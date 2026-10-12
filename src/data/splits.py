@@ -33,12 +33,17 @@ class FixedSplit:
 
 
 _SPLIT_KEYS: tuple[str, ...] = ("train", "val", "test")
+#: The final split (``configs/benchmarks/cell_line_geneeffect_split.json``), which
+#: adds the single-cell extras to the 226's training lines and lists the bulk-only
+#: training-side lines (``src.data.extra_lines.load_bulk_lines``).
+SPLIT_SCHEMA_VERSION = "cell-line-geneeffect-split-v1"
 
 
 __all__ = [
+    "SPLIT_SCHEMA_VERSION",
     "FixedSplit",
     "assert_fit_eligible",
-    "load_geneeffect_226_split",
+    "load_geneeffect_split",
     "validate_fixed_split",
 ]
 
@@ -68,8 +73,9 @@ def validate_fixed_split(split: FixedSplit) -> None:
         raise ValueError(f"unlabeled_train contains non-train ModelIDs: {outside[:10]}")
 
 
-def load_geneeffect_226_split(path: Path) -> FixedSplit:
-    """Load a ``cell_line_geneeffect_226_split``-shaped JSON into a :class:`FixedSplit`.
+def load_geneeffect_split(path: Path) -> FixedSplit:
+    """Load a split JSON (the final split, or the 226 split it is built from) into
+    a :class:`FixedSplit`; other keys of the file are left to their own loaders.
 
     Validate string-list fields, disjoint train/validation/test membership,
     and train-only membership of the explicitly unlabeled lines.
@@ -117,8 +123,7 @@ def assert_fit_eligible(model_id: str, split: FixedSplit) -> None:
 
     Args:
         model_id: The candidate line's ACH model id.
-        split: The loaded ``cell_line_geneeffect_226_split`` membership
-            authority.
+        split: The loaded split, the membership authority.
 
     Raises:
         ValueError: ``model_id`` is a declared ``unlabeled_train`` member, or
@@ -128,12 +133,10 @@ def assert_fit_eligible(model_id: str, split: FixedSplit) -> None:
     if model_id in split.unlabeled_train:
         raise ValueError(
             f"{model_id!r} is an unlabeled_train member (no GeneEffect label "
-            "under cell_line_geneeffect_226_split) and may not enter a "
-            "fitting/training path"
+            "under the split) and may not enter a fitting/training path"
         )
     if model_id not in split.train:
         raise ValueError(
-            f"{model_id!r} is not a labeled train member of "
-            "cell_line_geneeffect_226_split (val/test lines are "
-            "inference-only); it may not enter a fitting/training path"
+            f"{model_id!r} is not a labeled train member of the split (val/test "
+            "lines are inference-only); it may not enter a fitting/training path"
         )

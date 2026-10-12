@@ -16,7 +16,6 @@ train:
   state_mode: frozen   # unused: STATE is absent (use_delta_proj and use_s false)
   warmup_epochs: 1
   genes_per_block: 6
-  single_cell_extras: true  # the built single-cell extras join the training lines
 comparison:
   epochs: 50
   hidden: 512
@@ -45,10 +44,9 @@ preparation:
   var_ensembl_col: ensembl_id
   hvg_gene_symbol_col: auto
 paths:
-  split: configs/benchmarks/cell_line_geneeffect_226_split.json
+  split: configs/benchmarks/cell_line_geneeffect_split.json
   gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
   basal_raw_umi: data/sl_dependency_v0/processed/basal_raw_umi
-  extra_single_cell_lines: configs/benchmarks/extra_single_cell_lines_26Q1.json
   tx1_registration: configs/benchmarks/provenance/phase_a_tx1_20260724/phase_a_registration.json
   cell_line_manifest: configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv
   tx1_model_dir: data/models/tahoe_x1_3b/3b-model
@@ -57,6 +55,6 @@ paths:
   state_checkpoint: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562/checkpoints/final.ckpt
   state_model_dir: model/checkpoints/state/ST-HVG-Replogle/fewshot/k562
   perturbseq_sources: configs/experiments/13_geneeffect_226/perturbseq_sources.json
-  # The default prior with the single-cell extras as training lines, out of fold for every training line
-  # (hpc/run.sh prior-export configs/context_prior/default_prior_single_cell_extras.yaml --run-id default_prior_single_cell_extras_20261012).
-  prior: outputs/context_prior/default_prior_single_cell_extras_20261012/export
+  # The default prior's export on the final split, out of fold for every training line
+  # (hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_final_split_20261012).
+  prior: outputs/context_prior/default_prior_final_split_20261012/export

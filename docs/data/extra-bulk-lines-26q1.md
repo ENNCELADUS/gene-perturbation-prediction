@@ -3,7 +3,10 @@
 **Status:** Membership of the DepMap lines outside the 226-member
 [GeneEffect benchmark](cell-line-geneeffect-226.md) that may join the training side of the
 linear context prior ([protocol §10](../03-geneeffect-protocol.md#10-linear-context-prior),
-[design](../specs/2026-10-04-context-generalization-design.md)). Nothing here is SL evidence.
+[design](../specs/2026-10-04-context-generalization-design.md)). Since 2026-10-12 it is an input of
+the [final split](cell-line-geneeffect-split.md): its lines without built single cells are the final
+split's bulk-only lines (713 labelled, 576 unlabelled), which is what fits read; the 205 labelled
+lines with built single cells are single-cell training lines there. Nothing here is SL evidence.
 
 ## Purpose
 
@@ -16,7 +19,7 @@ never arrives as one of them.
 
 ## Membership
 
-The file is the sole membership authority for the extra lines, as the split JSON is for the 226.
+The file is the membership of the extra lines as built; the final split takes its roles from it.
 
 | Group | Lines | Definition |
 | --- | ---: | --- |
@@ -39,7 +42,9 @@ cross-fitting fold. The file is a pinned list, not a rule recomputed from labels
 the first run. The `training_side.exclude_lineages` key of a prior config drops lineages from the
 training side (`Lymphoid` and `Myeloid` in `configs/context_prior/bridge_remedies.yaml`; Model.csv
 `OncotreeLineage`). Validation and test hold no haematopoietic line, and the first runs showed that
-keeping them lowered the bridged score ([record](../../results/context_prior_seed0/README.md)).
+keeping them lowered the bridged score ([record](../../results/context_prior_seed0/README.md)). On the
+final split the rule covers every training-side line, single-cell training lines included
+([record](../../results/final_split_seed0/README.md)).
 
 ## Rebuild
 

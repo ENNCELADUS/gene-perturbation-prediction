@@ -2,10 +2,12 @@
 # §13): does a line's basal single-cell distribution add to what its pseudo-bulk gives the prior?
 # The mean arm (log-space mean, close to pseudo-bulk) is the like-for-like control; the
 # distribution arm reads only the detected fraction and variance; single_cell reads all three.
-# Every row is reported on validation and test; nothing is chosen in code.
+# Every row is reported on validation and test; nothing is chosen in code. Stacks on the default prior
+# of the final split (default_prior_final_split_20261012); earlier runs stacked on default_prior_export
+# (172/27/27 split, 2026-10-11) and default_prior_resplit_20261012 (the 226 split with A549 in test).
 seed: 0
 output_root: outputs/context_prior
-prior_run: outputs/context_prior/default_prior_export
+prior_run: outputs/context_prior/default_prior_final_split_20261012
 bootstrap_repeats: 1000
 selected_genes: 50
 penalties:

@@ -18,7 +18,7 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-10-11)
+## Current state (2026-10-12)
 
 The joint GeneEffect model (`configs/geneeffect_joint.yaml`) trained, tested and baselined once at seed 0, before the
 **expression-space change** (STATE was fed raw counts), so those numbers are not like for like with the current pipeline
@@ -61,14 +61,18 @@ screen set of Kebabci et al. 2026: the Ito, Klingbeil and Harle multi-line scree
 by its own call), trained pooled and scored within one screen, with a single-cell headline and a bulk-read
 complement. On 2026-10-11 the 226 split was rebuilt in place with A549 in test (171/27/28; the prepared caches did not
 change) and the benchmark was built on the H20 (`data/sl_screens/benchmark/`, data card
-`docs/data/sl-screen-benchmark.md`). On 2026-10-12 the default prior was rerun on the rebuilt split: 0.2302 validation /
-0.2318 test (`results/default_prior_rerun_seed0/`), and 0.2290 / 0.2301 with the single-cell extras as its single-cell
-training lines (interval spanning zero); the single-cell stack has not been rerun, and its recorded numbers are on the
-172/27/27 split. The **single-cell extras** (data layer only, plan of
+`docs/data/sl-screen-benchmark.md`). On 2026-10-12 the **final split** (`configs/benchmarks/cell_line_geneeffect_split.json`,
+[card](docs/data/cell-line-geneeffect-split.md)) made the 208 single-cell extras training lines (379, 377 labelled; the
+27/28 held-out lines unchanged), so gene means, selective genes (4,323, against 3,071) and residual SD fit on 377 lines
+and earlier numbers are on another metric. On it the default prior scores 0.2045 validation / 0.2025 test
+(`results/final_split_seed0/`; on the same genes it matches the 226 split's prior, which scored 0.2302 / 0.2318 on that
+split's metric), with lymphoid and myeloid lines of every kind off its training side; the single-cell stack's best rows
+add +0.0044 on validation (intervals spanning zero), and at one penalty pair the single-cell arm beats the mean arm by
++0.0009 [+0.0001, +0.0017] on validation but not on test. The **single-cell extras** (plan of
 2026-10-11, [card](docs/data/single-cell-atlas-search.md)) are built in two waves: 208 labelled lines outside the 226 with
-505,097 basal cells from 62 public deposits, prepared into `data/geneeffect_joint/v2` beside the unchanged 226 (every
-joint config trains on them through `train.single_cell_extras`, and the correction configs stack on the prior export
-that predicts them out of fold; no model has been trained on them yet), and the SL benchmark rebuilt on them (29 screened training lines with single cells, 13 through bulk).
+505,097 basal cells from 62 public deposits, prepared into `data/geneeffect_joint/v2` (the correction configs stack on
+the final split's prior export, which predicts every training line out of fold; no model has been trained on them yet),
+and the SL benchmark rebuilt on them (29 screened training lines with single cells, 13 through bulk).
 Wave 2 (counts recovered from processed deposits, Cell Ranger BAMs, or SRA reads re-counted with kb) added 22 lines and
 moved eight to sources with more or untreated cells; it adds no screened line. The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
@@ -139,14 +143,12 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   `log1p`, then STATE's HVG slice. Tx1 reads raw UMI, not CPM.
 - **Preparation** (`src/experiments/prepare.py`) is the only place raw data is read. It writes fixed caches and a manifest
   recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them. Its
-  lines are the 226 and the built single-cell extras (`configs/benchmarks/extra_single_cell_lines_26Q1.json`), each read
-  from `<paths.basal_raw_umi>/<ModelID>.h5ad`; an existing root grows by the lines it lacks, in the recorded space. The
+  lines are the split's (the 226 and the built single-cell extras), each read from `<paths.basal_raw_umi>/<ModelID>.h5ad`;
+  an existing root grows by the lines it lacks, in the recorded space (the split path is not a preparation setting). The
   extras' h5ad are built from public deposits by `src/data/prepare/build_extra_single_cell_sources.py`, after
   `src/data/prepare/recount_extra_single_cell_sources.py` re-counts the SRA reads of deposits without raw counts.
-- **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`) fits on the training lines
-  (`PreparedInputs.train_lines`): the split's 169 labelled training lines and, under `train.single_cell_extras` (true in
-  every joint config), the 208 single-cell extras; gene means, selective genes and residual SD stay fitted on the split's
-  training lines, so runs with and without the extras share one metric. STATE (`arc-state`, pinned commit)
+- **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`) fits on the split's 377
+  labelled training lines, as do the gene means, selective genes, residual SD and context PCA. STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
   the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the
   128-component context PCA (fitted on training lines), plus a per-(g, c) correction that never sees the context, and predicts in units of the
@@ -160,9 +162,13 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
   `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
   evaluation and baselines for one config.
-- `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority of the 226 (171 train / 27 val / 28 test; A549 moved to test on 2026-10-11);
-  lines outside it join the training side only through `extra_bulk_lines_26Q1.json` or `extra_single_cell_lines_26Q1.json`;
-  `src/data/splits.py:assert_fit_eligible` guards every fit. Only split, config, provenance files and the context prior's reference tables are tracked data.
+- `configs/benchmarks/cell_line_geneeffect_split.json` (the **final split**, [card](docs/data/cell-line-geneeffect-split.md)) is
+  the sole membership authority: 379 single-cell training lines (the 226's 171, PC9 and HeLa unlabelled, then the 208
+  single-cell extras), 27 validation, 28 test (A549 since 2026-10-11), 713 labelled and 576 unlabelled bulk-only lines
+  that join the prior's training side through bulk RNA, and 12 excluded. `src/data/prepare/build_cell_line_geneeffect_split.py`
+  builds it from `cell_line_geneeffect_226_split.json`, `extra_single_cell_lines_26Q1.json` and `extra_bulk_lines_26Q1.json`,
+  which no fit reads; its table (`.csv`) gives each line's lineage and patient. `src/data/splits.py:assert_fit_eligible`
+  guards every fit. Only split, config, provenance files and the context prior's reference tables are tracked data.
 
 ## Pitfalls and claim boundaries
 

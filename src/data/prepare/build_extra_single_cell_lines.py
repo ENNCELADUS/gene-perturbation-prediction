@@ -44,7 +44,7 @@ import pandas as pd
 
 from src.data.depmap import read_model_ids, read_models
 from src.data.extra_lines import SINGLE_CELL_SCHEMA_VERSION
-from src.data.splits import FixedSplit, load_geneeffect_226_split
+from src.data.splits import FixedSplit, load_geneeffect_split
 
 MAP_COLUMNS = (
     "source",
@@ -371,7 +371,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         candidates,
         read_models(args.model),
         labelled_ids=read_model_ids(args.gene_effect),
-        split=load_geneeffect_226_split(args.split),
+        split=load_geneeffect_split(args.split),
         qc=qc,
     )
     inputs = {
