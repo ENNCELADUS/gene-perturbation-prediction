@@ -56,7 +56,7 @@ line's own (the final split table's `expression_source`; `kinker_sccle` and `Tah
 `kinker_scp542` and `tahoe100m`) and from another accession, chosen by the policy above. 99 lines have one: 36 Kinker to
 MIX-seq, 13 Tahoe-100M to MIX-seq and 50 others; 89 from wave-1 sources, 10 from wave 2. The builder's
 `--second-source` mode writes them to their own directory and never touches the training caches or the membership
-file.
+file. All 99 were built on the H20 on 2026-10-12 (both waves, no failure).
 
 ## Builder
 
