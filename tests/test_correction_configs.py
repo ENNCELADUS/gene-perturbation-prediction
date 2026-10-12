@@ -8,7 +8,7 @@ from src.experiments.config import load_config
 
 CONFIGS = sorted(Path("configs/correction").glob("*.yaml"))
 SCREEN = sorted(Path("configs/correction").glob("*_no_state.yaml"))
-EXPORT = "outputs/context_prior/default_prior_export/export"
+EXPORT = "outputs/context_prior/default_prior_single_cell_extras_20261012/export"
 
 
 def test_four_objective_screen_configs_differ_only_in_objective():

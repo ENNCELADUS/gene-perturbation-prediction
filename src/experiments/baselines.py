@@ -21,6 +21,8 @@ def run_baselines(config, *, split, out_dir, inputs=None):
         from src.data.prepared import load_inputs
 
         inputs = load_inputs(config, include_test=(split == "test"))
+    # The ladder fits on the split's labelled training lines, its own gene means
+    # among them; the prior controls fit on the model's training lines.
     train = inputs.split.supervised_train
     requested = getattr(inputs.split, split)
     labels = inputs.labels.loc[inputs.labels.model_id.isin((*train, *requested))].copy()
