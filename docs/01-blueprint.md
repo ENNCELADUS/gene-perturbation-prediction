@@ -1,6 +1,6 @@
 # Research Blueprint — Context-Specific Synthetic Lethality Prediction Based on AI Virtual Cell Foundation Model
 
-Updated 2026-10-11. This note is the project's introduction, related work, task formulation and research plan, written as
+Updated 2026-10-12. This note is the project's introduction, related work, task formulation and research plan, written as
 for an ML paper. Methods, experiment rules and results are kept in the repository: the GeneEffect protocol
 (`docs/03-geneeffect-protocol.md`), the SL protocol (`docs/04-sl-ranking-protocol.md`), the extended related
 work with full citations (`docs/02-literature-review.md`) and the result records under `results/`.
@@ -134,13 +134,17 @@ cancer context, and those predictions help screen context-specific SL candidates
 Generalization is measured over held-out cell lines. A held-out line is excluded from supervised training
 and model selection in both stages; models are selected on validation lines and scored once on test lines.
 
-- **Stage one** uses one fixed split of the cell lines that have basal single-cell profiles and DepMap
-  GeneEffect. DepMap lines without single-cell data may join the training side only.
+- **Stage one** uses one fixed split of 226 cell lines with basal single-cell profiles: 171 training lines
+  (169 with DepMap GeneEffect), 27 validation and 28 test lines. Validation and test lines come only from this
+  split. The single-cell training lines are its 171 training lines and 208 further DepMap lines with
+  GeneEffect outside it, whose basal single cells come from public deposits: 379 in all, 377 labelled. Other
+  DepMap lines join the training side through their bulk RNA-seq only. A line outside the split that shares a
+  patient with a validation or test line is not used.
 - **Stage two** uses one fixed split of the cell lines that carry SL labels. The splits nest: SL training lines
   are stage-one training lines, SL validation lines are stage-one validation lines, and SL test lines are
   stage-one test lines. Stage one may hold further lines on each side. Validation and test lines carry basal
   single-cell profiles. The headline model trains on the SL lines that have them; a complementary model adds
-  SL training lines read through their DepMap bulk RNA, as stage one's extra lines are, and the two are reported
+  SL training lines read through their DepMap bulk RNA, as stage one's bulk-only lines are, and the two are reported
   side by side, never pooled.
 
 | Test context | Test genes or pairs | Setting | Scope |
