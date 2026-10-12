@@ -161,9 +161,9 @@ def context_rows(
 def run(paths: dict[str, Path], out: Path, processes: int) -> dict:
     import torch
 
-    from src.data.splits import load_geneeffect_226_split
+    from src.data.splits import load_geneeffect_split
 
-    split = load_geneeffect_226_split(paths["split"])
+    split = load_geneeffect_split(paths["split"])
     sl_split = json.loads(paths["sl_split"].read_text())
     held_out = {
         sl_split["contexts"][name]["model_id"]

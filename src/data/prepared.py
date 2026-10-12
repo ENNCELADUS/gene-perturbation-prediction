@@ -30,7 +30,6 @@ from src.data.basal import align_columns
 from src.data.context_pca import ContextPCA, fit_context_pca, pooled_context
 from src.data.embeddings import load_esm2_embeddings
 from src.data.expression import library_sizes, log_normalize
-from src.data.extra_lines import load_extra_single_cell_lines
 from src.data.geneeffect import (
     fit_residual_scale,
     fit_selective_genes,
@@ -46,7 +45,7 @@ from src.data.prior_offsets import (
 from src.data.q_sc import QScFeatures, compute_q_sc
 from src.data.residual_target import fit_gene_means
 from src.data.response_cache import ResponseTargetsCache, open_response_targets
-from src.data.splits import FixedSplit, assert_fit_eligible, load_geneeffect_226_split
+from src.data.splits import FixedSplit, assert_fit_eligible, load_geneeffect_split
 
 PREPARED_METADATA_FILENAME: Final[str] = "prepared_inputs.json"
 EXPRESSION_TRANSFORM: Final[str] = "log1p_normalize_total"
@@ -67,13 +66,10 @@ class PreparedInputs:
 
     Every expression quantity is in STATE's space: whole-library normalize_total
     to ``target_sum``, then log1p. Only Tx1 embeddings come from raw counts.
-    ``train_lines`` are the labelled lines the model fits on: the split's labelled
-    training lines, then the built single-cell extras when the config adds them.
     ``prior`` is the linear context prior export the head stacks on, or None.
     """
 
     split: FixedSplit
-    train_lines: tuple[str, ...]
     labels: pd.DataFrame
     genes: tuple[str, ...]
     train_gene_means: pd.Series
@@ -291,11 +287,7 @@ def load_inputs(
     """Open prepared inputs; fit (or restore) gene means, variable and selective
     genes, the residual scale and the context PCA (``model.context_components``).
 
-    Gene means, gene sets and the residual scale, which define the metric, are
-    fitted on the split's labelled training lines. The training lines
-    (``train_lines``) add the built single-cell extras under
-    ``train.single_cell_extras``; the context PCA is fitted on them, and their
-    labels and prepared cells are opened. ``preprocessing`` restores a
+    Fitting uses labeled training lines only. ``preprocessing`` restores a
     checkpoint's fitted state instead. Test labels and lines are opened only
     with ``include_test``. ``config["paths"]["prior"]`` names a prior export; it
     must match the gene panel, the residual SD and every exposed line, and a
@@ -308,21 +300,13 @@ def load_inputs(
         _restored_target_sum(preprocessing, target_sum)
         _restored_keys(preprocessing)
     paths, features = config["paths"], config["features"]
-    split = load_geneeffect_226_split(Path(paths["split"]))
+    split = load_geneeffect_split(Path(paths["split"]))
     if preprocessing is not None:
         _restored_split(preprocessing, split)
-    extras: tuple[str, ...] = ()
-    if config["train"]["single_cell_extras"]:
-        extras = tuple(
-            load_extra_single_cell_lines(
-                Path(paths["extra_single_cell_lines"]), split
-            ).labelled
-        )
     genes = tuple(manifest["common_gene_panel"])
-    labels = load_geneeffect_long(Path(paths["gene_effect"]), split, extras)
+    labels = load_geneeffect_long(Path(paths["gene_effect"]), split)
     labels = labels.loc[labels["gene_symbol"].isin(genes)].copy()
     train = split.supervised_train
-    train_lines = (*train, *extras)
 
     if preprocessing is None:
         for model_id in train:
@@ -383,12 +367,7 @@ def load_inputs(
             vectors = vectors.detach().cpu().numpy()
         esm2_vectors = np.asarray(vectors)
 
-    exposed = {
-        *split.train,
-        *split.val,
-        *(split.test if include_test else ()),
-        *extras,
-    }
+    exposed = {*split.train, *split.val, *(split.test if include_test else ())}
     exposed -= set(split.unlabeled_train)
     prior = None
     if paths["prior"] is not None:
@@ -406,16 +385,13 @@ def load_inputs(
     ].reset_index(drop=True)
     lines = {
         model_id: read_prepared_line(root / "lines" / f"{model_id}.npz", genes)
-        for model_id in (*split.all_model_ids, *extras)
+        for model_id in split.all_model_ids
         if model_id in exposed
     }
     if preprocessing is None:
         context_pca = fit_context_pca(
             np.stack(
-                [
-                    pooled_context(lines[model_id].controls_tx1)
-                    for model_id in train_lines
-                ]
+                [pooled_context(lines[model_id].controls_tx1) for model_id in train]
             ),
             int(config["model"]["context_components"]),
         )
@@ -423,7 +399,6 @@ def load_inputs(
         context_pca = ContextPCA.from_state(preprocessing["context_pca"])
     return PreparedInputs(
         split=split,
-        train_lines=train_lines,
         labels=labels,
         genes=genes,
         train_gene_means=gene_means,

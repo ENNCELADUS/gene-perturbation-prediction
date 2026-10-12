@@ -10,7 +10,7 @@ hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh revision configs/revision/frozen_huber.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
 hpc/run.sh prior configs/context_prior/bridge_remedies.yaml [--run-id <id>] [--experiments affine,contrastive]
-hpc/run.sh prior-export configs/context_prior/default_prior_single_cell_extras.yaml --run-id default_prior_single_cell_extras_20261012
+hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_final_split_20261012
 hpc/run.sh prior-stack configs/context_prior/single_cell_stack.yaml --run-id <id>
 hpc/run.sh revision configs/correction/huber_no_state.yaml --run-id correction_huber_no_state_seed0
 uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
@@ -173,15 +173,15 @@ each line's basal cells; the one step that reads raw data; the prepared root of 
 setting builds the bridged inputs, fits the prior for every block set and penalty, and scores validation and test
 (and the bulk-input oracle on validation). It decides nothing: gains are measured against the reference row the config
 pins, and the table is read by a person. `configs/context_prior/default_prior.yaml` holds the default prior alone;
-`default_prior_single_cell_extras.yaml` is the same prior with `training_side.single_cell_extras`, the single-cell
-extras as single-cell training lines (bridge pairs where their bulk RNA is on the training side, out-of-fold export
-rows). Run each with `prior` and then `prior-export` under one run id:
+it reads the final split through its joint config (single-cell training lines, then the bulk-only lines; lymphoid and
+myeloid lines of either kind leave its training side). Run it with `prior`, then `prior-export`, then the two stacks:
 
 ```bash
-OMP_NUM_THREADS=32 nohup bash -c "hpc/run.sh prior configs/context_prior/default_prior_single_cell_extras.yaml \
-  --run-id default_prior_single_cell_extras_20261012 && hpc/run.sh prior-export \
-  configs/context_prior/default_prior_single_cell_extras.yaml --run-id default_prior_single_cell_extras_20261012" \
-  > outputs/launches/default_prior_single_cell_extras_20261012.log 2>&1 &
+R=default_prior_final_split_20261012
+OMP_NUM_THREADS=32 nohup bash -c "hpc/run.sh prior configs/context_prior/default_prior.yaml --run-id $R \
+  && hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id $R" > outputs/launches/$R.log 2>&1 &
+OMP_NUM_THREADS=32 nohup hpc/run.sh prior-stack configs/context_prior/single_cell_stack.yaml \
+  --run-id single_cell_stack_final_split_20261012 > outputs/launches/single_cell_stack_final_split_20261012.log 2>&1 &
 ```
 
 `hpc/run.sh prior-selected CONFIG --run-id <id>` fits the config's reference row (its last stage must be the
@@ -191,8 +191,7 @@ directory: feature use, per-target gains of the stage, and scores with the stage
 `hpc/run.sh prior-export CONFIG --run-id <id>` writes the config's reference row for the single-cell correction into
 `outputs/context_prior/<run_id>/export/{prior.npz, prior.json}`: validation and test from the reference fit, and every
 labelled single-cell training line out of fold (the bridge and every stage refitted without the line's patient-grouped
-fold), the single-cell extras' included under the switch; a joint config with `train.single_cell_extras` needs such an
-export, since `load_inputs` refuses one lacking a line the run exposes. An existing export is never replaced; a correction checkpoint records the export's run id, so a new export
+fold), all 377 on the final split; `load_inputs` refuses an export lacking a line the run exposes. An existing export is never replaced; a correction checkpoint records the export's run id, so a new export
 needs a new run id. It runs on CPU (set `OMP_NUM_THREADS` and `MKL_NUM_THREADS`); `prior.json` holds its own
 validation and test scores, which reproduce the reference row of the `prior` run.
 
@@ -209,14 +208,17 @@ rerunning the same command with the same run id; `results.md` is rewritten from 
 `--experiments` restricts a process to the named experiments (all of them by default), so several processes can
 share one run directory: rows are per setting and never shared. A run directory is bound to the config it started
 with; another config needs a new run id. The reference tables it reads are committed under
-`configs/context_prior/reference/` and the extra-line membership at `configs/benchmarks/extra_bulk_lines_26Q1.json`.
+`configs/context_prior/reference/`; the lines come from the final split (`configs/benchmarks/cell_line_geneeffect_split.json`).
 The H20 reaches GitHub, PyPI, EBI/ENA/BioStudies and hf-mirror, but not NCBI GEO, figshare, Zenodo, the 10x CDN or
 Cellosaurus: files from those hosts are downloaded on the Mac and copied to the H20 data directory with their SHA-256.
 
 ## Extra single-cell lines
 
 Labelled DepMap lines outside the 226 with public basal single cells join the prepared root as raw-UMI h5ad
-([card](../docs/data/single-cell-atlas-search.md)). One wave of the source spec at a time, on CPU:
+([card](../docs/data/single-cell-atlas-search.md)), then the final split as training lines
+([card](../docs/data/cell-line-geneeffect-split.md)). One wave of the source spec at a time, on CPU; after the
+membership file changes, rebuild the final split (on the Mac; it reads tracked files only) and commit it before
+`prepare`, which reads the lines from it:
 
 ```bash
 S=configs/data/extra_single_cell_sources_26Q1.json
@@ -229,6 +231,10 @@ OMP_NUM_THREADS=16 nohup .venv-tx1/bin/python -m src.data.prepare.build_extra_si
   --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
   --split configs/benchmarks/cell_line_geneeffect_226_split.json \
   --qc-dir data/sl_dependency_v0/processed/basal_raw_umi/qc --out configs/benchmarks/extra_single_cell_lines_26Q1.json
+uv run python -m src.data.prepare.build_cell_line_geneeffect_split \
+  --split-226 configs/benchmarks/cell_line_geneeffect_226_split.json \
+  --single-cell configs/benchmarks/extra_single_cell_lines_26Q1.json \
+  --bulk configs/benchmarks/extra_bulk_lines_26Q1.json --out configs/benchmarks/cell_line_geneeffect_split.json
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=16 nohup .venv-tx1/bin/python -m src.experiments.prepare configs/geneeffect_joint.yaml \
   --pseudobulk-genes data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv \
   > outputs/launches/prepare_extras.log 2>&1 &
@@ -264,8 +270,8 @@ All configuration fields are explicit in `configs/geneeffect_joint.yaml`; unknow
 missing keys are errors; a checkpoint from before the selective-gene revision lacks its
 fitted selective genes and residual scale and is refused, and one from before the single-cell
 correction lacks its recorded prior export and is refused too. Input paths are relative to the repository root. Preparation
-requires one raw-UMI h5ad per prepared line at `paths.basal_raw_umi/<ModelID>.h5ad` (the 226 and the built
-extras of `paths.extra_single_cell_lines`), the GeneEffect CSV, supplied ESM2 table, STATE checkpoint and
+requires one raw-UMI h5ad per line of the split at `paths.basal_raw_umi/<ModelID>.h5ad` (the 226 and the built
+single-cell extras), the GeneEffect CSV, supplied ESM2 table, STATE checkpoint and
 gene order, and the response sources. Missing Tx1 caches additionally need the
 configured local Tx1 model and a GPU; newly encoded cells use collation seed 0, and the Tx1
 cache's existing on-disk format is read, never rewritten. Tx1 reads raw UMI counts; every

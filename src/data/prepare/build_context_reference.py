@@ -33,7 +33,7 @@ import pandas as pd
 
 from src.data.depmap import read_depmap_matrix
 from src.data.extra_lines import load_extra_lines
-from src.data.splits import load_geneeffect_226_split
+from src.data.splits import load_geneeffect_split
 
 BIOMART_URL = "https://useast.ensembl.org/biomart/martservice"
 CORUM_URL = (
@@ -254,7 +254,7 @@ def main(argv=None) -> int:
         help="rebuild drivers.tsv and msi.tsv only, keeping the gene tables",
     )
     args = parser.parse_args(argv)
-    split = load_geneeffect_226_split(args.split)
+    split = load_geneeffect_split(args.split)
     extra = load_extra_lines(args.extra_lines, split)
     blocked = {*split.val, *split.test, *extra.excluded}
     out = args.out

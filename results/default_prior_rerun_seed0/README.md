@@ -1,5 +1,8 @@
 # The default prior on the current split, with and without the single-cell extras, seed 0
 
+Superseded the same day by the [final split](../final_split_seed0/README.md), which makes the single-cell extras
+split members and fits the metric on 377 lines; the `single_cell_extras` switches these runs used are gone.
+
 Runs of 2026-10-12 on the H20 container on port 30838 (branch `feat/extras-training-lines` at `f4e1e02`), CPU only,
 each `hpc/run.sh prior CONFIG --run-id ID` then `hpc/run.sh prior-export CONFIG --run-id ID`:
 
@@ -47,3 +50,18 @@ and ACH-003012, which shares A549's patient.
 An earlier run of `default_prior.yaml` with the code before the switch (`0db59ad`, run `default_prior_20261012`) gave
 an identical export (largest absolute difference 0) and identical row files: the switch off reproduces the code before
 it. That run directory, whose bound config predates the switch, was removed.
+
+## The single-cell statistics stack on this split
+
+Runs of 2026-10-12 (branch `chore/stack-current-split` at `9ab012e`), stacked on `default_prior_resplit_20261012`:
+`single_cell_stack_resplit_20261012` (`configs/context_prior/single_cell_stack.yaml`) and
+`single_cell_stack_grid_resplit_20261012` (`single_cell_stack_penalty_grid.yaml`, selected penalties 100 to 10,000).
+Tables: [first grid](single_cell_stack_resplit_20261012.results.md), [penalty grid](single_cell_stack_grid_resplit_20261012.results.md).
+They read the 226's 169 labelled training lines and their definitions (3,071 selective genes), so the final split's
+runs supersede them ([record](../final_split_seed0/README.md)).
+
+The 2026-10-11 reading holds. No single-cell arm beats `mean` on validation by an interval above zero at any penalty
+pair (largest +0.0010 [−0.0006, +0.0023], `single_cell` at own shrinkage 10 and selected penalty 1,000), and no arm's
+best validation row clears the prior: `distribution` 0.2344 (+0.0042 [−0.0050, +0.0147]), `mean` 0.2342, `single_cell`
+0.2334 (own shrinkage 10, selected penalty 100), against 0.2302 for the prior alone (test 0.2415, 0.2411, 0.2409 against
+0.2318).
