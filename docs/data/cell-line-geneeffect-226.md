@@ -1,8 +1,11 @@
 # Cell-Line GeneEffect Benchmark
 
-**Status:** One fixed split, used by the final run of the historical staged GeneEffect
-protocol (Exp13, [result](../../results/exp13_stage2_full/README.md)) and by the seed-0 run of
-the [GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been observed once
+**Status:** The held-out partition and the first training lines. Since 2026-10-12 it is an
+input of the [final split](cell-line-geneeffect-split.md), which adds the 208 single-cell extras
+to its training lines and is what every fit reads; validation and test are this split's. Before
+then it was the only split, used by the final run of the historical staged GeneEffect protocol
+(Exp13, [result](../../results/exp13_stage2_full/README.md)) and by the seed-0 run of the
+[GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been observed once
 ([result](../../results/joint_geneeffect_seed0/README.md)).
 
 ## Fixed split
@@ -13,7 +16,7 @@ the [GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been obs
 | New single-cell atlas | 125 | 27 | 27 |
 | Total membership | 171 | 27 | 28 |
 
-This is the only train/validation/test split. The 47 original contexts are fixed in
+It fixes the validation and test lines of the final split. The 47 original contexts are fixed in
 train except A549 (`ACH-000681`), fixed in test since 2026-10-11 because all three screens of
 the SL benchmark test it ([SL protocol](../04-sl-ranking-protocol.md)); the split was rebuilt in
 place, and the earlier 172/27/27 version, with A549 in train, is in git history. The 179 new
@@ -33,7 +36,8 @@ semantic. **Resolved 2026-08-18:** the 152 `kinker_sccle` lines were published a
 pooling; [result](../../results/exp13_stage0/README.md)). Raw UMI counts from
 SCP542 now back all 152 lines — protocol §6, branch 1. Membership is unchanged.
 
-The split JSON is the sole membership authority. Fit residual targets, normalization,
+Before 2026-10-12 this split JSON was the sole membership authority; the final split is now.
+Fit residual targets, normalization,
 feature transforms and all model parameters on train only; validation selects the
 checkpoint by minimum GeneEffect Huber loss and test remains one-shot. GeneEffect
 is single-gene dependency, not SL.
@@ -44,7 +48,7 @@ missing train label, or any missing validation/test label, is a hard runtime err
 
 ## Artifacts
 
-- `configs/benchmarks/cell_line_geneeffect_226_split.json`: the only split authority.
+- `configs/benchmarks/cell_line_geneeffect_226_split.json`: the 226 split, an input of the final split.
 - `configs/benchmarks/cell_line_geneeffect_226_split.csv`: row-level cohort, patient,
   source semantics and label availability.
 - `configs/benchmarks/cell_line_geneeffect_226_split_audit.json`: counts and pinned hashes.
