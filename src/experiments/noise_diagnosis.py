@@ -453,9 +453,14 @@ def learning_curve(diagnosis: Diagnosis, out: Path) -> dict:
 
 
 def _deposits(diagnosis: Diagnosis) -> pd.Series:
-    """Each split line's deposit: the final split table's ``expression_source``."""
+    """Each split line's deposit: the final split table's ``expression_source``,
+    the 226's names mapped to the identity map's source keys (Tahoe-100M is one
+    deposit under two names)."""
+    from src.data.prepare.plan_second_sources import PRIMARY_KEYS
+
     table = pd.read_csv(Path(diagnosis.joint["paths"]["split"]).with_suffix(".csv"))
-    return table.set_index("model_id")["expression_source"].astype(str)
+    sources = table.set_index("model_id")["expression_source"].astype(str)
+    return sources.replace(PRIMARY_KEYS)
 
 
 def deposit_confound(diagnosis: Diagnosis, out: Path) -> dict:

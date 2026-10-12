@@ -7,6 +7,7 @@ import copy
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -264,6 +265,23 @@ def test_deposit_confound_reports_both_groupings(diagnosis, tmp_path, monkeypatc
     assert set(result["per_deposit"]) == {"big", "mid", "other"}
     for of in ("error", "residual"):
         assert set(result["shares"][of]) == {"deposit", "lineage"}
+
+
+def test_one_deposit_under_two_names_is_one_group(tmp_path):
+    split = tmp_path / "split.json"
+    pd.DataFrame(
+        {
+            "model_id": ["ACH-1", "ACH-2", "ACH-3"],
+            "expression_source": ["Tahoe-100M DMSO", "tahoe100m", "mixseq"],
+        }
+    ).to_csv(split.with_suffix(".csv"), index=False)
+    found = SimpleNamespace(joint={"paths": {"split": str(split)}})
+    deposits = run._deposits(found)
+    assert deposits.to_dict() == {
+        "ACH-1": "tahoe100m",
+        "ACH-2": "tahoe100m",
+        "ACH-3": "mixseq",
+    }
 
 
 def test_deposit_swap_reads_each_line_four_ways(diagnosis, tmp_path, monkeypatch):

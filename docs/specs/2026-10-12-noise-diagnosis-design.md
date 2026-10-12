@@ -75,7 +75,8 @@ side's profile.
 the quantile profile and the metric's definitions stay those of the full run) and scored with its gain over the full prior.
 
 **`deposit_confound`.** Out-of-fold error `E = truth − export` on the labelled single-cell training lines, over the
-selective genes; the deposit is the final split table's `expression_source`, deposits with fewer than `min_lines` lines
+selective genes; the deposit is the final split table's `expression_source` (the 226's names mapped to the identity
+map's source keys, so `Tahoe-100M DMSO` and `tahoe100m` are one deposit), deposits with fewer than `min_lines` lines
 pooled as `other`. Per gene the share of `E`'s variance between deposits (η²), macro-averaged; the null permutes deposit
 labels among lines of one lineage (`permutations`, seed 0); lineage is reported beside it, its null permuting among all
 lines. The same for the residual itself, and the error's mean square per deposit relative to all lines.

@@ -919,8 +919,8 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   pseudo-bulk, and the agreement of the two halves' predictions per selective gene.
 - **`learning_curve`.** The reference row refitted on nested patient-grouped fractions of the training side (bridge,
   components and data-selected genes refitted; profile and metric fixed), with the full prior as the last row.
-- **`deposit_confound`.** η² of a training line's deposit (the final split table's `expression_source`; deposits under
-  `min_lines` pooled) on the out-of-fold error and on the residual, macro-averaged over selective genes, against a null
+- **`deposit_confound`.** η² of a training line's deposit (the final split table's `expression_source`, the 226's names
+  mapped to the identity map's keys so Tahoe-100M is one deposit; deposits under `min_lines` pooled) on the out-of-fold error and on the residual, macro-averaged over selective genes, against a null
   permuting deposits within lineage; lineage beside it; the error's mean square per deposit.
 - **`deposit_swap`.** Labelled training lines with a second deposit, predicted out of fold (each export fold refitted once)
   from four readings: primary (refused unless it reproduces the export), second deposit, half A and half B, all through
