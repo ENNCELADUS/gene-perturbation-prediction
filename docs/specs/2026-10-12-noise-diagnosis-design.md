@@ -60,7 +60,8 @@ then the prior's space: the space's genes, a gap filled with the training-line m
 side's profile.
 
 **`cell_sampling`.**
-- *Reliability:* per space gene, Pearson across every split line with two or more cells between half A and half B, and its Spearman–Brown
+- *Reliability:* per space gene, Pearson across every split line with two or more cells between half A and half B, over
+  the values both halves measure (a gap's training-mean fill would pair two equal values), and its Spearman–Brown
   full-sample value `2r/(1+r)`; beside it, the bridge's per-gene correlation (out-of-fold bridged pseudo-bulk against bulk
   on the paired lines) and the paired lines' own split-half reliability. If the bridge's agreement sits far below
   `sqrt(reliability)` the bridge's loss is systematic, not sampling. Quartiles over all space genes and the selective genes
@@ -84,14 +85,16 @@ export, the reference prior is refitted without the fold and queried with the fo
 pseudo-bulk (must reproduce the export), second deposit, half A and half B, each through the bridge fitted on the primary
 pseudo-bulk of the paired lines outside the fold. Reported: scores of each reading over these lines, gains over primary,
 and per selective gene the Pearson across lines between primary and second predictions against that between the halves;
-the same for the space genes' normalised inputs.
+the same for the space genes' normalised inputs, over measured values only.
 
 **`cell_states`.** Per-line features, fitted on the labelled single-cell training lines, label-free:
 - *Programs:* per cell, the mean log-normalised expression (`log1p(x · T / L_cell)`, the prepared space) of a program's
-  member genes the source measures, minus the cell's mean over every gene of the scoring set it measures. The scoring set
-  is the pseudo-bulk's genes (DepMap's protein-coding symbols), one set for every line; members outside it (an IG gene, a
-  lncRNA) are not part of the program here, and the manifest records how many are in. A program measured at under half
-  its in-set members in any line stops preparation, naming both. Per program, a threshold at the 90th percentile of the
+  member genes, minus the cell's mean over every gene of the scoring set. The scoring set is the pseudo-bulk's genes
+  (DepMap's protein-coding symbols), one set for every line; members outside it (an IG gene, a lncRNA) are not part of the
+  program here, and the manifest records how many are in. A gene the source does not list scores as unexpressed: the
+  breast-atlas and CCLA builders drop each line's zero-count genes, and scoring over each source's own list moved identical
+  cells by build policy (0.84 against 0.07 in the review's example). The share of the scoring set and of each program a
+  line's source lists is reported, and lines listing under 90% of the set are named. Per program, a threshold at the 90th percentile of the
   training lines' pooled scores, each line weighted equally; `program_fractions` is the fraction of a line's cells above
   it, `program_means` (the control) the line's mean score.
 - *Clusters:* the prepared context cells (`basal_hvg`, 128 per line, repeated when a line has fewer), centred on their

@@ -87,6 +87,9 @@ SECTIONS = (
 )
 #: A reproduced export row may differ from the written one by float rounding only.
 REPRODUCTION_TOLERANCE = 1e-6
+#: Lines whose source lists less of the scoring set than this are named in
+#: ``cell_states`` (their unlisted genes score as unexpressed).
+LISTED_FLOOR = 0.9
 
 
 # ----------------------------------------------------------------------------
@@ -171,9 +174,18 @@ class Diagnosis:
         )
         return pd.read_parquet(path.parent / "subsamples.parquet")
 
-    def reading(self, frame: pd.DataFrame, lines: Sequence[str]) -> pd.DataFrame:
-        """``lines``' rows of a raw pseudo-bulk frame, in the prior's space."""
-        return self.base.normalize_pseudobulk(frame.loc[list(lines)])
+    def reading(
+        self, frame: pd.DataFrame, lines: Sequence[str], *, measured_only: bool = False
+    ) -> pd.DataFrame:
+        """``lines``' rows of a raw pseudo-bulk frame, in the prior's space. With
+        ``measured_only`` a value the source does not measure stays missing
+        instead of taking the training mean: agreement between two readings of a
+        line must not count the same filled value twice."""
+        rows = frame.loc[list(lines)]
+        normalized = self.base.normalize_pseudobulk(rows)
+        if measured_only:
+            normalized = normalized.where(rows.loc[:, normalized.columns].notna())
+        return normalized
 
 
 def load_diagnosis(config: Mapping[str, Any]) -> Diagnosis:
@@ -287,7 +299,9 @@ def cell_sampling(diagnosis: Diagnosis, out: Path) -> dict:
     full = diagnosis.raw_pseudobulk()
     lines = list(base.split.all_model_ids)
 
-    def draw(name: str, wanted: Sequence[str]) -> tuple[pd.DataFrame, list[str]]:
+    def draw(
+        name: str, wanted: Sequence[str], *, measured_only: bool = False
+    ) -> tuple[pd.DataFrame, list[str]]:
         """The draw's rows of ``wanted``; a line without the draw reads its full
         pseudo-bulk and is returned as capped."""
         rows = subsamples.xs(name, level="draw")
@@ -295,12 +309,13 @@ def cell_sampling(diagnosis: Diagnosis, out: Path) -> dict:
         frame = pd.concat(
             [rows.loc[[m for m in wanted if m in rows.index]], full.loc[capped]]
         )
-        return diagnosis.reading(frame, wanted), capped
+        reading = diagnosis.reading(frame, wanted, measured_only=measured_only)
+        return reading, capped
 
     halved = set(subsamples.xs("half_b", level="draw").index)
     lines = [m for m in lines if m in halved]  # a one-cell line has no halves
-    half_a, _ = draw("half_a", lines)
-    half_b, _ = draw("half_b", lines)
+    half_a, _ = draw("half_a", lines, measured_only=True)
+    half_b, _ = draw("half_b", lines, measured_only=True)
     paired = [m for m in base.bridge.paired if m in halved]
     affine = _build(base, "affine", {})
     genes = pd.DataFrame(
@@ -514,6 +529,10 @@ def deposit_swap(diagnosis: Diagnosis, out: Path) -> dict:
         "half_b": subsamples.xs("half_b", level="draw"),
     }
     readings = {name: diagnosis.reading(frame, lines) for name, frame in raw.items()}
+    measured = {
+        name: diagnosis.reading(frame, lines, measured_only=True)
+        for name, frame in raw.items()
+    }
     bridge = base.bridge
     bridged = {
         name: oof_bridged(
@@ -576,24 +595,27 @@ def deposit_swap(diagnosis: Diagnosis, out: Path) -> dict:
             ),
         },
         "input_agreement": {
-            "primary_second": agreement(readings["primary"], readings["second"]),
-            "half_a_half_b": agreement(readings["half_a"], readings["half_b"]),
+            "primary_second": agreement(measured["primary"], measured["second"]),
+            "half_a_half_b": agreement(measured["half_a"], measured["half_b"]),
         },
     }
 
 
 def _program_scores(
     diagnosis: Diagnosis, lines: Sequence[str]
-) -> dict[str, np.ndarray]:
+) -> tuple[dict[str, np.ndarray], dict[str, dict[str, float]]]:
+    """Per line, its cells' program scores and the shares of the scoring set and
+    of each program its source lists."""
     diagnosis.subsamples()  # prepares the program scores alongside the draws
     from src.experiments.prepare import NOISE_DIR
 
-    root = diagnosis.prepared / NOISE_DIR / "programs"
+    root = diagnosis.prepared / NOISE_DIR
+    listed = json.loads((root / "manifest.json").read_text())["listed"]
     out = {}
     for model_id in lines:
-        with np.load(root / f"{model_id}.npz") as payload:
+        with np.load(root / "programs" / f"{model_id}.npz") as payload:
             out[model_id] = payload["scores"].astype(np.float64)
-    return out
+    return out, {m: listed[m] for m in lines}
 
 
 def _context_cells(diagnosis: Diagnosis, lines: Sequence[str]) -> dict[str, np.ndarray]:
@@ -614,11 +636,9 @@ def cell_states(diagnosis: Diagnosis, out: Path) -> dict:
     train, queries = diagnosis.train, diagnosis.queries
     every = [*train, *queries["val"], *queries["test"]]
     programs = list(settings["programs"])
+    scores, listed = _program_scores(diagnosis, every)
     fractions, means, thresholds = program_features(
-        _program_scores(diagnosis, every),
-        train,
-        programs,
-        float(settings["threshold_percentile"]),
+        scores, train, programs, float(settings["threshold_percentile"])
     )
     arms: dict[str, pd.DataFrame] = {
         "program_fractions": fractions,
@@ -676,6 +696,15 @@ def cell_states(diagnosis: Diagnosis, out: Path) -> dict:
         "programs": programs,
         "thresholds": dict(zip(programs, thresholds.tolist(), strict=True)),
         "features": {arm: int(frame.shape[1]) for arm, frame in arms.items()},
+        # A gene a source does not list scores as unexpressed; how much each
+        # line's source lists of the scoring set and of each program.
+        "listed": {
+            name: quartiles([listed[m][name] for m in every])
+            for name in ["scoring_set", *programs]
+        },
+        "lines_listing_under_90_percent": sorted(
+            m for m in every if listed[m]["scoring_set"] < LISTED_FLOOR
+        ),
     }
 
 
@@ -960,6 +989,11 @@ def _cell_states_md(section: Mapping[str, Any]) -> list[str]:
         "alone; `program_fractions` also over `program_means` at the same penalty.",
         "",
         *_table(header + ["Test", "Test gain", "Test over means"], rows),
+        "",
+        "Share of the scoring set each line's source lists (an unlisted gene scores "
+        f"as unexpressed): {_quartiles(section['listed']['scoring_set'])}; lines "
+        f"under {LISTED_FLOOR:.0%}: "
+        f"{', '.join(section['lines_listing_under_90_percent']) or 'none'}.",
     ]
 
 

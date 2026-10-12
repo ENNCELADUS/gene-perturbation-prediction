@@ -13,7 +13,8 @@ import pandas as pd
 
 def column_pearson(left: pd.DataFrame, right: pd.DataFrame) -> pd.Series:
     """Per column, Pearson across rows over the rows finite in both; NaN where
-    fewer than three such rows or either side is constant."""
+    fewer than three such rows or either side is constant on them (tested on the
+    range, as the bridge's quality is: a float SD of a constant need not be 0)."""
     if list(left.index) != list(right.index) or list(left.columns) != list(
         right.columns
     ):
@@ -22,13 +23,17 @@ def column_pearson(left: pd.DataFrame, right: pd.DataFrame) -> pd.Series:
     y = right.to_numpy(dtype=np.float64)
     both = np.isfinite(x) & np.isfinite(y)
     count = both.sum(axis=0)
+    varies = [
+        np.where(both, v, -np.inf).max(axis=0) > np.where(both, v, np.inf).min(axis=0)
+        for v in (x, y)
+    ]
     x, y = np.where(both, x, 0.0), np.where(both, y, 0.0)
     with np.errstate(invalid="ignore", divide="ignore"):
         mx, my = x.sum(axis=0) / count, y.sum(axis=0) / count
         dx, dy = np.where(both, x - mx, 0.0), np.where(both, y - my, 0.0)
         sxx, syy = (dx**2).sum(axis=0), (dy**2).sum(axis=0)
         rho = (dx * dy).sum(axis=0) / np.sqrt(sxx * syy)
-    defined = (count >= 3) & (sxx > 0) & (syy > 0)
+    defined = (count >= 3) & varies[0] & varies[1]
     return pd.Series(np.where(defined, rho, np.nan), index=left.columns)
 
 
