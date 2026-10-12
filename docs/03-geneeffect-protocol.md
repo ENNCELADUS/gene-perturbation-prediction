@@ -903,14 +903,15 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   pseudo-bulk (the §10 transform) of half A and half B of the line's cells (even and odd ranks of `sha256(ModelID|cell)`,
   the `select_context_cells` order) and of its first 10, 25, 50, 100, 200 and 400 cells (draws nest; a draw the line
   cannot fill is not written), and `noise/programs/<ModelID>.npz`: per-cell scores of the config's programs over every
-  basal cell (the mean log-normalised expression of a program's measured members minus the cell's mean over the measured
-  genes of the scoring set, the pseudo-bulk's DepMap protein-coding genes; a program measured at under half its members in
-  that set, in a line, stops preparation). Programs are Tirosh's S and G2/M sets
+  basal cell: the mean log-normalised expression of a program's members minus the cell's mean over the scoring set, the
+  pseudo-bulk's DepMap protein-coding genes, one set for every line. A gene a source does not list scores as unexpressed
+  (some builders drop zero-count genes), and the share of the set each source lists is reported. Programs are Tirosh's S and G2/M sets
   and the 21 Gavish meta-programs with no cell-line study among their sources (`configs/context_prior/reference/`,
   `build_state_programs.py`; the other 20 count Kinker's CCLE pools, the cells of validation and test lines).
   `noise/second_source/` holds pseudo-bulk of each line's second deposit (below). Any pseudo-bulk enters the prior's space
   as the prepared rows do: the space's genes, a gap given the training mean, quantile-normalised to the training profile.
-- **`cell_sampling`.** Per space gene, the split-half Pearson across lines and its Spearman–Brown reliability, beside the
+- **`cell_sampling`.** Per space gene, the split-half Pearson across lines over measured values (a training-mean fill would
+  pair equal values) and its Spearman–Brown reliability, beside the
   bridge's out-of-fold agreement with bulk on the paired lines and that agreement over the square root of their
   reliability (`cell_sampling_genes.csv`, quartiles over all and selective genes). The reference prior, refitted on the
   whole training side and refused unless it reproduces the export's validation and test rows, is queried with each draw

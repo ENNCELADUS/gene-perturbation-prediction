@@ -36,25 +36,36 @@ def test_halves_split_the_cells_and_draws_nest():
     assert not np.array_equal(other["cells_5"], draws["cells_5"])
 
 
-def test_program_scores_subtract_the_cells_mean_over_measured_scoring_genes():
+def test_program_scores_subtract_the_cells_mean_over_the_scoring_set():
     counts = csr_matrix(np.array([[1.0, 3.0, 0.0, 6.0], [4.0, 0.0, 2.0, 2.0]]))
     symbols = ["a", "B", "C", "OFFSET"]  # symbols are matched upper-cased
-    genes = ["A", "B", "C", "D"]  # the scoring set; D is not measured by this source
+    genes = ["A", "B", "C", "D"]  # the scoring set; this source does not list D
     # Q's member "e" lies outside the scoring set and is not part of Q here.
     members = {"P": ["A", "b"], "Q": ["C", "D", "e"]}
-    scores, coverage = program_scores(
-        counts, symbols, genes, members, 10.0, model_id="ACH-1"
-    )
+    scores, listed = program_scores(counts, symbols, genes, members, 10.0)
     library = np.array([10.0, 8.0])
     logged = np.log1p(counts.toarray()[:, :3] * (10.0 / library)[:, None])
-    background = logged.sum(axis=1) / 3
+    background = logged.sum(axis=1) / 4  # unlisted D counts as unexpressed
     assert np.allclose(scores[:, 0], logged[:, :2].mean(axis=1) - background)
-    assert np.allclose(scores[:, 1], logged[:, 2] - background)
-    assert coverage == {"P": 1.0, "Q": 0.5}
-    with pytest.raises(ValueError, match="ACH-1.*R"):
-        program_scores(
-            counts, symbols, genes, {"R": ["D", "E"]}, 10.0, model_id="ACH-1"
-        )
+    assert np.allclose(scores[:, 1], logged[:, 2] / 2 - background)
+    assert listed == {"scoring_set": 0.75, "P": 1.0, "Q": 0.5}
+
+
+def test_dropping_zero_count_genes_does_not_move_a_cells_scores():
+    """Some builders drop each line's zero-count genes; identical cells must
+    score the same whichever way their source was built."""
+    rng = np.random.default_rng(0)
+    counts = rng.poisson(0.5, size=(5, 30)).astype(float)
+    counts[:, :10] = 0.0  # never detected in this line
+    symbols = [f"G{i}" for i in range(30)]
+    members = {"P": symbols[5:15], "Q": symbols[20:25]}
+    kept, _ = program_scores(csr_matrix(counts), symbols, symbols, members, 1e4)
+    dropped, listed = program_scores(
+        csr_matrix(counts[:, 10:]), symbols[10:], symbols, members, 1e4
+    )
+    assert np.allclose(kept, dropped)
+    assert listed["scoring_set"] == pytest.approx(20 / 30)
+    assert listed["P"] == 0.5 and listed["Q"] == 1.0
 
 
 @pytest.fixture(scope="module")
@@ -83,7 +94,8 @@ def test_noise_inputs_are_written_once_from_raw_cells(world):
         assert np.allclose(frame.loc[(line, name)].to_numpy(), expected, equal_nan=True)
     with np.load(root / "programs" / f"{line}.npz") as payload:
         assert payload["scores"].shape == (CELLS_PER_LINE, 2)
-    assert manifest["coverage"][line] == {"P": 1.0, "Q": 1.0}
+    assert manifest["listed"][line] == {"scoring_set": 5 / 6, "P": 1.0, "Q": 1.0}
+    assert manifest["members_in_genes"] == {"P": 2, "Q": 2}
     assert set(manifest["lines"]) == set(frame.index.get_level_values("model_id"))
     # The same settings reuse the root; other settings are refused.
     assert (

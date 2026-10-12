@@ -380,7 +380,7 @@ def crossfit(
         labelled=labelled,
         encoder_lines=encoder_lines,
     )
-    return readings[""]
+    return readings.get("", {})
 
 
 def crossfit_readings(

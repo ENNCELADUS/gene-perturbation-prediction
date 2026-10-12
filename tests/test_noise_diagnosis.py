@@ -33,6 +33,9 @@ def test_column_pearson_uses_rows_finite_in_both():
     rho = noise.column_pearson(left, right)
     assert rho["a"] == pytest.approx(1.0)
     assert np.isnan(rho["b"])  # constant on one side: undefined, not zero
+    # A constant whose float SD is not exactly zero is still constant.
+    constant = pd.DataFrame({"c": [0.1] * 5})
+    assert np.isnan(noise.column_pearson(constant, constant)["c"])
     assert noise.spearman_brown(0.5) == pytest.approx(2 / 3)
 
 
@@ -219,6 +222,20 @@ def test_cell_sampling_reports_reliability_and_every_draw(diagnosis, tmp_path):
     assert set(result["prediction_agreement_between_halves"]) == {"val", "test"}
 
 
+def test_agreement_readings_leave_unmeasured_values_missing(diagnosis):
+    lines = list(diagnosis.base.bridge.val)
+    raw = diagnosis.raw.loc[lines].copy()
+    gene = raw.columns[3]
+    raw.loc[lines[0], gene] = np.nan  # this line's source lacks the gene
+    filled = diagnosis.reading(raw, lines)
+    measured = diagnosis.reading(raw, lines, measured_only=True)
+    assert np.isfinite(filled.loc[lines[0], gene])
+    assert np.isnan(measured.loc[lines[0], gene])
+    pd.testing.assert_frame_equal(
+        measured.drop(columns=gene), filled.drop(columns=gene)
+    )
+
+
 def test_the_reference_fit_must_reproduce_the_export(diagnosis):
     run.reference_fit(diagnosis)
     diagnosis.export.loc[list(diagnosis.base.bridge.val)] += 0.01
@@ -279,7 +296,18 @@ def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypa
     monkeypatch.setattr(
         run,
         "_program_scores",
-        lambda found, lines: {m: rng.normal(size=(40, 3)) for m in lines},
+        lambda found, lines: (
+            {m: rng.normal(size=(40, 3)) for m in lines},
+            {
+                m: {
+                    "scoring_set": 0.8 if m == "T0" else 1.0,
+                    "P0": 1.0,
+                    "P1": 1.0,
+                    "P2": 1.0,
+                }
+                for m in lines
+            },
+        ),
     )
     monkeypatch.setattr(
         run,
@@ -296,6 +324,8 @@ def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypa
         "clusters_3",
     }
     assert result["features"]["clusters_3"] == 3
+    assert result["lines_listing_under_90_percent"] == ["T0"]
+    assert set(result["listed"]) == {"scoring_set", "P0", "P1", "P2"}
     for arm, rows in result["arms"].items():
         assert [row["penalty"] for row in rows] == CONFIG["cell_states"]["penalties"]
         for row in rows:

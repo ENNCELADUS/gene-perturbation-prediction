@@ -491,8 +491,9 @@ def _noise_line(
     programs: Mapping[str, tuple[str, ...]],
     target_sum: float,
 ):
-    """One line's draw pseudo-bulks (draw name to row) and program coverage;
-    writes its per-cell program scores to ``programs_path``."""
+    """One line's draw pseudo-bulks (draw name to row) and the shares of the
+    scoring set and of each program its source lists; writes its per-cell program
+    scores to ``programs_path``."""
     import numpy as np
 
     from src.data.basal import symbol_column
@@ -511,14 +512,12 @@ def _noise_line(
             model_id, source.obs_names.astype(str), cells
         ).items()
     }
-    scores, coverage = program_scores(
-        source.X, symbols, genes, programs, target_sum, model_id=model_id
-    )
+    scores, listed = program_scores(source.X, symbols, genes, programs, target_sum)
     temporary = programs_path.with_name(f".{programs_path.name}.tmp")
     with temporary.open("wb") as handle:
         np.savez(handle, scores=scores)
     os.replace(temporary, programs_path)
-    return draws, coverage
+    return draws, listed
 
 
 def prepare_noise_inputs(
@@ -532,8 +531,8 @@ def prepare_noise_inputs(
     pseudo-bulk (``subsamples.parquet``, rows ``(model_id, draw)``, the prepared
     pseudo-bulk transform over ``genes``) and per-cell program scores over the same
     genes (``programs/<ModelID>.npz``, every basal cell, in ``programs`` order),
-    then ``manifest.json`` with each line's program coverage; return the manifest
-    path.
+    then ``manifest.json`` with the share of the scoring set and of each program
+    every line's source lists (``listed``); return the manifest path.
 
     A root written with the same settings is reused; one written with other
     settings is refused. Reads raw data (preparation is its only reader).
@@ -580,11 +579,11 @@ def prepare_noise_inputs(
         )
         for model_id, path in sources.items()
     ]
-    rows, index, coverage = [], [], {}
-    for model_id, (draws, covered) in zip(
+    rows, index, listed = [], [], {}
+    for model_id, (draws, shares) in zip(
         sources, _in_processes(calls, LINE_PROCESSES), strict=True
     ):
-        coverage[model_id] = covered
+        listed[model_id] = shares
         for name, values in draws.items():
             rows.append(values)
             index.append((model_id, name))
@@ -603,10 +602,10 @@ def prepare_noise_inputs(
             "settings": settings,
             "lines": list(sources),
             "members_in_genes": {
-                name: sum(str(g).upper() in scoring for g in members)
+                name: len({str(g).upper() for g in members} & scoring)
                 for name, members in settings["programs"].items()
             },
-            "coverage": coverage,
+            "listed": listed,
         },
     )
     return manifest_path
