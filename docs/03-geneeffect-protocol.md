@@ -18,9 +18,10 @@ selection rule and STATE treatment (§4–§6, §9.3): §4–§6 state the curre
 historical records of earlier runs under the earlier head and Huber selection. The
 [SL ranking protocol](04-sl-ranking-protocol.md) builds on this backbone; nothing here
 is SL evidence. §10 specifies the linear context prior, a CPU control that the joint model is
-compared against, §12 the single-cell correction that stacks the joint head on it, and §13 the
+compared against, §12 the single-cell correction that stacks the joint head on it, §13 the
 linear single-cell statistics stack, the first test of whether single-cell resolution adds to
-pseudo-bulk.
+pseudo-bulk, and §14 the noise diagnosis, which measures what limits the default prior before any
+denoising model is built.
 
 ## 1. Objective and prediction unit
 
@@ -885,6 +886,72 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
   prior by an interval above zero (+0.0014 to +0.0022 on validation, `mean` included), and there one row meets the
   reading rule: `single_cell` beats `mean` by +0.0009 [+0.0001, +0.0017] on validation, +0.0003 [−0.0004, +0.0010] on
   test, the only one of 26 comparisons with an interval above zero.
-- **Scope.** Per-line cell-state proportions need a new preparation step (second-wave plan, Task 4)
-  and are not in this stack. A stack result is single-gene dependency evidence on held-out lines; it is
-  not an SL result.
+- **Scope.** Per-line cell-state proportions are not in this stack; §14's `cell_states` stacks them on the
+  same export. A stack result is single-gene dependency evidence on held-out lines; it is not an SL result.
+
+## 14. Noise diagnosis
+
+The [noise-diagnosis design](specs/2026-10-12-noise-diagnosis-design.md) (agreed 2026-10-12) measures which noise
+limits the default prior (§10) before any single-cell model with noise handling of its own is built: per-cell sampling,
+the number of training lines, the deposit a line's cells come from, cell-state heterogeneity and the noise of the label.
+`configs/context_prior/noise_diagnosis.yaml`, run with `hpc/run.sh prior-noise CONFIG --run-id <id> [--sections A,B]`
+(`src/experiments/noise_diagnosis.py`), reads the prior run named by `prior_run` (its bound config and export) and writes
+`outputs/context_prior/<id>/noise/<section>.json`, skipping a section whose file exists, then `results.md`. Every score is
+on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing is chosen in code.
+
+- **Preparation.** The first section that needs them prepares, from each split line's raw cells, `noise/subsamples.parquet`:
+  pseudo-bulk (the §10 transform) of half A and half B of the line's cells (even and odd ranks of `sha256(ModelID|cell)`,
+  the `select_context_cells` order) and of its first 10, 25, 50, 100, 200 and 400 cells (draws nest; a draw the line
+  cannot fill is not written), and `noise/programs/<ModelID>.npz`: per-cell scores of the config's programs over every
+  basal cell: the mean log-normalised expression of a program's members minus the cell's mean over the scoring set, the
+  pseudo-bulk's DepMap protein-coding genes, one set for every line. A gene a source does not list scores as unexpressed
+  (some builders drop zero-count genes), and the share of the set each source lists is reported. Programs are Tirosh's S and G2/M sets
+  and the 21 Gavish meta-programs with no cell-line study among their sources (`configs/context_prior/reference/`,
+  `build_state_programs.py`; the other 20 count Kinker's CCLE pools, the cells of validation and test lines).
+  `noise/second_source/` holds pseudo-bulk of each line's second deposit (below). Any pseudo-bulk enters the prior's space
+  as the prepared rows do: the space's genes, a gap given the training mean, quantile-normalised to the training profile.
+- **`cell_sampling`.** Per space gene, the split-half Pearson across lines over measured values (a training-mean fill would
+  pair equal values) and its Spearman–Brown reliability, beside the
+  bridge's out-of-fold agreement with bulk on the paired lines and that agreement over the square root of their
+  reliability (`cell_sampling_genes.csv`, quartiles over all and selective genes). The reference prior, refitted on the
+  whole training side and refused unless it reproduces the export's validation and test rows, is queried with each draw
+  of the validation and test lines (a line with fewer cells reads them all and is counted as capped); gains over the full
+  pseudo-bulk, and the agreement of the two halves' predictions per selective gene.
+- **`learning_curve`.** The reference row refitted on nested patient-grouped fractions of the training side (bridge,
+  components and data-selected genes refitted; profile and metric fixed), with the full prior as the last row.
+- **`deposit_confound`.** η² of a training line's deposit (the final split table's `expression_source`, the 226's names
+  mapped to the identity map's keys so Tahoe-100M is one deposit; deposits under `min_lines` pooled) on the out-of-fold error and on the residual, macro-averaged over selective genes, against a null
+  permuting deposits within lineage; lineage beside it; the error's mean square per deposit.
+- **`deposit_swap`.** Labelled training lines with a second deposit, predicted out of fold (each export fold refitted once)
+  from four readings: primary (refused unless it reproduces the export), second deposit, half A and half B, all through
+  the bridges fitted on the primary pseudo-bulk outside the fold. Scores and gains over primary, and the agreement across
+  lines of primary and second against that of the halves, for predictions and inputs. Second deposits:
+  `plan_second_sources.py` writes `configs/data/second_source_lines_26Q1.json` (99 lines: another accepted raw-count
+  source of the identity map, another accession, the membership policy), which
+  `build_extra_single_cell_sources --second-source` builds into its own directory (`deposit.second_source_root`).
+- **`cell_states`.** Per-line features on the training lines' cells, label-free: `program_fractions` (cells above each
+  program's 90th percentile of the training lines' pooled scores, lines weighted equally), `program_means` (the
+  like-for-like control) and `clusters_<k>` (shares of the prepared context cells, centred on their line, nearest each of
+  `k` K-means centroids fitted on the training cells' leading principal components). Each is a shared ridge on what the
+  out-of-fold export leaves on the training lines, added to the export; gains over the prior alone and, for fractions,
+  over means at the same penalty.
+- **`screen_replicates`.** DepMap 26Q1's `ScreenGeneEffect.csv` and `CRISPRScreenMap.csv`, downloaded in a browser (the
+  portal's download API sits behind a browser check): per selective gene, Spearman across lines outside validation and test
+  between each line's first two screens; its macro mean and the approximate ceiling `sqrt(2r/(1+r))` beside the prior.
+- **Cilantro-SL's input reductions** are a bridge remedy of §10, `rank_value`
+  (`configs/context_prior/cilantro_encodings.yaml`, `hpc/run.sh prior`): values divided by each gene's training-side
+  nonzero median and ranked within the line (rank alone, rank with the top 2,048, and the same top 2,048 keeping their
+  expression), applied to bulk and pseudo-bulk before the affine bridge.
+- **Reading** (the design's §6, not code): flat scores from 50 to 100 cells up and split-half reliability above the
+  bridge's agreement say per-cell sampling does not bind; second-deposit predictions agreeing as well as the halves and no
+  deposit η² above its null say deposit batch does not; a curve still rising says more lines would help; the replicate
+  ceiling bounds the metric; fractions above means say state heterogeneity carries information beyond the mean.
+- **Result (2026-10-12, [record](../results/noise_diagnosis_seed0/README.md)).** Per-cell sampling does not bind:
+  split-half reliability 0.939 per gene, and ten cells per line score 0.2015 validation against 0.2045 (−0.0030
+  [−0.0092, +0.0036]); the bridge's agreement with bulk (0.453) is half its sampling ceiling. A second deposit moves a
+  line's input (agreement 0.375 against 0.865 for halves) and prediction (0.764 against 0.982) but not its accuracy
+  (+0.0066 [−0.0052, +0.0184] on 99 lines); deposit η² 0.0365 against a null of 0.0315. The learning curve still rises
+  (0.1930 at three quarters of the lines, +0.0115 for the last quarter). Screen replicates agree at 0.251 per gene
+  (ceiling about 0.587). Cell-state arms add at most +0.0010 and fractions never beat means; Cilantro's rank-value
+  encoding ties (−0.0022 [−0.0076, +0.0033]) and its top-2,048 truncations lose (−0.019, −0.014).
+- **Scope.** A diagnosis result is single-gene dependency evidence on held-out lines; it is not an SL result.

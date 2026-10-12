@@ -98,6 +98,10 @@ class RunBase:
         bridge: The quantile-normalised sources and folds the remedies start from.
         filled_lines: Training lines whose pseudo-bulk took the training mean for
             some gene of the space.
+        profile: The training side's mean sorted bulk profile, which bulk and
+            pseudo-bulk are quantile-normalised to.
+        pseudobulk_fill: Each space gene's pseudo-bulk mean over the training
+            lines measuring it: what an unmeasured value takes.
     """
 
     config: Mapping[str, Any]
@@ -109,10 +113,22 @@ class RunBase:
     reference: Reference
     bridge: BridgeBase
     filled_lines: int
+    profile: np.ndarray
+    pseudobulk_fill: pd.Series
 
     def truth(self, lines: Sequence[str]) -> pd.DataFrame:
         """Residual of ``lines`` in residual-SD units; reads their labels."""
         return scaled_residual(self.gene_effect, lines, self.definitions)
+
+    def normalize_pseudobulk(self, pseudobulk: pd.DataFrame) -> pd.DataFrame:
+        """Any pseudo-bulk rows (prepared transform, any genes) in the prior's
+        space, as ``bridge.pseudobulk`` holds the prepared rows: the space's genes,
+        an unmeasured value given the training mean, quantile-normalised to the
+        training side's profile."""
+        space = list(self.pseudobulk_fill.index)
+        return quantile_normalize(
+            pseudobulk.loc[:, space].fillna(self.pseudobulk_fill), self.profile
+        )
 
 
 def load_base(config: Mapping[str, Any]) -> RunBase:
@@ -165,7 +181,9 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     prepare_pseudobulk(joint, list(bulk.columns))
     pseudo = read_pseudobulk(prepared).loc[list(split.all_model_ids)]
     space = measured_genes(pseudo, list(bulk.columns), [*split.val, *split.test])
-    pseudo, filled = fill_unmeasured(pseudo.loc[:, space], split.train)
+    pseudo = pseudo.loc[:, space]
+    fill = pseudo.loc[list(split.train)].mean(axis=0, skipna=True)
+    pseudo, filled = fill_unmeasured(pseudo, split.train)
     definitions = fit_definitions(gene_effect, split, panel, joint["features"])
     gene_effect = gene_effect.loc[:, list(definitions.genes)]
 
@@ -203,6 +221,8 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
         ),
         bridge=bridge,
         filled_lines=int((filled > 0).sum()),
+        profile=profile,
+        pseudobulk_fill=fill,
     )
 
 

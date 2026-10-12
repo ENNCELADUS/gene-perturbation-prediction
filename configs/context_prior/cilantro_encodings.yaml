@@ -1,0 +1,34 @@
+# Cilantro-SL's input reductions on the default prior's input (noise-diagnosis design of 2026-10-12, §4): Geneformer's
+# rank-value encoding (each gene divided by its training-side nonzero median, then ranked within the line) and its
+# top-2,048 truncation, applied to bulk and pseudo-bulk before the affine bridge. The reference row is the default prior
+# (configs/context_prior/default_prior.yaml) on the final split; every encoding is fitted at the same penalties. Rank
+# alone, rank with top 2,048, and truncation alone (the same top 2,048 genes keeping their expression) separate the two
+# reductions. Every row is reported on validation and test; nothing is chosen in code.
+seed: 0
+joint_config: configs/revision/frozen_huber.yaml
+output_root: outputs/context_prior
+paths:
+  reference: configs/context_prior/reference
+  model: data/sl_dependency_v0/raw/depmap/Model.csv
+  bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
+training_side:
+  exclude_lineages: [Lymphoid, Myeloid]
+prior: {components: 128, folds: 5, bootstrap_repeats: 1000, selected_genes: 50}
+penalties:
+  components: [1.0]
+  gene: [10.0]
+block_sets:
+  selected: [expression_components, data_selected]
+reference: {experiment: affine, block_set: selected, components_penalty: 1.0, gene_penalty: 10.0}
+experiments:
+  affine:
+    kind: affine
+    settings: [{}]
+    block_sets: [selected]
+  rank_value:
+    kind: rank_value
+    settings:
+      - {encoding: rank_value, top_k: null}
+      - {encoding: rank_value, top_k: 2048}
+      - {encoding: expression, top_k: 2048}
+    block_sets: [selected]

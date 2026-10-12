@@ -372,22 +372,52 @@ def crossfit(
 ) -> dict[str, pd.DataFrame]:
     """Per-stage predictions of each fold's query rows by the prior fitted on the
     lines outside that fold, keyed by the query rows' index."""
+    readings = crossfit_readings(
+        spec,
+        inputs,
+        folds=folds,
+        queries={fold: {"": query} for fold, query in queries.items()},
+        labelled=labelled,
+        encoder_lines=encoder_lines,
+    )
+    return readings.get("", {})
+
+
+def crossfit_readings(
+    spec: PriorSpec,
+    inputs: PriorInputs,
+    *,
+    folds: Mapping[str, int],
+    queries: Mapping[int, Mapping[str, pd.DataFrame]],
+    labelled: Sequence[str],
+    encoder_lines: Sequence[str],
+) -> dict[str, dict[str, pd.DataFrame]]:
+    """:func:`crossfit` for several readings of each fold's lines (the same lines
+    read from different inputs): each fold is fitted once and predicts every
+    reading. Per-stage predictions keyed by reading, then block."""
     if inputs.gene_rows is not None:
         raise ValueError("cross-fitting does not split gene rows by fold")
-    parts: dict[str, list[pd.DataFrame]] = {}
-    for fold, query in sorted(queries.items()):
-        strays = [m for m in query.index if folds[m] != fold]
-        if strays:
-            raise ValueError(f"fold {fold} queries lines of other folds: {strays[:10]}")
+    parts: dict[str, dict[str, list[pd.DataFrame]]] = {}
+    for fold, readings in sorted(queries.items()):
+        for query in readings.values():
+            strays = [m for m in query.index if folds[m] != fold]
+            if strays:
+                raise ValueError(
+                    f"fold {fold} queries lines of other folds: {strays[:10]}"
+                )
         fitted = fit_prior(
             spec,
             inputs,
             fit_lines=[m for m in labelled if folds[m] != fold],
             encoder_lines=[m for m in encoder_lines if folds[m] != fold],
         )
-        for block, frame in fitted.predict(query).items():
-            parts.setdefault(block, []).append(frame)
+        for name, query in readings.items():
+            for block, frame in fitted.predict(query).items():
+                parts.setdefault(name, {}).setdefault(block, []).append(frame)
     return {
-        block: pd.concat(frames, verify_integrity=True)
-        for block, frames in parts.items()
+        name: {
+            block: pd.concat(frames, verify_integrity=True)
+            for block, frames in blocks.items()
+        }
+        for name, blocks in parts.items()
     }

@@ -49,6 +49,15 @@ lineage, cells and arms), `pending` (labelled, source not built or no cell after
 (no GeneEffect row; never built) and `excluded` (shares a PatientID with a validation or test line).
 Preparation and the SL benchmark read only `labelled`. `inputs` records the SHA-256 of every input.
 
+**Second deposits** (2026-10-12, for the [noise diagnosis](../specs/2026-10-12-noise-diagnosis-design.md)'s deposit
+swap): `configs/data/second_source_lines_26Q1.json` (`src/data/prepare/plan_second_sources.py`) names, for each labelled
+single-cell training line, one more source: an `ok`, raw-count row of the map from a source of the spec, other than the
+line's own (the final split table's `expression_source`; `kinker_sccle` and `Tahoe-100M DMSO` are the map's
+`kinker_scp542` and `tahoe100m`) and from another accession, chosen by the policy above. 99 lines have one: 36 Kinker to
+MIX-seq, 13 Tahoe-100M to MIX-seq and 50 others; 89 from wave-1 sources, 10 from wave 2. The builder's
+`--second-source` mode writes them to their own directory and never touches the training caches or the membership
+file. All 99 were built on the H20 on 2026-10-12 (both waves, no failure).
+
 ## Builder
 
 `src/data/prepare/build_extra_single_cell_sources.py` reads the tracked source spec
@@ -274,8 +283,10 @@ refuses to overwrite an h5ad.
   matrices with `done.json`),
   `data/references/gencode_v44/` (genome, GTF, kallisto index and its `kallisto_standard.json`),
   `data/sl_dependency_v0/processed/basal_raw_umi/` (one h5ad per prepared line, the 226 hard-linked
-  from their builders' outputs, and `qc/<source>.json`) and `data/superseded/extras_wave1_2026-10-11/`
-  (the wave-one files of the lines wave 2 rebuilt).
+  from their builders' outputs, and `qc/<source>.json`), `data/superseded/extras_wave1_2026-10-11/`
+  (the wave-one files of the lines wave 2 rebuilt) and, once built,
+  `data/sl_dependency_v0/processed/basal_raw_umi_second_source/` (the second deposits and their `qc/`).
+- `configs/data/second_source_lines_26Q1.json`: the second-deposit plan.
 
 ## Use
 

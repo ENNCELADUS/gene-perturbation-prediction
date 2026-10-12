@@ -217,6 +217,24 @@ def test_sources_write_basal_cells_of_their_chosen_lines_only(tmp_path):
     np.testing.assert_array_equal(line_b.X.toarray(), raw.counts[[0, 1, 3]].toarray())
 
 
+def test_second_source_plan_builds_planned_lines_even_of_the_226(tmp_path):
+    build_world(tmp_path)
+    plan = tmp_path / "plan.json"
+    plan.write_text(
+        json.dumps({"lines": {TRAIN: {"primary": "elsewhere", "second": "geo"}}})
+    )
+    out = tmp_path / "second"
+    run(tmp_path / "spec.json", 1, out, second_source=plan)
+    assert [p.name for p in out.glob("*.h5ad")] == [f"{TRAIN}.h5ad"]
+    line = ad.read_h5ad(out / f"{TRAIN}.h5ad")
+    assert list(line.obs_names) == [f"{TRAIN}:1:t{i}" for i in range(4)]
+    assert set(line.obs["source"]) == {"geo"}
+    # Line A's six cells belong to no planned line (checked before the QC floor);
+    # the unplanned source is not read.
+    assert _report(out, "geo")["dropped"] == {"line not taken from this source": 6}
+    assert not (out / "qc" / "labelled.json").exists()
+
+
 def test_sources_resume_and_refuse_interrupted_output(tmp_path):
     build_world(tmp_path)
     out = tmp_path / "out"

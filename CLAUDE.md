@@ -74,7 +74,18 @@ add +0.0044 on validation (intervals spanning zero), and at one penalty pair the
 the final split's prior export, which predicts every training line out of fold; no model has been trained on them yet),
 and the SL benchmark rebuilt on them (29 screened training lines with single cells, 13 through bulk).
 Wave 2 (counts recovered from processed deposits, Cell Ranger BAMs, or SRA reads re-counted with kb) added 22 lines and
-moved eight to sources with more or untreated cells; it adds no screened line. The SL pair head is **unimplemented**.
+moved eight to sources with more or untreated cells; it adds no screened line. The **noise diagnosis** (agreed
+2026-10-12 after reviewing Cilantro-SL, which reads bulk RNA and whose reductions keep gene identity, not context;
+[design](docs/specs/2026-10-12-noise-diagnosis-design.md), protocol §14) measures what
+limits the default prior before any denoising model is built: per-cell sampling (split halves, 10 to 400 cells), a
+learning curve over training lines, deposit batch (a confound test, and 99 second deposits built by
+`build_extra_single_cell_sources --second-source`), cell-state programs (Tirosh's cell cycle and the 21 Gavish
+meta-programs without a cell-line study) and K-means clusters, label replicates (DepMap per-screen files, downloaded
+by hand on 2026-10-12) and Cilantro's rank-value and top-2,048 encodings (`configs/context_prior/cilantro_encodings.yaml`).
+It ran on 2026-10-12 (`results/noise_diagnosis_seed0/`): ten cells per line read as well as all of them, a second
+deposit moves inputs and predictions but not accuracy, state programs, clusters and Cilantro's encodings add nothing,
+and the learning curve still rises at the full training side; lines, not single-cell noise, limit the prior.
+The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.
 
@@ -97,6 +108,7 @@ hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   # linear context pri
 hpc/run.sh prior-selected CONFIG --run-id ID                # the reference row's data-selected genes, CPU: data_selected/ in the same run directory
 hpc/run.sh prior-export CONFIG --run-id ID                  # the reference row for the correction, CPU: export/ (val/test, training lines out of fold); never overwritten
 hpc/run.sh prior-stack CONFIG --run-id ID                   # single-cell q_sc statistics stacked on a prior export, CPU: single_cell_stack/ (protocol §13)
+hpc/run.sh prior-noise CONFIG --run-id ID [--sections A,B]  # noise diagnosis against a prior run, CPU: noise/ (protocol §14)
 uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```

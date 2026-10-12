@@ -36,7 +36,27 @@
       "source": "https://ndownloader.figshare.com/files/51065726",
       "rows": 1865,
       "sha256": "34d0d924d40548167d6b21211e6e6a8336d5c7dcb00fe201f7de2b6c75c4a4fa"
+    },
+    "cell_cycle.tsv": {
+      "source": "https://raw.githubusercontent.com/satijalab/seurat/00e55c9b54c8b12b5ae85ffafc1c18d683c73a9f/data/cc.genes.rda",
+      "rows": 97,
+      "sha256": "abf12ba8ac7477e9bfd6f0defdf9245fa40ea48233afd17ca0d6b192ad27cfc2"
+    },
+    "meta_programs.tsv": {
+      "source": "https://raw.githubusercontent.com/tiroshlab/3ca/21a784103528cdf15008761f9669e2025159d6d2/ITH_hallmarks/MPs_distribution/MP_list.RDS.gz",
+      "rows": 2050,
+      "sha256": "21b57bc8421b0fbe4575f07e6ef36845d3b48fee142ddc5d1063d01e4b6fe39e"
+    },
+    "meta_program_sources.tsv": {
+      "source": "https://raw.githubusercontent.com/tiroshlab/3ca/21a784103528cdf15008761f9669e2025159d6d2/ITH_hallmarks/TCGA_analysis/study_contribution_per_MP.RDS",
+      "rows": 41,
+      "sha256": "340df0294341727f400d17ebc49fd88ae7329d5dbf61d5e6394135bc3e32c40b"
     }
   },
-  "line_tables_rebuilt": "2026-10-11"
+  "line_tables_rebuilt": "2026-10-11",
+  "state_programs_retrieved": "2026-10-12",
+  "checks": {
+    "meta_program_cell_lines": "meta_program_sources.tsv counts each program's cell-line studies (Kinker et al. 2020's CCLE pools and other cell-line sets). Kinker's pools hold the cells of validation and test lines, the exposure ruled out for Kinker's own programs on 2026-10-04, so a config reads only programs with no cell-line study (21 of 41; decided 2026-10-12).",
+    "tirosh_cell_cycle": "Tirosh et al. 2016 (Science 352:189, PMC4944528): 'we used gene signatures previously shown to denote G1/S or G2/M phases in both synchronization and single-cell experiments in cell lines', citing Whitfield et al. 2002 (synchronised HeLa; HeLa is a test line here) and Macosko et al. 2015. Canonical cell-cycle genes from an earlier experiment, no deposit this project reads; kept and noted."
+  }
 }

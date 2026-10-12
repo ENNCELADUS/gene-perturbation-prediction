@@ -30,7 +30,7 @@ import tarfile
 import zipfile
 from array import array
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -734,9 +734,13 @@ def _mito(library: Library, gene_metadata: pd.DataFrame, id_kind: str) -> np.nda
 
 
 def build_source(
-    name: str, source: Mapping[str, Any], context: Context, output: Path
+    name: str,
+    source: Mapping[str, Any],
+    context: Context,
+    output: Path,
+    wanted: Collection[str],
 ) -> dict[str, Any]:
-    """Write this source's lines; return its QC report."""
+    """Write the ``wanted`` lines' cells from this source; return its QC report."""
     _require(
         source, ("wave", "files", "unpack", "gene_id_kind", "arms", "libraries"), name
     )
@@ -754,7 +758,7 @@ def build_source(
             "identifier",
         ]
     )
-    wanted = {m for m, s in context.admission.labelled.items() if s == name}
+    wanted = set(wanted)
     blocks: dict[str, list[tuple[Any, ...]]] = {m: [] for m in wanted}
     dropped, reports = Counter(), []
     floor = context.spec["min_genes"], context.spec["max_mito_fraction"]
@@ -798,10 +802,12 @@ def build_source(
                 dropped["identity not accepted"] += 1
             elif identifier not in ours:
                 raise ValueError(f"{name}: label {identifier!r} absent from the map")
-            elif ours[identifier] in context.split.all_model_ids:
-                dropped["line of the 226"] += 1
             elif ours[identifier] not in wanted:
-                dropped["line not taken from this source"] += 1
+                dropped[
+                    "line of the 226"
+                    if ours[identifier] in context.split.all_model_ids
+                    else "line not taken from this source"
+                ] += 1
             elif arms[cell] not in source["arms"]:
                 dropped["arm"] += 1
             elif detected[cell] < floor[0] or mito_umi[cell] > floor[1] * totals[cell]:
@@ -925,8 +931,15 @@ def _unpack(archive: Path, into: Path) -> None:
 
 
 def run(
-    spec_path: Path, wave: int, output: Path, only: Sequence[str] | None = None
+    spec_path: Path,
+    wave: int,
+    output: Path,
+    only: Sequence[str] | None = None,
+    second_source: Path | None = None,
 ) -> None:
+    """Build the wave's sources: each admitted line from its chosen source, or,
+    with ``second_source`` (a plan of ``plan_second_sources``), each planned line
+    from its second deposit, which may be a line of the 226."""
     spec = json.loads(spec_path.read_text())
     split = load_geneeffect_split(Path(spec["split_path"]))
     candidates = read_map(Path(spec["candidates_path"]))
@@ -941,6 +954,9 @@ def run(
     context = Context(
         spec, candidates, admission, split, models, gene_metadata, symbol_to_ensembl
     )
+    planned = (
+        {} if second_source is None else json.loads(second_source.read_text())["lines"]
+    )
     (output / "qc").mkdir(parents=True, exist_ok=True)
     unknown = sorted(set(only or ()) - set(spec["sources"]))
     if unknown:
@@ -952,14 +968,21 @@ def run(
         if report_path.exists():
             print(f"{name}: built", flush=True)
             continue
-        wanted = [m for m, s in admission.labelled.items() if s == name]
+        taken = (
+            admission.labelled
+            if second_source is None
+            else {m: line["second"] for m, line in planned.items()}
+        )
+        wanted = [m for m, s in taken.items() if s == name]
+        if second_source is not None and not wanted:
+            continue
         partial = [m for m in wanted if (output / f"{m}.h5ad").exists()]
         if partial:
             raise FileExistsError(
                 f"{name}: h5ad without a QC report (an interrupted run): {partial}"
             )
         print(f"{name}: building {len(wanted)} lines", flush=True)
-        report = build_source(name, source, context, output)
+        report = build_source(name, source, context, output, wanted)
         report["spec_sha256"] = _sha256(spec_path)
         temporary = report_path.with_name(f".{report_path.name}.tmp")
         temporary.write_text(json.dumps(report, indent=2, default=float) + "\n")
@@ -995,6 +1018,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--print-downloads", action="store_true")
     parser.add_argument("--sources", help="comma-separated source keys (default: all)")
+    parser.add_argument(
+        "--second-source",
+        type=Path,
+        help="a second-deposit plan: build its lines from their second deposits "
+        "(into an output directory of their own)",
+    )
     args = parser.parse_args(argv)
     if args.print_downloads:
         for url, path in downloads(args.spec, args.wave):
@@ -1003,7 +1032,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.output_dir is None:
         parser.error("--output-dir is required to build")
     only = None if args.sources is None else args.sources.split(",")
-    run(args.spec, args.wave, args.output_dir, only)
+    run(args.spec, args.wave, args.output_dir, only, args.second_source)
     return 0
 
 

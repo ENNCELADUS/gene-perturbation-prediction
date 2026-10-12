@@ -1,0 +1,42 @@
+program	studies	cell_line_studies
+MP1 Cell Cycle - G2/M	87	24
+MP2 Cell Cycle - G1/S	63	22
+MP3 Cell Cylce HMG-rich	11	0
+MP4 Chromatin	19	12
+MP5 Stress	72	12
+MP6 Hypoxia	39	1
+MP7 Stress (in vitro)	37	18
+MP8 Proteasomal degradation	40	21
+MP9 Unfolded protein response	11	0
+MP10 Protein maturation	15	6
+MP11 Translation initiation	13	1
+MP12 EMT-I	20	2
+MP13 EMT-II	26	6
+MP14 EMT-III	30	3
+MP15 EMT IV	3	0
+MP16 MES (glioma)	4	1
+MP17 Interferon/MHC-II (I)	48	8
+MP18 Interferon/MHC-II (II)	9	0
+MP19 Epithelial Senescence	26	4
+MP20 MYC	31	0
+MP21 Respiration	23	0
+MP22 Secreted I	8	0
+MP23 Secreted II	8	0
+MP24 Cilia	9	0
+MP25 Astrocytes	12	1
+MP26 NPC Glioma	10	2
+MP27 Oligo Progenitor	8	0
+MP28 Oligo normal	2	0
+MP29 NPC/OPC	3	1
+MP30 PDAC-classical	11	0
+MP31 Alveolar	5	0
+MP32 Skin-pigmentation	2	1
+MP33 RBCs	4	0
+MP34 Platelet-activation	6	0
+MP35 Hemato-related-I	3	0
+MP36 IG	5	0
+MP37 Hemato-related-II	2	0
+MP38 Glutathione	4	0
+MP39 Metal-response	3	0
+MP40 PDAC-related	5	1
+MP41 Unassigned	4	0

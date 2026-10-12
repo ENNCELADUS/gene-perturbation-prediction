@@ -476,6 +476,201 @@ def prepare_pseudobulk(config: Mapping[str, Any], genes: Sequence[str]) -> Path:
     return manifest_path
 
 
+NOISE_DIR: Final[str] = "noise"
+
+
+def _noise_line(
+    model_id: str,
+    source_path: Path,
+    programs_path: Path,
+    *,
+    var_ensembl_col: str,
+    hvg_gene_symbol_col: str,
+    genes: tuple[str, ...],
+    cells: tuple[int, ...],
+    programs: Mapping[str, tuple[str, ...]],
+    target_sum: float,
+):
+    """One line's draw pseudo-bulks (draw name to row) and the shares of the
+    scoring set and of each program its source lists; writes its per-cell program
+    scores to ``programs_path``."""
+    import numpy as np
+
+    from src.data.basal import symbol_column
+    from src.data.noise_inputs import cell_draws, program_scores
+    from src.data.pseudobulk import pseudobulk
+    from src.data.tx1_cache import read_basal_source
+
+    source = read_basal_source(
+        source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
+    )
+    symbols = source.var[symbol_column(source.var, hvg_gene_symbol_col)]
+    symbols = symbols.astype(str).tolist()
+    draws = {
+        name: pseudobulk(source.X[rows], symbols, genes)
+        for name, rows in cell_draws(
+            model_id, source.obs_names.astype(str), cells
+        ).items()
+    }
+    scores, listed = program_scores(source.X, symbols, genes, programs, target_sum)
+    temporary = programs_path.with_name(f".{programs_path.name}.tmp")
+    with temporary.open("wb") as handle:
+        np.savez(handle, scores=scores)
+    os.replace(temporary, programs_path)
+    return draws, listed
+
+
+def prepare_noise_inputs(
+    config: Mapping[str, Any],
+    genes: Sequence[str],
+    *,
+    cells: Sequence[int],
+    programs: Mapping[str, Sequence[str]],
+) -> Path:
+    """Write ``<prepared_root>/noise/`` for every line of the split: cell-draw
+    pseudo-bulk (``subsamples.parquet``, rows ``(model_id, draw)``, the prepared
+    pseudo-bulk transform over ``genes``) and per-cell program scores over the same
+    genes (``programs/<ModelID>.npz``, every basal cell, in ``programs`` order),
+    then ``manifest.json`` with the share of the scoring set and of each program
+    every line's source lists (``listed``); return the manifest path.
+
+    A root written with the same settings is reused; one written with other
+    settings is refused. Reads raw data (preparation is its only reader).
+    """
+    import numpy as np
+    import pandas as pd
+
+    from src.data.prepared import read_manifest
+
+    prepared = Path(config["prepared_root"])
+    root = prepared / NOISE_DIR
+    manifest_path = root / "manifest.json"
+    prepared_manifest = read_manifest(prepared)
+    settings = {
+        "genes": list(genes),
+        "cells": sorted(int(n) for n in cells),
+        "programs": {name: list(members) for name, members in programs.items()},
+        "target_sum": float(prepared_manifest["expression_space"]["target_sum"]),
+    }
+    sources = basal_sources(config)
+    if manifest_path.is_file():
+        recorded = json.loads(manifest_path.read_text())
+        if recorded["settings"] != settings:
+            raise ValueError(f"{root} was prepared with other settings")
+        if recorded["lines"] == list(sources):
+            return manifest_path
+        raise ValueError(
+            f"{root} was prepared for other lines; move it aside and rerun"
+        )
+    (root / "programs").mkdir(parents=True, exist_ok=True)
+    options = config["preparation"]
+    calls = [
+        partial(
+            _noise_line,
+            model_id,
+            path,
+            root / "programs" / f"{model_id}.npz",
+            var_ensembl_col=options["var_ensembl_col"],
+            hvg_gene_symbol_col=options["hvg_gene_symbol_col"],
+            genes=tuple(genes),
+            cells=tuple(settings["cells"]),
+            programs={name: tuple(m) for name, m in settings["programs"].items()},
+            target_sum=settings["target_sum"],
+        )
+        for model_id, path in sources.items()
+    ]
+    rows, index, listed = [], [], {}
+    for model_id, (draws, shares) in zip(
+        sources, _in_processes(calls, LINE_PROCESSES), strict=True
+    ):
+        listed[model_id] = shares
+        for name, values in draws.items():
+            rows.append(values)
+            index.append((model_id, name))
+    frame = pd.DataFrame(
+        np.stack(rows),
+        index=pd.MultiIndex.from_tuples(index, names=["model_id", "draw"]),
+        columns=list(genes),
+    )
+    temporary = root / "subsamples.parquet.tmp"
+    frame.to_parquet(temporary)
+    os.replace(temporary, root / "subsamples.parquet")
+    scoring = {str(gene).upper() for gene in genes}
+    _write_json(
+        manifest_path,
+        {
+            "settings": settings,
+            "lines": list(sources),
+            "members_in_genes": {
+                name: len({str(g).upper() for g in members} & scoring)
+                for name, members in settings["programs"].items()
+            },
+            "listed": listed,
+        },
+    )
+    return manifest_path
+
+
+def prepare_second_source(
+    config: Mapping[str, Any], genes: Sequence[str], second_root: Path
+) -> Path:
+    """Write ``<prepared_root>/noise/second_source/``: pseudo-bulk, in the
+    prepared transform over ``genes``, of every split line with a second-deposit
+    h5ad ``<second_root>/<ModelID>.h5ad``; rows of lines already written stay as
+    written and new files add rows. Refuses a root for other genes or another
+    second-deposit directory."""
+    import numpy as np
+    import pandas as pd
+
+    from src.data.splits import load_geneeffect_split
+
+    root = Path(config["prepared_root"]) / NOISE_DIR / "second_source"
+    manifest_path = root / "manifest.json"
+    settings = {"genes": list(genes), "second_root": str(second_root)}
+    split = load_geneeffect_split(Path(config["paths"]["split"]))
+    available = {
+        model_id: Path(second_root) / f"{model_id}.h5ad"
+        for model_id in split.all_model_ids
+        if (Path(second_root) / f"{model_id}.h5ad").is_file()
+    }
+    if manifest_path.is_file():
+        recorded = json.loads(manifest_path.read_text())
+        if recorded["settings"] != settings:
+            raise ValueError(f"{root} holds another second-deposit pseudo-bulk")
+        frame = pd.read_parquet(root / "pseudobulk.parquet")
+    else:
+        frame = pd.DataFrame(columns=list(genes), dtype=np.float32)
+    missing = [m for m in available if m not in frame.index]
+    if not missing and manifest_path.is_file():
+        return manifest_path
+    options = config["preparation"]
+    calls = [
+        partial(
+            _pseudobulk_line,
+            model_id,
+            available[model_id],
+            var_ensembl_col=options["var_ensembl_col"],
+            hvg_gene_symbol_col=options["hvg_gene_symbol_col"],
+            genes=tuple(genes),
+        )
+        for model_id in missing
+    ]
+    if calls:
+        added = pd.DataFrame(
+            np.stack(list(_in_processes(calls, LINE_PROCESSES))),
+            index=missing,
+            columns=list(genes),
+        )
+        frame = pd.concat([frame, added]) if len(frame) else added
+    frame.index.name = "model_id"
+    root.mkdir(parents=True, exist_ok=True)
+    temporary = root / "pseudobulk.parquet.tmp"
+    frame.to_parquet(temporary)
+    os.replace(temporary, root / "pseudobulk.parquet")
+    _write_json(manifest_path, {"settings": settings, "lines": list(frame.index)})
+    return manifest_path
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
