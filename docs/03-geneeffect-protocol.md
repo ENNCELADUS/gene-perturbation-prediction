@@ -47,15 +47,19 @@ SL protocol's pair evaluation.
 
 ## 2. Benchmark
 
-The [fixed split](../configs/benchmarks/cell_line_geneeffect_226_split.json) is the
-sole membership authority; the [data card](data/cell-line-geneeffect-226.md)
-documents its construction.
+The [final split](../configs/benchmarks/cell_line_geneeffect_split.json) is the
+sole membership authority ([data card](data/cell-line-geneeffect-split.md)). It is built from the
+[226 split](data/cell-line-geneeffect-226.md), which fixes the held-out lines, and the built single-cell
+and bulk extras.
 
 | Cohort | Members | Labeled | Role |
 | --- | ---: | ---: | --- |
-| train | 171 | 169 | supervised fitting; PC9 and HeLa have no 26Q1 GeneEffect row |
+| train | 379 | 377 | supervised fitting: the 226's 171 training lines and the 208 single-cell extras; PC9 and HeLa have no 26Q1 GeneEffect row |
 | validation | 27 | 27 | once-per-epoch evaluation, checkpoint selection, early stopping |
 | test | 28 | 28 | one-shot final evaluation |
+
+The bulk-only lines (713 labelled, 576 unlabelled) join the training side of the linear prior
+through bulk RNA (§10); 12 lines sharing a patient with a held-out line are never read.
 
 The 47 original basal/SL-context union lines are fixed in train except A549, fixed in test
 since 2026-10-11 for the SL benchmark (the split was rebuilt in place; results recorded before
@@ -77,10 +81,9 @@ it reads the counts underneath, and the shift survives pooling
 cells per line is encoded once by the frozen Tx1-3B foundation model; the same cells,
 in the expression space of §3.4, are STATE's basal input.
 
-The **training lines** are the split's 169 labelled training lines and, under
-`train.single_cell_extras` (true in every joint config), the 208 labelled single-cell extras
-outside the 226 ([card](data/single-cell-atlas-search.md)), 377 in all. An extra's cells are
-prepared like the 226's and read the same way; validation and test lines come only from the split.
+The training lines are the 226's 171 and the 208 single-cell extras built from public deposits
+([card](data/single-cell-atlas-search.md)); an extra's cells are prepared like the 226's and read the
+same way. Validation and test lines are the 226's.
 
 ### 3.2 Response anchors
 
@@ -95,12 +98,11 @@ held-out behaviour is measured by the comparison of §9.
 ### 3.3 Dependency labels
 
 Use the pinned DepMap 26Q1 GeneEffect release, joined by ModelID. Fit the gene mean, the
-variable-gene set, the selective-gene set and per-gene residual SD of §4 and §6 on the split's
-169 labeled training lines only, and reuse them unchanged in every later evaluation. They define
-the target and the metric, so the single-cell extras do not move them: an extra's labels are
-training targets, residuals over the same gene means, and a run with the extras is scored by the
-same definitions as one without. Test values never enter preparation or fitting. Missing labels
-stay missing.
+variable-gene set, the selective-gene set and per-gene residual SD of §4 and §6 on the 377 labeled
+training lines only, and reuse them unchanged in every later evaluation. Test values never enter
+preparation or fitting. Missing labels stay missing. Results recorded before 2026-10-12 fit them on
+the 226's 169 labelled training lines (3,071 selective genes on the 171/27/28 split, against 4,323 on
+the final split), so their metric is not the current one.
 
 ### 3.4 Expression space
 
@@ -124,14 +126,13 @@ $$
   prepared line, the response targets and anchor control bags, the basal statistics $q_{g,c}$
   (mean and variance; detected fraction is space-invariant), and the HVG features of the
   context baselines (§6).
-- The prepared lines are the 226 and the built single-cell extras
-  (`configs/benchmarks/extra_single_cell_lines_26Q1.json`,
+- The prepared lines are the split's (the 226 and the built single-cell extras,
   [card](data/single-cell-atlas-search.md)); each line's raw-UMI cells are
   `<paths.basal_raw_umi>/<ModelID>.h5ad`, and a missing file stops preparation. $T$, the gene
   panel and the HVG order are fixed by the 226. Once the manifest exists, a run prepares only
   the lines without `lines/<ModelID>.npz`, in the recorded space, and records the line list in
-  the manifest; every other file stays as written. Training, evaluation and the controls read
-  the 226 only.
+  the manifest; every other file stays as written. The split path names which lines exist, not
+  how one is prepared, so a root recorded under another split path is reused.
 - Preparation refuses a source matrix that is already normalised, and loading refuses a
   prepared root without `expression_space`, so a raw-count cache cannot reach STATE.
 
@@ -620,7 +621,7 @@ ridge (and, with a prior export, minus each prior control of §12), and a descri
 per-lineage table (the mean over a lineage's lines of the per-line residual Spearman across the
 selective genes), then the best epoch with its training-diagnostic and validation selective
 Spearman; a best epoch before the first update is reported as the prior alone. The lineages come
-from the split table next to the split file (`cell_line_geneeffect_226_split.csv`). One
+from the split table next to the split file (`cell_line_geneeffect_split.csv`). One
 config is one experiment at seed 0 (Figure 2); there is no multi-seed stage. Runs are screened
 one at a time: the three objectives under frozen STATE, then the winning objective with
 trainable STATE and with no STATE. A winner has the highest `val_selective_spearman` at its
@@ -653,12 +654,11 @@ block sets to fit under it. A run:
 
 1. **Pseudo-bulk and the bridge inputs.** Preparation sums each line's raw UMI over all its basal
    cells, then CPM and log1p, into the prepared root; this is the only raw-data read. It covers
-   every prepared line (§3.4) and appends the rows of new ones, keeping existing rows; the prior
-   reads the 226's rows and, under `training_side.single_cell_extras`, the single-cell extras'.
-   The single-cell training lines are then the split's labelled training lines and the extras: an
-   extra pairs for the bridge where its bulk RNA is on the training side (not one of a dropped
-   lineage, nor one without bulk RNA) and takes a patient-grouped fold. The prior's fit lines, the
-   labelled training-side lines with bulk RNA, do not change. The shared
+   every prepared line (§3.4) and appends the rows of new ones, keeping existing rows. The prior
+   reads the split of its joint config: the labelled single-cell training lines are its
+   single-cell side (the bridge pairs those with bulk RNA, and each takes a patient-grouped fold),
+   and the split's bulk-only lines outside the config's dropped lineages join its training side
+   through bulk RNA; the dropped lineages apply to bulk-only lines only. The shared
    space is the bulk genes every validation and test line's source measures (8,737 on the current
    split, whose test line A549 comes from the Tahoe-100M source; 9,711 on the 172/27/27 split); a training
    line lacking one takes the training lines' mean for it (counts in `facts.json`). Bulk and pseudo-bulk
@@ -692,7 +692,7 @@ Every components penalty is a reported row, and a gene-level block set has a row
 components and gene penalty pair: the components penalty sets how much residual the gene-level
 stages fit, while the scale-free score barely separates components penalties on their own.
 Gains are measured against the reference row the config pins; nothing is chosen, kept, dropped,
-passed or failed in code. Which setting, block set or extra-line cohort to use is decided by
+passed or failed in code. Which setting, block set or bulk-only cohort to use is decided by
 reading the table. `hpc/run.sh prior-selected CONFIG --run-id ID`
 (`src/experiments/data_selected_analysis.py`) fits the reference row, which must end with the
 data-selected genes, and writes `data_selected/` into the run directory: per feature, how often
@@ -707,12 +707,11 @@ config's reference row into `outputs/context_prior/<run_id>/export/` for the sin
 correction (§12): `prior.npz` (lines × genes in residual-SD units, the line and gene order, the
 residual SD it was fitted with) and `prior.json` (run id, reference row, units, lines per split,
 and the export's own selective-Spearman scores). Validation and test rows are the reference row
-itself. Each labelled single-cell training line, the extras' included under the switch, is
-predicted **out of fold**: the bridge and every stage are refitted without the line's
-patient-grouped fold (the five folds of step 2); a bulk-only extra line sharing a patient with a
-line of that fold is held out with it, and every other bulk-only extra line is always fitted on. A
-correction that trains on the single-cell extras needs an export made with the switch on, since
-`load_inputs` refuses an export lacking a line the run exposes. The export is written once; an existing export is never replaced, because a
+itself. Each of the 377 labelled single-cell training lines is predicted **out of fold**: the
+bridge and every stage are refitted without the line's patient-grouped fold (the five folds of step
+2); a bulk-only line sharing a patient with a line of that fold is held out with it, and every other
+bulk-only line is always fitted on. `load_inputs` refuses an export lacking a line the run exposes,
+so a correction needs an export of its own split. The export is written once; an existing export is never replaced, because a
 correction checkpoint may have recorded it. The export runs for the affine bridge only.
 
 Each setting writes `rows/<experiment>__<n>.json` and is skipped when the file exists, so a
@@ -746,23 +745,23 @@ affine bridge on validation. The follow-ups on that row (2026-10-07,
 +0.0010 on validation (interval spanning zero) once the data-selected genes are in, and that the
 data-selected genes' gain is spread over thousands of features. The **default prior** is therefore the
 affine bridge with expression components at penalty 1 and data-selected genes at gene penalty 10:
-0.2290 validation / 0.2338 test (`configs/context_prior/default_prior.yaml`). On the split rebuilt with
-A549 in test it scores **0.2302 validation / 0.2318 test** (run `default_prior_resplit_20261012`,
-[record](../results/default_prior_rerun_seed0/README.md)). With the single-cell extras as single-cell
-training lines (`configs/context_prior/default_prior_single_cell_extras.yaml`, 347 bridge pairs instead of
-166) it scores 0.2290 / 0.2301, −0.0012 [−0.0036, 0.0010] on validation against the unchanged prior; its
-export, which predicts all 377 training lines out of fold, is the one the correction configs stack on.
+0.2290 validation / 0.2338 test (`configs/context_prior/default_prior.yaml`). On the 226 split rebuilt
+with A549 in test it scored 0.2302 / 0.2318 (run `default_prior_resplit_20261012`,
+[record](../results/default_prior_rerun_seed0/README.md)). On the **final split** (run
+`default_prior_final_split_20261012`, [record](../results/final_split_seed0/README.md)), whose definitions fit on
+377 labelled training lines (4,323 selective genes), it scores **0.2045 validation / 0.2025 test**: the change is the
+metric's, since on the same genes it is −0.0014 [−0.0030, 0.0003] on validation against the 226 split's prior. There
+the dropped lineages leave every training-side line: fitting the 24 lymphoid and myeloid single-cell extras cost
+−0.0047 [−0.0084, −0.0009] on validation (test +0.0007, interval spanning zero against the fit without them).
 
 ## 11. Rules
 
 The experiments follow the usual train, validation and test practice; these are the points
 specific to this task.
 
-- **Fit on training lines.** Gene means, variable and selective gene sets and the residual SD,
-  which define the target and the metric, use the split's labelled training lines; normalisation,
-  context PCA, bridge, encoders and every other fitted quantity use the training lines, which add
-  the single-cell extras where the config says so (§3.1, §10). Fit eligibility is checked
-  against the split file and the membership files.
+- **Fit on training lines.** Gene means, variable and selective gene sets, residual SD,
+  normalisation, context PCA, bridge, encoders and every fitted preprocessing use the labelled
+  training lines only. Fit eligibility is checked against the split file.
 - **Tune on validation.** Hyperparameters, penalties, checkpoints and the choice among settings
   use validation. Report validation and test for every row; one config is one run at seed 0, and
   `best.pt` is scored on test once. The seed-0 joint-model test split has been observed, so
@@ -772,17 +771,17 @@ specific to this task.
 - **Query lines supply basal single cells only.** No GeneEffect, perturbation-response or SL
   measurement of a query line is an input. Validation lines' bulk RNA is read only in the
   labelled oracle row; test lines' bulk RNA is never read.
-- **Line authorities.** The [split file](../configs/benchmarks/cell_line_geneeffect_226_split.json)
-  fixes the 226 members; the [extra-line membership file](../configs/benchmarks/extra_bulk_lines_26Q1.json)
-  fixes the DepMap lines outside the 226 that may join the training side through bulk RNA
-  ([card](data/extra-bulk-lines-26q1.md)), and the
-  [single-cell membership file](../configs/benchmarks/extra_single_cell_lines_26Q1.json) those
-  whose basal single cells are built ([card](data/single-cell-atlas-search.md)). A source's own
-  spelling of a line becomes a ModelID only through a reviewed row of the
+- **Line authority.** The [final split](../configs/benchmarks/cell_line_geneeffect_split.json)
+  ([card](data/cell-line-geneeffect-split.md)) gives every line one role: single-cell training,
+  validation, test, bulk-only training side, or excluded. It is built from the 226 split, the
+  [single-cell membership file](../configs/benchmarks/extra_single_cell_lines_26Q1.json)
+  ([card](data/single-cell-atlas-search.md)) and the
+  [bulk membership file](../configs/benchmarks/extra_bulk_lines_26Q1.json)
+  ([card](data/extra-bulk-lines-26q1.md)), which no fit reads. A source's own spelling of a line
+  becomes a ModelID only through a reviewed row of the
   [identity map](../configs/benchmarks/single_cell_atlas_candidates.csv). Lines join by DepMap
-  ModelID, never by name at run time, and every
-  line sharing a patient with a validation or test line is excluded from every fit. Results that
-  use extra lines are a training-data change scored on the unchanged validation and test lines.
+  ModelID, never by name at run time, and every line sharing a patient with a validation or test
+  line is excluded from every fit.
 - **Context claims need context-blind controls.** Residual evaluation against the gene mean, the
   copy prior, the nearest line and the context ridges (§6) decides whether a model learned
   context; high absolute correlation does not. Response improvement is not dependency
@@ -824,7 +823,7 @@ it without changing any model input.
   prior. Validation runs then (epoch −1) and is eligible for `best.pt`: "the prior alone" can win.
 - **Controls.** With a prior export the control ladder adds the prior alone
   (`context_prior`) and the prior plus the Tx1 context-PCA ridge fitted on what the prior leaves
-  on the model's training lines (`context_prior+context_pca_ridge[tx1]`; same view, 8
+  on the labelled training lines (`context_prior+context_pca_ridge[tx1]`; same view, 8
   components, ridge $\alpha=1$ as the Tx1 ridge of §6), the linear special case of the head on
   the same target. The revision summary (§9.3) bootstraps the stack minus the Tx1 ridge, minus the
   prior and minus the prior plus Tx1 ridge, and adds the per-lineage table.
@@ -833,9 +832,8 @@ it without changing any model input.
   the default prior's export (wave one, on the 172/27/27 split:
   `outputs/context_prior/default_prior_export/export`), each run with
   `hpc/run.sh revision CONFIG --run-id <id>` into `outputs/geneeffect_correction/`. The configs now
-  train on the single-cell extras and stack on the export of
-  `configs/context_prior/default_prior_single_cell_extras.yaml`
-  (`outputs/context_prior/default_prior_single_cell_extras_20261012/export`). The winner on
+  read the final split and stack on its default prior's export
+  (`outputs/context_prior/default_prior_final_split_20261012/export`). The winner on
   validation then runs with frozen and with trainable STATE. The reading rule is that of §9.3:
   the highest validation selective Spearman at `best.pt`; within the 27-line paired bootstrap
   interval (`uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val`) the simpler
@@ -857,7 +855,8 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
   The space is the genes every validation and test line measures; a training line's gap takes the
   training-line mean, and each statistic is quantile-normalised per line to the training lines' mean
   sorted profile, so source depth and vocabulary do not read as context.
-- **Target.** What the export leaves on the 169 single-cell training lines, $r-\hat r_{\text{prior}}$ in
+- **Target.** What the export leaves on the labelled single-cell training lines (377 on the final split),
+  $r-\hat r_{\text{prior}}$ in
   residual-SD units, the prior out of fold, so the stack learns at the prior's deployment error; a
   missing label counts as zero, as in §10. Validation and test add the stack to the export's full fit.
 - **Stack.** Two ridge stages, each on what the earlier leaves: the gene's own statistics (weights
@@ -879,7 +878,13 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
   interval above zero at any penalty pair (largest +0.0011 [−0.0005, +0.0026]), and no arm's best validation row
   clears the prior: `distribution` 0.2340 (+0.0050 [−0.0036, +0.0155]), `mean` 0.2329, `single_cell` 0.2329, against
   0.2290 for the prior alone (test 0.2404, 0.2409, 0.2397 against 0.2338). In linear form, a gene's detected fraction
-  and variance across a line's cells add nothing its mean expression does not.
+  and variance across a line's cells add nothing detected beyond its mean expression.
+- **Result on the final split (2026-10-12, [record](../results/final_split_seed0/README.md)).** Stacked on the final
+  split's prior (0.2045 validation / 0.2025 test), every arm's best validation row is 0.2089 (own shrinkage 10,
+  selected penalty 100; +0.0044 over the prior, intervals spanning zero). At selected penalty 1,000 every arm clears the
+  prior by an interval above zero (+0.0014 to +0.0022 on validation, `mean` included), and there one row meets the
+  reading rule: `single_cell` beats `mean` by +0.0009 [+0.0001, +0.0017] on validation, +0.0003 [−0.0004, +0.0010] on
+  test, the only one of 26 comparisons with an interval above zero.
 - **Scope.** Per-line cell-state proportions need a new preparation step (second-wave plan, Task 4)
   and are not in this stack. A stack result is single-gene dependency evidence on held-out lines; it is
   not an SL result.
