@@ -3,11 +3,12 @@
 Reads the run's stage-one rows (generated_df/gene2vec_emb_mat.h5: one row per line and
 gene in the line's top 2,048 expressed, its 640-d input and Cilantro's label) and its
 trained regressor (models/gene2vec_5x.pth), keeps the rows of the split's validation and
-test lines, maps Ensembl IDs to DepMap symbols through the notebooks' symbol map (an
-Ensembl ID several symbols share is dropped), and writes ``model_id, gene_symbol,
-prediction, cilantro_label`` as CSV. The regressor trained on every row of these lines,
-so its predictions on them are in-sample. No retraining; the noise diagnosis's
-learning curve scores the file (configs/context_prior/noise_diagnosis.yaml).
+test lines, maps Ensembl IDs to DepMap symbols through the notebooks' symbol map over
+the run's GeneEffect columns (an Ensembl ID several symbols share is dropped), and
+writes ``model_id, gene_symbol, prediction, cilantro_label`` as CSV. The regressor
+trained on every row of these lines, so its predictions on them are in-sample. No
+retraining; the noise diagnosis's learning curve scores the file
+(configs/context_prior/noise_diagnosis.yaml).
 
 ``.venv-cilantro/bin/python hpc/cilantro/stage_one_predictions.py --run-dir
 outputs/cilantro_reproduction/as_released_gc95M --out
@@ -48,8 +49,13 @@ def main() -> None:
     wanted = set(split["val"]) | set(split["test"])
     with open(SYMBOL_MAP, "rb") as handle:
         symbol_to_ensembl = pickle.load(handle)
-    shared = Counter(symbol_to_ensembl.values())
-    symbol_of = {e: s for s, e in symbol_to_ensembl.items() if shared[e] == 1}
+    # Invert the map as the perturber applied it: over the run's DepMap GeneEffect
+    # columns ("SYMBOL (Entrez)"); the map also holds Ensembl-to-Ensembl entries.
+    header = pd.read_csv(args.run_dir / "inputs" / "gene_effect.csv", nrows=0)
+    symbols = [c.split(" ")[0] for c in header.columns[1:]]
+    mapped = {s: symbol_to_ensembl[s] for s in symbols if s in symbol_to_ensembl}
+    shared = Counter(mapped.values())
+    symbol_of = {e: s for s, e in mapped.items() if shared[e] == 1}
 
     # A fixed-format HDF table: read whole (about 11 GB), then keep the split's lines.
     df = pd.read_hdf(args.run_dir / "generated_df" / "gene2vec_emb_mat.h5", "table")
