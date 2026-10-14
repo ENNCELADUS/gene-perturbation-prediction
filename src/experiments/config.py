@@ -177,7 +177,7 @@ def load_stack_config(path: Path) -> dict[str, Any]:
 
 _NOISE_GROUPS = {
     "cell_sampling": "cells",
-    "learning_curve": "fractions",
+    "learning_curve": "fractions cilantro_predictions",
     "deposit": "min_lines permutations second_source_root",
     "cell_states": (
         "programs threshold_percentile cluster_components cluster_counts penalties"
@@ -197,6 +197,9 @@ def validate_noise_config(config: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("cell_sampling.cells must be positive integers")
     if not all(0 < f < 1 for f in config["learning_curve"]["fractions"]):
         raise ValueError("learning_curve.fractions must lie in (0, 1)")
+    cilantro = config["learning_curve"]["cilantro_predictions"]
+    if cilantro is not None and not (isinstance(cilantro, str) and cilantro):
+        raise ValueError("learning_curve.cilantro_predictions must be a path or null")
     states = config["cell_states"]
     if not states["programs"] or len(set(states["programs"])) != len(
         states["programs"]
