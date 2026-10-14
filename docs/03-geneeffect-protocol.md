@@ -917,8 +917,15 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   whole training side and refused unless it reproduces the export's validation and test rows, is queried with each draw
   of the validation and test lines (a line with fewer cells reads them all and is counted as capped); gains over the full
   pseudo-bulk, and the agreement of the two halves' predictions per selective gene.
-- **`learning_curve`.** The reference row refitted on nested patient-grouped fractions of the training side (bridge,
-  components and data-selected genes refitted; profile and metric fixed), with the full prior as the last row.
+- **`learning_curve`.** The reference row refitted on nested patient-grouped fractions of the training side (1/8 to 7/8;
+  bridge, components and data-selected genes refitted; profile and metric fixed), with the full prior as the last row.
+  Each row sits beside its own gene mean (the prior's intercept on the fraction's labelled lines). Line-specific part:
+  selective Spearman (gain over the full prior), within-gene R² (pooled over selective genes, `1 − SSE / Σ residual²`
+  against the training gene mean, which scores 0; paired line-bootstrap gains over the row's gene mean and over the
+  full prior), AUPR lift and residual Pearson. Whole prediction: per-line Pearson across genes and RMSE, prior and gene
+  mean. When `cilantro_predictions` names a file (`hpc/cilantro/stage_one_predictions.py`: the released stage one,
+  trained on every labelled line, so in-sample here), the full prior, its gene mean and stage one are scored on the
+  validation and test pairs stage one covers.
 - **`deposit_confound`.** η² of a training line's deposit (the final split table's `expression_source`, the 226's names
   mapped to the identity map's keys so Tahoe-100M is one deposit; deposits under `min_lines` pooled) on the out-of-fold error and on the residual, macro-averaged over selective genes, against a null
   permuting deposits within lineage; lineage beside it; the error's mean square per deposit.
