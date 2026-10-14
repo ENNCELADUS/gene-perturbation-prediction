@@ -51,21 +51,16 @@ def main() -> None:
     shared = Counter(symbol_to_ensembl.values())
     symbol_of = {e: s for s, e in symbol_to_ensembl.items() if shared[e] == 1}
 
-    keys, inputs, labels = [], [], []
-    store = pd.HDFStore(args.run_dir / "generated_df" / "gene2vec_emb_mat.h5", "r")
-    try:
-        for chunk in store.select("table", chunksize=500_000):
-            parsed = [KEY.fullmatch(k) for k in chunk.index]
-            if not all(parsed):
-                raise ValueError("a stage-one row key is not ('ModelID', 'gene_ENSG')")
-            keep = np.array([m.group(1) in wanted for m in parsed])
-            if keep.any():
-                keys += [m.groups() for m, k in zip(parsed, keep) if k]
-                inputs.append(chunk.iloc[keep, :640].to_numpy(dtype=np.float32))
-                labels.append(chunk.loc[keep, "viability score"].to_numpy(dtype=float))
-    finally:
-        store.close()
-    x = np.concatenate(inputs)
+    # A fixed-format HDF table: read whole (about 11 GB), then keep the split's lines.
+    df = pd.read_hdf(args.run_dir / "generated_df" / "gene2vec_emb_mat.h5", "table")
+    parsed = [KEY.fullmatch(k) for k in df.index]
+    if not all(parsed):
+        raise ValueError("a stage-one row key is not ('ModelID', 'gene_ENSG')")
+    keep = np.array([m.group(1) in wanted for m in parsed])
+    keys = [m.groups() for m, k in zip(parsed, keep) if k]
+    x = df.iloc[keep, :640].to_numpy(dtype=np.float32)
+    labels = df["viability score"].to_numpy(dtype=float)[keep]
+    del df
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     net = FiLMNet(protein_size=128)
@@ -89,7 +84,7 @@ def main() -> None:
             "model_id": [line for line, _ in keys],
             "ensembl": [gene for _, gene in keys],
             "prediction": np.concatenate(predictions),
-            "cilantro_label": np.concatenate(labels),
+            "cilantro_label": labels,
         }
     )
     rows["gene_symbol"] = rows["ensembl"].map(symbol_of)
