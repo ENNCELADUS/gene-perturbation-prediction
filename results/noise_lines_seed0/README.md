@@ -64,7 +64,7 @@ Cilantro's R² over the gene mean +0.0423 [+0.0150, +0.0659] / +0.0458 [+0.0275,
   "still rises" came from the 3/4 → all step, which is all in 3/4 → 7/8.
 - **The per-line adjustment is right in size, but small.** Within-gene R² is above the row's gene mean at every
   fraction (intervals above zero), and the full prior explains 4.3% / 4.2% of the selective genes' line-specific
-  variance; the replicate ceiling on selective Spearman is about 0.587 ([noise diagnosis](../noise_diagnosis_seed0/README.md)).
+  variance.
 - **Whole-prediction metrics hide it.** Absolute Pearson and RMSE move in the third decimal; they measure the gene mean.
 - **Cilantro does not beat the prior even in-sample.** On its covered pairs it carries line-specific signal (R² over the
   gene mean above zero) but scores lower selective Spearman and R², with the R² difference's interval spanning zero. Its

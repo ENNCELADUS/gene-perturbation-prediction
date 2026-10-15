@@ -48,8 +48,3 @@ cell_states:
   cluster_components: 50
   cluster_counts: [8, 16]
   penalties: [1.0, 10.0, 100.0, 1000.0]
-screen_replicates:
-  # DepMap Public 26Q1, downloaded in a browser (the portal's download API sits behind a browser check) and copied
-  # here with their SHA-256 (docs/data/depmap-public-26q1.md).
-  screen_gene_effect: data/sl_dependency_v0/raw/depmap/ScreenGeneEffect.csv
-  screen_map: data/sl_dependency_v0/raw/depmap/CRISPRScreenMap.csv

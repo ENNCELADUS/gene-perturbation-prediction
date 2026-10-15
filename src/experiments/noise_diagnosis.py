@@ -20,8 +20,7 @@ a section whose file exists, then ``results.md`` from every section present:
   deposit explains, against permutations within lineage;
 - ``deposit_swap``: out-of-fold predictions of training lines read from a second
   deposit, against two halves of their own deposit;
-- ``cell_states``: cell-state features stacked on the out-of-fold export;
-- ``screen_replicates``: agreement of two DepMap screens of one line.
+- ``cell_states``: cell-state features stacked on the out-of-fold export.
 
 Every score is on the metric of the prior run; gains carry 95% paired
 line-bootstrap intervals. It reports and chooses nothing; nothing here is
@@ -90,7 +89,6 @@ SECTIONS = (
     "deposit_confound",
     "deposit_swap",
     "cell_states",
-    "screen_replicates",
 )
 #: A reproduced export row may differ from the written one by float rounding only.
 REPRODUCTION_TOLERANCE = 1e-6
@@ -853,95 +851,12 @@ def cell_states(diagnosis: Diagnosis, out: Path) -> dict:
     }
 
 
-def read_screens(
-    gene_effect_path: Path, map_path: Path
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Per-screen gene effect (ScreenID x upper-case symbols) and the screen map
-    (``ScreenID``, ``ModelID``); a missing column stops the section."""
-    from src.data.depmap import depmap_symbol
-
-    screens = pd.read_csv(gene_effect_path, index_col=0)
-    screens.index = screens.index.astype(str)
-    screens.columns = [depmap_symbol(c) for c in screens.columns]
-    mapping = pd.read_csv(map_path)
-    missing = {"ScreenID", "ModelID"} - set(mapping.columns)
-    if missing:
-        raise ValueError(
-            f"{map_path} lacks columns {sorted(missing)}: {list(mapping.columns)}"
-        )
-    return screens.astype(np.float64), mapping
-
-
-def screen_pairs(
-    mapping: pd.DataFrame, screens: Sequence[str], blocked: Sequence[str]
-) -> dict[str, tuple[str, str]]:
-    """Per model outside ``blocked`` with two or more screens in ``screens``, its
-    first two ScreenIDs in sorted order."""
-    present = mapping.loc[mapping["ScreenID"].astype(str).isin(set(screens))]
-    present = present.loc[~present["ModelID"].astype(str).isin(set(blocked))]
-    pairs = {}
-    for model_id, group in present.groupby("ModelID"):
-        ids = sorted(group["ScreenID"].astype(str).unique())
-        if len(ids) >= 2:
-            pairs[str(model_id)] = (ids[0], ids[1])
-    return pairs
-
-
-def screen_agreement(
-    screens: pd.DataFrame, pairs: Mapping[str, tuple[str, str]], genes: Sequence[str]
-) -> pd.Series:
-    """Per gene, Spearman across models between their first and second screens."""
-    models = sorted(pairs)
-    columns = [g for g in genes if g in screens.columns]
-    first = screens.loc[[pairs[m][0] for m in models], columns]
-    second = screens.loc[[pairs[m][1] for m in models], columns]
-    first.index = second.index = models
-    both = first.notna() & second.notna()  # ranks over the models both screened
-    return column_pearson(
-        first.where(both).rank(axis=0), second.where(both).rank(axis=0)
-    )
-
-
-def screen_replicates(diagnosis: Diagnosis, out: Path) -> dict:
-    settings = diagnosis.config["screen_replicates"]
-    paths = [Path(settings["screen_gene_effect"]), Path(settings["screen_map"])]
-    absent = [str(p) for p in paths if not p.is_file()]
-    if absent:
-        raise FileNotFoundError(
-            f"{absent}: download DepMap Public 26Q1's ScreenGeneEffect.csv and "
-            "CRISPRScreenMap.csv in a browser and copy them here (protocol §14)"
-        )
-    screens, mapping = read_screens(*paths)
-    split = diagnosis.base.split
-    pairs = screen_pairs(mapping, list(screens.index), [*split.val, *split.test])
-    selective = list(diagnosis.base.definitions.selective)
-    agreement = screen_agreement(screens, pairs, selective)
-    ceiling = np.sqrt(spearman_brown(agreement).clip(lower=0))
-    prior = {
-        split_name: score(
-            diagnosis.export.loc[lines],
-            diagnosis.base.truth(lines),
-            diagnosis.base.definitions,
-        )["selective_spearman"]
-        for split_name, lines in diagnosis.queries.items()
-    }
-    return {
-        "models": len(pairs),
-        "selective_genes_scored": int(agreement.notna().sum()),
-        "agreement": quartiles(agreement),
-        "agreement_macro": float(agreement.mean()),
-        "ceiling_macro": float(ceiling.mean()),
-        "prior_selective_spearman": prior,
-    }
-
-
 RUNNERS: dict[str, Callable[[Diagnosis, Path], dict]] = {
     "cell_sampling": cell_sampling,
     "learning_curve": learning_curve,
     "deposit_confound": deposit_confound,
     "deposit_swap": deposit_swap,
     "cell_states": cell_states,
-    "screen_replicates": screen_replicates,
 }
 
 
@@ -1250,27 +1165,12 @@ def _cell_states_md(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _screen_replicates_md(section: Mapping[str, Any]) -> list[str]:
-    prior = section["prior_selective_spearman"]
-    return [
-        "## Screen replicates",
-        "",
-        f"{section['models']} lines with two screens. Per selective gene, Spearman "
-        f"across lines between them: {_quartiles(section['agreement'])}, macro "
-        f"{_number(section['agreement_macro'])}; approximate ceiling against a "
-        f"two-screen label {_number(section['ceiling_macro'])}. The prior's "
-        f"selective Spearman: validation {_number(prior['val'])}, test "
-        f"{_number(prior['test'])}.",
-    ]
-
-
 SECTION_MARKDOWN: dict[str, Callable[[Mapping[str, Any]], list[str]]] = {
     "cell_sampling": _cell_sampling_md,
     "learning_curve": _learning_curve_md,
     "deposit_confound": _deposit_confound_md,
     "deposit_swap": _deposit_swap_md,
     "cell_states": _cell_states_md,
-    "screen_replicates": _screen_replicates_md,
 }
 
 

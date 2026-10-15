@@ -208,8 +208,7 @@ directory is refused, so a rerun needs a new run id.
 finished section is skipped, so a rerun with the same run id resumes. The first section that needs them prepares
 `noise/subsamples.parquet` and `noise/programs/` under `prepared_root` from every line's raw cells (CPU, 16 processes);
 Sections run in the order `--sections` lists them, so the two that read no raw cells go first. `deposit_swap` first needs
-the second-deposit builds (Extra single-cell lines, below), and `screen_replicates` needs DepMap's per-screen files, which
-are downloaded in a browser ([card](../docs/data/depmap-public-26q1.md)). The Cilantro-SL encodings run through `prior`:
+the second-deposit builds (Extra single-cell lines, below). The Cilantro-SL encodings run through `prior`:
 
 ```bash
 OMP_NUM_THREADS=32 nohup hpc/run.sh prior configs/context_prior/cilantro_encodings.yaml \

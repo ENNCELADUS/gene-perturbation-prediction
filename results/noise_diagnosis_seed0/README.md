@@ -7,17 +7,17 @@ Runs of 2026-10-12 on the H20 container on port 30838, CPU only, branch `feat/no
 synthetic-lethality evidence; nothing is chosen in code.
 
 - `noise_20261012`: `hpc/run.sh prior-noise` with `configs/context_prior/noise_diagnosis.yaml`
-  ([table](noise_20261012.results.md)). `learning_curve`, `screen_replicates`, `cell_sampling` and `cell_states` at
+  ([table](noise_20261012.results.md)). `learning_curve`, `cell_sampling` and `cell_states` at
   `97a3066`; `deposit_confound` and `deposit_swap` at `a1bdadc`, which reads Tahoe-100M as one deposit (the first
   `deposit_confound`, at `97a3066`, pooled the one extra Tahoe line as `other`; η² moved by less than 0.0003).
 - `cilantro_encodings_20261012`: `hpc/run.sh prior` with `configs/context_prior/cilantro_encodings.yaml` at `97a3066`
   ([table](cilantro_encodings_20261012.results.md)).
 - Inputs built for it: per-line cell draws and per-cell program scores under `data/geneeffect_joint/v2/noise/` (434
   lines), the 99 planned second deposits under `data/sl_dependency_v0/processed/basal_raw_umi_second_source/` (all built,
-  none missing), and DepMap 26Q1's per-screen files ([card](../../docs/data/depmap-public-26q1.md)).
+  none missing).
 
 **Question.** Does technical noise in a line's single cells limit the default prior: sampling of cells, the deposit the
-cells come from, too few training lines, noise in the GeneEffect label, unmodelled cell states? And do Cilantro-SL's
+cells come from, too few training lines, unmodelled cell states? And do Cilantro-SL's
 input reductions (rank-value encoding, the top 2,048 genes) clean the input?
 
 ## Per-cell sampling does not bind
@@ -71,13 +71,6 @@ The reference row refitted on nested patient-grouped fractions of the training s
 
 The last quarter of lines adds 0.0115 validation / 0.0122 test (intervals above zero); the curve has not flattened.
 
-## The label leaves room
-
-202 lines outside validation and test have two DepMap screens. Per selective gene, the Spearman across lines between
-their first and second screens is 0.239 [0.139, 0.350], macro 0.251; the approximate ceiling against a two-screen label,
-`sqrt(2r/(1+r))` per gene, is 0.587. The prior's 0.2045 is about a third of it; label noise caps the metric well above
-where the prior sits.
-
 ## Cell states and Cilantro's encodings add nothing
 
 Per-line features from the training lines' cells (Tirosh S and G2M plus the 21 Gavish meta-programs without a cell-line
@@ -97,7 +90,7 @@ Rank-value encoding is a tie; truncating to 2,048 genes loses on validation (bri
 
 **Reading.** The technical noise of single cells does not limit the default prior: it reads a line from ten cells as
 well as from all of them, and neither state programs, clusters nor Cilantro's reductions improve it. What limits it is
-the number of labelled lines (still rising at the full DepMap training side) and how much of the dependency a linear
-read of expression can reach (bulk RNA as input adds only 0.017). Deposit batch changes a line's input more than
-anything else measured here but not its accuracy, so batch correction is not a lever for this prior either. The label
-ceiling (about 0.59) leaves room above 0.20.
+how much of the dependency a linear read of expression can reach (bulk RNA as input adds only 0.017); more labelled
+lines helped up to three quarters here, and the 2026-10-14 rerun ([record](../noise_lines_seed0/README.md)) found the
+curve flat from 7/8 to all lines. Deposit batch changes a line's input more than
+anything else measured here but not its accuracy, so batch correction is not a lever for this prior either.

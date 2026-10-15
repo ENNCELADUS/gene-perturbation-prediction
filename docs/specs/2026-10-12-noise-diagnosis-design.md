@@ -81,7 +81,6 @@ scored selective Spearman only and had no baseline per fraction.
   (`hpc/cilantro/stage_one_predictions.py`), predicts the validation and test pairs it covers (a gene among the line's
   top 2,048 expressed). It trained on every labelled line, so these predictions are in-sample: an upper bound for it.
   It, the full prior and its gene mean are scored on those pairs only.
-- *Ceiling.* The label's replicate ceiling (§3.6) bounds the line-specific part.
 
 **Reading.** The step from 7/8 to all lines, with an interval above zero on selective Spearman and on within-gene R²:
 using up DepMap still helps, and the curve's slope at the end says how much another source of labelled lines might
@@ -161,21 +160,7 @@ information beyond the mean, and the second-wave distributional models start fro
 
 **Outcome.** Best row +0.0010 on validation; fractions over means +0.0000 [−0.0009, +0.0009]. Nothing added.
 
-### 3.6 Screen replicates (`screen_replicates`)
-
-**Question.** How much line-specific signal can the label carry?
-
-**Definition.** DepMap 26Q1's per-screen gene effect (`ScreenGeneEffect.csv`) and its screen map (`CRISPRScreenMap.csv`,
-`ScreenID` and `ModelID`). Lines with two or more screens, outside validation and test, pair their first two screens by
-`ScreenID`. Per selective gene, the Spearman across lines between the two screens; its macro mean is one screen's replicate
-agreement, and `sqrt(2r/(1+r))` approximates what a perfect predictor reaches against a two-screen label. Both file
-schemas are checked when read; a missing column stops the section.
-
-**Reading.** The prior's score against that ceiling: how much of the reachable signal it already has.
-
-**Outcome.** Agreement 0.251 over 202 lines; ceiling 0.587. The prior's 0.2045 is about a third of it.
-
-### 3.7 Cilantro encodings
+### 3.6 Cilantro encodings
 
 **Question.** Do Cilantro-SL's input reductions (rank-value encoding, top-2,048 truncation) clean the prior's input?
 Geneformer's deletion delta is not tested (GPU, and no line-specific signal in the reproduction).
@@ -206,9 +191,6 @@ bridge diagnostics take medians from the bulk outside each fold. Rows: rank alon
   `subsamples.parquet` (halves and draws of every split line) and `programs/<ModelID>.npz` (per-cell program scores) with
   their manifest; `prepare_second_source` writes `noise/second_source/` from the second-deposit directory, growing as files
   are added. Preparation stays the only raw-data reader.
-- **Per-screen GeneEffect** (by hand; the DepMap portal sits behind a browser check): `ScreenGeneEffect.csv` and
-  `CRISPRScreenMap.csv` of DepMap Public 26Q1, copied to `data/sl_dependency_v0/raw/depmap/` on the H20 with their SHA-256
-  and added to the DepMap card.
 
 ## 5. Out of scope
 
