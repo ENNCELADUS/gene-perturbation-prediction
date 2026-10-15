@@ -76,6 +76,39 @@ def nested_fractions(
     return out
 
 
+def line_sums(
+    prediction: np.ndarray, truth: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per line (row), the squared error and the squared truth over the entries
+    whose truth is finite: the two sums of a within-gene R² against the training
+    gene mean the truth is centred on (that mean scores 0)."""
+    finite = np.isfinite(truth)
+    if not np.isfinite(prediction[finite]).all():
+        raise ValueError("a prediction is missing where the truth is finite")
+    truth = np.where(finite, truth, 0.0)
+    error = np.where(finite, prediction, 0.0) - truth
+    return (error**2).sum(axis=1), (truth**2).sum(axis=1)
+
+
+def r2_gain(
+    sse: np.ndarray,
+    reference_sse: np.ndarray,
+    total: np.ndarray,
+    *,
+    repeats: int,
+    seed: int,
+) -> dict[str, float | list[float]]:
+    """Pooled within-gene R² of one prediction minus a reference's on the same
+    lines, ``(reference_sse - sse) / total`` summed over lines, with a 95% paired
+    line bootstrap (the same resample for both)."""
+    draws = np.random.default_rng(seed).integers(0, len(total), (repeats, len(total)))
+    resampled = (reference_sse[draws].sum(1) - sse[draws].sum(1)) / total[draws].sum(1)
+    return {
+        "difference": float((reference_sse.sum() - sse.sum()) / total.sum()),
+        "interval": [float(q) for q in np.quantile(resampled, [0.025, 0.975])],
+    }
+
+
 def _between_share(
     values: np.ndarray, finite: np.ndarray, onehot: np.ndarray
 ) -> np.ndarray:

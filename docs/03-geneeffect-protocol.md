@@ -917,8 +917,15 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   whole training side and refused unless it reproduces the export's validation and test rows, is queried with each draw
   of the validation and test lines (a line with fewer cells reads them all and is counted as capped); gains over the full
   pseudo-bulk, and the agreement of the two halves' predictions per selective gene.
-- **`learning_curve`.** The reference row refitted on nested patient-grouped fractions of the training side (bridge,
-  components and data-selected genes refitted; profile and metric fixed), with the full prior as the last row.
+- **`learning_curve`.** The reference row refitted on nested patient-grouped fractions of the training side (1/8 to 7/8;
+  bridge, components and data-selected genes refitted; profile and metric fixed), with the full prior as the last row.
+  Each row sits beside its own gene mean (the prior's intercept on the fraction's labelled lines). Line-specific part:
+  selective Spearman (gain over the full prior), within-gene R² (pooled over selective genes, `1 − SSE / Σ residual²`
+  against the training gene mean, which scores 0; paired line-bootstrap gains over the row's gene mean and over the
+  full prior), AUPR lift and residual Pearson. Whole prediction: per-line Pearson across genes and RMSE, prior and gene
+  mean. When `cilantro_predictions` names a file (`hpc/cilantro/stage_one_predictions.py`: the released stage one,
+  trained on every labelled line, so in-sample here), the full prior, its gene mean and stage one are scored on the
+  validation and test pairs stage one covers.
 - **`deposit_confound`.** η² of a training line's deposit (the final split table's `expression_source`, the 226's names
   mapped to the identity map's keys so Tahoe-100M is one deposit; deposits under `min_lines` pooled) on the out-of-fold error and on the residual, macro-averaged over selective genes, against a null
   permuting deposits within lineage; lineage beside it; the error's mean square per deposit.
@@ -950,8 +957,10 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   split-half reliability 0.939 per gene, and ten cells per line score 0.2015 validation against 0.2045 (−0.0030
   [−0.0092, +0.0036]); the bridge's agreement with bulk (0.453) is half its sampling ceiling. A second deposit moves a
   line's input (agreement 0.375 against 0.865 for halves) and prediction (0.764 against 0.982) but not its accuracy
-  (+0.0066 [−0.0052, +0.0184] on 99 lines); deposit η² 0.0365 against a null of 0.0315. The learning curve still rises
-  (0.1930 at three quarters of the lines, +0.0115 for the last quarter). Screen replicates agree at 0.251 per gene
+  (+0.0066 [−0.0052, +0.0184] on 99 lines); deposit η² 0.0365 against a null of 0.0315. The learning curve, rerun
+  on 2026-10-14 with 7/8 and a gene mean per fraction ([record](../results/noise_lines_seed0/README.md)), plateaus:
+  0.2051 at 7/8 against 0.2045 at all lines (the last eighth adds −0.0006 [−0.0062, +0.0050]; within-gene R² 0.043,
+  unchanged), after +0.0115 from 3/4 to all. Screen replicates agree at 0.251 per gene
   (ceiling about 0.587). Cell-state arms add at most +0.0010 and fractions never beat means; Cilantro's rank-value
   encoding ties (−0.0022 [−0.0076, +0.0033]) and its top-2,048 truncations lose (−0.019, −0.014).
 - **Scope.** A diagnosis result is single-gene dependency evidence on held-out lines; it is not an SL result.

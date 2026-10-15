@@ -9,7 +9,10 @@ bootstrap_repeats: 1000
 cell_sampling:
   cells: [10, 25, 50, 100, 200, 400]
 learning_curve:
-  fractions: [0.125, 0.25, 0.5, 0.75]
+  fractions: [0.125, 0.25, 0.5, 0.75, 0.875]
+  # Cilantro-SL's released stage one on the validation and test lines (hpc/cilantro/stage_one_predictions.py);
+  # null leaves its rows out.
+  cilantro_predictions: outputs/cilantro_analysis/stage_one_split_lines.csv
 deposit:
   min_lines: 5
   permutations: 1000
