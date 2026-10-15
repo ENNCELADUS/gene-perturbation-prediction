@@ -12,7 +12,10 @@ a section whose file exists, then ``results.md`` from every section present:
   prior queried with half of each validation and test line's cells and with
   10 to 400 of them;
 - ``learning_curve``: the reference row refitted on nested patient-grouped
-  fractions of the training side;
+  fractions of the training side, each beside its own gene mean, scored on the
+  line-specific part (selective Spearman, within-gene R², AUPR lift, residual
+  Pearson) and the whole prediction (per-line Pearson, RMSE); at the full side,
+  Cilantro-SL's stage one on the pairs it covers;
 - ``deposit_confound``: the share of the out-of-fold error a training line's
   deposit explains, against permutations within lineage;
 - ``deposit_swap``: out-of-fold predictions of training lines read from a second
@@ -44,9 +47,11 @@ from src.context_prior.noise import (
     cluster_proportions,
     column_pearson,
     group_share,
+    line_sums,
     nested_fractions,
     program_features,
     quartiles,
+    r2_gain,
     spearman_brown,
 )
 from src.context_prior.prior import (
@@ -62,6 +67,7 @@ from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.experiments.all import _number
 from src.experiments.config import load_config, load_noise_config
 from src.experiments.context_prior import (
+    BOOTSTRAP_SEED,
     SCORED,
     RunBase,
     _bind,
@@ -71,6 +77,7 @@ from src.experiments.context_prior import (
     _write_text,
     gain,
     load_base,
+    long_frame,
     prior_inputs,
     score,
     stages,
@@ -389,7 +396,68 @@ def cell_sampling(diagnosis: Diagnosis, out: Path) -> dict:
     }
 
 
+def _gene_mean(
+    diagnosis: Diagnosis, labelled: Sequence[str], lines: Sequence[str]
+) -> pd.DataFrame:
+    """The context-blind part of a prior fitted on ``labelled``: per gene, the
+    mean training target over those lines, a missing label counting as zero as
+    the ridge's intercept reads it; the same row for every query line."""
+    mean = diagnosis.base.truth(list(labelled)).fillna(0.0).mean()
+    return pd.DataFrame(
+        np.tile(mean.to_numpy(), (len(lines), 1)), index=list(lines), columns=mean.index
+    )
+
+
+def _accuracy(
+    diagnosis: Diagnosis,
+    predictions: pd.DataFrame,
+    lines: Sequence[str],
+    covered: pd.DataFrame | None = None,
+) -> tuple[dict, np.ndarray, np.ndarray]:
+    """Line-specific and whole-prediction metrics of ``predictions`` (residual-SD
+    units) on ``lines``, over the entries ``covered`` marks when given; and the
+    per-line sums of the pooled within-gene R² over the selective genes."""
+    from src.eval.geneeffect import aggregate_geneeffect
+
+    base = diagnosis.base
+    lines = list(lines)
+    genes = list(base.definitions.genes)
+    truth = base.truth(lines)
+    if covered is not None:
+        truth = truth.where(covered)
+    predictions = predictions.loc[lines, genes]
+    metrics, _, _ = aggregate_geneeffect(
+        long_frame(predictions, truth, base.definitions),
+        model_ids=lines,
+        genes=genes,
+        variable_genes=list(base.definitions.variable),
+        selective_genes=list(base.definitions.selective),
+    )
+    selective = list(base.definitions.selective)
+    sse, total = line_sums(
+        predictions[selective].to_numpy(dtype=np.float64),
+        truth[selective].to_numpy(dtype=np.float64),
+    )
+    return (
+        {
+            "selective_spearman": metrics["selective_spearman"],
+            "selective_spearman_scored": metrics["selective_spearman_scored"],
+            "within_gene_r2": float(1 - sse.sum() / total.sum()),
+            "residual_pearson": metrics["residual_pearson_macro_per_gene"],
+            "aupr_lift": metrics["selective_aupr_lift"],
+            "absolute_pearson": metrics["geneeffect_pearson_macro_per_line"],
+            "rmse": metrics["geneeffect_rmse"],
+        },
+        sse,
+        total,
+    )
+
+
 def learning_curve(diagnosis: Diagnosis, out: Path) -> dict:
+    """The reference row refitted on nested patient-grouped fractions of the
+    training side, each beside its own gene mean (the prior's intercept on the
+    fraction's labelled lines); at the full side, Cilantro-SL's stage one on the
+    validation and test pairs it covers, when the config names its predictions."""
     base = diagnosis.base
     side = list(base.bridge.bulk.index)
     patients = base.models["patient_id"].astype(str).to_dict()
@@ -399,9 +467,8 @@ def learning_curve(diagnosis: Diagnosis, out: Path) -> dict:
         diagnosis.config["learning_curve"]["fractions"],
         seed=int(diagnosis.config["seed"]),
     )
-    reference = diagnosis.export
     reference_row = base.config["reference"]
-    rows = []
+    fits = []
     for fraction, kept in fractions.items():
         keep = set(kept)
         sc = [m for m in base.bridge.single_cell_train if m in keep]
@@ -425,31 +492,104 @@ def learning_curve(diagnosis: Diagnosis, out: Path) -> dict:
             )
         )
         print(f"  learning curve {fraction:g}: {len(kept)} lines", flush=True)
-        rows.append(
-            {
-                "fraction": fraction,
-                "training_side_lines": len(kept),
-                "labelled_lines": len(sub.labelled),
-                "paired_lines": len(sub.bridge.paired),
-                **{
-                    split: _scores(diagnosis, predictions[split], reference, lines)
-                    for split, lines in diagnosis.queries.items()
-                },
-            }
-        )
-    rows.append(
-        {
-            "fraction": 1.0,
-            "training_side_lines": len(side),
-            "labelled_lines": len(base.labelled),
-            "paired_lines": len(base.bridge.paired),
-            **{
-                split: _scores(diagnosis, reference, reference, lines)
-                for split, lines in diagnosis.queries.items()
-            },
+        fits.append((fraction, sub, pd.concat([predictions[s] for s in SCORED])))
+    fits.append((1.0, base, diagnosis.export))
+    repeats = int(diagnosis.config["bootstrap_repeats"])
+    full = {
+        split: _accuracy(diagnosis, diagnosis.export, lines)
+        for split, lines in diagnosis.queries.items()
+    }
+    rows = []
+    for fraction, sub, predictions in fits:
+        row = {
+            "fraction": fraction,
+            "training_side_lines": len(sub.bridge.bulk),
+            "labelled_lines": len(sub.labelled),
+            "paired_lines": len(sub.bridge.paired),
         }
-    )
-    return {"rows": rows}
+        for split, lines in diagnosis.queries.items():
+            prior, sse, total = _accuracy(diagnosis, predictions, lines)
+            mean, mean_sse, _ = _accuracy(
+                diagnosis, _gene_mean(diagnosis, sub.labelled, lines), lines
+            )
+            truth = base.truth(lines)
+            row[split] = {
+                "prior": prior,
+                "gene_mean": mean,
+                "gain": gain(
+                    predictions.loc[lines],
+                    diagnosis.export.loc[lines],
+                    truth,
+                    base.definitions,
+                    repeats,
+                ),
+                "r2_over_gene_mean": r2_gain(
+                    sse, mean_sse, total, repeats=repeats, seed=BOOTSTRAP_SEED
+                ),
+                "r2_over_full": r2_gain(
+                    sse, full[split][1], total, repeats=repeats, seed=BOOTSTRAP_SEED
+                ),
+            }
+        rows.append(row)
+    path = diagnosis.config["learning_curve"]["cilantro_predictions"]
+    return {
+        "rows": rows,
+        "cilantro": None if path is None else cilantro_rows(diagnosis, Path(path)),
+    }
+
+
+def cilantro_rows(diagnosis: Diagnosis, path: Path) -> dict:
+    """Cilantro-SL's stage one (GeneEffect predictions keyed by ``model_id`` and
+    ``gene_symbol``) against the full prior and its gene mean, all three scored on
+    the validation and test pairs stage one covers (a gene among the line's top
+    2,048 expressed). The released stage one trained on every labelled line, so
+    its rows on validation and test lines are in-sample."""
+    base = diagnosis.base
+    rows = pd.read_csv(path)
+    if rows.duplicated(["model_id", "gene_symbol"]).any():
+        raise ValueError(f"{path}: duplicate (model_id, gene_symbol) rows")
+    wide = rows.pivot(index="model_id", columns="gene_symbol", values="prediction")
+    genes = list(base.definitions.genes)
+    repeats = int(diagnosis.config["bootstrap_repeats"])
+    out = {}
+    for split, lines in diagnosis.queries.items():
+        absolute = wide.reindex(index=lines, columns=genes)
+        cilantro = absolute.sub(base.definitions.gene_means, axis=1).div(
+            base.definitions.residual_scale, axis=1
+        )
+        covered = cilantro.notna() & base.truth(lines).notna()
+        scored = {}
+        sums = {}
+        for name, predictions in (
+            ("cilantro", cilantro),
+            ("prior", diagnosis.export.loc[lines]),
+            ("gene_mean", _gene_mean(diagnosis, base.labelled, lines)),
+        ):
+            scored[name], sums[name], total = _accuracy(
+                diagnosis, predictions.where(covered), lines, covered
+            )
+        selective = covered[list(base.definitions.selective)]
+        out[split] = {
+            **scored,
+            "pairs": int(covered.to_numpy().sum()),
+            "selective_pairs": int(selective.to_numpy().sum()),
+            "lines": int(covered.any(axis=1).sum()),
+            "cilantro_over_gene_mean": r2_gain(
+                sums["cilantro"],
+                sums["gene_mean"],
+                total,
+                repeats=repeats,
+                seed=BOOTSTRAP_SEED,
+            ),
+            "prior_over_cilantro": r2_gain(
+                sums["prior"],
+                sums["cilantro"],
+                total,
+                repeats=repeats,
+                seed=BOOTSTRAP_SEED,
+            ),
+        }
+    return out
 
 
 def _deposits(diagnosis: Diagnosis) -> pd.Series:
@@ -884,24 +1024,132 @@ def _cell_sampling_md(section: Mapping[str, Any]) -> list[str]:
 
 
 def _learning_curve_md(section: Mapping[str, Any]) -> list[str]:
-    rows = [
-        [
-            f"{row['fraction']:g}",
-            str(row["training_side_lines"]),
-            str(row["labelled_lines"]),
-            str(row["paired_lines"]),
-            *(cell for split in SCORED for cell in _split_cells(row[split])),
-        ]
-        for row in section["rows"]
-    ]
-    header = ["Fraction", "Training side", "Labelled", "Paired"]
-    return [
+    specific, whole = [], []
+    for row in section["rows"]:
+        lines = (
+            f"{row['training_side_lines']:,} / {row['labelled_lines']:,} / "
+            f"{row['paired_lines']:,}"
+        )
+        for split in SCORED:
+            entry = row[split]
+            prior, mean = entry["prior"], entry["gene_mean"]
+            specific.append(
+                [
+                    f"{row['fraction']:g}",
+                    lines,
+                    split,
+                    _number(prior["selective_spearman"]),
+                    _interval(entry["gain"]),
+                    _number(prior["within_gene_r2"]),
+                    _number(mean["within_gene_r2"]),
+                    _interval(entry["r2_over_gene_mean"]),
+                    _interval(entry["r2_over_full"]),
+                    _number(prior["aupr_lift"]),
+                    _number(prior["residual_pearson"]),
+                ]
+            )
+            whole.append(
+                [
+                    f"{row['fraction']:g}",
+                    split,
+                    _number(prior["absolute_pearson"]),
+                    _number(mean["absolute_pearson"]),
+                    _number(prior["rmse"]),
+                    _number(mean["rmse"]),
+                ]
+            )
+    out = [
         "## Learning curve",
         "",
         "The reference row refitted on nested patient-grouped fractions of the "
-        "training side; gains over the full prior.",
+        "training side (lines: training side / labelled / paired), each beside "
+        "its gene mean (the prior's intercept on the fraction's labelled lines). "
+        "Within-gene R² is pooled over the selective genes against the training "
+        "gene mean (which scores 0); gains are 95% paired line bootstraps.",
         "",
-        *_table(header + ["Val", "Val gain", "Test", "Test gain"], rows),
+        "Line-specific part:",
+        "",
+        *_table(
+            [
+                "Fraction",
+                "Lines",
+                "Split",
+                "Selective Spearman",
+                "Gain over full",
+                "Within-gene R²",
+                "Gene mean R²",
+                "R² over gene mean",
+                "R² gain over full",
+                "AUPR lift",
+                "Residual Pearson",
+            ],
+            specific,
+        ),
+        "",
+        "Whole prediction (per-line Pearson across genes; RMSE over every pair):",
+        "",
+        *_table(
+            [
+                "Fraction",
+                "Split",
+                "Absolute Pearson",
+                "Gene mean",
+                "RMSE",
+                "Gene mean RMSE",
+            ],
+            whole,
+        ),
+    ]
+    cilantro = section["cilantro"]
+    if cilantro is None:
+        return out
+    rows = []
+    for split in SCORED:
+        entry = cilantro[split]
+        for name in ("cilantro", "prior", "gene_mean"):
+            scores = entry[name]
+            rows.append(
+                [
+                    name,
+                    split,
+                    f"{entry['pairs']:,} ({entry['selective_pairs']:,} selective)",
+                    f"{_number(scores['selective_spearman'])} "
+                    f"({scores['selective_spearman_scored']} genes)",
+                    _number(scores["within_gene_r2"]),
+                    _number(scores["absolute_pearson"]),
+                    _number(scores["rmse"]),
+                ]
+            )
+    gains = [
+        [
+            split,
+            _interval(cilantro[split]["cilantro_over_gene_mean"]),
+            _interval(cilantro[split]["prior_over_cilantro"]),
+        ]
+        for split in SCORED
+    ]
+    return out + [
+        "",
+        "Cilantro-SL's stage one (as released, trained on every labelled line, so "
+        "in-sample on these lines) against the full prior and its gene mean, all on "
+        "the validation and test pairs stage one covers:",
+        "",
+        *_table(
+            [
+                "Predictor",
+                "Split",
+                "Pairs",
+                "Selective Spearman",
+                "Within-gene R²",
+                "Absolute Pearson",
+                "RMSE",
+            ],
+            rows,
+        ),
+        "",
+        *_table(
+            ["Split", "Cilantro R² over gene mean", "Prior R² over Cilantro"], gains
+        ),
     ]
 
 

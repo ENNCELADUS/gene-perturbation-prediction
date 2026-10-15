@@ -84,7 +84,10 @@ meta-programs without a cell-line study) and K-means clusters, label replicates 
 by hand on 2026-10-12) and Cilantro's rank-value and top-2,048 encodings (`configs/context_prior/cilantro_encodings.yaml`).
 It ran on 2026-10-12 (`results/noise_diagnosis_seed0/`): ten cells per line read as well as all of them, a second
 deposit moves inputs and predictions but not accuracy, state programs, clusters and Cilantro's encodings add nothing,
-and the learning curve still rises at the full training side; lines, not single-cell noise, limit the prior.
+and lines, not single-cell noise, limit the prior. The learning curve's rerun on 2026-10-14
+(`results/noise_lines_seed0/`, 7/8 added, a gene mean per fraction, within-gene R², Cilantro's stage one) found it
+flat from 7/8 to all 947 labelled lines (−0.0006 [−0.0062, +0.0050] validation): using up DepMap no longer helps this
+prior, whose within-gene R² is 0.043, and Cilantro's in-sample stage one does not beat it on its covered pairs.
 The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.

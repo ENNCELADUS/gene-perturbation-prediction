@@ -119,6 +119,10 @@ def test_noise_config_is_strict():
     whole["learning_curve"]["fractions"] = [0.5, 1.0]  # the full prior is a row anyway
     with pytest.raises(ValueError, match="fractions"):
         validate_noise_config(whole)
+    empty = copy.deepcopy(CONFIG)
+    empty["learning_curve"]["cilantro_predictions"] = ""
+    with pytest.raises(ValueError, match="cilantro_predictions"):
+        validate_noise_config(empty)
     repeated = copy.deepcopy(CONFIG)
     repeated["cell_states"]["programs"] = ["S", "S"]
     with pytest.raises(ValueError, match="programs"):
@@ -198,7 +202,9 @@ def diagnosis(tmp_path) -> SyntheticDiagnosis:
     noise_config = copy.deepcopy(CONFIG)
     noise_config.update(bootstrap_repeats=20)
     noise_config["cell_sampling"]["cells"] = [10, 30]
-    noise_config["learning_curve"]["fractions"] = [0.5, 0.75]
+    noise_config["learning_curve"].update(
+        fractions=[0.5, 0.75], cilantro_predictions=None
+    )
     noise_config["deposit"].update(permutations=50, min_lines=3)
     noise_config["cell_states"].update(
         programs=["P0", "P1", "P2"], cluster_components=3, cluster_counts=[2, 3]
@@ -245,12 +251,74 @@ def test_the_reference_fit_must_reproduce_the_export(diagnosis):
 
 
 def test_learning_curve_ends_at_the_prior_itself(diagnosis, tmp_path):
-    rows = run.learning_curve(diagnosis, tmp_path)["rows"]
+    section = run.learning_curve(diagnosis, tmp_path)
+    rows = section["rows"]
     assert [row["fraction"] for row in rows] == [0.5, 0.75, 1.0]
     sizes = [row["training_side_lines"] for row in rows]
     assert sizes == sorted(sizes) and sizes[-1] == len(diagnosis.base.bridge.bulk)
+    assert section["cilantro"] is None
     for split in ("val", "test"):
-        assert rows[-1][split]["gain"]["difference"] == 0.0
+        full = rows[-1][split]
+        assert full["gain"]["difference"] == 0.0
+        assert full["r2_over_full"]["difference"] == 0.0
+        # The gene mean is constant across lines: its correlations are undefined.
+        assert full["gene_mean"]["selective_spearman"] is None
+        assert full["gene_mean"]["selective_spearman_scored"] == 0
+        assert abs(full["gene_mean"]["within_gene_r2"]) < 0.2
+        # The synthetic lines carry context the prior reads.
+        assert full["r2_over_gene_mean"]["difference"] > 0
+        assert full["prior"]["absolute_pearson"] > 0
+    markdown = "\n".join(run._learning_curve_md(section))
+    assert "Within-gene R²" in markdown and "Cilantro" not in markdown
+
+
+def test_cilantro_rows_score_only_the_pairs_stage_one_covers(diagnosis, tmp_path):
+    base = diagnosis.base
+    lines = [*base.bridge.val, *base.bridge.test]
+    genes = list(base.definitions.genes)
+    # A perfect stage one on every other gene; nothing on the rest.
+    covered = genes[::2]
+    truth = base.truth(lines).mul(base.definitions.residual_scale, axis=1)
+    absolute = truth.add(base.definitions.gene_means, axis=1).loc[:, covered]
+    rows = (
+        absolute.stack()
+        .rename("prediction")
+        .rename_axis(["model_id", "gene_symbol"])
+        .reset_index()
+    )
+    path = tmp_path / "stage_one.csv"
+    rows.to_csv(path, index=False)
+    result = run.cilantro_rows(diagnosis, path)
+    for split in ("val", "test"):
+        entry = result[split]
+        split_lines = list(getattr(base.bridge, split))
+        assert entry["pairs"] == int(
+            base.truth(split_lines)[covered].notna().to_numpy().sum()
+        )
+        assert entry["cilantro"]["within_gene_r2"] == pytest.approx(1.0)
+        assert entry["prior_over_cilantro"]["difference"] < 0
+        assert entry["cilantro_over_gene_mean"]["difference"] > 0
+    section = {
+        "rows": run.learning_curve(diagnosis, tmp_path)["rows"],
+        "cilantro": result,
+    }
+    assert "Cilantro R² over gene mean" in "\n".join(run._learning_curve_md(section))
+    rows.iloc[[0, 0]].to_csv(path, index=False)
+    with pytest.raises(ValueError, match="duplicate"):
+        run.cilantro_rows(diagnosis, path)
+
+
+def test_within_gene_r2_sums_and_paired_gain():
+    truth = np.array([[1.0, -1.0, np.nan], [2.0, 0.0, 1.0]])
+    perfect = noise.line_sums(np.nan_to_num(truth), truth)[0]
+    sse_zero, total = noise.line_sums(np.zeros_like(truth), truth)
+    assert np.allclose(perfect, 0.0)
+    assert np.allclose(sse_zero, total) and np.allclose(total, [2.0, 5.0])
+    result = noise.r2_gain(perfect, sse_zero, total, repeats=50, seed=0)
+    assert result["difference"] == pytest.approx(1.0)
+    assert result["interval"] == pytest.approx([1.0, 1.0])
+    with pytest.raises(ValueError, match="missing"):
+        noise.line_sums(np.full_like(truth, np.nan), truth)
 
 
 def test_deposit_confound_reports_both_groupings(diagnosis, tmp_path, monkeypatch):
