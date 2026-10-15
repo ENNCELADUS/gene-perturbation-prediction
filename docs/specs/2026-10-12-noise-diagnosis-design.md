@@ -89,8 +89,14 @@ add. Within-gene R² above zero over the gene mean at every fraction: the prior'
 not only in order. Cilantro at or below the gene mean even in-sample: it carries no line-specific GeneEffect to
 compare against.
 
-**Outcome.** First run (selective Spearman only): 0.1132 at an eighth of the lines to 0.2045 at all of them; the last
-quarter adds 0.0115 / 0.0122 (intervals above zero). Redesigned run: pending.
+**Outcome** (2026-10-14, [record](../../results/noise_lines_seed0/README.md)). Selective Spearman climbs from 0.1132
+/ 0.1331 at an eighth of the lines to 0.2051 / 0.2007 at 7/8 and then stops: the last eighth (167 lines, 108
+labelled) adds −0.0006 [−0.0062, +0.0050] / +0.0018 [−0.0034, +0.0067] and within-gene R² +0.0001 / +0.0009
+(intervals spanning zero). The full prior's within-gene R² is 0.043 / 0.042 against −0.003 / +0.002 for its gene mean,
+above it at every fraction; whole-prediction Pearson moves only 0.910 → 0.914. Cilantro, in-sample on its covered
+pairs, scores 0.169 / 0.196 selective Spearman and R² 0.039 / 0.049 against the prior's 0.215 / 0.221 and 0.052 /
+0.051 (prior minus Cilantro R² +0.013 [−0.010, +0.038] / +0.002 [−0.015, +0.022]); it does carry line-specific signal
+(R² over its gene mean +0.042 / +0.046). More DepMap lines no longer help this prior.
 
 ### 3.3 Deposit confound (`deposit_confound`)
 
