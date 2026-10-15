@@ -1,0 +1,626 @@
+{
+  "rows": [
+    {
+      "fraction": 0.125,
+      "training_side_lines": 173,
+      "labelled_lines": 126,
+      "paired_lines": 41,
+      "val": {
+        "prior": {
+          "selective_spearman": 0.11322270322270322,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": -3.6760758260978577e-05,
+          "residual_pearson": 0.11713759521412992,
+          "aupr_lift": 0.14369023449877114,
+          "absolute_pearson": 0.9096356241518362,
+          "rmse": 0.18137715756893158
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": -0.01080759682551724,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9087715404112835,
+          "rmse": 0.1821938008069992
+        },
+        "gain": {
+          "difference": -0.0912837657112466,
+          "interval": [
+            -0.11513474042524978,
+            -0.058609479097305475
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.010770836067256337,
+          "interval": [
+            0.0027340696641688605,
+            0.018352020826828908
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.042865433273497094,
+          "interval": [
+            -0.058538287741547575,
+            -0.02829686994219728
+          ]
+        }
+      },
+      "test": {
+        "prior": {
+          "selective_spearman": 0.1330504513219644,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.013019666446908107,
+          "residual_pearson": 0.14134368578206352,
+          "aupr_lift": 0.1514147537011828,
+          "absolute_pearson": 0.9119473330113281,
+          "rmse": 0.17882069945335388
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": -0.003689057195389367,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9105899477081059,
+          "rmse": 0.180097296833992
+        },
+        "gain": {
+          "difference": -0.06942107597829356,
+          "interval": [
+            -0.08568401573358822,
+            -0.0475869822617186
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.016708723642297398,
+          "interval": [
+            0.007732278546916148,
+            0.026521859057264
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.0292724931817732,
+          "interval": [
+            -0.03988321012094618,
+            -0.019291027241419654
+          ]
+        }
+      }
+    },
+    {
+      "fraction": 0.25,
+      "training_side_lines": 354,
+      "labelled_lines": 251,
+      "paired_lines": 86,
+      "val": {
+        "prior": {
+          "selective_spearman": 0.1616585167730206,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.025562452374985556,
+          "residual_pearson": 0.17194307757809535,
+          "aupr_lift": 0.16266969679603208,
+          "absolute_pearson": 0.9119015851246997,
+          "rmse": 0.1792285442352295
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": -0.006178247509139201,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9091309016974785,
+          "rmse": 0.1818651705980301
+        },
+        "gain": {
+          "difference": -0.04284795216092924,
+          "interval": [
+            -0.0625190011173784,
+            -0.019647689403145766
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.03174069988412462,
+          "interval": [
+            0.025763834162414512,
+            0.037630298685626014
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.01726622014025066,
+          "interval": [
+            -0.025000854063491524,
+            -0.010146697840380721
+          ]
+        }
+      },
+      "test": {
+        "prior": {
+          "selective_spearman": 0.14118582889529474,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.02195701724314436,
+          "residual_pearson": 0.15474288528858493,
+          "aupr_lift": 0.14943480308136303,
+          "absolute_pearson": 0.9130500836962677,
+          "rmse": 0.17775453627109528
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": -0.0019107781594336348,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.910813462070185,
+          "rmse": 0.17988669872283936
+        },
+        "gain": {
+          "difference": -0.06128569840496323,
+          "interval": [
+            -0.07597582144183124,
+            -0.04203685438478309
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.02386779540257807,
+          "interval": [
+            0.016185436287390748,
+            0.03352375003412804
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.020335142385536988,
+          "interval": [
+            -0.026090594067301985,
+            -0.015216113471626262
+          ]
+        }
+      }
+    },
+    {
+      "fraction": 0.5,
+      "training_side_lines": 708,
+      "labelled_lines": 486,
+      "paired_lines": 165,
+      "val": {
+        "prior": {
+          "selective_spearman": 0.17784915113159389,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.03421625192488753,
+          "residual_pearson": 0.19057667306334575,
+          "aupr_lift": 0.1754110478238993,
+          "absolute_pearson": 0.9127012394611633,
+          "rmse": 0.1784820407629013
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": -0.005142070436807034,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9092479613940946,
+          "rmse": 0.1817544847726822
+        },
+        "gain": {
+          "difference": -0.026657317802355945,
+          "interval": [
+            -0.035347205964367814,
+            -0.015721801008493994
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.03935832236169466,
+          "interval": [
+            0.03061909873811442,
+            0.049204066550914506
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.00861242059034862,
+          "interval": [
+            -0.013097179751859233,
+            -0.00410759889881384
+          ]
+        }
+      },
+      "test": {
+        "prior": {
+          "selective_spearman": 0.17531430362278297,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.03509253485213293,
+          "residual_pearson": 0.19379212014649408,
+          "aupr_lift": 0.1684579849367748,
+          "absolute_pearson": 0.914181117911977,
+          "rmse": 0.17666302621364594
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": 0.0005351527935297806,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9110173036132173,
+          "rmse": 0.17969650030136108
+        },
+        "gain": {
+          "difference": -0.027157223677475,
+          "interval": [
+            -0.03737062636655681,
+            -0.014949460391225288
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.03455738205860323,
+          "interval": [
+            0.025484581192275514,
+            0.04563289837290203
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.007199624776548356,
+          "interval": [
+            -0.010908032033742783,
+            -0.003701074240320055
+          ]
+        }
+      }
+    },
+    {
+      "fraction": 0.75,
+      "training_side_lines": 1060,
+      "labelled_lines": 721,
+      "paired_lines": 246,
+      "val": {
+        "prior": {
+          "selective_spearman": 0.1930032336902566,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.03852833535124167,
+          "residual_pearson": 0.2093694810911573,
+          "aupr_lift": 0.18469656092617895,
+          "absolute_pearson": 0.9131685630689302,
+          "rmse": 0.17803876101970673
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": -0.003432429474321097,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9093716653595094,
+          "rmse": 0.18164539337158203
+        },
+        "gain": {
+          "difference": -0.011503235243693233,
+          "interval": [
+            -0.01982224328398621,
+            -0.0033420784099359733
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.04196076482556284,
+          "interval": [
+            0.03439481271783555,
+            0.05035790652300661
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.004300337163994535,
+          "interval": [
+            -0.006643864650279664,
+            -0.0019103641550087419
+          ]
+        }
+      },
+      "test": {
+        "prior": {
+          "selective_spearman": 0.19030936221844585,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.03938042760188498,
+          "residual_pearson": 0.21322901893155646,
+          "aupr_lift": 0.1760054913033393,
+          "absolute_pearson": 0.9146556160841345,
+          "rmse": 0.17620068788528442
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": 0.0007355668593891362,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9110699295620898,
+          "rmse": 0.1796509176492691
+        },
+        "gain": {
+          "difference": -0.012162165081812115,
+          "interval": [
+            -0.02000486806956425,
+            -0.0036348810432321314
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.03864486074249594,
+          "interval": [
+            0.02962453220181276,
+            0.049156096229916076
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.0029117320267962998,
+          "interval": [
+            -0.005413813810722259,
+            -0.0004047720519233943
+          ]
+        }
+      }
+    },
+    {
+      "fraction": 0.875,
+      "training_side_lines": 1232,
+      "labelled_lines": 839,
+      "paired_lines": 297,
+      "val": {
+        "prior": {
+          "selective_spearman": 0.20514836026286407,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.04272488942308239,
+          "residual_pearson": 0.22301115148365042,
+          "aupr_lift": 0.19501698592575545,
+          "absolute_pearson": 0.9135484341968415,
+          "rmse": 0.17766645550727844
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": -0.0026111167828639648,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9094452217791559,
+          "rmse": 0.1815738081932068
+        },
+        "gain": {
+          "difference": 0.0006418913289142347,
+          "interval": [
+            -0.004994178059326513,
+            0.00618860670513639
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.045336006205946376,
+          "interval": [
+            0.03656807690735487,
+            0.05531380477507337
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.00010378309215380727,
+          "interval": [
+            -0.0019414277955923365,
+            0.0018622018484341285
+          ]
+        }
+      },
+      "test": {
+        "prior": {
+          "selective_spearman": 0.20065867558857706,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.04139626781335626,
+          "residual_pearson": 0.22049741259323927,
+          "aupr_lift": 0.18141894899876976,
+          "absolute_pearson": 0.914802952134891,
+          "rmse": 0.17605647444725037
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": 0.0015443272862651902,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9111414395622343,
+          "rmse": 0.17958173155784607
+        },
+        "gain": {
+          "difference": -0.0018128517116809129,
+          "interval": [
+            -0.006707900518198638,
+            0.0033519023897684228
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.03985194052709102,
+          "interval": [
+            0.031032535715341703,
+            0.050106333251824585
+          ]
+        },
+        "r2_over_full": {
+          "difference": -0.000895891815325107,
+          "interval": [
+            -0.002230168599541231,
+            0.0006262694858240621
+          ]
+        }
+      }
+    },
+    {
+      "fraction": 1.0,
+      "training_side_lines": 1399,
+      "labelled_lines": 947,
+      "paired_lines": 343,
+      "val": {
+        "prior": {
+          "selective_spearman": 0.20450646893394983,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.042828672515236144,
+          "residual_pearson": 0.2219578931752069,
+          "aupr_lift": 0.1962907736033146,
+          "absolute_pearson": 0.9135684762512155,
+          "rmse": 0.1776474267244339
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": -0.0025609211281167887,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9094512342733938,
+          "rmse": 0.1815674901008606
+        },
+        "gain": {
+          "difference": 0.0,
+          "interval": [
+            0.0,
+            0.0
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.045389593643352884,
+          "interval": [
+            0.03657050463182313,
+            0.05546690750564762
+          ]
+        },
+        "r2_over_full": {
+          "difference": 0.0,
+          "interval": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "test": {
+        "prior": {
+          "selective_spearman": 0.20247152730025797,
+          "selective_spearman_scored": 4323,
+          "within_gene_r2": 0.04229215962868127,
+          "residual_pearson": 0.22206628501068165,
+          "aupr_lift": 0.18271401442378876,
+          "absolute_pearson": 0.9148781889172994,
+          "rmse": 0.1759810447692871
+        },
+        "gene_mean": {
+          "selective_spearman": null,
+          "selective_spearman_scored": 0,
+          "within_gene_r2": 0.002208207550278174,
+          "residual_pearson": null,
+          "aupr_lift": 0.0,
+          "absolute_pearson": 0.9112076184837047,
+          "rmse": 0.17951735854148865
+        },
+        "gain": {
+          "difference": 0.0,
+          "interval": [
+            0.0,
+            0.0
+          ]
+        },
+        "r2_over_gene_mean": {
+          "difference": 0.04008395207840317,
+          "interval": [
+            0.031363413238206586,
+            0.049893411996560486
+          ]
+        },
+        "r2_over_full": {
+          "difference": 0.0,
+          "interval": [
+            0.0,
+            0.0
+          ]
+        }
+      }
+    }
+  ],
+  "cilantro": {
+    "val": {
+      "cilantro": {
+        "selective_spearman": 0.16917399649375187,
+        "selective_spearman_scored": 1252,
+        "within_gene_r2": 0.03913540627168188,
+        "residual_pearson": 0.2546115313605581,
+        "aupr_lift": 0.19251981206887098,
+        "absolute_pearson": 0.932556437761105,
+        "rmse": 0.22981160879135132
+      },
+      "prior": {
+        "selective_spearman": 0.2152985102275751,
+        "selective_spearman_scored": 1262,
+        "within_gene_r2": 0.0518290637695803,
+        "residual_pearson": 0.2169091206476593,
+        "aupr_lift": 0.21375841605531795,
+        "absolute_pearson": 0.92769786829581,
+        "rmse": 0.23870429396629333
+      },
+      "gene_mean": {
+        "selective_spearman": null,
+        "selective_spearman_scored": 0,
+        "within_gene_r2": -0.0031373601365209947,
+        "residual_pearson": null,
+        "aupr_lift": 0.0,
+        "absolute_pearson": 0.9233733873582022,
+        "rmse": 0.24528810381889343
+      },
+      "pairs": 49509,
+      "selective_pairs": 20503,
+      "lines": 26,
+      "cilantro_over_gene_mean": {
+        "difference": 0.042272766408202926,
+        "interval": [
+          0.014977957186210334,
+          0.06586718342343482
+        ]
+      },
+      "prior_over_cilantro": {
+        "difference": 0.012693657497898431,
+        "interval": [
+          -0.009537945129294503,
+          0.03753363958931231
+        ]
+      }
+    },
+    "test": {
+      "cilantro": {
+        "selective_spearman": 0.19631358728727838,
+        "selective_spearman_scored": 1270,
+        "within_gene_r2": 0.04906807666919499,
+        "residual_pearson": 0.27246476238022305,
+        "aupr_lift": 0.20902113959732915,
+        "absolute_pearson": 0.9316063203057018,
+        "rmse": 0.22959738969802856
+      },
+      "prior": {
+        "selective_spearman": 0.2210241909001705,
+        "selective_spearman_scored": 1285,
+        "within_gene_r2": 0.050842192389839,
+        "residual_pearson": 0.22920275720883873,
+        "aupr_lift": 0.20189147269100288,
+        "absolute_pearson": 0.9259915414180986,
+        "rmse": 0.2393166869878769
+      },
+      "gene_mean": {
+        "selective_spearman": null,
+        "selective_spearman_scored": 0,
+        "within_gene_r2": 0.0032247922020309794,
+        "residual_pearson": null,
+        "aupr_lift": 0.0,
+        "absolute_pearson": 0.9221858567289951,
+        "rmse": 0.24510256946086884
+      },
+      "pairs": 53272,
+      "selective_pairs": 21911,
+      "lines": 28,
+      "cilantro_over_gene_mean": {
+        "difference": 0.04584328446716403,
+        "interval": [
+          0.02749173606085051,
+          0.06219563920389506
+        ]
+      },
+      "prior_over_cilantro": {
+        "difference": 0.0017741157206439882,
+        "interval": [
+          -0.015415758833468468,
+          0.02153626597509933
+        ]
+      }
+    }
+  }
+}
