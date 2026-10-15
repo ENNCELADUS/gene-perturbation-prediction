@@ -421,36 +421,6 @@ def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypa
     assert len(every) == len(set(every))
 
 
-def test_screen_replicates_pair_two_screens_outside_held_out_lines(diagnosis, tmp_path):
-    rng = np.random.default_rng(6)
-    genes = list(diagnosis.base.definitions.selective)
-    models = [f"M{i}" for i in range(30)] + ["V0"]
-    signal = rng.normal(size=(len(models), len(genes)))
-    screens, rows = [], []
-    for k, model in enumerate(models):
-        for replicate in range(2 + (k == 0)):
-            screen = f"SC{k:02d}{replicate}"
-            screens.append(
-                pd.Series(signal[k] + 0.3 * rng.normal(size=len(genes)), name=screen)
-            )
-            rows.append({"ScreenID": screen, "ModelID": model})
-    frame = pd.DataFrame(screens)
-    frame.columns = [f"{g} (1)" for g in genes]
-    frame.to_csv(tmp_path / "screens.csv")
-    pd.DataFrame(rows).to_csv(tmp_path / "map.csv", index=False)
-    diagnosis.config["screen_replicates"] = {
-        "screen_gene_effect": str(tmp_path / "screens.csv"),
-        "screen_map": str(tmp_path / "map.csv"),
-    }
-    result = run.screen_replicates(diagnosis, tmp_path)
-    assert result["models"] == 30  # V0 is a validation line
-    assert result["agreement"]["median"] > 0.8
-    assert result["ceiling_macro"] >= result["agreement_macro"]
-    pd.DataFrame([{"ScreenID": "x"}]).to_csv(tmp_path / "map.csv", index=False)
-    with pytest.raises(ValueError, match="ModelID"):
-        run.screen_replicates(diagnosis, tmp_path)
-
-
 def test_main_writes_sections_and_skips_finished_ones(diagnosis, tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(run, "load_diagnosis", lambda config: diagnosis)

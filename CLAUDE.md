@@ -80,8 +80,7 @@ moved eight to sources with more or untreated cells; it adds no screened line. T
 limits the default prior before any denoising model is built: per-cell sampling (split halves, 10 to 400 cells), a
 learning curve over training lines, deposit batch (a confound test, and 99 second deposits built by
 `build_extra_single_cell_sources --second-source`), cell-state programs (Tirosh's cell cycle and the 21 Gavish
-meta-programs without a cell-line study) and K-means clusters, label replicates (DepMap per-screen files, downloaded
-by hand on 2026-10-12) and Cilantro's rank-value and top-2,048 encodings (`configs/context_prior/cilantro_encodings.yaml`).
+meta-programs without a cell-line study) and K-means clusters, and Cilantro's rank-value and top-2,048 encodings (`configs/context_prior/cilantro_encodings.yaml`).
 It ran on 2026-10-12 (`results/noise_diagnosis_seed0/`): ten cells per line read as well as all of them, a second
 deposit moves inputs and predictions but not accuracy, state programs, clusters and Cilantro's encodings add nothing,
 and lines, not single-cell noise, limit the prior. The learning curve's rerun on 2026-10-14

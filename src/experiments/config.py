@@ -182,7 +182,6 @@ _NOISE_GROUPS = {
     "cell_states": (
         "programs threshold_percentile cluster_components cluster_counts penalties"
     ),
-    "screen_replicates": "screen_gene_effect screen_map",
 }
 _NOISE_TOP_LEVEL = "seed output_root prior_run bootstrap_repeats"
 

@@ -893,7 +893,7 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
 
 The [noise-diagnosis design](specs/2026-10-12-noise-diagnosis-design.md) (agreed 2026-10-12) measures which noise
 limits the default prior (§10) before any single-cell model with noise handling of its own is built: per-cell sampling,
-the number of training lines, the deposit a line's cells come from, cell-state heterogeneity and the noise of the label.
+the number of training lines, the deposit a line's cells come from, and cell-state heterogeneity.
 `configs/context_prior/noise_diagnosis.yaml`, run with `hpc/run.sh prior-noise CONFIG --run-id <id> [--sections A,B]`
 (`src/experiments/noise_diagnosis.py`), reads the prior run named by `prior_run` (its bound config and export) and writes
 `outputs/context_prior/<id>/noise/<section>.json`, skipping a section whose file exists, then `results.md`. Every score is
@@ -942,17 +942,14 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   `k` K-means centroids fitted on the training cells' leading principal components). Each is a shared ridge on what the
   out-of-fold export leaves on the training lines, added to the export; gains over the prior alone and, for fractions,
   over means at the same penalty.
-- **`screen_replicates`.** DepMap 26Q1's `ScreenGeneEffect.csv` and `CRISPRScreenMap.csv`, downloaded in a browser (the
-  portal's download API sits behind a browser check): per selective gene, Spearman across lines outside validation and test
-  between each line's first two screens; its macro mean and the approximate ceiling `sqrt(2r/(1+r))` beside the prior.
 - **Cilantro-SL's input reductions** are a bridge remedy of §10, `rank_value`
   (`configs/context_prior/cilantro_encodings.yaml`, `hpc/run.sh prior`): values divided by each gene's training-side
   nonzero median and ranked within the line (rank alone, rank with the top 2,048, and the same top 2,048 keeping their
   expression), applied to bulk and pseudo-bulk before the affine bridge.
 - **Reading** (the design's §6, not code): flat scores from 50 to 100 cells up and split-half reliability above the
   bridge's agreement say per-cell sampling does not bind; second-deposit predictions agreeing as well as the halves and no
-  deposit η² above its null say deposit batch does not; a curve still rising says more lines would help; the replicate
-  ceiling bounds the metric; fractions above means say state heterogeneity carries information beyond the mean.
+  deposit η² above its null say deposit batch does not; a curve still rising says more lines would help;
+  fractions above means say state heterogeneity carries information beyond the mean.
 - **Result (2026-10-12, [record](../results/noise_diagnosis_seed0/README.md)).** Per-cell sampling does not bind:
   split-half reliability 0.939 per gene, and ten cells per line score 0.2015 validation against 0.2045 (−0.0030
   [−0.0092, +0.0036]); the bridge's agreement with bulk (0.453) is half its sampling ceiling. A second deposit moves a
@@ -960,7 +957,7 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   (+0.0066 [−0.0052, +0.0184] on 99 lines); deposit η² 0.0365 against a null of 0.0315. The learning curve, rerun
   on 2026-10-14 with 7/8 and a gene mean per fraction ([record](../results/noise_lines_seed0/README.md)), plateaus:
   0.2051 at 7/8 against 0.2045 at all lines (the last eighth adds −0.0006 [−0.0062, +0.0050]; within-gene R² 0.043,
-  unchanged), after +0.0115 from 3/4 to all. Screen replicates agree at 0.251 per gene
-  (ceiling about 0.587). Cell-state arms add at most +0.0010 and fractions never beat means; Cilantro's rank-value
+  unchanged), after +0.0115 from 3/4 to all.
+  Cell-state arms add at most +0.0010 and fractions never beat means; Cilantro's rank-value
   encoding ties (−0.0022 [−0.0076, +0.0033]) and its top-2,048 truncations lose (−0.019, −0.014).
 - **Scope.** A diagnosis result is single-gene dependency evidence on held-out lines; it is not an SL result.
