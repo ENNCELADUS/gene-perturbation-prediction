@@ -57,7 +57,7 @@ lineage explains 0.0927 against 0.0640. By the design's reading (second-deposit 
 halves, deposit η² at its null) deposit batch binds; by score it does not: the excess η² is 0.005 and a line read
 from another deposit is predicted no worse. Per-deposit error mean squares run from 0.73 to 1.29 of the overall.
 
-## Lines are the lever
+## More lines helped, up to a point
 
 The reference row refitted on nested patient-grouped fractions of the training side:
 
@@ -69,7 +69,9 @@ The reference row refitted on nested patient-grouped fractions of the training s
 | 1,060 | 721 | 246 | 0.1930 | 0.1903 |
 | 1,399 | 947 | 343 | 0.2045 | 0.2025 |
 
-The last quarter of lines adds 0.0115 validation / 0.0122 test (intervals above zero); the curve has not flattened.
+The last quarter of lines adds 0.0115 validation / 0.0122 test (intervals above zero). The 2026-10-14 rerun with a 7/8
+row ([record](../noise_lines_seed0/README.md)) puts all of that gain between 3/4 and 7/8: from 7/8 to all lines the
+curve is flat (−0.0006 [−0.0062, +0.0050] validation).
 
 ## Cell states and Cilantro's encodings add nothing
 
