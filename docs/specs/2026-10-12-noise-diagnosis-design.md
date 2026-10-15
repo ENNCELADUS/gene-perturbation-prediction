@@ -157,6 +157,13 @@ second deposit scores +0.0066 [−0.0052, +0.0184] over primary. Batch moves the
 
 **Reading.** `program_fractions` above `program_means` with a validation interval above zero: state heterogeneity carries
 information beyond the mean, and the second-wave distributional models start from that arm.
+<span style="color:red">**TODO (open, 2026-10-15):** a null here does not show that heterogeneity carries no dependency
+information. The arms are weak readers of it: a few per-line shares (23 programs, 8 or 16 K-means clusters on 128
+context cells per line, fitted without labels), added linearly to the prior's out-of-fold error by one shared ridge
+across genes. Clusters on line-centred cells capture only the shared axes of within-line variation, not line-specific
+subpopulations, and a residual stack over the prior can only correct what the mean already leaves out. Open: does a
+model that reads the cell distribution directly (per-cell encodings pooled with learned weights, subpopulation-aware
+or set models, trained against GeneEffect rather than stacked on the prior) find information these summaries miss?</span>
 
 **Outcome.** Best row +0.0010 on validation; fractions over means +0.0000 [−0.0009, +0.0009]. Nothing added.
 
