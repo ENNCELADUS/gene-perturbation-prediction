@@ -163,6 +163,30 @@ removes any gene whose files are incomplete.
 The port's coverage report (step 0, CPU only) runs in the project environment:
 `.venv-tx1/bin/python -m src.experiments.cilantro_coverage --out outputs/cilantro_coverage/<id>`.
 
+## The PIE harness
+
+PIE (Arc Institute, [ArcInstitute/pie](https://github.com/ArcInstitute/pie)) is vendored and tracked in
+`third_party/pie/` at `21a526a` ([VENDORED.md](../third_party/pie/VENDORED.md); CC BY-NC-SA 4.0, which our additions
+there share), so it arrives with `git pull`. It runs in its own environment, `.venv-pie` (Python 3.12, `torch==2.10.0`
+from the cu128 index, pandas 3), built from PIE's `uv.lock` by `hpc/pie/setup.sh`, which ends with a CUDA check (a
+bf16 matmul and scaled-dot-product attention on `cuda:0`). PIE's own tests run from its directory:
+`(cd third_party/pie && ../../.venv-pie/bin/python -m pytest tests -q -p no:cacheprovider)`.
+
+`hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps fetch,evaluate,compare]` is Task 1 of the
+[stage-one design](../docs/specs/2026-10-16-pie-geneeffect-ladder-design.md): PIE's released checkpoints
+(`PIE_replogle_xdataset` on Replogle `test_seen` and `test_unseen`, the four `PIE_replogle_wdataset` folds on
+`unseen_ctx`) re-scored by the vendored code and compared with the metric files released with them. It exports
+`PIE_DATA_ROOT=data/pie` and `PIE_CACHE_DIR=data/pie/cache` and, unless set, `HF_ENDPOINT=https://hf-mirror.com`;
+the runner sets `PIE_RUNS_ROOT` to the run's `runs/`. Steps, each skipped once its outputs exist (rerun the same id to
+resume): `fetch` (checkpoints and released tables at pinned revisions into `data/pie/released/`), `evaluate`
+(`pie.evaluate.run_eval` per target, from the target's run directory so the checkpoints' legacy relative paths
+`data/splits/…` and `data/sources/aliases.yaml` map to PIE's Hugging Face copies, as PIE intends), `compare`
+(`comparison.csv`, `granular_comparison.csv`, `results.md`). Evaluation reads the data config saved in each
+checkpoint and rebuilds same-perturbation evidence from its training data, so the first `evaluate` downloads every
+dataset and source the checkpoints pin (all five cross-dataset training sets; `ncbi_text` alone is 43 GB) into
+`data/pie/hf/`; PIE checks each array against its `meta.json` SHA-256. Output: `outputs/pie_reproduction/<id>/`
+(`run.json` with pins, environment and step times).
+
 ## The `prior` command
 
 `hpc/run.sh prior CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear context prior

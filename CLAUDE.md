@@ -118,6 +118,7 @@ hpc/run.sh prior-selected CONFIG --run-id ID                # the reference row'
 hpc/run.sh prior-export CONFIG --run-id ID                  # the reference row for the correction, CPU: export/ (val/test, training lines out of fold); never overwritten
 hpc/run.sh prior-stack CONFIG --run-id ID                   # single-cell q_sc statistics stacked on a prior export, CPU: single_cell_stack/ (protocol §13)
 hpc/run.sh prior-noise CONFIG --run-id ID [--sections A,B]  # noise diagnosis against a prior run, CPU: noise/ (protocol §14)
+hpc/run.sh pie-reproduce --run-id ID                        # PIE's released checkpoints re-scored by the vendored PIE in .venv-pie (hpc/pie/setup.sh), 1 GPU
 uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
