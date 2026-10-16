@@ -40,7 +40,9 @@ outputs/pie_reproduction/<id>/ (results.md); PIE's assets go to data/pie/
 its ladder_root; `pie-precompute` the frozen PIE's deltas beside them (one
 process per --shard; the pilot report is read before `full`). `gene-sources`
 runs one step of the gene sources: `proteins` (.venv-pie), `afdb` and `esm`
-(.venv-esm, built by hpc/esm/setup.sh), `align` (this environment).
+(ESM_PYTHON, default the H20's existing esm environment, with ESM_HF_HOME its
+shared Hugging Face cache; hpc/esm/setup.sh builds .venv-esm), `align` (this
+environment).
 EOF
 }
 
@@ -55,6 +57,10 @@ if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 python_bin=${PYTHON_BIN:-"$repo_root/.venv-tx1/bin/python"}
+# The ESM steps reuse the H20's existing esm environment and shared Hugging Face cache
+# (ESM C 600M and ESM3-open at the pinned revisions); hpc/esm/setup.sh builds .venv-esm instead.
+esm_python=${ESM_PYTHON:-/2023533015/ppi-mutation-ddg/.venv/bin/python}
+esm_hf_home=${ESM_HF_HOME:-/2023533015/.cache/huggingface}
 pie_environment() {
   export PIE_DATA_ROOT="$repo_root/data/pie" PIE_CACHE_DIR="$repo_root/data/pie/cache"
   export HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
@@ -80,10 +86,10 @@ case "$command" in
     step=$1; shift
     case "$step" in
       proteins) exec "$repo_root/.venv-pie/bin/python" -m src.data.prepare.embed_protein_sources --steps proteins "$@" ;;
-      afdb) exec "$repo_root/.venv-esm/bin/python" -m src.data.prepare.embed_protein_sources --steps afdb "$@" ;;
+      afdb) exec "$esm_python" -m src.data.prepare.embed_protein_sources --steps afdb "$@" ;;
       esm)
-        export HF_HOME="$repo_root/data/esm/hf" HF_HUB_OFFLINE=1
-        exec "$repo_root/.venv-esm/bin/python" -m src.data.prepare.embed_protein_sources --steps esmc,esm3 "$@" ;;
+        export HF_HOME="$esm_hf_home" HF_HUB_OFFLINE=1
+        exec "$esm_python" -m src.data.prepare.embed_protein_sources --steps esmc,esm3 "$@" ;;
       align) exec "$python_bin" -m src.data.gene_sources "$@" ;;
       *) usage >&2; exit 2 ;;
     esac ;;

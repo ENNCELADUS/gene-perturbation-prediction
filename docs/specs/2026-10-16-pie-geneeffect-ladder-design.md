@@ -412,17 +412,19 @@ shows how much the model leans on statistics only large bags provide.
 | --- | --- | --- |
 | `third_party/pie/` | vendored, then extended | PIE's repository (CC BY-NC-SA 4.0, pinned commit), its own environment |
 | `third_party/pie/src/pie/model/geneeffect.py` | new | the direct-readout trunk: per-channel chunked encoder, gene queries and evidence, gene-to-cell block |
-| `src/data/prepare/prepare_ladder_inputs.py` | new | Task 2's caches and manifest |
-| `src/data/prepare/pie_precompute.py` | new | Task 2's frozen-PIE deltas (runs in PIE's environment) |
-| `src/data/prepare/cellosaurus_context.py` | new | Cellosaurus records and their embeddings |
+| `src/data/ladder_cells.py` | new | Task 2's per-line cell computations (PIE's input, pseudo-bulk, spread, QC, HVG cells and shuffles) |
+| `src/experiments/ladder_inputs.py` | new | Task 2's frame, cells, mean channel, summaries, Tx1 caches and manifest |
+| `src/experiments/pie_precompute.py` | new | Task 2's frozen-PIE deltas (runs in PIE's environment) |
+| `src/data/prepare/cellosaurus_context.py` | new | Cellosaurus records and their embeddings (on the Mac) |
+| `src/data/prepare/embed_protein_sources.py`, `hpc/esm/setup.sh` | new | ESM C and ESM3-open embeddings (`.venv-esm`) |
 | `src/data/gene_sources.py` | new | read and align §4.4's sources |
 | `src/model/stage_one.py` | new | Cilantro's FiLM layer and tail, the gene and context encoders, the virtual-cell, multi-encoder and hybrid arms |
 | `src/training/stage_one_trainer.py` | new | the training loop of §4.1 |
 | `src/experiments/stage_one.py` | new | config validation, runs, scoring, contrasts, `results.md` |
 | `src/experiments/pie_reproduction.py` | new | Task 1 |
 | `configs/stage_one/` | new | one config per run |
-| `hpc/run.sh` | edit | `pie-reproduce`, `pie-precompute` and `stage-one` commands |
-| `docs/03-geneeffect-protocol.md` | edit | a new section for the stage-one model |
+| `hpc/run.sh` | edit | `pie-reproduce`, `ladder-inputs`, `pie-precompute`, `gene-sources` and `stage-one` commands |
+| `docs/03-geneeffect-protocol.md` | edit | §15 for the stage-one inputs; a new section for the stage-one model |
 
 `data` and `model` import neither `training` nor `experiments`. Configs are strict. Checkpoints record the split
 membership and load strictly, the vendored PIE included.
