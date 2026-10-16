@@ -169,7 +169,8 @@ PIE (Arc Institute, [ArcInstitute/pie](https://github.com/ArcInstitute/pie)) is 
 `third_party/pie/` at `21a526a` ([VENDORED.md](../third_party/pie/VENDORED.md); CC BY-NC-SA 4.0, which our additions
 there share), so it arrives with `git pull`. It runs in its own environment, `.venv-pie` (Python 3.12, `torch==2.10.0`
 from the cu128 index, pandas 3), built from PIE's `uv.lock` by `hpc/pie/setup.sh`, which ends with a CUDA check (a
-bf16 matmul and scaled-dot-product attention on `cuda:0`). PIE's own tests run from its directory:
+bf16 matmul and scaled-dot-product attention on `cuda:0`; the cu128 wheels run on the H20's driver 550, CUDA 12.4, through
+minor-version compatibility). PIE's own tests run from its directory (814 passed on the H20, 2026-10-16):
 `(cd third_party/pie && ../../.venv-pie/bin/python -m pytest tests -q -p no:cacheprovider)`.
 
 `hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps fetch,download,evaluate,compare]` is Task 1 of the

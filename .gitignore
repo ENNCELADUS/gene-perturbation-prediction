@@ -59,6 +59,8 @@ wheels/
 !configs/benchmarks/provenance/phase_a_tx1_20260724/k_label_panels.csv
 # Curated P1 diagnostic evidence (small comparison tables and summaries, source-of-truth for results)
 !results/p1_response_pathway_diagnostics/evidence/**
+# PIE reproduction comparison tables (small, the record of results/pie_reproduction/)
+!results/pie_reproduction/*.csv
 /outputs/
 data/**/features
 data/**/interim
