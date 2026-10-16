@@ -2,8 +2,9 @@
 
 **Status:** agreed 2026-10-16 (two grill sessions after the review of the noise diagnosis; checked by a Codex
 alignment review and an Opus review). Task 1 done 2026-10-16 ([record](../../results/pie_reproduction/README.md): the
-released checkpoints reproduce to rounding); Tasks 2–7 not built. Evidence it starts from: the
-[noise diagnosis](2026-10-12-noise-diagnosis-design.md) (its §6 lists the open corrections) and its records
+released checkpoints reproduce to rounding); Tasks 2–7 not built. Revised 2026-10-16 after Task 1: PIE's DepMap
+source is masked in every pass (§3.2) and Task 4's GeneEffect profile is masked by fold, not by line. Evidence it
+starts from: the [noise diagnosis](2026-10-12-noise-diagnosis-design.md) (its §6 lists the open corrections) and its records
 ([noise diagnosis](../../results/noise_diagnosis_seed0/README.md), [learning curve](../../results/noise_lines_seed0/README.md)).
 PIE: Arc Institute's "Perturbation is Everything" (bioRxiv, 5 October 2026), code
 [ArcInstitute/pie](https://github.com/ArcInstitute/pie), data and checkpoints in the Hugging Face
@@ -67,12 +68,16 @@ expression never reaches the latents: it enters only as each decoded gene's own 
   signalling screens and ARC VCC 25; Replogle held out. Of PIE's Perturb-seq lines, K562, HepG2, Jurkat and HCT116 are
   our training lines; no validation or test line has perturbation data in its corpus. 38 of our training lines are in
   Tahoe; test line SW620 shares a patient with Tahoe's SW480 (chemical exposure only).
-- **DepMap source.** PIE reads each perturbed gene's Chronos scores across 1,186 lines in ModelID order (its
-  provenance lists them; 375 of our 379 training lines and all 55 held-out lines are columns). For every (line c, gene
-  g) pass, these columns are set to 0 (PIE's missing-value convention): the 55 held-out lines, every line sharing a
-  patient with one of them (ACH-000023 with validation ACH-000022, ACH-000842 with test ACH-000651; protocol §11),
-  and line c's own column with its patient siblings. A training pair then never sees its own label, and training and
-  held-out inputs are built the same way. One row of Task 3 masks the source entirely.
+- **DepMap source: masked.** PIE's `depmap_gene_effect` token is the perturbed gene's Chronos scores across 1,186
+  lines in ModelID order (its provenance lists them; 375 of our 379 training lines and all 55 held-out lines are
+  columns). Every pass masks it, as PIE masks a perturbation without a DepMap row (Tahoe's compounds, genes outside
+  DepMap's 18,435): no token. Zeroing the held-out columns keeps their labels out, but a training pair's own column
+  cannot be handled cleanly: left in, the label is in the input; zeroed, the pair's input differs from every other
+  line's by exactly its label at that column (leave-one-out target encoding), a label channel present in training
+  and absent on held-out lines that a head knowing the line through Δ can learn. And with the source in, part of Δ is
+  g's GeneEffect pattern across lines, which the base and the prior already hold, not the simulated knockdown in line
+  c. GeneEffect from other lines enters stage one only through Task 4's fold-masked profile. PIE saw this source for
+  about 97% of its training perturbations, so masking moves its input; the pilot measures what it costs PIE.
 - **Context.** For line `c`: PIE's control-mean evidence on one decode panel shared by every line: for a line with
   cells, its definition (the mean over cells of `log1p` CP10K); for a bulk-only line, the bulk profile rescaled to
   PIE's CP10K scale (a bulk profile has no cells to average logs over); (the protocol's GeneEffect genes with a `gene_text` entry), a gene the line's
@@ -101,8 +106,10 @@ expression never reaches the latents: it enters only as each decoded gene's own 
 - **Storage and order.** Values are stored in fp32, centred within each gene (a line-specific component can sit two to
   three orders of magnitude below the gene component). The pass loops gene-major so g's sources, memory and evidence
   are built once per gene; the vendored model is called directly (`pie infer` needs the checkpoint's split hash).
-- **Pilot.** Before the full pass: about 200 genes × every line, timed, reporting for each delta the variance across
-  lines within a gene against the variance between genes. People read it before the full pass is launched.
+- **Pilot.** Before the full pass: the xdataset checkpoint re-scored on Replogle `test_seen` and `test_unseen` with
+  the DepMap source masked, beside Task 1's numbers (what masking costs PIE on its own task); then about 200 genes ×
+  every line, timed, reporting for each delta the variance across lines within a gene against the variance between
+  genes. People read it before the full pass is launched.
 
 ### 3.3 Stage-one architecture arms (Task 3)
 
@@ -112,7 +119,7 @@ viability embedding `V(c, g)`, saved for every line × gene for stage two. Arms 
 | Arm | Before the tail |
 | --- | --- |
 | **Direct readout** | A PIE-architecture trunk trained from fresh weights: the line's tokens (§4.3) go into the encoder through per-channel cross-attention; gene g's query (gene encoder + own evidence) decodes a feature `h(c, g)` → Linear 256 → ReLU. It starts small (width 128–256, 32–64 latents, 1–2 blocks per stage, about 1–5M parameters; about 1,000 distinct line inputs feed it) and widens only on validation; 30–50% of input gene tokens dropped per step, weight decay 0.05–0.1, EMA weights, a zero-initialised output so the untrained model is a candidate. Row: shared modules warm-started from the checkpoint (at PIE's width). |
-| **Virtual cell + FiLM** (Cilantro) | Δ → Linear 256 → ReLU → FiLM, `[γ, β] = Linear(gene encoder(g))`, `x = γ ⊙ x + β`. Rows: ΔH, ΔE, ΔL; and the best Δ with the DepMap source masked. |
+| **Virtual cell + FiLM** (Cilantro) | Δ → Linear 256 → ReLU → FiLM, `[γ, β] = Linear(gene encoder(g))`, `x = γ ⊙ x + β`. Rows: ΔH, ΔE, ΔL. |
 | **Multi-encoder** | As virtual cell + FiLM, with the FiLM condition `gene encoder(g) ⊕ context encoder(c)`; the context encoder pools the line's tokens (§4.3) with the Cellosaurus text. Rows: ΔH, ΔE, ΔL. |
 | **Hybrid** | `[h(c, g) ; FiLM(best Δ)]` → Linear 256 → ReLU. |
 
@@ -215,8 +222,8 @@ The gene encoder projects these and sums them; a gene without an entry has that 
 | `string_space` | interaction network | 19,699 | PIE_sources (STRING v12) |
 | Gene2vec | co-expression | ~24,000 | the matrix Cilantro's stage one reads; its best gene prior (Fig. 2C) |
 
-PIE's `depmap_gene_effect` is never a gene-encoder source; the self-masked training-side profile of Task 4 is the
-only GeneEffect-derived gene source.
+PIE's `depmap_gene_effect` is never a gene-encoder source and is masked in the frozen PIE (§3.2); the fold-masked
+training-side profile of Task 4 is the only GeneEffect-derived input.
 
 ## 5. Tasks
 
@@ -244,11 +251,12 @@ manifest recording the expression space:
 - the gene sources of §4.4 aligned to the GeneEffect gene axis, with coverage per source;
 - Cellosaurus 56.0 records fetched on the Mac for every line with an RRID, rendered with PIE's template and embedded
   with `text-embedding-3-large` (the user's key), as PIE's `context_text`;
-- PIE's evidence inputs: its datasets' responses for same-perturbation evidence, and the DepMap source with the 55
-  held-out columns zeroed (the mapping from its columns to ModelIDs checked first);
+- PIE's evidence inputs: its datasets' responses for same-perturbation evidence (the DepMap source masked, §3.2);
 - the frozen PIE's deltas and own-gene slots for every line × labelled gene (about 434 × 17,900 = 7.8M pairs; about
-  7 hours on 4 × H20 in bf16 by a FLOP estimate, doubled by the masked-DepMap row), after the pilot of §3.2;
-- the base `m_g` (§4.1).
+  7 hours on 4 × H20 in bf16 by a FLOP estimate), after the pilot of §3.2;
+- the base `m_g` (§4.1);
+- five patient-grouped folds of the 947 training-side lines (seed 0), which Task 4's profile row masks and Task 3's
+  out-of-fold scores use on the 377 single-cell lines.
 
 **Reading.** Coverage per source, per line and per gene (genes with same-perturbation evidence among the selective
 genes) is reported; nothing is chosen from it.
@@ -281,8 +289,7 @@ training lines (377 scored lines against 27), as telemetry.
 
 **Reading.** The arm and row best on validation is the stage-one architecture. Virtual cell + FiLM against direct
 readout: does the simulated knockdown add over reading the line? Its ΔL row against its ΔH and ΔE rows: how much of
-it needs no expression (gene identity and line text). The hybrid against both: are the two complementary? The masked-DepMap row: what keeping that
-source costs or gives.
+it needs no expression (gene identity and line text). The hybrid against both: are the two complementary?
 
 ### Task 4. Gene query
 
@@ -290,9 +297,11 @@ source costs or gives.
 
 **Definition.** On the Task 3 architecture: `gene_text`; then + ESM C; + ESM3-open; + STRING; + Gene2vec; then
 `gene_text` with the best two of ESM C, STRING and Gene2vec (ESM3-open only ever swaps for ESM C). One more row:
-`gene_text` + g's GeneEffect profile over the 947 training-side lines, with line c's own column and its patient
-siblings masked for every pair (held-out lines and their siblings never enter); it is how the prior specialises per
-gene.
+`gene_text` + g's GeneEffect profile over the 947 training-side lines, masked by fold: a training line in fold k reads
+the profile with fold k's columns zeroed, so every line of a fold reads the same input and none reads its own label or
+a gap left by it (masking line c's own column would, as §3.2 describes); held-out lines and their patient siblings
+never enter, and a held-out line's prediction is the mean of its five predictions, one per fold mask. It is how the
+prior specialises per gene.
 
 **Reading.** The query best on validation is kept for Tasks 5–7, `gene_text` alone included.
 
@@ -424,7 +433,8 @@ On synthetic fixtures:
 - a gene absent from training decodes (no per-gene parameter);
 - Cilantro's FiLM layer and tail match `third_party/cilantro_sl/nn_helpers` on the same weights;
 - the target is GeneEffect minus the 947-line mean; the scorer receives `m_g + σ_g · z`;
-- the base, the zeroed DepMap columns and every planted-term fit reject validation and test lines;
+- the base, the profile folds and every planted-term fit reject validation and test lines;
+- a training line's profile never holds its own fold's columns, and the frozen PIE's batches carry no DepMap token;
 - the vendored PIE loads a released checkpoint strictly;
 - a two-line end-to-end run precomputes, trains, selects and scores.
 
