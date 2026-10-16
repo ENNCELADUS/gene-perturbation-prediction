@@ -89,18 +89,8 @@ class Target:
         return f"{kind}_{CKPT}.csv"
 
 
+# The wdataset folds first: they need only Replogle and the gene sources.
 TARGETS = (
-    *(
-        Target(
-            "replogle_xdataset",
-            XDATASET_REPO,
-            XDATASET_REVISION,
-            "",
-            row_set,
-            f"{SPLITS_URI}/replogle_xdataset/{row_set}.json",
-        )
-        for row_set in ("test_seen", "test_unseen")
-    ),
     *(
         Target(
             f"replogle_wdataset/{fold}",
@@ -111,6 +101,17 @@ TARGETS = (
             f"{SPLITS_URI}/replogle_wdataset/unseen_ctx/{fold}/test.json",
         )
         for fold in WDATASET_FOLDS
+    ),
+    *(
+        Target(
+            "replogle_xdataset",
+            XDATASET_REPO,
+            XDATASET_REVISION,
+            "",
+            row_set,
+            f"{SPLITS_URI}/replogle_xdataset/{row_set}.json",
+        )
+        for row_set in ("test_seen", "test_unseen")
     ),
 )
 
@@ -427,7 +428,7 @@ def _asset_references(run_dir: Path) -> list[tuple[str, str]]:
     from pie.predict import load_checkpoint
 
     references: dict[tuple[str, str], None] = {}
-    for target in sorted(TARGETS, key=lambda t: t.repo == XDATASET_REPO):
+    for target in TARGETS:
         references[("split_file", target.split)] = None
         experiment_dir = run_dir / "runs" / target.experiment
         # As in evaluate: legacy relative paths must not resolve from this repo.
