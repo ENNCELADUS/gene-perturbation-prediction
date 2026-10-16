@@ -146,7 +146,9 @@ about 100 GB) come through hf-mirror.
   `σ_g` over every labelled gene.
 - **Scoring.** The tail outputs `z`; the scorer receives GeneEffect `m_g + σ_g · z` and re-centres it on the protocol's
   377-line mean `μ_g` as every prediction is; it never receives `z`. The base is a row of its own (its within-gene R²
-  is that of `m_g − μ_g`).
+  is that of `m_g − μ_g`). One Task 3 row trains the winning family around the 377-line mean instead (target
+  `GeneEffect − μ_g`, prediction `μ_g + σ_g · z`): without per-gene parameters the main rows must learn each gene's
+  offset `μ_g − m_g`, which moves within-gene R², RMSE and calibration but not selective Spearman.
 - **Metric.** The final split's (protocol §6): selective genes (4,323) and residual SD fitted on the 377 lines.
   Headline: selective Spearman and within-gene R² (protocol §14). Beside them: AUPR lift, residual Pearson, per-line
   absolute Pearson, RMSE and the calibration slope (measured residual regressed on predicted, pooled over selective
@@ -199,7 +201,8 @@ The gene encoder projects these and sums them; a gene without an entry has that 
 | `string_space` | interaction network | 19,699 | PIE_sources (STRING v12) |
 | Gene2vec | co-expression | ~24,000 | the matrix Cilantro's stage one reads; its best gene prior (Fig. 2C) |
 
-PIE's `depmap_gene_effect` is never a gene-encoder source (it is the label).
+PIE's `depmap_gene_effect` is never a gene-encoder source; the self-masked training-side profile of Task 4 is the
+only GeneEffect-derived gene source.
 
 ## 5. Tasks
 
@@ -271,7 +274,10 @@ source costs or gives.
 **Question.** Which gene sources should the gene encoder keep?
 
 **Definition.** On the Task 3 architecture: `gene_text`; then + ESM C; + ESM3-open; + STRING; + Gene2vec; then
-`gene_text` with the best two of ESM C, STRING and Gene2vec (ESM3-open only ever swaps for ESM C).
+`gene_text` with the best two of ESM C, STRING and Gene2vec (ESM3-open only ever swaps for ESM C). One more row:
+`gene_text` + g's GeneEffect profile over the 947 training-side lines, with line c's own column and its patient
+siblings masked for every pair (held-out lines and their siblings never enter); it is how the prior specialises per
+gene, and the one way the 947 lines' labels reach the 377-line frame.
 
 **Reading.** The query best on validation is kept for Tasks 5–7, `gene_text` alone included.
 
