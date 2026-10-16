@@ -1,0 +1,43 @@
+{
+  "run_id": "pie_reproduction_20261016",
+  "pins": {
+    "vendored_pie_commit": "21a526add9ff3a81b4f962d9b16bbae570052c63",
+    "models": {
+      "arcinstitute/PIE_replogle_xdataset": "f6da9607226139a1040b6992736118c9b5c7c313",
+      "arcinstitute/PIE_replogle_wdataset": "055c7a2cabdaff5659121c64fa2b609c231fc5be"
+    },
+    "splits": "hf://datasets/arcinstitute/PIE_splits@396ab9563175ee887750c9eed7ccaea6f5fdbf50"
+  },
+  "environment": {
+    "python": "3.12.13",
+    "torch": "2.10.0+cu128",
+    "torch_cuda": "12.8",
+    "pie": "1.0.0",
+    "gpus": [
+      "NVIDIA H20, 550.144.03",
+      "NVIDIA H20, 550.144.03",
+      "NVIDIA H20, 550.144.03",
+      "NVIDIA H20, 550.144.03"
+    ],
+    "HF_ENDPOINT": "https://hf-mirror.com",
+    "LD_LIBRARY_PATH": null
+  },
+  "steps": {
+    "fetch": {
+      "started": "2026-10-16T08:36:54+00:00",
+      "finished": "2026-10-16T08:37:59+00:00"
+    },
+    "download": {
+      "started": "2026-10-16T08:57:42+00:00",
+      "finished": "2026-10-16T10:19:40+00:00"
+    },
+    "evaluate": {
+      "started": "2026-10-16T10:19:44+00:00",
+      "finished": "2026-10-16T10:33:00+00:00"
+    },
+    "compare": {
+      "started": "2026-10-16T10:33:00+00:00",
+      "finished": "2026-10-16T10:33:00+00:00"
+    }
+  }
+}
