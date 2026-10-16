@@ -63,29 +63,41 @@ expression never reaches the latents: it enters only as each decoded gene's own 
   signalling screens and ARC VCC 25; Replogle held out. Of PIE's Perturb-seq lines, K562, HepG2, Jurkat and HCT116 are
   our training lines; no validation or test line has perturbation data in its corpus. 38 of our training lines are in
   Tahoe; test line SW620 shares a patient with Tahoe's SW480 (chemical exposure only).
-- **DepMap source.** PIE reads each perturbed gene's Chronos scores across 1,186 lines, our validation and test lines
-  included. The 55 held-out lines' columns are set to 0 (PIE's missing-value convention); training-line columns stay.
-  One row of Task 3 masks the source entirely.
-- **Context.** For line `c`: PIE's control-mean evidence (its definition, the mean over cells of `log1p` CP10K) on every
-  gene the line's source lists, and the line's Cellosaurus text where a record exists.
+- **DepMap source.** PIE reads each perturbed gene's Chronos scores across 1,186 lines in ModelID order (its
+  provenance lists them; 375 of our 379 training lines and all 55 held-out lines are columns). For every (line c, gene
+  g) pass, these columns are set to 0 (PIE's missing-value convention): the 55 held-out lines, every line sharing a
+  patient with one of them (ACH-000023 with validation ACH-000022, ACH-000842 with test ACH-000651; protocol §11),
+  and line c's own column with its patient siblings. A training pair then never sees its own label, and training and
+  held-out inputs are built the same way. One row of Task 3 masks the source entirely.
+- **Context.** For line `c`: PIE's control-mean evidence (its definition, the mean over cells of `log1p` CP10K) on one
+  decode panel shared by every line (the protocol's GeneEffect genes with a `gene_text` entry), a gene the line's
+  source does not list taking the training-line mean, as the prior fills it (PIE's frozen evidence encoder blanks a
+  whole row on any NaN); and the line's Cellosaurus text where a record exists.
 - **Knockdown of g.** The perturbation tokens of gene g; same-perturbation evidence from g's responses in the
   checkpoint's training data; same-context evidence empty (no responses in our lines).
 - **No perturbation.** The same context inputs with every perturbation source and every response-evidence block
   absent (PIE's zero carrier token stands in for the missing perturbation sources). PIE never trained on this input,
   so the reference pass is outside its training distribution; ΔE needs no reference pass (below).
 - **Three deltas per (line, gene)**, computed once:
-  - **Decoder-feature delta ΔH**: PIE's last decoder-layer gene features, mean-pooled over every decoded gene (768-d),
+  - **Decoder-feature delta ΔH**: PIE's last decoder-layer gene features, mean-pooled over the decode panel (768-d),
     knockdown pass minus reference pass. The direct analogue of Cilantro's cell-embedding delta.
-  - **Profile delta ΔE**: PIE's predicted change in mean expression `Δ̂(c, g)` (its `delta_p_pred`, on PIE's
-    `log1p` CP10K scale) on every decoded gene. The before-state is the line's PIE input `x_c` and the after-state
-    `x_c + Δ̂(c, g)`, both on one gene axis: the protocol's GeneEffect genes, a gene the line's source does not list
-    being masked. The precompute stores both states as coordinates on 512 principal components fitted on training
-    lines' after-states (a storage compression; the variance kept is reported, and a full-axis row on the selective
-    genes checks what it loses). The state encoder `E` is trained in stage one on those stored states:
-    `ΔE = E(after) − E(before)`.
+  - **Profile delta ΔE**: PIE's predicted change in mean expression `Δ̂(c, g)` on the decode panel, read as the
+    softmax expectation over its Δp bin centres (PIE's own readout takes the arg-max bin, which quantises small
+    changes). The before-state is the line's PIE input `x_c`, the after-state `x_c + Δ̂(c, g)`. Both are stored as
+    coordinates on 512 principal components fitted on `Δ̂` of the pilot's training pairs (below), so the basis keeps
+    knockdown directions; the variance kept is reported, and a full-panel row on the selective genes checks what the
+    compression loses. The state encoder `E` is trained in stage one on the stored states: `ΔE = E(after) − E(before)`.
   - **Latent delta ΔL**: the mean-pooled latent array, knockdown pass minus reference pass. The latents see no
     expression, so ΔL carries the line only through its Cellosaurus text: an expression-blind, text-conditioned
-    control.
+    control; without text it depends on g alone (the gene-identity control).
+- **Own-gene slot.** Beside each pooled delta, the pair stores gene g's own decoder feature `h_g(c, g)`, its own
+  predicted change `Δ̂_g(c, g)` and its basal value `x_cg`: mean pooling over ~18,000 genes weights g's own term by
+  1/18,000, and "g is not expressed" is the most direct context signal a knockdown carries.
+- **Storage and order.** Values are stored in fp32, centred within each gene (a line-specific component can sit two to
+  three orders of magnitude below the gene component). The pass loops gene-major so g's sources, memory and evidence
+  are built once per gene; the vendored model is called directly (`pie infer` needs the checkpoint's split hash).
+- **Pilot.** Before the full pass: about 200 genes × every line, timed, reporting for each delta the variance across
+  lines within a gene against the variance between genes. People read it before the full pass is launched.
 
 ### 3.3 Stage-one architecture arms (Task 3)
 
@@ -94,7 +106,7 @@ viability embedding `V(c, g)`, saved for every line × gene for stage two. Arms 
 
 | Arm | Before the tail |
 | --- | --- |
-| **Direct readout** | A PIE-architecture trunk trained from fresh weights: the line's tokens (§4.3) go into the encoder through per-channel chunked cross-attention; gene g's query (gene encoder + own evidence) decodes a feature `h(c, g)` → Linear 256 → ReLU. Row: shared modules warm-started from the checkpoint. |
+| **Direct readout** | A PIE-architecture trunk trained from fresh weights: the line's tokens (§4.3) go into the encoder through per-channel cross-attention; gene g's query (gene encoder + own evidence) decodes a feature `h(c, g)` → Linear 256 → ReLU. It starts small (width 128–256, 32–64 latents, 1–2 blocks per stage, about 1–5M parameters; 377 distinct line inputs feed it) and widens only on validation; 30–50% of input gene tokens dropped per step, weight decay 0.05–0.1, EMA weights, a zero-initialised output so the untrained model is a candidate. Row: shared modules warm-started from the checkpoint (at PIE's width). |
 | **Virtual cell + FiLM** (Cilantro) | Δ → Linear 256 → ReLU → FiLM, `[γ, β] = Linear(gene encoder(g))`, `x = γ ⊙ x + β`. Rows: ΔH, ΔE, ΔL; and the best Δ with the DepMap source masked. |
 | **Multi-encoder** | As virtual cell + FiLM, with the FiLM condition `gene encoder(g) ⊕ context encoder(c)`; the context encoder pools the line's tokens (§4.3) with the Cellosaurus text. Rows: ΔH, ΔE, ΔL. |
 | **Hybrid** | `[h(c, g) ; FiLM(best Δ)]` → Linear 256 → ReLU. |
@@ -106,15 +118,20 @@ validation selective Spearman; the winner carries to Tasks 4–7.
 gene's variance and dropout, plus the Cellosaurus text. So that architecture contrasts compare models rather than
 inputs, every Task 3 arm reads the same line information: the mean channel's tokens carry both values (`log1p` of the
 mean and the mean of `log1p`), and the Cellosaurus text is one more context token for the direct readout and the
-multi-encoder's context encoder.
+multi-encoder's context encoder. Because the text carries the line's disease, site and mutations (PIE renders
+Cellosaurus "Sequence Variation"), every arm with text has a text-off row, and text is never credited to expression.
 
 ### 3.4 Vendoring
 
 PIE's model imports `pie.data` and `pie.utils`, so its repository is copied at a pinned commit into `third_party/pie/`
 (as Cilantro's is in `third_party/cilantro_sl/`), with `LICENSE.md` (CC BY-NC-SA 4.0) and a note naming the commit. The
-copy and our additions stay under that licence. PIE pins Python 3.12, torch 2.10 and pandas 3; it runs in its own
-environment (`.venv-pie`), and the precompute writes plain arrays the project's environment reads. The direct-readout
-trunk adds `pie.model.geneeffect` beside `pie.model` and reuses its layers, trunk blocks and evidence encoders.
+copy and our additions stay under that licence. PIE pins Python 3.12, `torch==2.10.0` (cu128) and pandas ≥ 3, which the
+project's environment (with `arc-state`) cannot share, and the hybrid joins PIE's trunk with our heads in one process.
+So the precompute and every stage-one run use one environment, `.venv-pie`: PIE installed editable plus the project's
+stage-one modules, which stay free of `arc-state` and run under pandas 3. Task 1 checks the H20 driver (cu128 needs
+570 or newer) and this environment. The direct-readout trunk adds `pie.model.geneeffect` beside `pie.model` and reuses
+its layers, trunk blocks and evidence encoders. PIE's assets (Tahoe, Orion, sources including the 43 GB `ncbi_text`;
+about 100 GB) come through hf-mirror.
 
 ## 4. Shared setup
 
@@ -135,8 +152,7 @@ trunk adds `pie.model.geneeffect` beside `pie.model` and reuses its layers, trun
   absolute Pearson, RMSE and the calibration slope (measured residual regressed on predicted, pooled over selective
   genes). Contrasts carry 95% paired line-bootstrap intervals (1,000 resamples).
 - **Training.** AdamW, warmup then cosine; `best.pt` chosen on validation selective Spearman only and scored once on
-  test; one seed (0). The direct-readout trunk's width, depth and latent count start at PIE's and are set once on its
-  validation score; train-versus-validation gaps are reported for every run.
+  test; one seed (0); train-versus-validation gaps are reported for every run.
 
 ### 4.2 Cells per line
 
@@ -150,8 +166,9 @@ Every line reads all of its cells. Counts per line, from the raw h5ad:
 
 ### 4.3 Context channels
 
-Each channel has its own cross-attention, normalised over that channel's tokens only (exact attention in chunks with a
-running softmax, so a 58,324-cell bag fits); the channels' outputs are summed. Duplicating a channel's tokens leaves its
+Each channel has its own cross-attention, normalised over that channel's tokens only (PyTorch's scaled-dot-product
+attention per channel with a padding mask, whose memory-efficient kernels are exact over 58,324 keys and have a native
+backward); the channels' outputs are summed. Duplicating a channel's tokens leaves its
 output unchanged; there is no sum pooling and no cell-count input.
 
 | Channel | Tokens | Built from |
@@ -205,13 +222,15 @@ is a copy or data error, fixed before Task 2.
 **Definition.** Preparation on the H20 (the only reader of raw data) writes `data/geneeffect_joint/v2/ladder/` with a
 manifest recording the expression space:
 - per line, from all cells: the channels of §4.3, their shuffles and per-cell QC values;
-- Tx1-3B embeddings of every cell and of every raw-count-shuffled cell;
+- Tx1-3B embeddings of every cell and of every raw-count-shuffled cell (about 2 × 10⁶ cells; roughly 1–2 days on
+  4 × H20 by a FLOP estimate, timed on a sample first);
 - the gene sources of §4.4 aligned to the GeneEffect gene axis, with coverage per source;
 - Cellosaurus 56.0 records fetched on the Mac for every line with an RRID, rendered with PIE's template and embedded
   with `text-embedding-3-large` (the user's key), as PIE's `context_text`;
 - PIE's evidence inputs: its datasets' responses for same-perturbation evidence, and the DepMap source with the 55
   held-out columns zeroed (the mapping from its columns to ModelIDs checked first);
-- the frozen PIE's ΔH, ΔE and ΔL for every line × labelled gene (about 434 × 17,900), timed on a sample first;
+- the frozen PIE's deltas and own-gene slots for every line × labelled gene (about 434 × 17,900 = 7.8M pairs; about
+  7 hours on 4 × H20 in bf16 by a FLOP estimate, doubled by the masked-DepMap row), after the pilot of §3.2;
 - the base `m_g` (§4.1).
 
 **Reading.** Coverage per source, per line and per gene (genes with same-perturbation evidence among the selective
@@ -221,10 +240,26 @@ genes) is reported; nothing is chosen from it.
 
 **Question.** Question 1 of §1.
 
-**Definition.** The arms and rows of §3.3, on the mean channel, with `gene_text` as the gene encoder. Reference rows:
-the base; the **matched linear prior** (a ridge on 128 components of the 377 lines' log pseudo-bulk, fitted on the same
-target, penalty set on validation); a **nonlinear reader of the same 128 components** (a small per-gene MLP), so the
-linear-to-nonlinear step is measured on fixed inputs; the default prior (`results/final_split_seed0/`).
+**Definition.** The arms and rows of §3.3, on the mean channel, with `gene_text` as the gene encoder.
+
+Reference rows:
+- the base;
+- the **matched linear prior**: the default prior's recipe (128 components at penalty 1, data-selected genes at penalty
+  10) fitted on the 377 lines' log pseudo-bulk, on the same target;
+- a **shared nonlinear reader of the same 128 components**: one network conditioned on the gene encoder, no per-gene
+  parameter, so the linear-to-nonlinear step is measured on fixed inputs;
+- lineage only; Cellosaurus text only; own expression `x_cg` only;
+- the default prior (`results/final_split_seed0/`).
+
+Controls for the virtual-cell families:
+- **no-Δ FiLM**: the multi-encoder with Δ replaced by a learned constant (the gene × context model without PIE);
+- **line-permuted Δ**: for each gene, Δ shuffled across lines (keeps gene identity and each gene's spread of Δ,
+  removes its line content);
+- a per-gene ridge on line-centred ΔH (is its line signal linearly decodable?);
+- ΔL without text (gene identity).
+
+Beside validation, every Task 3 row reports patient-grouped five-fold out-of-fold scores over the 377 training lines
+(about 377 scored lines against 27), as telemetry.
 
 **Reading.** The arm and row best on validation is the stage-one architecture. Virtual cell + FiLM against direct
 readout: does the simulated knockdown add over reading the line? Its ΔL row against its ΔH and ΔE rows: how much of
@@ -375,6 +410,11 @@ On synthetic fixtures:
 
 Out of scope: training or fine-tuning PIE; SL pairs (stage two reads the saved `V(c, g)` later); PIE's chemical
 sources as gene sources; any change to the split, the metric or the default prior.
+
+Stage two (its own design) needs, from stage one: out-of-fold `V(c, g)` and predictions for training lines (in-sample
+values for training lines would leak into the SL classifier, as the prior's export avoids), and predictions on edited
+contexts (gene A's expression set to zero, or the after-state of knocking A down) for the SL definition's "B's
+dependency with A lost"; the gene-only virtual-cell arm cannot provide the latter.
 
 Follow-ups, each its own design when taken up:
 - bulk-only lines as training lines for stage one;
