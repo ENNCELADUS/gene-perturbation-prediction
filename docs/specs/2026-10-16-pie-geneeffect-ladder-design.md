@@ -24,6 +24,9 @@ line's cells. In order:
    encoding of the same cells?
 4. **Sensitivity.** Can the model recover planted distribution-only terms of known kind and size?
 
+Every arm trains on the same labelled lines as the default prior (§4.1), so its 0.2045 / 0.2025 is a like-for-like
+bar.
+
 The noise diagnosis tested one route (cells → a few summaries → a linear model), whose nulls cannot separate absent
 information, information lost in summarising, and a reader that could not use it. Questions 2–4 tell these apart as
 far as a capable reader and planted terms allow; no null can show that the raw cells hold nothing.
@@ -69,8 +72,9 @@ expression never reaches the latents: it enters only as each decoded gene's own 
   patient with one of them (ACH-000023 with validation ACH-000022, ACH-000842 with test ACH-000651; protocol §11),
   and line c's own column with its patient siblings. A training pair then never sees its own label, and training and
   held-out inputs are built the same way. One row of Task 3 masks the source entirely.
-- **Context.** For line `c`: PIE's control-mean evidence (its definition, the mean over cells of `log1p` CP10K) on one
-  decode panel shared by every line (the protocol's GeneEffect genes with a `gene_text` entry), a gene the line's
+- **Context.** For line `c`: PIE's control-mean evidence on one decode panel shared by every line: for a line with
+  cells, its definition (the mean over cells of `log1p` CP10K); for a bulk-only line, the bulk profile rescaled to
+  PIE's CP10K scale (a bulk profile has no cells to average logs over); (the protocol's GeneEffect genes with a `gene_text` entry), a gene the line's
   source does not list taking the training-line mean, as the prior fills it (PIE's frozen evidence encoder blanks a
   whole row on any NaN); and the line's Cellosaurus text where a record exists.
 - **Knockdown of g.** The perturbation tokens of gene g; same-perturbation evidence from g's responses in the
@@ -106,7 +110,7 @@ viability embedding `V(c, g)`, saved for every line × gene for stage two. Arms 
 
 | Arm | Before the tail |
 | --- | --- |
-| **Direct readout** | A PIE-architecture trunk trained from fresh weights: the line's tokens (§4.3) go into the encoder through per-channel cross-attention; gene g's query (gene encoder + own evidence) decodes a feature `h(c, g)` → Linear 256 → ReLU. It starts small (width 128–256, 32–64 latents, 1–2 blocks per stage, about 1–5M parameters; 377 distinct line inputs feed it) and widens only on validation; 30–50% of input gene tokens dropped per step, weight decay 0.05–0.1, EMA weights, a zero-initialised output so the untrained model is a candidate. Row: shared modules warm-started from the checkpoint (at PIE's width). |
+| **Direct readout** | A PIE-architecture trunk trained from fresh weights: the line's tokens (§4.3) go into the encoder through per-channel cross-attention; gene g's query (gene encoder + own evidence) decodes a feature `h(c, g)` → Linear 256 → ReLU. It starts small (width 128–256, 32–64 latents, 1–2 blocks per stage, about 1–5M parameters; about 1,000 distinct line inputs feed it) and widens only on validation; 30–50% of input gene tokens dropped per step, weight decay 0.05–0.1, EMA weights, a zero-initialised output so the untrained model is a candidate. Row: shared modules warm-started from the checkpoint (at PIE's width). |
 | **Virtual cell + FiLM** (Cilantro) | Δ → Linear 256 → ReLU → FiLM, `[γ, β] = Linear(gene encoder(g))`, `x = γ ⊙ x + β`. Rows: ΔH, ΔE, ΔL; and the best Δ with the DepMap source masked. |
 | **Multi-encoder** | As virtual cell + FiLM, with the FiLM condition `gene encoder(g) ⊕ context encoder(c)`; the context encoder pools the line's tokens (§4.3) with the Cellosaurus text. Rows: ΔH, ΔE, ΔL. |
 | **Hybrid** | `[h(c, g) ; FiLM(best Δ)]` → Linear 256 → ReLU. |
@@ -137,8 +141,14 @@ about 100 GB) come through hf-mirror.
 
 ### 4.1 Frame
 
-- **Lines.** Every arm trains on the 377 labelled single-cell training lines of the
-  [final split](../data/cell-line-geneeffect-split.md), validates on its 27 and scores its 28 test lines once.
+- **Lines.** Every arm trains on the same lines: the 377 labelled single-cell training lines of the
+  [final split](../data/cell-line-geneeffect-split.md) and the bulk-only labelled lines the default prior fits
+  (lymphoid and myeloid bulk-only lines dropped, as it drops them); the count is reported in Task 2. It validates on
+  the split's 27 lines and scores its 28 test lines once. Cell channels exist only on the 377 single-cell lines and
+  are absent on bulk-only lines, so arms differ only in their channels and the default prior, trained on the same
+  labelled lines, is a like-for-like bar. (The first grill chose a 377-line frame; the architecture grill moved to
+  this one, because a frame of 377 lines starts near 0.17, the learning curve's value at that size, against the
+  prior's 0.2045, and a per-gene base cannot change selective Spearman.)
 - **Base and target.** `m_g` is the gene's mean measured GeneEffect over the 947 lines the default prior fits, built as
   `src/experiments/context_prior.py` builds them (single-cell training lines admitted by `assert_fit_eligible`,
   bulk-only labelled lines from `load_bulk_lines`, which refuses any overlap with validation and test; lymphoid and
@@ -175,7 +185,7 @@ output unchanged; there is no sum pooling and no cell-count input.
 
 | Channel | Tokens | Built from |
 | --- | --- | --- |
-| Mean | one per gene the line's source lists: gene encoder + embedded value | `log1p` of the mean CP10K over the line's cells (log pseudo-bulk). Not a mean of `log1p`, which moves with a gene's variance and dropout. An unlisted gene is absent, never a NaN in a shared row (PIE blanks a row's evidence when any gene is NaN; ours masks per gene) |
+| Mean | one per gene the line's profile lists: gene encoder + embedded value | the line's profile in bulk space, as the default prior reads it: bulk RNA for bulk-only lines; for single-cell training lines and held-out lines, `log1p` of the mean CP10K over the line's cells (log pseudo-bulk, not a mean of `log1p`, which moves with a gene's variance and dropout) mapped by the prior's affine bridge. Row: a separate bulk encoder instead of the bridge (below). An unlisted gene is absent, never a NaN in a shared row |
 | Per-gene spread | none; enters gene g's evidence | the excess of the detected fraction and of the SD of `log1p` CP10K over their depth-expected values (`mean_i(1 − exp(−μ_g L_i / T))` for detection; the Poisson trend for SD) |
 | Summaries | one token | the noise diagnosis's per-line features: 23 program fractions and means, cluster shares at 8 and 16 |
 | QC and cycle cells | one per cell | the cell's log UMI, genes detected, mitochondrial and ribosomal fractions, S and G2/M scores, doublet score |
@@ -185,7 +195,10 @@ output unchanged; there is no sum pooling and no cell-count input.
 | Tx1 cells | one per cell | a projection of the frozen Tx1-3B embedding of the cell (raw UMI, 2,048 tokens) |
 | Shuffled Tx1 cells | one per cell, as Tx1 cells | raw counts permuted per gene the same way, then embedded; this keeps raw-count marginals only (library size and Tx1's per-cell binning change) |
 
-The mean channel and the per-gene spread always come from the real cells. Evidence dropout (new, not PIE's, which
+The mean channel and the per-gene spread always come from the real cells. **Separate bulk encoder (row):** bulk profiles
+and pseudo-bulk profiles enter through two token encoders into one token space, with a source embedding; the 343
+single-cell training lines that also have bulk RNA give both views of one line and align the two encoders; held-out
+lines go through the pseudo-bulk encoder. Evidence dropout (new, not PIE's, which
 drops response evidence only): during training a sample's own-gene evidence is zeroed at a fixed rate, so an unlisted
 gene is a case the model has seen.
 
@@ -245,14 +258,15 @@ genes) is reported; nothing is chosen from it.
 
 **Definition.** The arms and rows of §3.3, on the mean channel, with `gene_text` as the gene encoder.
 
+Rows of the winning family: the separate bulk encoder in place of the bridge; and the family trained on the 377
+single-cell lines alone (what the bulk-only lines add).
+
 Reference rows:
 - the base;
-- the **matched linear prior**: the default prior's recipe (128 components at penalty 1, data-selected genes at penalty
-  10) fitted on the 377 lines' log pseudo-bulk, on the same target;
+- the default prior, now on the same labelled lines and the same input: the like-for-like linear reference;
 - a **shared nonlinear reader of the same 128 components**: one network conditioned on the gene encoder, no per-gene
   parameter, so the linear-to-nonlinear step is measured on fixed inputs;
-- lineage only; Cellosaurus text only; own expression `x_cg` only;
-- the default prior (`results/final_split_seed0/`).
+- lineage only; Cellosaurus text only; own expression `x_cg` only.
 
 Controls for the virtual-cell families:
 - **no-Δ FiLM**: the multi-encoder with Δ replaced by a learned constant (the gene × context model without PIE);
@@ -261,8 +275,8 @@ Controls for the virtual-cell families:
 - a per-gene ridge on line-centred ΔH (is its line signal linearly decodable?);
 - ΔL without text (gene identity).
 
-Beside validation, every Task 3 row reports patient-grouped five-fold out-of-fold scores over the 377 training lines
-(about 377 scored lines against 27), as telemetry.
+Beside validation, every Task 3 row reports patient-grouped five-fold out-of-fold scores over the 377 single-cell
+training lines (377 scored lines against 27), as telemetry.
 
 **Reading.** The arm and row best on validation is the stage-one architecture. Virtual cell + FiLM against direct
 readout: does the simulated knockdown add over reading the line? Its ΔL row against its ΔH and ΔE rows: how much of
@@ -277,7 +291,7 @@ source costs or gives.
 `gene_text` with the best two of ESM C, STRING and Gene2vec (ESM3-open only ever swaps for ESM C). One more row:
 `gene_text` + g's GeneEffect profile over the 947 training-side lines, with line c's own column and its patient
 siblings masked for every pair (held-out lines and their siblings never enter); it is how the prior specialises per
-gene, and the one way the 947 lines' labels reach the 377-line frame.
+gene.
 
 **Reading.** The query best on validation is kept for Tasks 5–7, `gene_text` alone included.
 
@@ -335,7 +349,8 @@ comparable size.
 
 **Question.** Question 4 of §1.
 
-**Definition.** The real cells and labels, with planted terms added to the target of every line:
+**Definition.** The real cells and labels, with planted terms added to the target of every line with cells (bulk-only
+lines keep their real target; they have no cells to carry a term):
 `y(c, g) + β · (w_g · h_marginal(c) + w′_g · h_joint(c) + w″_g · h_rare(c))`.
 - `h_marginal(c)`: the within-line SD of one HVG (the one whose SD varies most across training lines), kept exactly by
   the HVG shuffle.
