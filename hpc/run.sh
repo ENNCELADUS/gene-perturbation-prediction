@@ -58,6 +58,8 @@ case "$command" in
   pie-reproduce)
     export PIE_DATA_ROOT="$repo_root/data/pie" PIE_CACHE_DIR="$repo_root/data/pie/cache"
     export HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+    # TLS handshakes from the H20 to hf-mirror's Xet redirect can exceed the 10 s default.
+    export HF_HUB_DOWNLOAD_TIMEOUT=${HF_HUB_DOWNLOAD_TIMEOUT:-60} HF_HUB_ETAG_TIMEOUT=${HF_HUB_ETAG_TIMEOUT:-60}
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.pie_reproduction "$@" ;;
   test) checkpoint=$1; shift; exec "$python_bin" -m src.evaluate --checkpoint "$checkpoint" --split test "$@" ;;
 esac
