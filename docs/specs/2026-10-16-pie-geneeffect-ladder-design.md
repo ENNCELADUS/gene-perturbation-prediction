@@ -11,13 +11,16 @@ PIE: Arc Institute's "Perturbation is Everything" (bioRxiv, 5 October 2026), cod
 
 The noise diagnosis tested one route: a line's cells → a few hand-made summaries → a linear model. Its nulls cannot say
 whether the cell distribution holds no GeneEffect information, whether the summaries lost it, or whether the linear
-reader could not use it. This design separates the three. It answers, in order:
+reader could not use it. This design tells them apart as far as a capable reader and planted controls allow; no null
+can show that the raw cells hold nothing. It answers, in order:
 
-1. Does a capable nonlinear reader of a line's mean expression beat the linear prior trained on the same lines?
+1. Does the trunk reading a line's mean expression (every gene, with gene knowledge) beat the linear prior trained on
+   the same lines?
 2. Does reading the line's cells add GeneEffect information beyond its mean, and does that gain need the joint
    structure of cells (co-expression within a cell) or only each gene's own distribution?
-3. Do foundation-model cell encodings (Tx1) add over a standard encoding of the same cells, under the same reader?
-4. How small an effect of each kind could the reader have found (a planted positive control)?
+3. Does the Tx1 pipeline (pretrained encoder, raw-count input, its vocabulary) add over a standard HVG encoding of the
+   same cells, under the same reader?
+4. Can the reader recover planted distribution-only terms of known kind and size (a positive control)?
 
 The reader is one trunk for every arm, taken from PIE and reproduced first, so the arms differ only in what they read.
 It is also the model the project builds on afterwards.
@@ -26,11 +29,11 @@ It is also the model the project builds on afterwards.
 
 | Task | What it produces | Needs | Compute |
 | --- | --- | --- | --- |
-| 1. PIE reproduction | Vendored PIE that re-scores the released checkpoints and retrains one fold | — | 4 × H20 |
+| 1. PIE reproduction | Vendored PIE that re-scores the released checkpoints and retrains one fold | — | 2 × H20 |
 | 2. Inputs | Cell bags, Tx1 embeddings of every cell, shuffled cells, pseudo-bulk, gene sources | — | H20 CPU + GPU |
 | 3. GeneEffect trunk and gene query | PIE adapted to GeneEffect; mean-only arm; the gene query chosen | 1, 2 | 4 × H20 |
-| 4. The ladder | Six arms and three reference rows, every contrast | 3 | 4 × H20 |
-| 5. Planted control | Each arm's smallest detectable distribution effect | 3 | 4 × H20 |
+| 4. The ladder | Seven arms and three reference rows, every contrast | 3 | 4 × H20 |
+| 5. Planted control | Recovery of planted distribution-only terms of known size | 3 | 4 × H20 |
 | 6. Cell-count curve | Accuracy against cells per line, repeated draws | 4 | 1 × H20 |
 | 7. Context text (deferred) | The mean-only arm with the line's Cellosaurus text | 3, an OpenAI key | 4 × H20 |
 
@@ -52,19 +55,27 @@ decodes. Heads output DE probability, log fold change and a binned Δ.
 mean and the Cellosaurus text. GeneEffect of g depends on the rest of the line (paralogs, pathway state, lineage), and
 PIE never reads cells.
 
-**The GeneEffect trunk** keeps PIE's trunk, decoder and evidence encoders and changes four things:
+**The GeneEffect trunk** keeps PIE's trunk, decoder and evidence encoders, trained from fresh weights on GeneEffect (no
+PIE checkpoint is loaded), and changes five things:
 
 - **Context tokens into the encoder.** The latents cross-attend to the line's expression, given as tokens (§4.3), in
-  chunks with a running softmax. This is exact attention over every token, so a 58,324-cell bag fits in memory.
+  chunks with a running softmax: exact attention over every token, so a 58,324-cell bag fits in memory. Each channel
+  has its own cross-attention, normalised over that channel's tokens only, and the channels' outputs are summed into
+  the latents. Duplicating a channel's tokens leaves its output unchanged, so the cell channel's weight does not grow
+  with the number of cells.
 - **A sample is a line.** No perturbation tokens: the knocked-out gene is the decoded gene, so gene knowledge goes into
   the query (§4.4).
 - **One head.** GeneEffect delta in residual-SD units replaces the DE, log fold change and Δ heads.
 - **Evidence for gene g.** The gene's own mean in the line, and, in one arm, its spread across cells. No response
   evidence (no response data here).
+- **Evidence dropout**, as PIE: during training a sample's per-gene evidence is zeroed at PIE's rate, so a gene the
+  line's source does not list is a case the model has seen.
 
-**Vendoring.** PIE's `src/pie/model/` (`layers.py`, `trunk.py`, `evidence.py`, `heads.py`, `pie.py`) is copied at a
-pinned commit into `src/model/pie/`, with its `LICENSE.md` (CC BY-NC-SA 4.0) and a note naming the commit. Those files
-and our edits to them stay under that licence. Task 1 runs the copy unchanged; Task 3 edits it.
+**Vendoring.** PIE's model imports its own `pie.data` and `pie.utils`, so the whole repository is copied at a pinned
+commit into `third_party/pie/` (the `src/pie` package, its tests, `pyproject.toml`, `uv.lock` and `LICENSE.md`), with a
+note naming the commit, and installed editable into the runs' environment (PIE needs Python 3.12). The copy and our
+edits stay under CC BY-NC-SA 4.0. Task 1 runs the copy unchanged through its own CLI; Task 3 adds the GeneEffect model
+beside `pie.model` and reuses its layers, trunk blocks and evidence encoders.
 
 ## 4. Shared setup
 
@@ -73,10 +84,15 @@ and our edits to them stay under that licence. Task 1 runs the copy unchanged; T
 - **Lines.** Every arm trains on the 377 labelled single-cell training lines of the
   [final split](../data/cell-line-geneeffect-split.md), validates on its 27 and scores its 28 test lines once.
   Bulk-only lines enter only the base (below) and the default prior's reference row.
-- **Target.** `y(c, g) = GeneEffect(c, g) − m_g`, with `m_g` the gene's mean over the 947 labelled training-side lines
-  (the default prior's, lymphoid and myeloid lines off); the prediction is `m_g + ŷ(c, g)`. The loss is standardised
+- **Target.** `y(c, g) = GeneEffect(c, g) − m_g`. `m_g` is the gene's mean measured GeneEffect over the 947 lines the
+  default prior fits, built as `src/experiments/context_prior.py` builds them: single-cell training lines admitted by
+  `assert_fit_eligible` and bulk-only labelled lines from `load_bulk_lines` (which refuses any overlap with the split's
+  validation and test lines), lymphoid and myeloid lines dropped. The prediction is `m_g + ŷ(c, g)`. The loss is standardised
   MSE in units of the 377-line residual SD over every labelled gene; each step decodes a random 2,048 of a line's
   labelled genes, and evaluation decodes every gene.
+- **Scoring.** The head outputs `z` in units of the 377-line residual SD `σ_g`. The scorer receives GeneEffect,
+  `m_g + σ_g · z`, and re-centres it on the protocol's 377-line mean `μ_g` as every prediction is; it never receives
+  `z`. The base alone is a row of its own: its within-gene R² is that of `m_g − μ_g`, not zero.
 - **Metric.** The final split's (protocol §6): gene means, selective genes (4,323) and residual SD fitted on the 377
   lines. Headline: selective Spearman and within-gene R² (protocol §14). Beside them: AUPR lift, residual Pearson,
   per-line absolute Pearson and RMSE. Contrasts carry 95% paired line-bootstrap intervals (1,000 resamples).
@@ -94,7 +110,7 @@ Every line reads all of its cells (uncapped). Counts per line, from the raw h5ad
 | Validation | 27 | 78 | 246 | 1,623 |
 | Test | 28 | 128 | 307 | 1,573 |
 
-Pooling is size-invariant (attention normalised over tokens; no sum and no cell-count input). Task 6 reports error
+Pooling is size-invariant per channel (§3); no sum and no cell-count input. Task 6 reports error
 against bag size, since the large training bags come from the large extra deposits.
 
 ### 4.3 Context channels
@@ -105,10 +121,13 @@ against bag size, since the large training bags come from the large extra deposi
 | Per-gene spread | none; enters gene g's evidence | the SD of `log1p` CP10K across the line's cells and the detected fraction |
 | HVG cells | one per cell | an MLP over the cell's 2,000 HVGs (`log1p` of `normalize_total`, the protocol's space) |
 | Tx1 cells | one per cell | a projection of the frozen Tx1-3B embedding of the cell (raw UMI, 2,048 tokens) |
-| Shuffled cells | one per cell, as the HVG or Tx1 channel | the line's counts with each gene permuted independently across its cells (seed 0): every gene keeps its own distribution in the line; co-expression within cells is destroyed |
+| Mean as one cell | one token through the HVG cell MLP | `log1p` of the line's mean normalised HVG profile: the cell branch's capacity with no distribution |
+| Shuffled HVG cells | one per cell, as HVG cells | each HVG's values in the consumed space (`log1p` of `normalize_total`) permuted independently across the line's cells (seed 0): every gene's within-line distribution in that space is kept exactly; co-expression within cells is destroyed |
+| Shuffled Tx1 cells | one per cell, as Tx1 cells | the raw counts permuted per gene the same way, then embedded by Tx1. Tx1 reads raw counts, and the shuffle changes each cell's library size and Tx1's per-cell binning, so this control keeps raw-count marginals only |
 
 The mean channel is `log1p` of the mean, not PIE's mean of `log1p`: a mean of logs moves with a gene's variance and
-dropout, so it is not a mean-only input.
+dropout, so it is not a mean-only input. The mean channel and the per-gene spread always come from the real cells,
+also in the shuffled arms.
 
 ### 4.4 Gene query
 
@@ -134,14 +153,15 @@ source entry has that source masked.
 **Definition.**
 - **Re-score.** The four released `replogle_wdataset` checkpoints (`<held-out line>/best_auprc.ckpt`), run through the
   vendored code on their `unseen_ctx` test splits (PIE_splits), on the preprocessed Replogle–Nadig data and PIE_sources.
-- **Retrain.** One fold, HepG2 held out, trained from the vendored code with the repository's `replogle_wdataset`
-  experiment config and scored the same way. The released recipe uses two nodes of four GPUs; this runs on one node of four H20s.
+- **Retrain.** One fold, HepG2 held out, trained from the vendored code with its published recipe
+  (`configs/experiment/replogle_wdataset.yaml`: one node, two devices, gradient accumulation 4) on two of the H20s,
+  and scored the same way.
 - **Targets.** The model card's `unseen_ctx` metrics (four folds: AUPRC 0.4155 ± 0.0286, Spearman log fold change
   0.6568 ± 0.0411) and each fold's released `metrics_best_auprc.csv`.
 
-**Reading.** Re-scored checkpoints match their released per-fold metrics to rounding: the copy and data path are
-faithful. The retrained fold lands within the four-fold spread: training reproduces. Either failing is fixed before
-Task 3 edits the copy.
+**Reading.** Re-scored checkpoints matching their released per-fold metrics to rounding show the copy and data path
+are faithful; a mismatch is a copy or data error and is fixed before Task 3. The retrained fold is reported beside the
+four-fold spread.
 
 ### Task 2. Inputs
 
@@ -149,18 +169,18 @@ Task 3 edits the copy.
 
 **Definition.** One preparation step on the H20 (the only reader of raw data) writes `data/geneeffect_joint/v2/ladder/`
 with a manifest recording the expression space:
-- per line: all cells as HVG `float16` (the protocol's space); the mean channel and per-gene spread over the source's
-  listed genes; the shuffled counts' HVG cells;
-- Tx1-3B embeddings of every cell and of every shuffled cell (GPU, chunked per line, seeded collator as now);
+- per line: all cells as HVG `float16` (the protocol's space) and their shuffle in that space; the mean channel, the
+  mean HVG profile and the per-gene spread over the source's listed genes;
+- Tx1-3B embeddings of every cell and of every raw-count-shuffled cell (GPU, chunked per line, seeded collator as now);
 - the gene sources of §4.4, aligned to the GeneEffect gene axis with a coverage table;
-- the 947-line base `m_g`, fitted through `assert_fit_eligible`.
+- the 947-line base `m_g` (§4.1).
 
 **Reading.** Coverage per source and per line is reported; nothing is chosen from it.
 
 ### Task 3. GeneEffect trunk and gene query
 
-**Question.** Does a nonlinear reader of the mean beat the linear prior on the same lines, and which gene sources
-should the query keep?
+**Question.** Does the trunk reading the mean beat the linear prior on the same lines, and which gene sources should
+the query keep?
 
 **Definition.** The trunk of §3 with the mean channel only (the **mean-only arm**). Gene-query rows on it:
 `gene_text`; `gene_text` + ESM C; `gene_text` + STRING; `gene_text` + Gene2vec; `gene_text` + the best two others.
@@ -168,7 +188,8 @@ The **matched linear prior** is a reference row: a ridge on 128 components of th
 rows and no bridge, its penalty set on validation.
 
 **Reading.** The query that scores best on validation is kept for every later task (one or two sources besides
-`gene_text`). The mean-only arm against the matched linear prior answers the first question of §1.
+`gene_text`). The mean-only arm against the matched linear prior compares the two readers as built (every gene token,
+gene knowledge and nonlinearity together against 128 components and a ridge), the first question of §1.
 
 ### Task 4. The ladder
 
@@ -180,8 +201,9 @@ rows and no bridge, its penalty set on validation.
 | --- | --- |
 | Mean only | — (from Task 3) |
 | Per-gene spread | each gene's SD across cells and detected fraction, in its evidence |
+| Mean as one cell | one token of the mean HVG profile through the cell branch |
 | HVG cells | HVG cell tokens |
-| Shuffled HVG cells | HVG cell tokens of the shuffled counts |
+| Shuffled HVG cells | HVG cell tokens of the shuffled cells |
 | Tx1 cells | Tx1 cell tokens |
 | Shuffled Tx1 cells | Tx1 cell tokens of the shuffled counts |
 
@@ -191,8 +213,9 @@ rows and no bridge, its penalty set on validation.
 | --- | --- |
 | Per-gene spread − mean only | does each gene's own distribution add? |
 | HVG cells − mean only | do the cells add anything? |
+| HVG cells − mean as one cell | do the cells add beyond the cell branch's capacity? |
 | HVG cells − shuffled HVG cells | does joint structure within cells add? |
-| Tx1 cells − HVG cells | does the foundation-model encoding add over a standard one? |
+| Tx1 cells − HVG cells | does the Tx1 pipeline (pretraining, raw-count input, vocabulary) add over the HVG one? |
 | Tx1 cells − shuffled Tx1 cells | does joint structure add when read through Tx1? |
 | Shuffled HVG cells − per-gene spread | do cell tokens of independent genes read more than two statistics per gene? |
 
@@ -200,29 +223,34 @@ rows and no bridge, its penalty set on validation.
 (`results/final_split_seed0/`, 947 lines through the bridge).
 
 **Reading.** A contrast with a validation interval above zero is a gain of that kind of information for this reader;
-test is reported beside it. A tie is read against Task 5's detectable effects.
+test is reported beside it. A tie is read against Task 5: it is informative only for a kind of term the arm recovered
+there at a comparable size.
 
 ### Task 5. Planted control
 
-**Question.** How large a distribution-only effect could the mean-only, HVG cells and shuffled HVG cells arms detect?
+**Question.** Do the mean-only, HVG cells and shuffled HVG cells arms recover planted distribution-only terms of known
+kind and size?
 
 **Definition.** The real cells and labels, with a planted term added to the target of every line:
 `y(c, g) + β · (w_g · h_marginal(c) + w′_g · h_joint(c))`.
-- `h_marginal(c)`: the within-line SD of the cells' G2/M program score (the program scores the noise diagnosis
-  prepared). The shuffle keeps it.
-- `h_joint(c)`: the fraction of the line's cells above the training lines' 90th percentile in both the S and the G2/M
-  score, minus the product of the two single fractions. The shuffle destroys it.
-- Each is residualised on the 128 pseudo-bulk components by a ridge fitted on training lines, then standardised.
+- `h_marginal(c)`: the within-line SD, across the line's cells, of one HVG in the consumed space: the HVG whose
+  within-line SD varies most across training lines. It is a single gene's distribution, so the HVG shuffle keeps it
+  exactly.
+- `h_joint(c)`: the within-line Pearson correlation, across the line's cells, of two HVGs: the pair, among the 100
+  HVGs of largest across-line variance, whose within-line correlation varies most across training lines. The shuffle
+  sets its expectation to zero; its realised value under the shuffle is reported.
+- Both choices and fits use training lines only. Each term is residualised on the 128 pseudo-bulk components by a ridge
+  fitted on training lines, then standardised.
 - `w_g`, `w′_g`: fixed random normal gene loadings (seed 0).
 - `β`: the planted terms make up 0.5%, 2% and 5% of the target's variance over training lines and selective genes.
-- 3 arms × 3 `β` = 9 trained runs. Recovery per term: the Pearson, over held-out lines and selective genes, between
-  each run's prediction minus the same arm's unplanted prediction and the planted term, and its line-bootstrap
-  interval.
+- 3 arms × 3 `β` = 9 trained runs. Recovery per term, by projection on its loading: for each held-out line,
+  `ĥ(c) = Σ_g w_g Δ(c, g) / (β Σ_g w_g²)` over selective genes, with `Δ` the run's prediction minus the same arm's
+  unplanted prediction (Task 4); reported, the Pearson and the slope of `ĥ` on `h` over the 55 held-out lines, with
+  line-bootstrap intervals (and the same with `w′` for `h_joint`).
 
-**Reading.** HVG cells recovering both terms, shuffled HVG cells only `h_marginal`: the reader can extract
-distribution-only signal of that size. The mean-only arm's recovery measures how much of a planted term a nonlinear
-reader of the mean still sees after linear residualisation. The smallest `β` an arm recovers is its detectable effect,
-against which Task 4's ties are read.
+**Reading.** HVG cells recovering both terms and shuffled HVG cells only `h_marginal`: this reader extracts
+distribution-only terms of these kinds at that size; it says nothing about other kinds. The mean-only arm's recovery
+measures how much of a term a nonlinear reader of the mean still sees after linear residualisation.
 
 ### Task 6. Cell-count curve
 
@@ -231,10 +259,12 @@ against which Task 4's ties are read.
 **Definition.** The trained mean-only, HVG cells and Tx1 cells arms (Task 4), unchanged, score validation and test
 lines read from 10, 25, 50, 100 and 200 cells and from all of them, 16 random draws per size and line (a line with
 fewer cells than the size reads them all and is counted). The mean channel is rebuilt from the same draw. Reported:
-the mean and spread over draws of every metric, and per-line error against the line's full bag size.
+per size, the mean and spread over draws of every metric; each cell arm's paired gain over the mean-only arm on the
+same draws, with its interval; and per-line error against the line's full bag size.
 
-**Reading.** A cell-reading arm that keeps rising past the size where the mean-only arm flattens reads something the
-mean does not. The spread over draws is the sampling uncertainty the noise diagnosis did not measure.
+**Reading.** A cell arm's paired gain over the mean-only arm that grows with the cells read is consistent with
+information beyond the mean (capacity is held by the mean-as-one-cell arm, channel weight by §3's per-channel
+normalisation). The spread over draws is the sampling uncertainty the noise diagnosis did not measure.
 
 ### Task 7. Context text (deferred)
 
@@ -250,8 +280,8 @@ on its own and never credited to expression.
 
 | Path | Change | Responsibility |
 | --- | --- | --- |
-| `src/model/pie/` | vendored, then edited | PIE's model code (CC BY-NC-SA 4.0, pinned commit) |
-| `src/model/geneeffect_trunk.py` | new | context tokens, gene queries and evidence, chunked encoder, GeneEffect head |
+| `third_party/pie/` | vendored, then extended | PIE's repository (CC BY-NC-SA 4.0, pinned commit), installed editable |
+| `third_party/pie/src/pie/model/geneeffect.py` | new | context tokens, per-channel chunked encoder, gene queries and evidence, GeneEffect head |
 | `src/data/prepare/prepare_ladder_inputs.py` | new | Task 2's caches and manifest |
 | `src/data/gene_sources.py` | new | read and align the gene sources of §4.4 |
 | `src/training/ladder_trainer.py` | new | the training loop of §4.1 |
@@ -268,15 +298,23 @@ Checkpoints record the split membership and load strictly, the vendored code inc
 
 On synthetic fixtures:
 - chunked cross-attention equals unchunked attention;
-- the shuffle keeps every gene's values in each line and removes the correlation between genes;
-- duplicating every cell of a bag leaves the pooled latents unchanged;
+- the HVG shuffle keeps every gene's values in the consumed space in each line and removes the correlation between
+  genes;
+- duplicating every cell token leaves the cell channel's output unchanged, with the mean channel present;
+- the scorer receives `m_g + σ_g · z`, never `z`;
 - a gene absent from training decodes (no per-gene parameter);
 - the target is GeneEffect minus the 947-line mean, and the base and every planted-term fit reject validation and test
   lines;
 - the vendored model loads a released checkpoint strictly;
 - a two-line end-to-end run trains, selects and scores.
 
-## 8. Out of scope
+## 8. Out of scope, and follow-ups
 
-SL pairs; bulk-only lines as training lines for the trunk (a later step, once the ladder reads); perturbation-response
-data and evidence; PIE's chemical sources; any change to the split, the metric or the default prior.
+Out of scope: SL pairs; perturbation-response data and evidence; PIE's chemical sources; any change to the split, the
+metric or the default prior.
+
+Follow-ups, each its own design when taken up:
+- bulk-only lines as training lines for the trunk, once the ladder reads;
+- a Tx1 cell arm from randomly initialised Tx1 weights, to separate pretraining from Tx1's input pipeline;
+- a learning curve with the bridge held at all paired lines and several patient orders;
+- a deposit batch-correction test: whether correcting the 99 lines' second deposits recovers accuracy.

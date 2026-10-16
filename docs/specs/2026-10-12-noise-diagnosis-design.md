@@ -218,7 +218,8 @@ controls are the [PIE-derived GeneEffect ladder](2026-10-16-pie-geneeffect-ladde
   mean: the adjustment is right in size" → it lowers squared error; calibration is not tested.
 - [ ] **§3.3–3.4.** Drop "batch correction is not a lever": two sources can be equally degraded, and per-gene or
   per-line changes can cancel in a macro mean. The swap's +0.0066 [−0.0052, +0.0184] is not equivalence; accessions
-  mix technical batch with culture state. In §3.3, lineage composition is a plausible reading of the residual's excess,
+  mix technical batch with culture state, and the 99 lines with a second deposit need not represent future held-out
+  sources. In §3.3, lineage composition is a plausible reading of the residual's excess,
   not one that excludes batch.
 - [ ] **§3.5.** Fractions against means compares two summaries; it does not test information beyond the mean (a
   fraction above a threshold moves with the mean). The conclusion is limited to these summaries under this linear
@@ -228,3 +229,5 @@ controls are the [PIE-derived GeneEffect ladder](2026-10-16-pie-geneeffect-ladde
   needs refining.
 - [ ] **Noise diagnosis record and CLAUDE.md.** "What limits it is how much a linear read of expression can reach" →
   not established: the list of causes is incomplete and the tests' sensitivity is unmeasured.
+- [ ] **Follow-ups** to these readings (a fixed-bridge learning curve over several patient orders; a batch-correction
+  recovery test) are listed in the ladder design's §8.
