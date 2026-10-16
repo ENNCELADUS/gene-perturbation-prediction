@@ -1,6 +1,6 @@
 # Research Blueprint — Context-Specific Synthetic Lethality Prediction Based on AI Virtual Cell Foundation Model
 
-Updated 2026-10-12. This note is the project's introduction, related work, task formulation and research plan, written as
+Updated 2026-10-16. This note is the project's introduction, related work, task formulation and research plan, written as
 for an ML paper. Methods, experiment rules and results are kept in the repository: the GeneEffect protocol
 (`docs/03-geneeffect-protocol.md`), the SL protocol (`docs/04-sl-ranking-protocol.md`), the extended related
 work with full citations (`docs/02-literature-review.md`) and the result records under `results/`.
@@ -111,6 +111,13 @@ single-cell death label, and a single-gene prediction is not SL evidence.
   directions.
 
 ### 3.5 Why two stages
+
+Stage one predicts GeneEffect because the target context has none. A line DepMap has screened needs no stage one:
+its measured GeneEffect is more reliable than any prediction. A new patient's tumour, or a line derived from it, rarely
+has a CRISPR screen, which is slow and costly, while a basal single-cell profile is cheap; stage one fills the gap,
+$x_{c^*} \to \hat{y}(c^*,g)$, before stage two reasons from it. Held-out lines are DepMap lines whose GeneEffect is
+withheld (§3.2) to simulate this; run through stage two in place of $\hat{y}$, their measured values show what stage
+one's error costs, a reference and never a bar.
 
 GeneEffect prediction comes first because DepMap provides large-scale, cell-line-specific labels for
 single-gene knockouts, whereas labelled SL pairs with defined cellular contexts, suitable for training a model
