@@ -159,8 +159,8 @@ second deposit scores +0.0066 [−0.0052, +0.0184] over primary. Batch moves the
 information beyond the mean, and the second-wave distributional models start from that arm.
 <span style="color:red">**TODO (open, 2026-10-15):** a null here does not show that heterogeneity carries no dependency
 information. The arms are weak readers of it: a few per-line shares (23 programs, 8 or 16 K-means clusters on 128
-context cells per line, fitted without labels), added linearly to the prior's out-of-fold error by one shared ridge
-across genes. Clusters on line-centred cells capture only the shared axes of within-line variation, not line-specific
+context cells per line, fitted without labels), added linearly to the prior's out-of-fold error by a ridge with its
+own coefficients per gene on those same features and one penalty. Clusters on line-centred cells capture only the shared axes of within-line variation, not line-specific
 subpopulations, and a residual stack over the prior can only correct what the mean already leaves out. Open: does a
 model that reads the cell distribution directly (per-cell encodings pooled with learned weights, subpopulation-aware
 or set models, trained against GeneEffect rather than stacked on the prior) find information these summaries miss?</span>
@@ -203,3 +203,28 @@ bridge diagnostics take medians from the bulk outside each fold. Rows: rank alon
 
 Any new model, any change to the training caches or the split, Geneformer, and SL. A diagnosis result is single-gene
 dependency evidence on held-out lines; it estimates no genetic interaction.
+
+## 6. Open corrections (review of 2026-10-15)
+
+The tables stand as evidence; these readings and summaries claim more than they show. The follow-up model and its
+controls are the [PIE-derived GeneEffect ladder](2026-10-16-pie-geneeffect-ladder-design.md).
+
+- [ ] **§3.1.** "Ten cells read as well as all of them" → no loss detected: the ten-cell test interval
+  (−0.0060 [−0.0132, +0.0016]) allows one, there was one fixed draw order, and the 400-cell row reads most held-out
+  lines whole. The halves share their deposit's library, culture and measurement, so their agreement is
+  reproducibility within a source: the bridge's gap is not mainly within-source sampling, not "systematic" as shown.
+- [ ] **§3.2.** "More DepMap lines no longer help" → no gain detected from 7/8 to all lines under one patient order and
+  one fixed configuration; each fraction also changes the bridge's paired lines and the encoder. "R² above the gene
+  mean: the adjustment is right in size" → it lowers squared error; calibration is not tested.
+- [ ] **§3.3–3.4.** Drop "batch correction is not a lever": two sources can be equally degraded, and per-gene or
+  per-line changes can cancel in a macro mean. The swap's +0.0066 [−0.0052, +0.0184] is not equivalence; accessions
+  mix technical batch with culture state. In §3.3, lineage composition is a plausible reading of the residual's excess,
+  not one that excludes batch.
+- [ ] **§3.5.** Fractions against means compares two summaries; it does not test information beyond the mean (a
+  fraction above a threshold moves with the mean). The conclusion is limited to these summaries under this linear
+  residual correction, with no positive control.
+- [ ] **Learning-curve record.** Cilantro's in-sample predictions are a favourable reference, not an upper bound; its
+  stage one carries line-specific signal (R² over the gene mean +0.042 / +0.046), so §1's "gene identity, not context"
+  needs refining.
+- [ ] **Noise diagnosis record and CLAUDE.md.** "What limits it is how much a linear read of expression can reach" →
+  not established: the list of causes is incomplete and the tests' sensitivity is unmeasured.
