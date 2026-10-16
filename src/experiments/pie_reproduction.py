@@ -674,6 +674,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             continue
         started = _now()
         run[step]()
+        # Re-read: another process may have recorded its steps meanwhile.
+        record = json.loads(record_path.read_text())
         record["steps"][step] = {"started": started, "finished": _now()}
         _write_record(record_path, record)
     return 0
