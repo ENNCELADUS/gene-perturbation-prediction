@@ -70,15 +70,22 @@ expression never reaches the latents: it enters only as each decoded gene's own 
   gene the line's source lists, and the line's Cellosaurus text where a record exists.
 - **Knockdown of g.** The perturbation tokens of gene g; same-perturbation evidence from g's responses in the
   checkpoint's training data; same-context evidence empty (no responses in our lines).
-- **Three deltas per (line, gene)**, each "knock down g" minus "no perturbation" (PIE's zero carrier token), computed
-  once:
-  - **Decoder-feature delta ΔH**: PIE's last decoder-layer gene features, mean-pooled over every decoded gene (768-d).
-    The direct analogue of Cilantro's cell-embedding delta.
-  - **Profile delta ΔE**: the predicted change in mean expression `Δ̂(c, g)` on every decoded gene, so the after-state
-    is `x_c + Δ̂(c, g)`. Both states are stored as coordinates on 512 principal components fitted on training lines'
-    after-states (variance kept reported); a state encoder reads them, `ΔE = E(after) − E(before)`.
-  - **Latent delta ΔL**: the mean-pooled latent array. The latents see no expression, so ΔL carries the line only
-    through its Cellosaurus text: a gene-identity control.
+- **No perturbation.** The same context inputs with every perturbation source and every response-evidence block
+  absent (PIE's zero carrier token stands in for the missing perturbation sources). PIE never trained on this input,
+  so the reference pass is outside its training distribution; ΔE needs no reference pass (below).
+- **Three deltas per (line, gene)**, computed once:
+  - **Decoder-feature delta ΔH**: PIE's last decoder-layer gene features, mean-pooled over every decoded gene (768-d),
+    knockdown pass minus reference pass. The direct analogue of Cilantro's cell-embedding delta.
+  - **Profile delta ΔE**: PIE's predicted change in mean expression `Δ̂(c, g)` (its `delta_p_pred`, on PIE's
+    `log1p` CP10K scale) on every decoded gene. The before-state is the line's PIE input `x_c` and the after-state
+    `x_c + Δ̂(c, g)`, both on one gene axis: the protocol's GeneEffect genes, a gene the line's source does not list
+    being masked. The precompute stores both states as coordinates on 512 principal components fitted on training
+    lines' after-states (a storage compression; the variance kept is reported, and a full-axis row on the selective
+    genes checks what it loses). The state encoder `E` is trained in stage one on those stored states:
+    `ΔE = E(after) − E(before)`.
+  - **Latent delta ΔL**: the mean-pooled latent array, knockdown pass minus reference pass. The latents see no
+    expression, so ΔL carries the line only through its Cellosaurus text: an expression-blind, text-conditioned
+    control.
 
 ### 3.3 Stage-one architecture arms (Task 3)
 
@@ -94,6 +101,12 @@ viability embedding `V(c, g)`, saved for every line × gene for stage two. Arms 
 
 The gene encoder in Task 3 is a projection of `gene_text`; Task 4 chooses its other sources. Selection is on
 validation selective Spearman; the winner carries to Tasks 4–7.
+
+**Matched inputs.** The frozen PIE must read its own input, the mean over cells of `log1p` CP10K, which moves with a
+gene's variance and dropout, plus the Cellosaurus text. So that architecture contrasts compare models rather than
+inputs, every Task 3 arm reads the same line information: the mean channel's tokens carry both values (`log1p` of the
+mean and the mean of `log1p`), and the Cellosaurus text is one more context token for the direct readout and the
+multi-encoder's context encoder.
 
 ### 3.4 Vendoring
 
@@ -215,7 +228,7 @@ linear-to-nonlinear step is measured on fixed inputs; the default prior (`result
 
 **Reading.** The arm and row best on validation is the stage-one architecture. Virtual cell + FiLM against direct
 readout: does the simulated knockdown add over reading the line? Its ΔL row against its ΔH and ΔE rows: how much of
-it is gene identity alone. The hybrid against both: are the two complementary? The masked-DepMap row: what keeping that
+it needs no expression (gene identity and line text). The hybrid against both: are the two complementary? The masked-DepMap row: what keeping that
 source costs or gives.
 
 ### Task 4. Gene query
@@ -223,17 +236,26 @@ source costs or gives.
 **Question.** Which gene sources should the gene encoder keep?
 
 **Definition.** On the Task 3 architecture: `gene_text`; then + ESM C; + ESM3-open; + STRING; + Gene2vec; then
-`gene_text` with the best two others.
+`gene_text` with the best two of ESM C, STRING and Gene2vec (ESM3-open only ever swaps for ESM C).
 
-**Reading.** The query best on validation (one or two sources besides `gene_text`) is kept for Tasks 5–7.
+**Reading.** The query best on validation is kept for Tasks 5–7, `gene_text` alone included.
 
 ### Task 5. Data ladder
 
 **Question.** Questions 2 and 3 of §1.
 
-**Definition.** The Task 3 architecture with the Task 4 query; the context channels enter through its context path
-(the direct-readout encoder, or the multi-encoder's context encoder; a winning virtual cell + FiLM arm is given the
-multi-encoder's context encoder for this task). Arms, each with the mean channel:
+**Definition.** The Task 3 architecture with the Task 4 query. Where each channel enters, by the winning family:
+
+| Winner | Token channels (mean, summaries, QC, cells) | Per-gene spread |
+| --- | --- | --- |
+| Direct readout | its encoder | gene g's query evidence |
+| Hybrid | its direct trunk's encoder | gene g's query evidence |
+| Multi-encoder | its context encoder | the FiLM condition (gene g's own spread) |
+| Virtual cell + FiLM | it has no context path: the ladder runs on the multi-encoder with the winning delta, whose Task 3 row is then the ladder's mean-only baseline | the FiLM condition |
+
+In the virtual-cell families the frozen PIE's deltas always read the mean of `log1p` CP10K and the text, so their
+"mean only" already carries that summary; their contrasts measure additions beyond it. The gene-to-cell arm needs a
+decoder and runs only when the direct readout or the hybrid wins. Arms, each with the mean channel:
 
 | Arm | Adds |
 | --- | --- |
@@ -264,8 +286,8 @@ Per-line QC covariates (median UMI, genes per cell, mitochondrial and ribosomal 
 chemistry, pooled flag) are reported beside every contrast, with each contrast's per-line gain against them.
 
 **Reading.** A contrast with a validation interval above zero is a gain of that kind for this model; test is reported
-beside it. Summaries ≈ mean only with cells above both: the noise diagnosis's null came from summarising; summaries
-above mean only: it came from the linear reader. A tie is informative only for a kind of term Task 6 recovered at a
+beside it. Summaries ≈ mean only with cells above both is consistent with the noise diagnosis's null coming from
+summarising; summaries above mean only, with it coming from the linear reader (the fitting setup differs as well). A tie is informative only for a kind of term Task 6 recovered at a
 comparable size.
 
 ### Task 6. Planted control
@@ -286,9 +308,10 @@ comparable size.
   loadings instead.
 - `β`: the planted terms make up 0.5%, 2% and 5% of the target's variance over training lines and selective genes.
 - Arms: mean only, HVG cells and shuffled HVG cells at all three `β` (9 runs); Tx1 cells at 2% (1 run).
-- Recovery per term, by projection on its loading: for each held-out line, `ĥ(c) = Σ_g w_g Δ(c, g) / (β Σ_g w_g²)`
-  over selective genes, with `Δ` the run's prediction minus the same arm's unplanted prediction (Task 5); reported, the
-  Pearson and slope of `ĥ` on `h` over the 55 held-out lines with line-bootstrap intervals.
+- Recovery, jointly: for each held-out line, regress `Δ(c, ·)` over selective genes on the three loadings
+  `[w, w′, w″]` (least squares), with `Δ` the run's prediction minus the same arm's unplanted prediction (Task 5); the
+  coefficients divided by `β` are `ĥ_marginal(c)`, `ĥ_joint(c)`, `ĥ_rare(c)`. Reported per term: the Pearson and slope
+  of `ĥ` on `h` over the 55 held-out lines, with line-bootstrap intervals.
 
 **Reading.** HVG cells recovering all three terms and shuffled HVG cells only `h_marginal`: the model extracts
 distribution-only terms of these kinds at that size; it says nothing about other kinds. The mean-only arm's recovery
@@ -301,7 +324,9 @@ measures what a nonlinear reader of the mean still sees after residualisation.
 **Definition.**
 - Held-out lines: the trained mean-only, HVG cells and Tx1 cells arms, and the default prior, score validation and
   test lines read from 10, 25, 50, 100 and 200 cells and from all of them, 16 random draws per size and line (a line
-  with fewer cells reads them all and is counted). The mean channel is rebuilt from the same draw.
+  with fewer cells reads them all and is counted). Every input that depends on the bag is rebuilt from the same draw:
+  the mean channel, the cell tokens and, for a virtual-cell-family model, the frozen PIE's deltas (recomputed for 4 of
+  the 16 draws and on the selective genes only, to bound the cost).
 - Training-bag stability (evaluation only): on training lines with at least 1,000 cells, each arm's prediction from all
   cells against 16 draws of 250 and 500 cells.
 - Reported: per size, the mean and spread over draws of every metric; each cell arm's paired gain over the mean-only arm
