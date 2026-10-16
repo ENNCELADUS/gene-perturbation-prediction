@@ -91,7 +91,7 @@ The review of that diagnosis (2026-10-15) found its nulls cannot separate absent
 or a linear reader; its open corrections are listed in the design's §6. The next model is a **PIE-based stage-one
 model** ([design](docs/specs/2026-10-16-pie-geneeffect-ladder-design.md), not built): PIE's released cross-dataset
 checkpoint, vendored and frozen, as a virtual cell (held-out lines' DepMap columns zeroed); an architecture stage on the
-377 single-cell lines (direct readout, Cilantro-style virtual cell + FiLM on three PIE deltas, multi-encoder, hybrid;
+377 single-cell lines plus the prior's bulk-only lines (direct readout, Cilantro-style virtual cell + FiLM on three PIE deltas, multi-encoder, hybrid;
 Cilantro's tail with its 32-d viability embedding saved for stage two); then the gene query, a data ladder of
 cell-reading arms with shuffled, capacity, summary and QC controls, a planted positive control and a cell-count curve.
 The SL pair head is **unimplemented**.
