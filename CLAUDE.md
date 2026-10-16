@@ -88,11 +88,12 @@ and lines, not single-cell noise, limit the prior. The learning curve's rerun on
 flat from 7/8 to all 947 labelled lines (−0.0006 [−0.0062, +0.0050] validation): using up DepMap no longer helps this
 prior, whose within-gene R² is 0.043, and Cilantro's in-sample stage one does not beat it on its covered pairs.
 The review of that diagnosis (2026-10-15) found its nulls cannot separate absent information from lossy summaries
-or a linear reader; its open corrections are listed in the design's §6. The next model is a **PIE-derived GeneEffect
-trunk** ([design](docs/specs/2026-10-16-pie-geneeffect-ladder-design.md), not built): PIE reproduced from vendored
-code, then adapted to read a line's mean and cells as encoder tokens, trained on the 377 single-cell lines, with a
-ladder of arms (mean only, per-gene spread, HVG cells, Tx1 cells and their gene-shuffled controls) and a planted
-positive control.
+or a linear reader; its open corrections are listed in the design's §6. The next model is a **PIE-based stage-one
+model** ([design](docs/specs/2026-10-16-pie-geneeffect-ladder-design.md), not built): PIE's released cross-dataset
+checkpoint, vendored and frozen, as a virtual cell (held-out lines' DepMap columns zeroed); an architecture stage on the
+377 single-cell lines (direct readout, Cilantro-style virtual cell + FiLM on three PIE deltas, multi-encoder, hybrid;
+Cilantro's tail with its 32-d viability embedding saved for stage two); then the gene query, a data ladder of
+cell-reading arms with shuffled, capacity, summary and QC controls, a planted positive control and a cell-count curve.
 The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.
