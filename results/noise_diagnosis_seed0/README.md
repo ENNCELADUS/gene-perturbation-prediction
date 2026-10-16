@@ -12,6 +12,7 @@ synthetic-lethality evidence; nothing is chosen in code.
   `deposit_confound`, at `97a3066`, pooled the one extra Tahoe line as `other`; η² moved by less than 0.0003).
 - `cilantro_encodings_20261012`: `hpc/run.sh prior` with `configs/context_prior/cilantro_encodings.yaml` at `97a3066`
   ([table](cilantro_encodings_20261012.results.md)).
+- Row by row: what each row of both tables does and what its number is ([table guide](table_guide.md)).
 - Inputs built for it: per-line cell draws and per-cell program scores under `data/geneeffect_joint/v2/noise/` (434
   lines), the 99 planned second deposits under `data/sl_dependency_v0/processed/basal_raw_umi_second_source/` (all built,
   none missing).
