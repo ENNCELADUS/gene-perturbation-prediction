@@ -1,7 +1,8 @@
 # Design: a PIE-based stage-one GeneEffect model, its architecture stage and the cell-distribution ladder
 
 **Status:** agreed 2026-10-16 (two grill sessions after the review of the noise diagnosis; checked by a Codex
-alignment review and an Opus review); not built. Evidence it starts from: the
+alignment review and an Opus review). Task 1 done 2026-10-16 ([record](../../results/pie_reproduction/README.md): the
+released checkpoints reproduce to rounding); Tasks 2–7 not built. Evidence it starts from: the
 [noise diagnosis](2026-10-12-noise-diagnosis-design.md) (its §6 lists the open corrections) and its records
 ([noise diagnosis](../../results/noise_diagnosis_seed0/README.md), [learning curve](../../results/noise_lines_seed0/README.md)).
 PIE: Arc Institute's "Perturbation is Everything" (bioRxiv, 5 October 2026), code

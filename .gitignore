@@ -59,6 +59,8 @@ wheels/
 !configs/benchmarks/provenance/phase_a_tx1_20260724/k_label_panels.csv
 # Curated P1 diagnostic evidence (small comparison tables and summaries, source-of-truth for results)
 !results/p1_response_pathway_diagnostics/evidence/**
+# PIE reproduction comparison tables (small, the record of results/pie_reproduction/)
+!results/pie_reproduction/*.csv
 /outputs/
 data/**/features
 data/**/interim
@@ -111,9 +113,12 @@ csc286_eval.py
 /data/
 *.npz
 
-# Released third-party code and its environment, placed on the H20 only (hpc/cilantro/setup.sh)
-/third_party/
+# Released third-party code and its environment, placed on the H20 only (hpc/cilantro/setup.sh);
+# PIE is vendored and tracked (third_party/pie/VENDORED.md), its environment built by hpc/pie/setup.sh
+/third_party/*
+!/third_party/pie/
 /.venv-cilantro/
+/.venv-pie/
 
 # Documentation
 archive/
