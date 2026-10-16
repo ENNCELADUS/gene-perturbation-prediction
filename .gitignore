@@ -111,9 +111,12 @@ csc286_eval.py
 /data/
 *.npz
 
-# Released third-party code and its environment, placed on the H20 only (hpc/cilantro/setup.sh)
-/third_party/
+# Released third-party code and its environment, placed on the H20 only (hpc/cilantro/setup.sh);
+# PIE is vendored and tracked (third_party/pie/VENDORED.md), its environment built by hpc/pie/setup.sh
+/third_party/*
+!/third_party/pie/
 /.venv-cilantro/
+/.venv-pie/
 
 # Documentation
 archive/

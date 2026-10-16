@@ -90,6 +90,7 @@ extend-exclude = [
     "archive/",
     "data/",
     "docs/",
+    "third_party",
     "**/*.sh",
     "**/*.yaml",
     "**/*.yml",
