@@ -1018,9 +1018,11 @@ def run(
     config: Mapping[str, Any], steps: Sequence[str], shard: tuple[int, int], device: str
 ) -> None:
     out = layout(config)
-    tables = read_tables(out.root)
     out.pilot.mkdir(parents=True, exist_ok=True)
-    write_dataset(out, tables)
+    if set(steps) - {"rescore"}:
+        # The re-score reads PIE's own data alone; every other step our lines.
+        tables = read_tables(out.root)
+        write_dataset(out, tables)
     seed = int(config["seed"])
     for step in steps:
         if step == "rescore":
