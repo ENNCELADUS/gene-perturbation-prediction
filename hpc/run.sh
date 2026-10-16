@@ -11,7 +11,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh prior-export CONFIG --run-id ID   (the reference prior's predictions for the correction, CPU)
        hpc/run.sh prior-stack CONFIG --run-id ID   (single-cell statistics stacked on a prior export, CPU)
        hpc/run.sh prior-noise CONFIG --run-id ID [--sections A,B]   (what limits the prior, CPU)
-       hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps fetch,evaluate,compare]   (PIE's released checkpoints, GPU)
+       hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps fetch,download,evaluate,compare]   (PIE's released checkpoints, GPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment; pie-reproduce
 always runs in .venv-pie.
 `all` uses every visible GPU (CUDA_VISIBLE_DEVICES is respected) for every

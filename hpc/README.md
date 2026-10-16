@@ -172,18 +172,20 @@ from the cu128 index, pandas 3), built from PIE's `uv.lock` by `hpc/pie/setup.sh
 bf16 matmul and scaled-dot-product attention on `cuda:0`). PIE's own tests run from its directory:
 `(cd third_party/pie && ../../.venv-pie/bin/python -m pytest tests -q -p no:cacheprovider)`.
 
-`hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps fetch,evaluate,compare]` is Task 1 of the
+`hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps fetch,download,evaluate,compare]` is Task 1 of the
 [stage-one design](../docs/specs/2026-10-16-pie-geneeffect-ladder-design.md): PIE's released checkpoints
 (`PIE_replogle_xdataset` on Replogle `test_seen` and `test_unseen`, the four `PIE_replogle_wdataset` folds on
 `unseen_ctx`) re-scored by the vendored code and compared with the metric files released with them. It exports
 `PIE_DATA_ROOT=data/pie` and `PIE_CACHE_DIR=data/pie/cache` and, unless set, `HF_ENDPOINT=https://hf-mirror.com`;
 the runner sets `PIE_RUNS_ROOT` to the run's `runs/`. Steps, each skipped once its outputs exist (rerun the same id to
-resume): `fetch` (checkpoints and released tables at pinned revisions into `data/pie/released/`), `evaluate`
+resume): `fetch` (checkpoints and released tables at pinned revisions into `data/pie/released/`), `download` (every split,
+dataset and source the checkpoints pin, through PIE's resolver, each retried up to 100 times with backoff: the H20's
+connections to hf-mirror's CDN redirect drop for minutes at a time), `evaluate`
 (`pie.evaluate.run_eval` per target, from the target's run directory so the checkpoints' legacy relative paths
 `data/splits/…` and `data/sources/aliases.yaml` map to PIE's Hugging Face copies, as PIE intends), `compare`
 (`comparison.csv`, `granular_comparison.csv`, `results.md`). Evaluation reads the data config saved in each
-checkpoint and rebuilds same-perturbation evidence from its training data, so the first `evaluate` downloads every
-dataset and source the checkpoints pin (all five cross-dataset training sets; `ncbi_text` alone is 43 GB) into
+checkpoint and rebuilds same-perturbation evidence from its training data, so `download` fetches every dataset and
+source the checkpoints pin (all five cross-dataset training sets; `ncbi_text` alone is 43 GB) into
 `data/pie/hf/`; PIE checks each array against its `meta.json` SHA-256. Output: `outputs/pie_reproduction/<id>/`
 (`run.json` with pins, environment and step times).
 

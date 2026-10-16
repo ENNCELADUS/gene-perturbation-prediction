@@ -1,17 +1,20 @@
 """PIE reproduction: PIE's released checkpoints, run through the vendored code on
 PIE's own data, splits and sources, against the metrics PIE released with them.
 
-``python -m src.experiments.pie_reproduction --run-id ID [--device cuda]
-[--steps fetch,evaluate,compare]`` (``hpc/run.sh pie-reproduce``, in ``.venv-pie``)
-covers ``PIE_replogle_xdataset`` on Replogle ``test_seen`` and ``test_unseen`` and
-the four ``PIE_replogle_wdataset`` folds on their ``unseen_ctx`` test splits. Steps,
-each skipped when its outputs exist, so rerunning with the same id resumes:
+``python -m src.experiments.pie_reproduction --run-id ID [--device cuda] [--steps
+fetch,download,evaluate,compare]`` (``hpc/run.sh pie-reproduce``, in ``.venv-pie``)
+covers ``PIE_replogle_xdataset`` on Replogle ``test_seen`` and ``test_unseen`` and the
+four ``PIE_replogle_wdataset`` folds on their ``unseen_ctx`` test splits. Steps, each
+skipped when its outputs exist, so rerunning with the same id resumes:
 
 - ``fetch``: the pinned checkpoints, their configs and data stats, and the released
   ``metrics_best_auprc.csv`` and ``granular_best_auprc.csv`` into
   ``$PIE_DATA_ROOT/released/<repo>@<revision>/``; the released tables copied to
   ``released/<experiment>/<row set>/``; ``runs/<experiment>/`` holds links to the
   checkpoint files only (``pie eval`` refuses to overwrite an existing ``eval/``);
+- ``download``: every split, dataset and source the checkpoints pin, through PIE's
+  own resolver into ``$PIE_DATA_ROOT/hf/``, each retried until it is complete
+  (``downloaded.json``);
 - ``evaluate``: ``pie.evaluate.run_eval`` per target, writing
   ``runs/<experiment>/eval/<row set>/``;
 - ``compare``: released against reproduced, per context and per (context,
@@ -59,7 +62,10 @@ CKPT = "best_auprc"
 CHECKPOINT_FILES = (f"{CKPT}.ckpt", "config.yaml", "data_stats.json")
 TABLES = ("metrics", "granular")
 ALL_CONTEXT = "all"
-STEPS = ("fetch", "evaluate", "compare")
+STEPS = ("fetch", "download", "evaluate", "compare")
+# The H20's connections to the Hugging Face CDN drop for minutes at a time.
+DOWNLOAD_ATTEMPTS = 100
+DOWNLOAD_BACKOFF_MAX = 600.0
 # The wdataset model card's unseen_ctx summary over the four folds (mean, SD).
 MODEL_CARD = {"binary_auprc": (0.4155, 0.0286), "spearman_lfc": (0.6568, 0.0411)}
 FOLD_METRICS = tuple(MODEL_CARD)
@@ -406,17 +412,83 @@ def fetch(run_dir: Path) -> None:
         log.info("fetched %s %s into %s", target.experiment, target.row_set, local_dir)
 
 
-def evaluate(run_dir: Path, device: str) -> None:
-    # PIE runs only in its own environment (.venv-pie), not the project's.
-    from pie.config import EvalConfig
-    from pie.evaluate import run_eval
-
+def _pie_environment(run_dir: Path) -> None:
     for name in ("PIE_DATA_ROOT", "PIE_CACHE_DIR"):
         if not os.environ.get(name):
             raise RuntimeError(f"{name} is unset; run through hpc/run.sh pie-reproduce")
     # Each checkpoint saves its run_dir as ${PIE_RUNS_ROOT}/<experiment>, which
     # loading resolves; here that is runs/<experiment> of this run.
     os.environ["PIE_RUNS_ROOT"] = str(run_dir / "runs")
+
+
+def _asset_references(run_dir: Path) -> list[tuple[str, str]]:
+    """(kind, reference) of every split, dataset and source the evaluations read,
+    in the order the wdataset folds, then the xdataset, need them."""
+    from pie.predict import load_checkpoint
+
+    references: dict[tuple[str, str], None] = {}
+    for target in sorted(TARGETS, key=lambda t: t.repo == XDATASET_REPO):
+        references[("split_file", target.split)] = None
+        experiment_dir = run_dir / "runs" / target.experiment
+        # As in evaluate: legacy relative paths must not resolve from this repo.
+        with contextlib.chdir(experiment_dir):
+            data = load_checkpoint(experiment_dir / f"{CKPT}.ckpt").config.data
+        references[("splits", data.split_dir)] = None
+        for path in data.preprocessed_dirs:
+            references[("preprocessed", path)] = None
+        references[("source", data.gene_text_dir)] = None
+        for path in data.source_dirs.values():
+            references[("source", path)] = None
+    return list(references)
+
+
+def download(run_dir: Path) -> None:
+    """Resolve every asset through PIE's own resolver, retrying each one, so that
+    evaluate finds them complete. A failed attempt keeps the files it finished."""
+    import httpx
+    from huggingface_hub.utils import close_session
+    from pie.assets import resolve_asset, resolve_split_file
+
+    _pie_environment(run_dir)
+    references = _asset_references(run_dir)
+    resolved = {}
+    for number, (kind, reference) in enumerate(references, start=1):
+        for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+            try:
+                path = (
+                    resolve_split_file(reference)
+                    if kind == "split_file"
+                    else resolve_asset(reference, kind=kind)
+                )
+                break
+            except (OSError, RuntimeError, httpx.HTTPError) as error:
+                if attempt == DOWNLOAD_ATTEMPTS:
+                    raise
+                wait = min(DOWNLOAD_BACKOFF_MAX, 30.0 * attempt)
+                log.warning(
+                    "download %d/%d %s attempt %d failed (%s: %s); retrying in %.0f s",
+                    number,
+                    len(references),
+                    reference,
+                    attempt,
+                    type(error).__name__,
+                    str(error)[:200],
+                    wait,
+                )
+                # A retry after a failed request can leave the shared client closed.
+                close_session()
+                time.sleep(wait)
+        resolved[reference] = str(path)
+        log.info("download %d/%d %s: %s", number, len(references), kind, reference)
+    _write_record(run_dir / "downloaded.json", resolved)
+
+
+def evaluate(run_dir: Path, device: str) -> None:
+    # PIE runs only in its own environment (.venv-pie), not the project's.
+    from pie.config import EvalConfig
+    from pie.evaluate import run_eval
+
+    _pie_environment(run_dir)
     for target in TARGETS:
         metrics = _reproduced_table(run_dir, target, "metrics")
         granular = _reproduced_table(run_dir, target, "granular")
@@ -583,6 +655,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     record = _start_record(record_path, args.run_id)
     done = {
         "fetch": lambda: all(path.exists() for path in _fetch_outputs(run_dir)),
+        "download": lambda: (run_dir / "downloaded.json").exists(),
         "evaluate": lambda: all(
             _reproduced_table(run_dir, t, "granular").exists() for t in TARGETS
         ),
@@ -590,6 +663,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     run = {
         "fetch": lambda: fetch(run_dir),
+        "download": lambda: download(run_dir),
         "evaluate": lambda: evaluate(run_dir, args.device),
         "compare": lambda: compare(run_dir, args.run_id),
     }
