@@ -5,7 +5,9 @@
 [PIE stage-one design](../specs/2026-10-16-pie-geneeffect-ladder-design.md) (plan
 [2026-10-16](../specs/2026-10-16-pie-ladder-inputs-plan.md)); the definitions are in
 [protocol §15](../03-geneeffect-protocol.md#15-stage-one-inputs) and the build record in
-[`results/ladder_inputs/`](../../results/ladder_inputs/README.md). No model has read them yet.
+[`results/ladder_inputs/`](../../results/ladder_inputs/README.md). The stage-one model (protocol §16) reads them
+through `src/data/ladder_reader.py`, which refuses a `pie/index.json` whose lines or genes are not `lines.parquet`'s
+and the decode panel in order; no model has been trained on them yet.
 
 ## Role
 

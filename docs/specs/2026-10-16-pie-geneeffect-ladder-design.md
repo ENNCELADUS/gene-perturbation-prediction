@@ -2,7 +2,9 @@
 
 **Status:** agreed 2026-10-16 (two grill sessions after the review of the noise diagnosis; checked by a Codex
 alignment review and an Opus review). Task 1 done 2026-10-16 ([record](../../results/pie_reproduction/README.md): the
-released checkpoints reproduce to rounding); Tasks 2–7 not built. Revised 2026-10-16 after Task 1: PIE's DepMap
+released checkpoints reproduce to rounding); Task 2 done 2026-10-17
+([record](../../results/ladder_inputs/README.md)); Task 3's shared stack built 2026-10-17 (plan Wave 1A, §3.3 "As
+built"; protocol §16), not yet run. Revised 2026-10-16 after Task 1: PIE's DepMap
 source is masked in every pass (§3.2) and Task 4's GeneEffect profile is masked by fold, not by line. Revised
 2026-10-16 in the Task 2 grill ([plan](2026-10-16-pie-ladder-inputs-plan.md)): the frame is 981 lines (§4.1), a line
 with cells always reads its cells (pseudo-bulk from per-cell CP10K, §4.3), and every arm reads the Cellosaurus text
@@ -141,6 +143,18 @@ viability embedding `V(c, g)`, saved for every line × gene for stage two. Arms 
 
 The gene encoder in Task 3 is a projection of `gene_text`; Task 4 chooses its other sources. Selection is on
 validation selective Spearman; the winner carries to Tasks 4–7.
+
+**As built (2026-10-17, plan Wave 1A; protocol §16).** Choices the text above leaves open:
+- the pair input of a delta is `[Δ centred within gene ; frame mean Δ̄_g]`; for ΔE, `E(after) − E(before)` minus `E`
+  at the frame-mean states (`E(shift_g) − E(0)`, the before-state's frame mean being 0), beside that frame-mean term;
+- the ΔH and ΔE rows append the scalar own-gene slots `own_dp` and `own_x` (each `[centred ; frame mean]`); the 768-d
+  `own_h` is left out (it would double the resident memory); ΔL rows carry no slot, so they stay expression-blind;
+- the line-permuted control permutes, per gene, across all 1,036 lines, and moves the delta, its slots and (for ΔE)
+  the before-state together;
+- a line token is one per gene of the panel ∪ the mean channel's space, carrying both values with their flags;
+- `V(c, g)` is Cilantro's `l3` output before its ReLU, as `FiLMNet128` returns it;
+- the base is constant within each gene, so epoch 0 (the untrained model) has an undefined selective Spearman and is a
+  `best.pt` candidate only when that is defined; its within-gene R² is the base row's.
 
 **Matched inputs.** The frozen PIE must read its own input, the mean over cells of `log1p` CP10K, which moves with a
 gene's variance and dropout, plus the Cellosaurus text. So that architecture contrasts compare models rather than
