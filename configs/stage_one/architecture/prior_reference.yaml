@@ -1,0 +1,9 @@
+# Task 3's linear reference: the default prior (the ladder config's prior_config, its reference row)
+# refitted on the frame's 981 lines' mean channel and labels, the input every arm reads; also the 128
+# component scores the components reader reads. `hpc/run.sh stage-one-prior CONFIG --run-id prior_reference_seed0`
+# (project environment, CPU).
+kind: prior_reference
+task: architecture
+seed: 0
+output_root: outputs/stage_one
+ladder_config: configs/stage_one/ladder_inputs.yaml
