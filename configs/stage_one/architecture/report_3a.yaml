@@ -33,6 +33,10 @@ rows:
   - {name: lineage only, kind: run, config: configs/stage_one/architecture/lineage_only.yaml}
   - {name: text only, kind: run, config: configs/stage_one/architecture/text_only.yaml}
   - {name: own x only, kind: run, config: configs/stage_one/architecture/own_x_only.yaml}
+  - {name: film dE selective, kind: run, config: configs/stage_one/architecture/film_dE_selective.yaml}
+  - {name: film dE full, kind: run, config: configs/stage_one/architecture/film_dE_full.yaml}
+  - {name: multi dE selective, kind: run, config: configs/stage_one/architecture/multi_dE_selective.yaml}
+  - {name: multi dE full, kind: run, config: configs/stage_one/architecture/multi_dE_full.yaml}
 contrasts:
   - [film dH, direct readout]
   - [film dE, direct readout]
@@ -64,3 +68,5 @@ contrasts:
   - [film dH, own x only]
   - [film dE, own x only]
   - [text only, lineage only]
+  - [film dE full, film dE selective]
+  - [multi dE full, multi dE selective]

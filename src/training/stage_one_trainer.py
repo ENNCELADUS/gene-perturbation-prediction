@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
@@ -243,7 +244,13 @@ def fit(
             ", ".join(
                 f"{key} {value:.4g}" if isinstance(value, float) else f"{key} {value}"
                 for key, value in metrics.items()
-                if key in ("train_loss", "val_selective_spearman", "val_within_gene_r2")
+                if key
+                in (
+                    "train_loss",
+                    "epoch_seconds",
+                    "val_selective_spearman",
+                    "val_within_gene_r2",
+                )
             ),
             " (best)" if improved else "",
         )
@@ -255,6 +262,7 @@ def fit(
     ):
         epoch = state.next_epoch
         model.train()
+        started = time.monotonic()
         losses = []
         for genes, lines in epoch_steps(data, config, generator):
             target = data.targets[lines][:, genes].T
@@ -271,7 +279,11 @@ def fit(
                 ema.update_parameters(model)
             state.global_step += 1
             losses.append(float(loss.detach()))
-        metrics = {"train_loss": float(np.mean(losses)) if losses else None}
+        metrics = {
+            "train_loss": float(np.mean(losses)) if losses else None,
+            # The updates alone, without validation: a streamed input's I/O shows here.
+            "epoch_seconds": time.monotonic() - started,
+        }
         metrics |= validate(validated)
         judge(epoch, metrics)
     if not best.is_file():

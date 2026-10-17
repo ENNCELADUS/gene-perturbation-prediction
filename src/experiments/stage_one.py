@@ -153,13 +153,37 @@ def run_directory(config: Mapping[str, Any], run_id: str, fold: int | None) -> P
 
 
 def predictions_frame(
-    setup: Setup, m_g: pd.Series, z: np.ndarray, lines: Sequence[str]
+    setup: Setup,
+    m_g: pd.Series,
+    z: np.ndarray,
+    lines: Sequence[str],
+    genes: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    """Scoring units ``(m_g - mu_g) / sigma_g + z`` on every gene; ``z`` covers the
-    decode panel (panel genes x lines), every other gene predicts the base."""
+    """Scoring units ``(m_g - mu_g) / sigma_g + z`` on every gene; ``z`` covers
+    ``genes`` (default the decode panel; genes x lines), every other gene predicts
+    the base."""
     frame = reader.base_prediction(setup.ladder, m_g, lines)
-    frame.loc[:, setup.ladder.panel] += z.T.astype(np.float64)
+    frame.loc[:, list(setup.ladder.panel if genes is None else genes)] += z.T.astype(
+        np.float64
+    )
     return frame
+
+
+def run_genes(setup: Setup, config: Mapping[str, Any]) -> tuple[list[str], dict]:
+    """The genes a run trains on and predicts (``data.genes``) and their coverage:
+    the decode panel, or the selective genes in it that have a full-panel profile
+    delta (``pie/full/``), the same set for both matched profile rows."""
+    ladder = setup.ladder
+    if config["data"]["genes"] == "panel":
+        return ladder.panel, {"genes": "panel", "count": len(ladder.panel)}
+    selective = [g for g in ladder.panel if bool(ladder.genes.at[g, "selective"])]
+    found = reader.full_panel_genes(ladder, selective)
+    return found, {
+        "genes": "selective_full",
+        "count": len(found),
+        "selective_in_panel": len(selective),
+        "without_full_panel": [g for g in selective if g not in set(found)],
+    }
 
 
 # --- inputs on the device ------------------------------------------------------------
@@ -170,9 +194,10 @@ class Resident:
     panel; the delta (bf16 on CUDA, by gene chunk from its memory map) with its
     frame mean and the own-gene slots; the profile delta's states; a line-level
     input; the line tokens and Cellosaurus text; PIE's input as each gene's own
-    evidence. ``batch(genes, lines)`` assembles a ``PairBatch`` from panel-gene and
-    line positions; a permuted control reads, for each gene, another line's delta
-    and slots (a fixed permutation of the lines, seeded)."""
+    evidence; the full-panel profile delta streamed by gene chunk (``FullStream``).
+    ``batch(genes, lines)`` assembles a ``PairBatch`` from positions in ``genes``
+    (the run's genes) and line positions; a permuted control reads, for each gene,
+    another line's delta and slots (a fixed permutation of the lines, seeded)."""
 
     def __init__(
         self,
@@ -181,6 +206,7 @@ class Resident:
         fold: int | None,
         targets: reader.Targets,
         device: torch.device,
+        genes: Sequence[str],
     ) -> None:
         ladder, data = setup.ladder, config["data"]
         arm, kind = config["model"]["arm"], data["input"]
@@ -188,6 +214,10 @@ class Resident:
         dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
         panel = ladder.panel
         n_lines, n_genes = len(ladder.line_ids), len(panel)
+        at = {g: i for i, g in enumerate(panel)}
+        self.panel_index = torch.tensor([at[g] for g in genes], device=device)
+        self.full = None
+        self.full_record: dict[str, Any] | None = None
         position = {g: i for i, g in enumerate(str(g) for g in ladder.genes.index)}
         on_panel = [position[g] for g in panel]
         sources = reader.gene_sources(ladder, data["gene_sources"])
@@ -215,6 +245,26 @@ class Resident:
             )
             self.width = int(self.delta.shape[2])
             self.delta_mean = torch.from_numpy(means[kind]).to(device)
+        if kind == "dE_full":
+            profile = reader.full_profile(ladder, reader.pie_input(ladder), genes)
+            if profile.genes != tuple(genes):
+                raise ValueError(
+                    f"no full-panel profile delta for {profile.missing[:10]}"
+                )
+            frame = [ladder.line_ids.index(m) for m in ladder.frame]
+            self.full = reader.FullStream(profile, frame, device, dtype)
+            self.before = torch.from_numpy(profile.before).to(device)
+            self.width = int(profile.before.shape[1])
+            self.full_record = {
+                "genes": len(profile.genes),
+                "frame_mean_pass_seconds": self.full.seconds,
+                "frame_mean_pass_bytes": self.full.bytes_read,
+            }
+            log.info(
+                "full-panel profile delta: %d genes, frame-mean pass %.0f s",
+                len(profile.genes),
+                self.full.seconds,
+            )
         if kind == "dE":
             states = reader.profile_states(
                 ladder, reader.pie_input(ladder), means, reader.basis(ladder)
@@ -322,6 +372,7 @@ class Resident:
     def batch(self, genes: torch.Tensor, lines: torch.Tensor):
         from src.model.stage_one import PairBatch
 
+        run_genes, genes = genes, self.panel_index[genes]
         rows = lines.unsqueeze(0).expand(len(genes), -1)
         if self.permutation is not None:
             rows = self.permutation[genes][:, lines]
@@ -333,10 +384,14 @@ class Resident:
         if self.delta is not None:
             batch.delta = self.delta[pick]
             batch.delta_mean = self.delta_mean[genes]
+        if self.full is not None:
+            batch.delta = self.full.rows(run_genes.cpu().numpy(), rows.cpu().numpy())
+            batch.shift = self.full.means[run_genes]
         if self.before is not None:
             # A permuted control reads the other line's before-state too.
             batch.before = self.before[lines if self.permutation is None else rows]
-            batch.shift = self.shift[genes]
+            if self.full is None:
+                batch.shift = self.shift[genes]
         if self.own is not None:
             batch.own = self.own[pick]
             batch.own_mean = self.own_mean[genes]
@@ -408,7 +463,8 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
     ladder = setup.ladder
     targets = setup.targets(fold)
     torch_device = torch.device(device)
-    resident = Resident(setup, config, fold, targets, torch_device)
+    genes, coverage = run_genes(setup, config)
+    resident = Resident(setup, config, fold, targets, torch_device, genes)
     model = make_model(config, resident)
     fresh = None
     trunk = config["model"]["trunk"]
@@ -416,20 +472,23 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
         fresh = warm_start_trunk(model, trunk["warm_start"])
     panel, lines = ladder.panel, ladder.line_ids
     position = {m: i for i, m in enumerate(lines)}
-    table = targets.values.loc[:, panel].to_numpy(np.float32)
-    labels = torch.full((len(lines), len(panel)), torch.nan, device=torch_device)
+    table = targets.values.loc[:, genes].to_numpy(np.float32)
+    labels = torch.full((len(lines), len(genes)), torch.nan, device=torch_device)
     trained = torch.tensor([position[m] for m in targets.lines], device=torch_device)
     labels[trained] = torch.from_numpy(table).to(torch_device)
-    data = TrainingData(resident.batch, labels, trained, len(panel))
+    data = TrainingData(resident.batch, labels, trained, len(genes))
     definitions = setup.definitions
     val = ladder.role_lines("val")
     val_positions = torch.tensor([position[m] for m in val], device=torch_device)
     val_truth = setup.truth(val)
 
     def validate(module: torch.nn.Module) -> dict[str, Any]:
-        z = predict(module, resident.batch, val_positions, len(panel), config)
+        z = predict(module, resident.batch, val_positions, len(genes), config)
         scores = wide_scores(
-            predictions_frame(setup, targets.m_g, z, val), val_truth, definitions, panel
+            predictions_frame(setup, targets.m_g, z, val, genes),
+            val_truth,
+            definitions,
+            panel,
         )
         return {f"val_{key}": value for key, value in scores.items()}
 
@@ -440,13 +499,13 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
         run_dir / ".V.npy.tmp",
         mode="w+",
         dtype=np.float16,
-        shape=(len(lines), len(panel), 32),
+        shape=(len(lines), len(genes), 32),
     )
     z = predict(
         best,
         resident.batch,
         torch.arange(len(lines), device=torch_device),
-        len(panel),
+        len(genes),
         config,
         viability=viability,
     )
@@ -457,13 +516,13 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
     write_json(
         run_dir / "V.json",
         {
-            "layout": "lines x panel genes x 32, float16",
+            "layout": "lines x the run's genes x 32, float16",
             "lines": lines,
-            "genes": panel,
+            "genes": genes,
             "in_sample": [m in in_sample for m in lines],
         },
     )
-    predictions = predictions_frame(setup, targets.m_g, z, lines)
+    predictions = predictions_frame(setup, targets.m_g, z, lines, genes)
     temporary = run_dir / ".predictions.parquet.tmp"
     predictions.astype(np.float32).to_parquet(temporary)
     os.replace(temporary, run_dir / "predictions.parquet")
@@ -497,6 +556,8 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
             "warm_start_fresh": fresh,
             "lineage_classes": resident.line_classes,
             "profile_variance_kept": resident.variance_kept,
+            "genes": coverage,
+            "full_panel_stream": resident.full_record,
         },
     )
     log.info(

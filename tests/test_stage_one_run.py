@@ -81,6 +81,14 @@ def _write_pie(root: Path, rng: np.random.Generator) -> np.ndarray:
     (pie / "index.json").write_text(
         json.dumps({"genes": panel, "lines": lines, "arrays": shapes})
     )
+    # The full-panel predicted change, kept for the selective genes in the panel;
+    # the last one has none (coverage is reported, not assumed).
+    selective = [g for g in panel if bool(tables.genes.at[g, "selective"])]
+    (pie / "full").mkdir()
+    for gene in selective[:-1]:
+        np.save(
+            pie / "full" / f"{gene}.npy", changes[panel.index(gene)].astype(np.float32)
+        )
     return changes
 
 
@@ -195,6 +203,71 @@ def test_profile_states_round_trip(world):
         after = states.after(np.asarray(stored[gene]), gene, lines)
         expected = changes[gene] @ components.T
         assert np.allclose(after - states.before, expected, atol=1e-4)
+
+
+def test_the_full_panel_profile_round_trips_and_reports_coverage(world):
+    _, ladder_root, changes = world
+    tables = reader.read_ladder(ladder_root)
+    panel = tables.panel
+    selective = [g for g in panel if bool(tables.genes.at[g, "selective"])]
+    assert len(selective) >= 3
+    pie_input = reader.pie_input(tables)
+    profile = reader.full_profile(tables, pie_input, selective)
+    assert profile.genes == tuple(selective[:-1])
+    assert profile.missing == (selective[-1],)
+    frame = pie_input.loc[tables.frame].to_numpy().mean(axis=0)
+    assert np.allclose(profile.before, pie_input.to_numpy() - frame, atol=1e-5)
+    lines = list(range(len(tables.line_ids)))
+    for gene in profile.genes:
+        after = profile.after(gene, lines)
+        expected = changes[panel.index(gene)]
+        assert np.allclose(after - profile.before, expected, atol=1e-5)
+    rows = [tables.line_ids.index(m) for m in tables.frame]
+    stream = reader.FullStream(profile, rows, torch.device("cpu"), torch.float32)
+    block = stream.rows(np.array([0, 1]), np.array([2, 0, 5]))
+    for i, gene in enumerate(profile.genes[:2]):
+        full = changes[panel.index(gene)]
+        assert np.allclose(block[i] + stream.means[i], full[[2, 0, 5]], atol=1e-5)
+        assert np.allclose(stream.means[i], full[rows].mean(axis=0), atol=1e-5)
+
+
+def test_the_full_panel_projects_onto_the_512_component_input(world):
+    """Projected on the basis, the full-panel states are the 512-component states:
+    a state encoder whose first layer is W C on the full panel computes exactly the
+    change W reads from the components."""
+    from src.model.stage_one import StateEncoder
+
+    _, ladder_root, changes = world
+    tables = reader.read_ladder(ladder_root)
+    index = reader.check_pie_index(tables)
+    basis = reader.basis(tables)
+    components = basis["components"].astype(np.float64)
+    pie_input = reader.pie_input(tables)
+    states = reader.profile_states(
+        tables, pie_input, reader.frame_means(tables, index), basis
+    )
+    selective = [g for g in tables.panel if bool(tables.genes.at[g, "selective"])]
+    profile = reader.full_profile(tables, pie_input, selective)
+    assert np.allclose(profile.before @ components.T, states.before, atol=1e-4)
+    stored = reader.open_delta(tables, "dE", index)
+    torch.manual_seed(0)
+    small = StateEncoder(components.shape[0], 7)
+    full = StateEncoder(components.shape[1], 7)
+    with torch.no_grad():
+        full.first.weight.copy_(small.first.weight @ torch.tensor(components).float())
+        full.first.bias.copy_(small.first.bias)
+        full.second.load_state_dict(small.second.state_dict())
+    for gene in profile.genes:
+        g = tables.panel.index(gene)
+        step = np.asarray(profile.change(gene))
+        projected = np.asarray(stored[g]) + states.shift[g]
+        assert np.allclose(step @ components.T, projected, atol=1e-4)
+        with torch.no_grad():
+            reads_full = full.change(torch.tensor(profile.before), torch.tensor(step))
+            reads_basis = small.change(
+                torch.tensor(states.before), torch.tensor(projected)
+            )
+        assert torch.allclose(reads_full, reads_basis, atol=1e-4)
 
 
 # --- runs --------------------------------------------------------------------------
@@ -443,3 +516,46 @@ def _check_reads_are_bound(
     with pytest.raises(ValueError, match="other inputs"):
         stage_one.report(report_path, "cpu")
     fingerprint.write_text(original)
+
+
+def test_matched_profile_rows_train_on_the_same_genes_and_are_contrasted(world):
+    root = world[0]
+    setup = _setup(world)
+    selective = [
+        g for g in setup.ladder.panel if bool(setup.ladder.genes.at[g, "selective"])
+    ]
+    runs = {}
+    for name in ("film_dE_selective", "film_dE_full"):
+        path = _config(root, name)
+        torch.manual_seed(0)
+        runs[name] = (path, stage_one.run(path, None, None, "cpu"))
+        row = json.loads((runs[name][1] / "row.json").read_text())
+        assert row["genes"]["count"] == len(selective) - 1
+        assert row["genes"]["without_full_panel"] == [selective[-1]]
+        record = json.loads((runs[name][1] / "V.json").read_text())
+        assert record["genes"] == selective[:-1]
+        assert np.load(runs[name][1] / "V.npy").shape[1] == len(selective) - 1
+        assert all(e["epoch_seconds"] >= 0 for e in row["history"][1:])
+        predictions = pd.read_parquet(runs[name][1] / "predictions.parquet")
+        others = [g for g in setup.ladder.genes.index if g not in set(selective[:-1])]
+        base = reader.base_prediction(setup.ladder, setup.ladder.genes["m_g"], ["x"])
+        assert np.allclose(predictions[others], base[others].to_numpy())
+    full_row = json.loads((runs["film_dE_full"][1] / "row.json").read_text())
+    assert full_row["full_panel_stream"]["genes"] == len(selective) - 1
+    report = {
+        "kind": "report",
+        "task": "architecture",
+        "output_root": str(root / "outputs"),
+        "ladder_config": str(root / "ladder.yaml"),
+        "bootstrap_repeats": 20,
+        "rows": [
+            {"name": "512", "kind": "run", "config": str(runs["film_dE_selective"][0])},
+            {"name": "full", "kind": "run", "config": str(runs["film_dE_full"][0])},
+        ],
+        "contrasts": [["full", "512"]],
+    }
+    path = root / "configs" / "report_profile.yaml"
+    path.write_text(yaml.safe_dump(report))
+    results = json.loads((stage_one.report(path, "cpu") / "results.json").read_text())
+    contrast = results["contrasts"][0]["val"]["selective_spearman"]
+    assert contrast["genes"] <= len(selective) - 1

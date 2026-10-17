@@ -1070,6 +1070,20 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   own evidence at `train.evidence_dropout`. Its warm row loads PIE's latents, norms, blocks, gene query MLP, control
   evidence encoder and text projection by an explicit, strict name map (the token channel's attention starts fresh).
   The gene encoder in Task 3 is a projection of `gene_text` (PIE's `gene_query_mlp` shape).
+- **Full-panel profile delta** (design §3.2's check of the compression). `data.genes: selective_full` restricts a run
+  to the selective genes in the panel with a full-panel predicted change (`pie/full/<gene>.npy`, lines × panel,
+  uncentred; `row.json` reports how many of the 4,269 have one and which lack it); every other gene predicts the base,
+  and `V.npy` covers the run's genes. `data.input: dE_full` reads ΔE on the full panel: before `x_c − x̄_frame` (PIE's
+  input), after plus `Δ̂(c, g)`, through the state encoder's fp32 change path with a 17,607-wide first layer. `Δ̂`
+  stays in its memory maps (`ladder_reader.FullStream`): each batch copies its genes' rows for its lines, centred on the
+  gene's frame mean (computed in one pass at the start, which also fills the host page cache), to the GPU in bf16.
+  Matched rows (`film_dE_selective`/`film_dE_full`, `multi_dE_selective`/`multi_dE_full`) share genes and steps;
+  `report_3a` contrasts full minus 512-component on the genes defined on both sides. Every epoch logs its update time
+  (`epoch_seconds`), and the full rows' `row.json` the frame-mean pass's seconds and bytes. Cost (an estimate until the
+  first epochs are logged): the files hold ~311 GB (4,269 × 1,036 × 17,607 fp32); an epoch reads ~295 GB of frame rows
+  (host gather and transfer, about 1–1.5 min from page cache, several minutes from disk) and ~1.1 × 10¹⁴ fp32 FLOP in
+  the first layer; 30 epochs are about 0.5–1 h per run, so the two full families × (main + 5 folds) take roughly
+  6–10 GPU-hours, plus the start pass per run; the 512-component selective rows cost about a quarter of a panel row.
 - **Controls and reference rows.** No-Δ FiLM (the multi-encoder with a learned constant for Δ); line-permuted Δ (per
   gene, the delta, its slots and the before-state read from a seeded permutation of all lines); the shared components
   reader, lineage only (one-hot over the training lines' lineages), Cellosaurus text only and own expression only, each

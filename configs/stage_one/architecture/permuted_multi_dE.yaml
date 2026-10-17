@@ -14,6 +14,7 @@ data:
   own_slots: [own_dp, own_x]
   permuted: true
   prior_run: null
+  genes: panel
 model:
   arm: multi_encoder
   gene_width: 128

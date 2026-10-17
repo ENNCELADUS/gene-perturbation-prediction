@@ -184,6 +184,103 @@ def profile_states(
     )
 
 
+@dataclass(frozen=True)
+class FullProfile:
+    """The profile delta on the full decode panel, for the genes the pass kept it
+    (the selective genes in the panel and the pilot genes): ``pie/full/<gene>.npy``,
+    lines x panel, PIE's predicted change ``Delta_hat`` as written (uncentred).
+
+    ``before`` (lines x panel) is ``x_c - x_frame`` from PIE's input; the after-state
+    of (c, g) is ``before[c] + Delta_hat[g][c]``. ``genes`` are the requested genes
+    with a file, in the order asked; ``missing`` those without one.
+    """
+
+    genes: tuple[str, ...]
+    missing: tuple[str, ...]
+    before: np.ndarray
+    root: Path
+
+    def change(self, gene: str) -> np.ndarray:
+        """Gene g's predicted change, memory-mapped (lines x panel, fp32)."""
+        return np.load(self.root / "pie" / "full" / f"{gene}.npy", mmap_mode="r")
+
+    def after(self, gene: str, lines: Sequence[int]) -> np.ndarray:
+        return self.before[list(lines)] + np.asarray(self.change(gene)[list(lines)])
+
+
+def full_panel_genes(ladder: Ladder, genes: Sequence[str]) -> list[str]:
+    """The ``genes`` with a full-panel profile delta file, in the order given."""
+    folder = ladder.root / "pie" / "full"
+    return [g for g in genes if (folder / f"{g}.npy").is_file()]
+
+
+def full_profile(
+    ladder: Ladder, pie_input_frame: pd.DataFrame, genes: Sequence[str]
+) -> FullProfile:
+    """The full-panel profile delta of ``genes`` (panel genes); every file found is
+    checked to be lines x panel fp32."""
+    if list(pie_input_frame.columns) != ladder.panel:
+        raise ValueError("PIE's input is not on the decode panel")
+    folder = ladder.root / "pie" / "full"
+    found = full_panel_genes(ladder, genes)
+    shape = (len(ladder.line_ids), len(ladder.panel))
+    for gene in found:
+        array = np.load(folder / f"{gene}.npy", mmap_mode="r")
+        if array.shape != shape or array.dtype != np.float32:
+            raise ValueError(f"pie/full/{gene}.npy is {array.dtype} {array.shape}")
+    x = pie_input_frame.loc[ladder.line_ids].to_numpy(dtype=np.float64)
+    centre = pie_input_frame.loc[ladder.frame].to_numpy(dtype=np.float64).mean(axis=0)
+    return FullProfile(
+        genes=tuple(found),
+        missing=tuple(g for g in genes if g not in set(found)),
+        before=(x - centre).astype(np.float32),
+        root=ladder.root,
+    )
+
+
+class FullStream:
+    """The full-panel profile delta streamed to a device by gene chunk: far too
+    large to be resident (~300 GB fp32 for the selective genes), it stays in its
+    memory maps, and each batch copies its genes' rows for its lines, centred on the
+    gene's frame-line mean, to the device in ``dtype``.
+
+    The frame means are computed once at construction, one pass over every gene's
+    frame rows (which also brings the files into the host page cache: later epochs
+    read from memory when it holds them); ``seconds`` and ``bytes_read`` record it.
+    """
+
+    def __init__(
+        self,
+        profile: FullProfile,
+        frame_rows: Sequence[int],
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> None:
+        import time
+
+        self.arrays = [profile.change(g) for g in profile.genes]
+        self.device, self.dtype = device, dtype
+        frame = np.asarray(sorted(frame_rows))
+        start = time.monotonic()
+        means = np.empty((len(self.arrays), profile.before.shape[1]), np.float32)
+        for i, array in enumerate(self.arrays):
+            means[i] = np.asarray(array[frame], dtype=np.float64).mean(axis=0)
+        self.seconds = time.monotonic() - start
+        self.bytes_read = int(len(self.arrays) * len(frame) * means.shape[1] * 4)
+        self.means = torch.from_numpy(means).to(device)
+
+    def rows(self, genes: np.ndarray, lines: np.ndarray) -> torch.Tensor:
+        """genes x lines x panel on the device: gene i's rows ``lines[i]`` (a 1-d
+        ``lines`` is shared by every gene), minus its frame mean."""
+        lines = np.broadcast_to(lines, (len(genes), lines.shape[-1]))
+        out = np.empty((len(genes), lines.shape[1], self.means.shape[1]), np.float32)
+        for i, gene in enumerate(genes):
+            out[i] = self.arrays[int(gene)][lines[i]]
+        block = torch.from_numpy(out).to(self.device)
+        block -= self.means[torch.as_tensor(genes, device=self.device)].unsqueeze(1)
+        return block.to(self.dtype)
+
+
 # --- tables -------------------------------------------------------------------------
 
 

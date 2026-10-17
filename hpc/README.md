@@ -244,7 +244,10 @@ CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one-report $A/report_3a.yaml            
 ```
 
 Each run holds its delta on the GPU in bf16 (ΔH is 28 GB, ΔE 19 GB), copied by gene chunk from the memory-mapped
-fp32 file, so one run fits one H20; the queue logs each run to `outputs/stage_one/<task>/logs/<run>.log`, where the
+fp32 file, so one run fits one H20. The exceptions are `film_dE_full` and `multi_dE_full`, which stream the
+full-panel predicted change (~311 GB under `pie/full/`) from its memory maps every epoch: they want it in the host
+page cache (1.5 TB on the H20; the frame-mean pass at their start fills it), and each epoch's `epoch_seconds` in the
+log shows whether they read from memory (about 1–1.5 min) or from disk. The queue logs each run to `outputs/stage_one/<task>/logs/<run>.log`, where the
 epoch-0 line (before any update) shows validation within-gene R² equal to the base row's in the report (its selective
 Spearman is undefined: the base is constant within each gene).
 

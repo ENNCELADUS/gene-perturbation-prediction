@@ -230,7 +230,8 @@ class DeltaFiLM(nn.Module):
     """Pair input -> Linear ``hidden`` -> ReLU -> FiLM(condition) -> tail.
 
     ``input`` names what the pair input is: a delta (``dH``, ``dL``: the stored
-    delta beside its frame mean; ``dE``: ``E(after) - E(before)`` beside its value
+    delta beside its frame mean; ``dE`` (on the 512-component basis) and ``dE_full``
+    (on the full decode panel): ``E(after) - E(before)`` beside its value
     at the frame-mean states, ``E(shift_g) - E(0)``), a line-level input
     (``components``, ``lineage``, ``text``), ``own_x`` (the gene's own expression
     beside its frame mean) or ``none`` (a learned constant). Own-gene slots, when
@@ -257,7 +258,7 @@ class DeltaFiLM(nn.Module):
         self.state = state
         # [value ; frame mean] for a delta (with its own slots) and own_x.
         width = {"own_x": 2 * input_dim}.get(input, input_dim)
-        if input in ("dH", "dL", "dE"):
+        if input in ("dH", "dL", "dE", "dE_full"):
             width = 2 * input_dim + 2 * own_dim
         if input == "none":
             self.constant = nn.Parameter(torch.zeros(hidden))
@@ -272,7 +273,7 @@ class DeltaFiLM(nn.Module):
         genes, lines = batch.shape
         if self.input in ("dH", "dL"):
             parts = [batch.delta, _per_gene(batch.delta_mean, lines)]
-        elif self.input == "dE":
+        elif self.input in ("dE", "dE_full"):
             # The frame-mean term is E at the frame-mean states (before 0, after
             # shift_g): for a linear E, exactly the frame mean of the change.
             before = batch.before
@@ -430,7 +431,7 @@ def build_model(config: Mapping[str, object], dims: InputDims) -> nn.Module:
         if arm == "direct_readout":
             return direct
     state = None
-    if kind == "dE":
+    if kind in ("dE", "dE_full"):
         state = StateEncoder(dims.delta, int(model["state_width"]))
     context, context_width = None, 0
     if model["context"] is not None:
@@ -443,7 +444,9 @@ def build_model(config: Mapping[str, object], dims: InputDims) -> nn.Module:
         )
     film = DeltaFiLM(
         input=kind,
-        input_dim=int(model["state_width"]) if kind == "dE" else dims.delta,
+        input_dim=int(model["state_width"])
+        if kind in ("dE", "dE_full")
+        else dims.delta,
         own_dim=dims.own,
         gene_encoder=GeneEncoder(dims.gene_sources, int(model["gene_width"])),
         context=context,
