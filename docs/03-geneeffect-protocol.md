@@ -1018,7 +1018,8 @@ in code.
   same-context blocks are empty); the reference pass reads the line's context alone. Stored: `dH` (last decoder-layer
   features pooled over the panel, knockdown minus reference), `dE` (the predicted change in mean expression, the softmax
   expectation over the delta-p bin centres at PIE's temperature, as coordinates on 512 principal components fitted on
-  the pilot's frame-line pairs; the full panel kept for the selective and pilot genes), `dL` (mean-pooled latents,
+  the pilot's frame-line pairs; the full panel kept for the selective and pilot genes; the before-state is not stored:
+  a reader projects the line's PIE input, centred on the frame mean, onto the same components), `dL` (mean-pooled latents,
   knockdown minus reference), and g's own feature, predicted change and control mean. The decode is PIE's
   (`PieModel._decode_group`) re-implemented step for step with three exact hoists (the decoder's memory keys and values
   once per batch, the control-mean encoding once per line batch and chunk for the run, the evidence-block encoders on one

@@ -89,7 +89,7 @@ flat from 7/8 to all 947 labelled lines (−0.0006 [−0.0062, +0.0050] validati
 prior, whose within-gene R² is 0.043, and Cilantro's in-sample stage one does not beat it on its covered pairs.
 The review of that diagnosis (2026-10-15) found its nulls cannot separate absent information from lossy summaries
 or a linear reader; its open corrections are listed in the design's §6. The next model is a **PIE-based stage-one
-model** ([design](docs/specs/2026-10-16-pie-geneeffect-ladder-design.md); Task 1 done, the rest not built): PIE's released cross-dataset
+model** ([design](docs/specs/2026-10-16-pie-geneeffect-ladder-design.md), [plan for Tasks 3–9](docs/specs/2026-10-17-pie-stage-one-plan.md); Tasks 1 and 2 done, the rest not built): PIE's released cross-dataset
 checkpoint, vendored and frozen, as a virtual cell (its DepMap source masked); an architecture stage on the
 377 single-cell lines plus the prior's bulk-only lines (direct readout, Cilantro-style virtual cell + FiLM on three PIE deltas, multi-encoder, hybrid;
 Cilantro's tail with its 32-d viability embedding saved for stage two); then the gene query, a data ladder of
@@ -97,6 +97,12 @@ cell-reading arms with shuffled, capacity, summary and QC controls, a planted po
 Task 1 (2026-10-16, [record](results/pie_reproduction/README.md)): PIE is vendored in `third_party/pie/` (`21a526a`,
 run in `.venv-pie`), and its five released checkpoints re-scored on the H20 match the released metrics to rounding
 (every `all`-row metric within 5.4e-5; the model card's 0.4155 ± 0.0286 AUPRC regenerated).
+Task 2 (2026-10-17, [record](results/ladder_inputs/README.md)): every stage-one input is built under
+`data/geneeffect_joint/v2/ladder/`, including the frozen PIE's deltas for 1,036 lines × 17,607 genes (DepMap source
+masked; masking costs PIE 0.27 → 0.11 Spearman LFC on unseen Replogle perturbations). The 2026-10-17 revision adds
+**cell states** (design §3.5, Tasks 8 and 9): shared state vocabularies, each state's own expression read through the
+frozen PIE, the line's prediction a mixture of model-implied state scores, against permuted-membership and QC-state
+controls; the next builds are Task 3 and Task 8, in parallel.
 The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.

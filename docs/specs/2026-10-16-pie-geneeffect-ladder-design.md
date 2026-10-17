@@ -6,7 +6,9 @@ released checkpoints reproduce to rounding); Tasks 2–7 not built. Revised 2026
 source is masked in every pass (§3.2) and Task 4's GeneEffect profile is masked by fold, not by line. Revised
 2026-10-16 in the Task 2 grill ([plan](2026-10-16-pie-ladder-inputs-plan.md)): the frame is 981 lines (§4.1), a line
 with cells always reads its cells (pseudo-bulk from per-cell CP10K, §4.3), and every arm reads the Cellosaurus text
-as PIE does (no text-off rows). Evidence it
+as PIE does (no text-off rows). Revised 2026-10-17 (a brainstorm after a literature survey of learned cell states, kept
+in the local notes as "Learned cell states for GeneEffect", and a Codex review of the draft): cell states read through
+the frozen PIE (§3.5, Tasks 8 and 9). Evidence it
 starts from: the [noise diagnosis](2026-10-12-noise-diagnosis-design.md) (its §6 lists the open corrections) and its records
 ([noise diagnosis](../../results/noise_diagnosis_seed0/README.md), [learning curve](../../results/noise_lines_seed0/README.md)).
 PIE: Arc Institute's "Perturbation is Everything" (bioRxiv, 5 October 2026), code
@@ -28,6 +30,9 @@ line's cells. In order:
 3. **Encoders.** Does the Tx1 pipeline (pretrained encoder, raw-count input, its vocabulary) add over a standard HVG
    encoding of the same cells?
 4. **Sensitivity.** Can the model recover planted distribution-only terms of known kind and size?
+5. **States.** Read as a mixture of shared cell states, each state's own expression run through the frozen PIE, does a
+   line predict GeneEffect better than from its whole-line mean, and what per-state account of its GeneEffect does the
+   model give?
 
 Every arm trains on the same labelled lines as the default prior (§4.1), so its 0.2045 / 0.2025 is a like-for-like
 bar.
@@ -47,6 +52,12 @@ far as a capable reader and planted terms allow; no null can show that the raw c
 | 5. Data ladder | Cell-reading arms and their controls, every contrast | 4 | 4 × H20 |
 | 6. Planted control | Recovery of planted distribution-only terms | 5 | 4 × H20 |
 | 7. Cell-count curve | Accuracy against cells per line, repeated draws | 5 | 1 × H20 |
+| 8. State telemetry | Frozen state vocabularies, the frozen PIE on state inputs and their controls; no training | 2 | H20 CPU + 4 × H20 |
+| 9. Cell states | The states pilot, then the three ways of learning states (frozen, fine-tuned, end to end) | 4, 8 | 4 × H20 |
+
+Task 8 runs as soon as Task 2's inputs exist; Task 9 runs beside Task 5. People read Task 8 before choosing the
+vocabularies Task 9 precomputes, and read Task 9's frozen-state pilot before its fine-tuned and end-to-end options are
+built.
 
 Embedding the Cellosaurus text (Task 2) sends public Cellosaurus records to OpenAI's embedding API and needs the
 user's key; it runs on the Mac (the H20 cannot reach OpenAI), with the key asked for when Task 2 runs.
@@ -96,10 +107,12 @@ expression never reaches the latents: it enters only as each decoded gene's own 
     knockdown pass minus reference pass. The direct analogue of Cilantro's cell-embedding delta.
   - **Profile delta ΔE**: PIE's predicted change in mean expression `Δ̂(c, g)` on the decode panel, read as the
     softmax expectation over its Δp bin centres (PIE's own readout takes the arg-max bin, which quantises small
-    changes). The before-state is the line's PIE input `x_c`, the after-state `x_c + Δ̂(c, g)`. Both are stored as
-    coordinates on 512 principal components fitted on `Δ̂` of the pilot's training pairs (below), so the basis keeps
+    changes). The before-state is the line's PIE input `x_c`, the after-state `x_c + Δ̂(c, g)`. `Δ̂` is stored as
+    coordinates on 512 principal components `C` fitted on `Δ̂` of the pilot's training pairs (below), so the basis keeps
     knockdown directions; the variance kept is reported, and a full-panel row on the selective genes checks what the
-    compression loses. The state encoder `E` is trained in stage one on the stored states: `ΔE = E(after) − E(before)`.
+    compression loses. The reader puts both states on the same basis: before `(x_c − x̄_frame) Cᵀ` from
+    `mean/pie_input.parquet`, after that plus `Δ̂ Cᵀ`, and reports how much of `x_c`'s variance across lines `C` keeps.
+    The state encoder `E` is trained in stage one on these states: `ΔE = E(after) − E(before)`.
   - **Latent delta ΔL**: the mean-pooled latent array, knockdown pass minus reference pass. The latents see no
     expression, so ΔL carries the line only through its Cellosaurus text: an expression-blind, text-conditioned
     control; for a line without a Cellosaurus record it depends on g alone.
@@ -148,6 +161,77 @@ stage-one modules, which stay free of `arc-state` and run under pandas 3. Task 1
 570 or newer) and this environment. The direct-readout trunk adds `pie.model.geneeffect` beside `pie.model` and reuses
 its layers, trunk blocks and evidence encoders. PIE's assets (Tahoe, Orion, sources including the 43 GB `ncbi_text`;
 about 100 GB) come through hf-mirror.
+
+### 3.5 Cell states
+
+**Motivation.** GeneEffect is a population growth phenotype: Chronos scores the fractional change in a line's growth
+rate after knockout over a ~21-day pooled screen. The frozen PIE reads only the line's control mean, so it computes the
+response at the mean state, not the average of the responses of the states the line holds. Where the response is
+nonlinear in state (a paralog expressed in some cells only, cycling against non-cycling cells, stress or mesenchymal
+states), the two differ, and only single cells show which states a line holds. The user's aim is a per-(line, gene)
+account as much as accuracy: which states a line holds, how the model scores each state's response to losing g, and how
+their mixture gives the line's prediction.
+
+**Limits, stated once.** If PIE and the head together were affine in the input, the state mixture would equal the
+whole-line prediction exactly, so any gain comes from the model's curvature over a line's within-line spread, part of
+which is technical (PIE's `mean == 0` feature, small-state noise). Per-state effects are not identified from one label
+per (line, gene): several decompositions predict the same labels, and only sharing across lines constrains them. States
+turn over on the screen's timescale. The proliferation-weighted identity `r = Σ w_s r_s`, `w_s ∝ π_s R_s`, holds only at
+fixed composition and needs state growth rates no input supplies. So per-state outputs are **model-implied state
+scores**, never measured per-state GeneEffects; a biological explanation claim waits for external state-resolved data
+(§8).
+
+**Vocabularies.** Fitted on training lines only, each line weighted equally (at most 500 cells per line, drawn with seed
+0); every cell of every line, training and held-out, is then projected by the frozen fit:
+- **Cycle phases**: soft memberships in three phases (non-cycling, S, G2/M) from a three-component Gaussian mixture on the
+  per-cell S and G2/M program scores Task 2 already computes.
+- **Recurrent programs**: consensus NMF per training line, programs clustered across lines into recurrent programs (the
+  Kinker and Gavish construction), cycle programs set aside, then starCAT projection of every cell onto the fixed
+  spectra. Usages are not exclusive states, so this vocabulary is called **program-weighted pseudo-contexts**; the
+  spectra normalisation, the background program and the usage-to-weight conversion are recorded in its manifest.
+- **Batch-aware mixture**: scVI (or MrVI's sample-unaware latent), library size modelled, the S and G2/M scores as
+  continuous covariates so the cycle does not take the mixture's slots; a Gaussian mixture with K = 4, 6 and 8 on the
+  latent, both line-centred and absolute. The categorical nuisance is the chemistry (each source's assay, such as 10x 3′
+  v2 or v3, recorded per source and also Task 5's per-line covariate), not the deposit: most deposits hold one line, so a deposit nuisance would remove line differences for those lines
+  and not for pooled ones, and the absolute row would mean different things by source. Deposit stays a reported
+  confound (Task 8).
+- **Baselines**: the same mixture on line-centred HVG-PCA and on the frozen Tx1-3B cell embeddings.
+
+Cell cycle stays in every state's expression input; it is only kept out of the non-cycle vocabularies' fit. A projected
+line from a deposit no training line comes from must project deterministically, and Task 8 shows it does.
+
+**State inputs.** For line c with per-cell `u_i = log1p(CP10K_i)` (Task 2's gene order, whole-library denominator and
+missing-gene treatment) and memberships `q_ik` summing to one over states, the state mass is `π_ck = Σ_i q_ik / n_c` and
+the state input `x_ck = Σ_i q_ik u_i / Σ_i q_ik`. Then `Σ_k π_ck x_ck` is the line's PIE input exactly. A state whose
+effective cell count `(Σ_i q_ik)² / Σ_i q_ik²` is below 10 is merged into its nearest state with its mass and weighted
+expression kept; a line left with one state, and every bulk-only line, keeps one state (its whole-line input). The
+identity holds at PIE's input, before PIE's own evidence features. Each (line, state) is a separate PIE context with its
+own name (the precompute caches control encodings by context name), the line's Cellosaurus text and the same masked
+sources.
+
+**Controls.**
+- **Permuted memberships**: each line's membership rows permuted across its cells (seeds 0–2), which keeps every state's
+  mass, effective cell count, overlap and the line input exactly while breaking the link between membership and
+  expression. The primary control for every vocabulary.
+- **QC states**: the same mixture fitted on log UMI, genes detected and mitochondrial fraction alone.
+- **Cycling-score-weighted input**: one whole-line input with each cell weighted by `p_i + 0.05` (its S plus G2/M
+  membership, floored), normalised; a sensitivity row for proliferation weighting, not a growth model.
+- **State-expression-only reader**: each state's input through the same state encoder `E` the ΔE row uses
+  (`E(x_ck)`, on the same 512 components) plus its own-gene value `x_ckg`, in place of the state's PIE change, with the
+  same head and combiner; PIE's contribution beyond basal state profiles is the difference.
+
+**Combining states.** A shared head maps state k's PIE change and own-gene slots to a model-implied state score `y_ckg`
+(in the units of §4.1's target). The line's prediction is the fixed average `ŷ = Σ_k π_ck y_ckg`, whose terms
+`π_ck y_ckg` are additive contributions. A row replaces it with `ŷ = τ log Σ_k π_ck exp(y_ckg / τ)` (one learned
+τ > 0, an empirical pooling parameter); its exact decomposition is `ŷ = Σ_k a_k y_ckg − τ KL(a ‖ π)` with
+`a_k ∝ π_ck exp(y_ckg / τ)`, and both terms are saved. Every run saves, per (line, gene, state), the mass, the score and
+the contribution, plus `m_g` and `σ_g`, so the arithmetic reproduces the prediction.
+
+**Scopes.** For validation and test scoring every learned object (vocabulary, mixture, encoder) is fitted on the 377
+single-cell training lines. Tasks 8 and 9 report no out-of-fold scores; only a state model exported for stage two gets
+them, with every learned object refitted outside each patient fold (§8). Task 8 reports
+training and validation lines; test lines are added after the vocabulary choice is recorded. The 99 second deposits
+are paired views of a line for stability telemetry, never extra lines.
 
 ## 4. Shared setup
 
@@ -406,6 +490,77 @@ measures what a nonlinear reader of the mean still sees after residualisation.
 (capacity is held by the mean-as-one-cell arm, channel weight by §4.3's per-channel normalisation). Training-bag drift
 shows how much the model leans on statistics only large bags provide.
 
+### Task 8. State telemetry
+
+**Question.** What do the vocabularies of §3.5 find in these lines, and how much does the frozen PIE's output move when
+a line is read as states rather than as its mean? Telemetry only; it does not say whether states help predict.
+
+**Definition.**
+- Fit every vocabulary of §3.5 and its controls; project every line with cells.
+- Per vocabulary: states' identity against Kinker's 12 recurrent programs (built from CCLE lines, some of them ours,
+  which is disclosed), Gavish's 41 meta-programs, MSigDB hallmarks and Tirosh's cycle sets; the share of each state's
+  mass explained by deposit, log UMI, genes detected and mitochondrial fraction; recurrence across lines; the lines ×
+  states mass matrix (singular values of its K − 1 contrasts, each state's spread across lines); agreement of state
+  masses between a line's two deposits; stability across three fitting seeds and cell subsamples.
+- The frozen PIE on the state inputs of every vocabulary, the permuted-membership and QC controls and the
+  cycling-score-weighted input, for every line with cells, on the Task 2 pilot's ~200 genes. Per vocabulary and
+  control: the gap `Σ_k π_ck Δ(x_ck, g) − Δ(x̄_c, g)` for ΔH, ΔE and the own-gene slots (ΔL reads no expression and
+  is excluded), its spread across lines within each gene, and timing.
+
+**Reading.** People choose which vocabularies Task 9 precomputes. A gap no larger than the permuted control's is not
+by itself a reason to stop: a nonlinear head can still use states, which Task 9's pilot measures.
+
+### Task 9. Cell states
+
+**Question.** Question 5 of §1.
+
+**Definition.** On the better on validation of Task 3's virtual cell + FiLM and multi-encoder families, each at its
+better of the ΔH and ΔE rows (ΔL reads no expression), whichever family wins Task 3 overall; with the Task 4 query, on
+the 981-line frame (bulk-only lines keep one state). A state reaches the model only through its PIE change and its
+own-gene slots; the multi-encoder's context encoder reads the line's whole-line tokens and text, the same for every
+state, so "states − one state" measures what reading states through PIE adds. Training and scoring use the 4,323
+selective genes for every row of this task, comparators included. The precompute carries one permuted-membership seed
+(seed 0); Task 8 carries three.
+
+1. **Frozen-state pilot (option one, learned from cells then frozen).** The full state precompute for the
+   vocabularies chosen after Task 8, its permuted-membership and QC controls, cost measured. Shared head, fixed
+   average, no per-state parameters. Primary contrasts, fixed now, each with its validation interval:
+   - states − one state (the whole-line input through the same model);
+   - states − permuted memberships;
+   - states − state-expression-only reader (what PIE adds);
+   - states − QC states.
+
+   Exploratory rows: the log-sum-exp combiner; cycling-score-weighted inputs; per-state deviations from the shared head,
+   shrunk toward zero (penalty on validation); K = 4, 6, 8; linear against small nonlinear shared head. References: the
+   best ladder model, the default prior and the refitted matched-input linear reference of Task 3.
+2. **Planted state effects**, before any further build: targets on the real lines and masses,
+   `y(c, g) + β Σ_k π_ck f_k(g)` with `f_k` a random function of the gene-query sources, at three signal sizes and with
+   one rare state (mass under 5%) and one low-spread state; recovery of each `f_k` from the saved state scores
+   (Pearson and slope over held-out lines, line-bootstrap intervals), not only of the line-level target.
+3. **Fine-tuned states (option three)**, after people read the pilot: the batch-aware mixture as initialisation; its
+   centres and covariances fine-tuned (never the encoder) with memberships an inductive function of the frozen
+   embedding; loss = GeneEffect + KL(memberships ‖ initial) + a weak usage prior pooled over lines, each line weighted
+   equally. Needs the differentiable PIE path (§6): parameters frozen, dropout off, gradients through the control
+   evidence and decode, only membership-independent work cached; the zero flag follows the support rule of the state
+   inputs. Reports drift: marker-gene overlap with the initial states, mass change, the KL; nearest real cells saved as
+   examples for each state.
+4. **End-to-end states (option two)**, after option three: the same differentiable mixture randomly initialised on
+   the frozen line-centred embedding (the batch-aware latent or Tx1), trained by GeneEffect alone, to show what the
+   label alone finds; same regularisers and reports, against permuted memberships and the whole-line input.
+
+Plausibility, reported for every state run: a gene-by-state direction table, fixed now as hypotheses:
+- DNA replication and mitosis genes (the MCMs, PCNA, POLA1, PLK1, KIF11, CDK1) score more negative in S and G2/M states;
+- GPX4 scores more negative in mesenchymal or EMT-like states;
+- TP53 and CDKN1A score positive in senescence-like states of TP53-wild-type lines;
+- JAK1 and STAT1 score toward interferon-like states (weak prior; monoculture interferon states are rare).
+
+Each state also gets its identity checks from Task 8, and every row reports train-versus-validation gaps.
+
+**Reading.** A primary contrast with a validation interval above zero is a gain of that kind; test is reported beside
+it. The state scores are what the model implies; planted recovery says whether this model can recover state effects of
+that size, and the direction table whether its account matches known biology. Neither shows that cells of a line
+actually respond that way.
+
 ## 6. Code
 
 | Path | Change | Responsibility |
@@ -425,6 +580,20 @@ shows how much the model leans on statistics only large bags provide.
 | `configs/stage_one/` | new | one config per run |
 | `hpc/run.sh` | edit | `pie-reproduce`, `ladder-inputs`, `pie-precompute`, `gene-sources` and `stage-one` commands |
 | `docs/03-geneeffect-protocol.md` | edit | §15 for the stage-one inputs; a new section for the stage-one model |
+| `src/data/ladder_reader.py` | new | memory-mapped readers of Task 2's outputs, the index check, targets with an excluded fold, the ΔE states |
+| `src/experiments/stage_one_prior.py` | new | the default prior refitted on the frame's mean channel (Task 3's linear reference and its 128 components) |
+| `src/experiments/run_dir.py`, `src/training/schedule.py` | new | run-directory binding and the learning-rate schedule, lifted so `.venv-pie` can import them |
+| `src/data/planted_terms.py` | new | Task 6's planted terms and Task 9's planted state effects |
+| `src/data/prepare/state_programs.py`, `hpc/states/setup.sh` | new | consensus NMF, starCAT and scVI fits in `.venv-states` |
+| `src/data/cell_states.py` | new | §3.5's vocabularies, projections, state masses and inputs, merging, permuted memberships, QC states, cycling-score weights |
+| `src/experiments/state_telemetry.py` | new | Task 8: fits, identity and confound reports, the frozen PIE's gaps |
+| `src/experiments/pie_precompute.py` | edit | (line, state) contexts with their own names; state passes |
+| `src/model/stage_one.py` | edit | the state combiners and their saved decomposition |
+| `src/model/pie_differentiable.py` | new | Task 9's differentiable frozen-PIE path (no inference mode, membership-independent caches only) |
+| `configs/stage_one/states/` | new | one config per Task 9 run |
+
+cNMF, starCAT and scvi-tools run where their dependencies resolve (the project environment or a separate one, as PIE's
+`.venv-pie`); their outputs are files the stage-one environment reads.
 
 `data` and `model` import neither `training` nor `experiments`. Configs are strict. Checkpoints record the split
 membership and load strictly, the vendored PIE included.
@@ -442,7 +611,13 @@ On synthetic fixtures:
 - the base, the profile folds and every planted-term fit reject validation and test lines;
 - a training line's profile never holds its own fold's columns, and the frozen PIE's batches carry no DepMap token;
 - the vendored PIE loads a released checkpoint strictly;
-- a two-line end-to-end run precomputes, trains, selects and scores.
+- a two-line end-to-end run precomputes, trains, selects and scores;
+- state masses times state inputs reproduce the line's PIE input, after merging too;
+- permuted memberships keep every state's mass and effective cell count and the line input;
+- two states of one line produce different PIE outputs (no stale cached control encoding);
+- a vocabulary fit rejects validation and test lines, and projecting a line twice gives the same memberships;
+- saved state contributions reproduce the prediction under both combiners (the log-sum-exp with its KL term);
+- the differentiable PIE path matches the precompute's outputs and agrees with finite differences.
 
 ## 8. Out of scope, and follow-ups
 
@@ -452,7 +627,15 @@ sources as gene sources; any change to the split, the metric or the default prio
 Stage two (its own design) needs, from stage one: out-of-fold `V(c, g)` and predictions for training lines (in-sample
 values for training lines would leak into the SL classifier, as the prior's export avoids), and predictions on edited
 contexts (gene A's expression set to zero, or the after-state of knocking A down) for the SL definition's "B's
-dependency with A lost"; the gene-only virtual-cell arm cannot provide the latter.
+dependency with A lost"; the gene-only virtual-cell arm cannot provide the latter. An out-of-fold run for outer fold
+k removes fold k's columns from every row's GeneEffect profile (Task 4) before the inner fold masks: otherwise the
+training rows' inputs carry the held-out fold's labels.
+
+Out of scope for the cell states (§3.5): a mechanistic growth model of states (state growth and switching rates need
+measurements no input supplies). TODO, after the SL model works end to end: validate state scores against
+state-resolved fitness data (Replogle 2022 genome-wide Perturb-seq, cells per guide by state; X-Atlas/Orion; Tahoe-100M
+per-line composition under drugs; MIX-seq; a lineage-traced knockout screen), minding drug against knockout, timescale
+(24 h to 8 days against 21 days) and that a state's loss can be death or transition.
 
 Follow-ups, each its own design when taken up:
 - bulk-only lines as training lines for stage one;
