@@ -13,7 +13,9 @@ base) and after every epoch; ``best.pt`` and early stopping follow
 ``val_selective_spearman`` only (``checkpoint.record_validation``). The base is
 constant within each gene, so its selective Spearman is undefined: epoch 0 is a
 candidate only when its score is defined, and is otherwise recorded as telemetry.
-``last.pt`` holds everything a resume needs; a resume refuses another config, and
+``last.pt`` holds everything a resume needs and is written before ``best.pt``, so a
+resume rewrites a ``best.pt`` left behind by a crash between the two from the
+restored weights; a resume refuses another config, and
 every checkpoint records the split membership it was fitted under and refuses
 another on load.
 """
@@ -178,6 +180,33 @@ def fit(
         restore_rng_state(payload["rng"], device)
         log.info("resumed at epoch %d", state.next_epoch)
 
+    def save_best() -> None:
+        _checkpoint(
+            best,
+            {
+                "weights": validated.state_dict(),
+                "epoch": state.best_epoch,
+                "score": state.best_score,
+                "config": record,
+                "membership": membership(split),
+            },
+        )
+
+    if last.is_file() and state.best_epoch >= 0:
+        # last.pt is written before best.pt: a crash between them leaves best.pt
+        # behind the state, whose weights (the last epoch's) are the best ones.
+        saved = load_checkpoint(best) if best.is_file() else None
+        if saved is None or (saved["epoch"], saved["score"]) != (
+            state.best_epoch,
+            state.best_score,
+        ):
+            if state.best_epoch != state.next_epoch - 1:
+                raise RuntimeError(
+                    f"{best} does not hold the recorded best epoch {state.best_epoch}"
+                )
+            save_best()
+            log.info("best.pt rewritten for epoch %d", state.best_epoch)
+
     def save_last() -> None:
         _checkpoint(
             last,
@@ -205,17 +234,9 @@ def fit(
             state.next_epoch = epoch + 1
             state.bad_epochs += int(epoch > 0)
         history.append({"epoch": epoch, "candidate": candidate, **metrics})
-        if improved:
-            _checkpoint(
-                best,
-                {
-                    "weights": validated.state_dict(),
-                    "epoch": epoch,
-                    "config": record,
-                    "membership": membership(split),
-                },
-            )
         save_last()
+        if improved:
+            save_best()
         log.info(
             "epoch %d: %s%s",
             epoch,
