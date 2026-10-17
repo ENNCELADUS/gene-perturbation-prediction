@@ -9,6 +9,7 @@ output_root: outputs/stage_one
 data:
   ladder_config: configs/stage_one/ladder_inputs.yaml
   gene_sources: [gene_text]
+  centre_gene_sources: true
   input: components
   own_slots: []
   permuted: false

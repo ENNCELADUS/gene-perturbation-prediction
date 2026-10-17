@@ -566,3 +566,40 @@ def test_a_run_refuses_a_changed_gene_set(tmp_path):
     stage_one.bind_genes(tmp_path, ["GA", "GB"])
     with pytest.raises(ValueError, match="another gene set"):
         stage_one.bind_genes(tmp_path, ["GA"])
+
+
+@pytest.mark.parametrize("centre", [True, False])
+def test_gene_sources_are_centred_on_their_panel_mean(world, centre):
+    """Gene-text vectors share half their energy along their mean; uncentred, the
+    FiLM arms' gene conditions were nearly equal across genes and the H20 trials
+    barely learned (validation selective Spearman ~0.02 against ~0.17 centred)."""
+    root = world[0]
+    setup = _setup(world)
+    config = yaml.safe_load(_config(root, "multi_dL").read_text())
+    config["data"]["centre_gene_sources"] = centre
+    targets = setup.targets(None)
+    resident = stage_one.Resident(
+        setup, config, None, targets, torch.device("cpu"), setup.ladder.panel
+    )
+    vectors = resident.gene_vectors["gene_text"].numpy()
+    present = resident.gene_present["gene_text"].numpy()
+    raw, _ = reader.gene_sources(setup.ladder, ["gene_text"])["gene_text"]
+    position = {g: i for i, g in enumerate(setup.ladder.genes.index)}
+    raw = raw[[position[g] for g in setup.ladder.panel]]
+    mean = raw[present].mean(axis=0)
+    if centre:
+        assert np.allclose(vectors[present].mean(axis=0), 0.0, atol=1e-5)
+        assert np.allclose(vectors[present], raw[present] - mean, atol=1e-5)
+    else:
+        assert np.allclose(vectors, raw)
+    tokens = resident.token_genes["gene_text"].numpy()
+    listed = resident.token_present["gene_text"].numpy()
+    assert np.allclose(tokens[~listed], 0.0)
+    shift = mean if centre else 0.0
+    text = Path(setup.ladder_config["paths"]["gene_text"])
+    expected, _ = reader.text_on_axis(text, resident_axis(setup))
+    assert np.allclose(tokens[listed], expected[listed] - shift, atol=1e-5)
+
+
+def resident_axis(setup):
+    return reader.line_tokens(setup.ladder).axis

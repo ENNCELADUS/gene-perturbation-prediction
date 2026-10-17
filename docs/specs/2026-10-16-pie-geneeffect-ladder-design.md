@@ -153,6 +153,9 @@ validation selective Spearman; the winner carries to Tasks 4–7.
   the before-state together;
 - a line token is one per gene of the panel ∪ the mean channel's space, carrying both values with their flags;
 - `V(c, g)` is Cilantro's `l3` output before its ReLU, as `FiLMNet128` returns it;
+- each gene source is centred on its mean over the panel genes it covers before the gene encoder (label-free; the
+  `gene_text` vectors share half their energy along that mean, which left the FiLM conditions nearly equal across
+  genes); the warm direct readout reads them uncentred, as PIE's gene query MLP did;
 - the base is constant within each gene, so epoch 0 (the untrained model) has an undefined selective Spearman and is a
   `best.pt` candidate only when that is defined; its within-gene R² is the base row's;
 - the full-panel check of §3.2 is a matched pair per ΔE family (`film_dE_selective` and `film_dE_full`,
