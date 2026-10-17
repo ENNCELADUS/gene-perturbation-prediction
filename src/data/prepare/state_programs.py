@@ -137,6 +137,25 @@ def _tpm(counts: sparse.csr_matrix) -> sparse.csr_matrix:
 # --- consensus NMF per line -----------------------------------------------------------
 
 
+def program_spectra(
+    spectra_tpm: pd.DataFrame, top: pd.DataFrame, panel: Sequence[str]
+) -> pd.DataFrame:
+    """cNMF's TPM spectra as programs x panel genes, rows in ``top``'s program
+    order. cNMF 1.7.1's ``load_results`` returns them genes x programs (it reads
+    its programs x genes file transposed, against its docstring); rows are taken
+    by program label, so they align with ``top``. Fails closed on an empty
+    spectrum. (A top-gene ranking check is not made: cNMF ranks top genes by
+    its z-scored gene scores, and a program split off at a larger K can rank
+    genes there that sit low in its TPM spectrum.)"""
+    programs = list(top.columns)
+    if set(spectra_tpm.columns) != set(programs):
+        raise ValueError("cNMF's spectra do not list the programs as columns")
+    spectra = spectra_tpm.T.loc[programs].reindex(columns=list(panel), fill_value=0.0)
+    if not (spectra.to_numpy(dtype=np.float64).sum(axis=1) > 0).all():
+        raise ValueError("cNMF returned an empty program spectrum")
+    return spectra
+
+
 def line_programs(
     model_id: str,
     path: str,
@@ -198,7 +217,7 @@ def line_programs(
             _, scores, spectra, top = model.load_results(
                 K=k, density_threshold=threshold, n_top_genes=int(settings["top_genes"])
             )
-            spectra = spectra.reindex(columns=list(plan["panel"]), fill_value=0.0)
+            spectra = program_spectra(spectra, top, list(plan["panel"]))
             arrays[f"top_k{k}"] = top.T.to_numpy(dtype=str)
             arrays[f"tpm_k{k}"] = spectra.to_numpy(dtype=np.float32)
         _save_npz(
@@ -389,6 +408,8 @@ def build_reference(
     kinds.append("background")
     rows.append(_renormalised(background))
     spectra = np.vstack(rows)[:, columns] / sd[columns]
+    if not (spectra.sum(axis=1) > 0).all():
+        raise ValueError("a reference program has an empty spectrum")
     _save_npz(
         folder / "reference.npz",
         programs=np.asarray(names),
@@ -611,7 +632,7 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
             early_stopping=True,
             accelerator="gpu" if torch.cuda.is_available() else "cpu",
         )
-        model.save(str(model_dir), overwrite=True)
+        model.save(str(model_dir), overwrite=True, save_anndata=True)
         history = {
             key: float(value.iloc[-1, 0])
             for key, value in model.history.items()
@@ -626,7 +647,10 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
                 "history": history,
             },
         )
+    # Saved with its training AnnData, so a resumed run reloads the model whole.
     model = scvi.model.SCVI.load(str(model_dir))
+    if model.adata is None:
+        raise ValueError(f"{model_dir} holds no training AnnData; refit the model")
     batch = model.registry["field_registries"]["batch"]["state_registry"]
     category = str(batch["categorical_mapping"][0])
     for sub, sources in (("latent", plan["encode"]), ("latent_second", plan["second"])):
