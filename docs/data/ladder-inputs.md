@@ -32,7 +32,7 @@ is refused), the expression space of each channel and each step's counts.
 
 | Path | Contents | Counts |
 | --- | --- | --- |
-| `lines.parquet` | every split line: role, lineage, patient, RRID, frame fold | frame 981 (377 single-cell training, 28 of them lymphoid or myeloid; 604 bulk-only), 343 paired, 27 validation, 28 test |
+| `lines.parquet` | every split line: role, frame fold, lineage, patient, paired flag (the RRID is in `context_text_provenance.json`) | frame 981 (377 single-cell training, 28 of them lymphoid or myeloid; 604 bulk-only), 343 paired, 27 validation, 28 test |
 | `genes.parquet` | per GeneEffect gene: frame base `m_g`, 377-line mean, residual SD, selective and variable flags, `gene_text` key | 17,787 genes; decode panel 17,607; selective 4,323 (4,269 in the panel) |
 | `cells/<ModelID>.npz` | PIE input, pseudo-bulk, spread against depth-expected values, per-cell QC, HVG cells and their shuffle | 434 lines, 573,532 cells, 19,277 source genes |
 | `mean/` | mean channel in the default prior's space, PIE input of every line, `pie_listed.parquet` | 1,036 lines, 8,810 space genes |
