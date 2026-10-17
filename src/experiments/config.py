@@ -258,7 +258,13 @@ STAGE_ONE_ARMS = ("film", "multi_encoder", "direct_readout", "hybrid")
 STAGE_ONE_TRUNK_ARMS = ("direct_readout", "hybrid")
 #: The pair input before the FiLM layer: a frozen-PIE delta, a learned constant
 #: (``none``), or a line-level reference input.
-STAGE_ONE_DELTAS = ("dH", "dE", "dL")
+#: ``dE_full``: the profile delta on the full decode panel (``pie/full/``), kept
+#: for the selective genes only.
+STAGE_ONE_DELTAS = ("dH", "dE", "dL", "dE_full")
+STAGE_ONE_PROFILES = ("dE", "dE_full")
+#: The genes a run trains on and predicts: the decode panel, or the selective
+#: genes in it with a full-panel profile delta (the matched profile rows).
+STAGE_ONE_GENE_SETS = ("panel", "selective_full")
 STAGE_ONE_INPUTS = (*STAGE_ONE_DELTAS, "none", "components", "lineage", "text", "own_x")
 STAGE_ONE_OWN_SLOTS = ("own_h", "own_dp", "own_x")
 STAGE_ONE_GENE_SOURCES = (
@@ -274,7 +280,7 @@ _STAGE_ONE_TOP_LEVEL = {
     "report": "kind task output_root ladder_config bootstrap_repeats rows contrasts",
 }
 _STAGE_ONE_GROUPS = {
-    "data": "ladder_config gene_sources input own_slots permuted prior_run",
+    "data": "ladder_config gene_sources input own_slots permuted prior_run genes",
     "model": "arm gene_width hidden state_width context trunk",
     "train": (
         "max_epochs patience warmup_epochs learning_rate weight_decay ema_decay "
@@ -325,6 +331,10 @@ def _validate_stage_one_data(data: Mapping[str, Any]) -> None:
         raise ValueError("data.own_slots go beside a frozen-PIE delta only")
     if data["permuted"] not in (True, False) or (data["permuted"] and not delta):
         raise ValueError("data.permuted: a boolean, true only with a frozen-PIE delta")
+    if data["genes"] not in STAGE_ONE_GENE_SETS:
+        raise ValueError(f"data.genes must be one of {STAGE_ONE_GENE_SETS}")
+    if data["input"] == "dE_full" and data["genes"] != "selective_full":
+        raise ValueError("data.input dE_full exists for data.genes selective_full only")
     if (data["input"] == "components") != isinstance(data["prior_run"], str):
         raise ValueError(
             "data.prior_run: the prior reference run for components, else null"
@@ -337,7 +347,7 @@ def _validate_stage_one_model(
     arm = model["arm"]
     if arm not in STAGE_ONE_ARMS:
         raise ValueError(f"model.arm must be one of {STAGE_ONE_ARMS}")
-    if (data["input"] == "dE") != (model["state_width"] is not None):
+    if (data["input"] in STAGE_ONE_PROFILES) != (model["state_width"] is not None):
         raise ValueError(
             "model.state_width: the profile delta's state encoder width, else null"
         )

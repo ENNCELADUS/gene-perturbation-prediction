@@ -13,6 +13,7 @@ data:
   own_slots: []
   permuted: false
   prior_run: null
+  genes: panel
 model:
   arm: film
   gene_width: 128

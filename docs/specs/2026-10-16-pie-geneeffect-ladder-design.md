@@ -154,7 +154,15 @@ validation selective Spearman; the winner carries to Tasks 4–7.
 - a line token is one per gene of the panel ∪ the mean channel's space, carrying both values with their flags;
 - `V(c, g)` is Cilantro's `l3` output before its ReLU, as `FiLMNet128` returns it;
 - the base is constant within each gene, so epoch 0 (the untrained model) has an undefined selective Spearman and is a
-  `best.pt` candidate only when that is defined; its within-gene R² is the base row's.
+  `best.pt` candidate only when that is defined; its within-gene R² is the base row's;
+- the full-panel check of §3.2 is a matched pair per ΔE family (`film_dE_selective` and `film_dE_full`,
+  `multi_dE_selective` and `multi_dE_full`): both train and predict only the selective genes in the panel that have a
+  full-panel predicted change (`pie/full/`, coverage reported; every other gene predicts the base), with the same
+  steps; the full row's state encoder reads 17,607-d states (before `x_c − x̄_frame`, after plus `Δ̂`) through the same
+  fp32 change path, its `Δ̂` streamed from the memory maps by gene chunk (it cannot be resident: ~311 GB fp32). The
+  report contrasts full-panel minus 512-component on the genes defined on both sides. A first layer `W C` on the full
+  panel reproduces the 512-component row's `W` exactly, so the difference is what the compression loses to a
+  nonlinear reader.
 
 **Matched inputs.** The frozen PIE must read its own input, the mean over cells of `log1p` CP10K, which moves with a
 gene's variance and dropout, plus the Cellosaurus text. So that architecture contrasts compare models rather than

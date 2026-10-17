@@ -13,6 +13,7 @@ data:
   own_slots: []
   permuted: false
   prior_run: outputs/stage_one/architecture/prior_reference_seed0
+  genes: panel
 model:
   arm: film
   gene_width: 128

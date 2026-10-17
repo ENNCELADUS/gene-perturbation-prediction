@@ -1,0 +1,40 @@
+# Task 3 of the PIE stage-one design (docs/specs/2026-10-16-pie-geneeffect-ladder-design.md §3.2, §3.3, §5;
+# protocol §16): virtual cell + FiLM on the profile delta ΔE on its 512-component basis,
+# on the selective genes only.
+# Matched rows: film_dE_selective and film_dE_full train and predict the same genes (the selective genes in
+# the decode panel with a full-panel profile delta, pie/full/) with the same steps; every other gene predicts the
+# base. report_3a contrasts full-panel minus 512-component on the genes defined on both sides.
+# `hpc/run.sh stage-one CONFIG [--fold K]`, or every config through `hpc/run.sh stage-one-queue`.
+kind: train
+task: architecture
+seed: 0
+output_root: outputs/stage_one
+data:
+  ladder_config: configs/stage_one/ladder_inputs.yaml
+  gene_sources: [gene_text]
+  input: dE
+  own_slots: [own_dp, own_x]
+  permuted: false
+  prior_run: null
+  genes: selective_full
+model:
+  arm: film
+  gene_width: 128
+  hidden: 256
+  state_width: 256
+  context: null
+  trunk: null
+train:
+  max_epochs: 30
+  patience: 5
+  warmup_epochs: 1
+  learning_rate: 1.0e-3
+  weight_decay: 0.01
+  ema_decay: null
+  lines_per_step: 128
+  genes_per_step: 32
+  token_dropout: 0.0
+  evidence_dropout: 0.0
+eval:
+  lines_per_chunk: 128
+  genes_per_chunk: 16

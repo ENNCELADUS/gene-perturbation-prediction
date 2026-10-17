@@ -366,7 +366,12 @@ def test_a_resumed_run_ends_where_an_uninterrupted_one_does(tmp_path):
         SPLIT,
         _validator(data, targets, config),
     )
-    assert resumed.history == whole.history
+
+    def timeless(history):
+        return [{k: v for k, v in e.items() if k != "epoch_seconds"} for e in history]
+
+    assert timeless(resumed.history) == timeless(whole.history)
+    assert all(e["epoch_seconds"] >= 0 for e in whole.history[1:])
 
 
 def test_a_crash_between_last_and_best_is_reconciled_on_resume(tmp_path):
