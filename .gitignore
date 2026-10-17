@@ -51,6 +51,8 @@ wheels/
 # Pinned single-cell atlas candidates (accession, ModelID, identifier per line), small provenance.
 !configs/benchmarks/single_cell_atlas_candidates.csv
 !configs/benchmarks/sl_screen_lines.csv
+# Reviewed chemistry of each single-cell deposit (cell-state telemetry), small provenance.
+!configs/benchmarks/single_cell_source_chemistry.csv
 # Hand-authored provenance CSVs for paper tables (small, source-of-truth; not data dumps)
 !docs/report/tables/*.csv
 # Small historical benchmark provenance manifests.
@@ -119,6 +121,8 @@ csc286_eval.py
 !/third_party/pie/
 /.venv-cilantro/
 /.venv-pie/
+# cNMF, starCAT and scvi-tools for the cell-state fits (hpc/states/setup.sh)
+/.venv-states/
 
 # Documentation
 archive/

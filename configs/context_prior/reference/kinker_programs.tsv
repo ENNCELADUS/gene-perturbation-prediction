@@ -1,0 +1,534 @@
+program	gene
+Cell Cycle - G1/S	HIST1H4C
+Cell Cycle - G1/S	CLSPN
+Cell Cycle - G1/S	ATAD2
+Cell Cycle - G1/S	E2F1
+Cell Cycle - G1/S	HELLS
+Cell Cycle - G1/S	RRM2
+Cell Cycle - G1/S	HIST2H2AC
+Cell Cycle - G1/S	HIST1H1E
+Cell Cycle - G1/S	FAM111A
+Cell Cycle - G1/S	GINS2
+Cell Cycle - G1/S	CENPU
+Cell Cycle - G1/S	CDCA5
+Cell Cycle - G1/S	ASF1B
+Cell Cycle - G1/S	CHAF1A
+Cell Cycle - G1/S	TCF19
+Cell Cycle - G1/S	HIST1H1D
+Cell Cycle - G1/S	KIAA0101
+Cell Cycle - G1/S	FEN1
+Cell Cycle - G1/S	HIST1H1B
+Cell Cycle - G1/S	PCNA
+Cell Cycle - G1/S	FBXO5
+Cell Cycle - G1/S	HIST1H1C
+Cell Cycle - G1/S	CDCA4
+Cell Cycle - G1/S	MYBL2
+Cell Cycle - G1/S	PKMYT1
+Cell Cycle - G1/S	FAM111B
+Cell Cycle - G1/S	USP1
+Cell Cycle - G1/S	CDC6
+Cell Cycle - G1/S	EZH2
+Cell Cycle - G1/S	PSMC3IP
+Cell Cycle - G1/S	GMNN
+Cell Cycle - G1/S	HMGB2
+Cell Cycle - G1/S	ORC6
+Cell Cycle - G1/S	TYMS
+Cell Cycle - G1/S	DNAJC9
+Cell Cycle - G1/S	CDK1
+Cell Cycle - G1/S	UBE2T
+Cell Cycle - G1/S	SLBP
+Cell Cycle - G1/S	BRCA1
+Cell Cycle - G1/S	C21orf58
+Cell Cycle - G1/S	CDT1
+Cell Cycle - G1/S	ESCO2
+Cell Cycle - G1/S	TEX30
+Cell Cycle - G1/S	ATAD5
+Cell Cycle - G1/S	CCNE1
+Cell Cycle - G1/S	RAD51AP1
+Cell Cycle - G2/M	AURKA
+Cell Cycle - G2/M	CENPF
+Cell Cycle - G2/M	PLK1
+Cell Cycle - G2/M	TOP2A
+Cell Cycle - G2/M	UBE2C
+Cell Cycle - G2/M	ASPM
+Cell Cycle - G2/M	TPX2
+Cell Cycle - G2/M	CENPA
+Cell Cycle - G2/M	CKAP2
+Cell Cycle - G2/M	GTSE1
+Cell Cycle - G2/M	CCNB1
+Cell Cycle - G2/M	ARL6IP1
+Cell Cycle - G2/M	MKI67
+Cell Cycle - G2/M	CENPE
+Cell Cycle - G2/M	CKS2
+Cell Cycle - G2/M	HMMR
+Cell Cycle - G2/M	DEPDC1
+Cell Cycle - G2/M	NUSAP1
+Cell Cycle - G2/M	PRC1
+Cell Cycle - G2/M	SGOL2
+Cell Cycle - G2/M	CCNA2
+Cell Cycle - G2/M	KPNA2
+Cell Cycle - G2/M	CDCA8
+Cell Cycle - G2/M	HMGB2
+Cell Cycle - G2/M	NUF2
+Cell Cycle - G2/M	KNSTRN
+Cell Cycle - G2/M	CDCA3
+Cell Cycle - G2/M	CEP55
+Cell Cycle - G2/M	KIF20B
+Cell Cycle - G2/M	FAM83D
+Cell Cycle - G2/M	PIF1
+Cell Cycle - G2/M	CDC20
+Cell Cycle - G2/M	DLGAP5
+Cell Cycle - G2/M	KIF2C
+Cell Cycle - G2/M	PRR11
+Cell Cycle - G2/M	ARHGAP11A
+Cell Cycle - G2/M	KIF23
+Cell Cycle - G2/M	AURKB
+Cell Cycle - G2/M	CDK1
+Cell Cycle - G2/M	KIF14
+Cell Cycle - G2/M	FAM64A
+Cell Cycle - G2/M	CCNB2
+Cell Cycle - G2/M	PSRC1
+Cell Cycle - G2/M	NEK2
+Cell Cycle - G2/M	CDCA2
+Cell Cycle - G2/M	BIRC5
+Cell Cycle - G2/M	TACC3
+Cell Cycle - G2/M	CKAP2L
+Cell Cycle - G2/M	HJURP
+Cell Cycle - G2/M	KIF4A
+Cell Cycle - G2/M	UBALD2
+Cell Cycle - G2/M	CDC25B
+Cell Cycle - G2/M	RACGAP1
+Cell Cycle - G2/M	SGOL1
+Cell Cycle - G2/M	ECT2
+Cell Cycle - G2/M	CCNF
+Cell Cycle - G2/M	UBE2S
+Cell Cycle - G2/M	ANLN
+Cell Cycle - G2/M	CDKN3
+Cell Cycle - G2/M	DBF4
+Cell Cycle - G2/M	G2E3
+Cell Cycle - G2/M	PBK
+Skin Pigmentation	PHACTR1
+Skin Pigmentation	DCT
+Skin Pigmentation	MITF
+Skin Pigmentation	CHCHD6
+Skin Pigmentation	MBP
+Skin Pigmentation	GDF15
+Skin Pigmentation	MLANA
+Skin Pigmentation	TBC1D7
+Skin Pigmentation	TNFRSF14
+Skin Pigmentation	TRPM1
+Skin Pigmentation	ASAH1
+Skin Pigmentation	CAPN3
+Skin Pigmentation	LINC00518
+Skin Pigmentation	BIRC7
+Skin Pigmentation	FXYD3
+Skin Pigmentation	GPNMB
+Skin Pigmentation	GPR137B
+Skin Pigmentation	LGALS3
+Skin Pigmentation	MXI1
+Skin Pigmentation	NOV
+Skin Pigmentation	PMEL
+Skin Pigmentation	TBC1D16
+Skin Pigmentation	WIPI1
+Skin Pigmentation	GYPC
+Skin Pigmentation	ISG20
+Skin Pigmentation	PLP1
+Skin Pigmentation	APOE
+Skin Pigmentation	AVPI1
+Skin Pigmentation	C11orf96
+Skin Pigmentation	DAB2
+Skin Pigmentation	FAM210B
+Skin Pigmentation	GJB1
+Skin Pigmentation	GPR56
+Skin Pigmentation	HES6
+Skin Pigmentation	NBL1
+Skin Pigmentation	RAB27A
+Skin Pigmentation	RAB38
+Skin Pigmentation	RAB5B
+Skin Pigmentation	RRAGD
+Skin Pigmentation	S100B
+Skin Pigmentation	SEMA6A
+Skin Pigmentation	SH3BP5
+Skin Pigmentation	STX7
+Skin Pigmentation	TIMP2
+Skin Pigmentation	TRIM2
+Skin Pigmentation	ZFYVE16
+Skin Pigmentation	ZNF106
+EMT I	DKK1
+EMT I	PMEPA1
+EMT I	C12orf75
+EMT I	CYR61
+EMT I	IL8
+EMT I	SORBS2
+EMT I	THBS1
+EMT I	TPST1
+EMT I	CAV1
+EMT I	KRT7
+EMT I	LIMA1
+EMT I	LIMCH1
+EMT I	MAP1B
+EMT I	MGLL
+EMT I	MXD4
+EMT I	PRSS23
+EMT I	RRAS
+EMT I	S100A16
+EMT I	TPM1
+EMT I	CCND1
+EMT I	CTGF
+EMT I	DDIT4
+EMT I	FN1
+EMT I	FOSL1
+EMT I	HOXB2
+EMT I	IER3
+EMT I	KRT81
+EMT I	NT5E
+EMT I	PLAUR
+EMT I	PPFIBP1
+EMT I	PTRF
+EMT I	RND3
+EMT I	S100A4
+EMT I	SMURF2
+EMT I	TGFBI
+EMT I	TNFRSF12A
+EMT I	TSC22D1
+EMT I	AC093673.5
+EMT I	ACTG2
+EMT I	CAV2
+EMT I	CCDC107
+EMT I	CD82
+EMT I	CDKN1A
+EMT I	CEBPD
+EMT I	CSRP1
+EMT I	CXCL1
+EMT I	DCBLD2
+EMT I	EVA1A
+EMT I	FAM20C
+EMT I	FHL2
+EMT I	FLNB
+EMT I	FRMD6
+EMT I	GLIPR1
+EMT I	HEBP2
+EMT I	HPCAL1
+EMT I	ITGA3
+EMT I	KDELR3
+EMT I	KRT18
+EMT I	LINC00152
+EMT I	MIR4435-1HG
+EMT I	MYL9
+EMT I	MYLK
+EMT I	NGFR
+EMT I	NME3
+EMT I	NNMT
+EMT I	PDLIM7
+EMT I	PEG10
+EMT I	PNRC1
+EMT I	PRKCDBP
+EMT I	PRNP
+EMT I	PTGES
+EMT I	S100A2
+EMT I	SERPINE2
+EMT I	SFRP1
+EMT I	SPRY2
+EMT I	TGM2
+EMT I	TIMP3
+EMT I	USP53
+EMT I	ZNF655
+EMT II	MYL9
+EMT II	SERPINE1
+EMT II	THBS1
+EMT II	FN1
+EMT II	IL32
+EMT II	LAMC2
+EMT II	MYH9
+EMT II	TAGLN
+EMT II	CLIC3
+EMT II	COL5A1
+EMT II	IGFBP3
+EMT II	INHBA
+EMT II	PMEPA1
+EMT II	CDC42EP3
+EMT II	CST6
+EMT II	CYR61
+EMT II	GLIPR1
+EMT II	TPM1
+EMT II	VIM
+EMT II	AKAP12
+EMT II	AXL
+EMT II	EDN1
+EMT II	FLNA
+EMT II	FST
+EMT II	FSTL1
+EMT II	IGFBP7
+EMT II	PRSS23
+EMT II	PTPRF
+IFN Response	ISG20
+IFN Response	IFIT3
+IFN Response	ISG15
+IFN Response	OASL
+IFN Response	IFIT1
+IFN Response	IFIT2
+IFN Response	IFI44
+IFN Response	PMAIP1
+IFN Response	RARRES3
+IFN Response	ZC3HAV1
+IFN Response	HERC5
+IFN Response	SAMD9
+IFN Response	WARS
+IFN Response	IGFBP6
+IFN Response	SAMD9L
+IFN Response	CCL5
+IFN Response	IFI6
+IFN Response	APOL2
+IFN Response	HES4
+IFN Response	IFIH1
+IFN Response	IRF1
+IFN Response	PARP14
+IFN Response	PSMB9
+IFN Response	ZNFX1
+IFN Response	HLA-B
+IFN Response	IL7R
+IFN Response	APOL6
+IFN Response	B4GALT5
+IFN Response	DDX58
+IFN Response	DDX60
+IFN Response	FAM46A
+IFN Response	JUNB
+IFN Response	KLF4
+IFN Response	PLAUR
+IFN Response	RSAD2
+IFN Response	SAR1A
+IFN Response	SDC4
+IFN Response	SQRDL
+IFN Response	ZFP36L2
+IFN Response	APOL1
+IFN Response	C15orf48
+IFN Response	CDKN1A
+IFN Response	FGF2
+IFN Response	GRB10
+IFN Response	HIP1R
+IFN Response	IL6
+IFN Response	TNIP1
+IFN Response	UBE2L6
+IFN Response	USP18
+EMT III	LAMA3
+EMT III	LAMB3
+EMT III	LAMC2
+EMT III	CDKN1A
+EMT III	FAM83A
+EMT III	ITGA2
+EMT III	PLAU
+EMT III	C15orf48
+EMT III	JUP
+EMT III	MAST4
+EMT III	RHOD
+EMT III	SERPINB1
+EMT III	SERPINE1
+EMT III	AHNAK2
+EMT III	COL17A1
+EMT III	DMKN
+EMT III	ELK3
+EMT III	F3
+EMT III	G0S2
+EMT III	IL32
+EMT III	INHBA
+EMT III	LRRC8A
+EMT III	NDRG1
+EMT III	NEAT1
+EMT III	S100A14
+EMT III	SLPI
+EMT III	TSPAN1
+EMT III	CDA
+EMT III	CDH1
+EMT III	CDH3
+EMT III	CST6
+EMT III	DHRS9
+EMT III	EPCAM
+EMT III	FN1
+EMT III	FXYD3
+EMT III	HBEGF
+EMT III	KLK10
+EMT III	LCN2
+EMT III	LSR
+EMT III	POLD4
+EMT III	PTGS2
+EMT III	SEMA3C
+EMT III	SERPINB2
+EMT III	SLFN5
+EMT III	SMIM22
+EMT III	SOX4
+EMT III	SRCAP
+EMT III	VAMP8
+EMT III	WFDC2
+p53-Dependent Senescence	CDKN1A
+p53-Dependent Senescence	NEAT1
+p53-Dependent Senescence	POLD4
+p53-Dependent Senescence	MXD4
+p53-Dependent Senescence	MMP24-AS1
+p53-Dependent Senescence	PNRC1
+p53-Dependent Senescence	HIST1H2BK
+p53-Dependent Senescence	SLPI
+p53-Dependent Senescence	TP53TG1
+p53-Dependent Senescence	IFI27L2
+p53-Dependent Senescence	IGBP1
+p53-Dependent Senescence	AHNAK2
+p53-Dependent Senescence	FDXR
+p53-Dependent Senescence	GPRC5A
+p53-Dependent Senescence	IFI27
+p53-Dependent Senescence	ISG15
+p53-Dependent Senescence	KRT19
+p53-Dependent Senescence	S100P
+p53-Dependent Senescence	TP53I3
+Epithelial Senescence	SLPI
+Epithelial Senescence	LCN2
+Epithelial Senescence	ELF3
+Epithelial Senescence	S100A9
+Epithelial Senescence	S100P
+Epithelial Senescence	SAA1
+Epithelial Senescence	C15orf48
+Epithelial Senescence	SPRR1B
+Epithelial Senescence	AQP3
+Epithelial Senescence	LY6D
+Epithelial Senescence	ASS1
+Epithelial Senescence	CLDN4
+Epithelial Senescence	FXYD3
+Epithelial Senescence	KRT15
+Epithelial Senescence	S100A14
+Epithelial Senescence	S100A8
+Epithelial Senescence	SERPINB1
+Epithelial Senescence	AGR2
+Epithelial Senescence	CXCL1
+Epithelial Senescence	KRT13
+Epithelial Senescence	KRT16
+Epithelial Senescence	ADIRF
+Epithelial Senescence	C9orf169
+Epithelial Senescence	CD9
+Epithelial Senescence	CTSD
+Epithelial Senescence	GSN
+Epithelial Senescence	MMP7
+Epithelial Senescence	NEAT1
+Epithelial Senescence	PI3
+Epithelial Senescence	PSCA
+Epithelial Senescence	RARRES3
+Epithelial Senescence	SAA2
+Epithelial Senescence	SAMD9
+Epithelial Senescence	SAT1
+Epithelial Senescence	SNCG
+Epithelial Senescence	TACSTD2
+Epithelial Senescence	TNFAIP2
+Epithelial Senescence	WFDC2
+Stress Response	DDIT3
+Stress Response	SNHG12
+Stress Response	SLC3A2
+Stress Response	PPP1R15A
+Stress Response	GADD45B
+Stress Response	GADD45A
+Stress Response	RSRC2
+Stress Response	TXNIP
+Stress Response	ATF3
+Stress Response	TAF1D
+Stress Response	TRIB3
+Stress Response	ASNS
+Stress Response	EPB41L4A-AS1
+Stress Response	KLF10
+Stress Response	SNHG15
+Stress Response	PDRG1
+Stress Response	CARS
+Stress Response	SNAPC1
+Stress Response	CCNL1
+Stress Response	SQSTM1
+Stress Response	TSC22D1
+Stress Response	DDIT4
+Stress Response	XBP1
+Stress Response	HERPUD1
+Stress Response	IER2
+Stress Response	NFKBIA
+Stress Response	RAE1
+Stress Response	JUN
+Stress Response	RELB
+Stress Response	BTG1
+Stress Response	IRF1
+Stress Response	ZNF622
+Stress Response	HIST1H2AC
+Stress Response	OSER1
+Stress Response	SERTAD1
+Stress Response	SNHG8
+Protein Maturation	HSPA5
+Protein Maturation	RPN2
+Protein Maturation	SLC3A2
+Protein Maturation	PDIA3
+Protein Maturation	LGALS3BP
+Protein Maturation	MCM7
+Protein Maturation	XRCC6
+Protein Maturation	EPRS
+Protein Maturation	VCP
+Protein Maturation	COPB2
+Protein Maturation	EIF4A3
+Protein Maturation	KPNA2
+Protein Maturation	OS9
+Protein Maturation	PRKCSH
+Protein Maturation	UBC
+Protein Maturation	ANXA1
+Protein Maturation	APP
+Protein Maturation	CYR61
+Protein Maturation	HSPA1A
+Protein Maturation	HSPA8
+Protein Maturation	LAPTM4A
+Protein Maturation	NDUFS2
+Protein Maturation	PGK1
+Protein Maturation	APLP2
+Protein Maturation	ATP6AP2
+Protein Maturation	CTSL
+Protein Maturation	GRN
+Protein Maturation	LAMB3
+Protein Maturation	LAMP1
+Protein Maturation	MAGED2
+Protein Maturation	NASP
+Protein Maturation	POLR2B
+Protein Maturation	SDHA
+Protein Maturation	SON
+Proteasomal Degradation	PSMA3
+Proteasomal Degradation	PSMC4
+Proteasomal Degradation	PRDX1
+Proteasomal Degradation	PSMC2
+Proteasomal Degradation	EIF4A3
+Proteasomal Degradation	MDH1
+Proteasomal Degradation	PSMA4
+Proteasomal Degradation	ANXA1
+Proteasomal Degradation	MRPL13
+Proteasomal Degradation	PGK1
+Proteasomal Degradation	DCAF13
+Proteasomal Degradation	PSME2
+Proteasomal Degradation	PRMT1
+Proteasomal Degradation	PSMB3
+Proteasomal Degradation	CCT8
+Proteasomal Degradation	SSBP1
+Proteasomal Degradation	CCNB1
+Proteasomal Degradation	CDC123
+Proteasomal Degradation	DPM1
+Proteasomal Degradation	NDUFS2
+Proteasomal Degradation	PDHA1
+Proteasomal Degradation	LAPTM4A
+Proteasomal Degradation	PSMB1
+Proteasomal Degradation	PCMT1
+Proteasomal Degradation	PSMB6
+Proteasomal Degradation	NDUFA9
+Proteasomal Degradation	POLR2G
+Proteasomal Degradation	CCT5
+Proteasomal Degradation	RTCB
+Proteasomal Degradation	HSPA5
+Proteasomal Degradation	DDX39A
+Proteasomal Degradation	MCTS1
+Proteasomal Degradation	SNRPB2
+Proteasomal Degradation	XRCC6
+Proteasomal Degradation	PSMD13
+Proteasomal Degradation	EIF3I
+Proteasomal Degradation	SSB
+Proteasomal Degradation	NUP37
+Proteasomal Degradation	ILF2
+Proteasomal Degradation	EIF4A1
+Proteasomal Degradation	FH
+Proteasomal Degradation	IMPDH2
+Proteasomal Degradation	CCT7
+Proteasomal Degradation	MAGOH
+Proteasomal Degradation	RBM42
+Proteasomal Degradation	SLC3A2
