@@ -177,6 +177,10 @@ def tiny_pie(tmp_path, monkeypatch):
     model = PieModel(
         helpers.tiny_config(), stats, dict(module.source_dims), module.gene_query_text()
     ).eval()
+    with torch.no_grad():  # zero-initialised adapters would hide a wrong fusion
+        for parameter in model.parameters():
+            if not parameter.any():
+                parameter.normal_(0.0, 0.2)
     pie = pp.Pie(
         model=model,
         module=module,
@@ -229,7 +233,7 @@ def test_our_batches_match_pies_data_path(tiny_pie, perturbation):
     with torch.inference_mode():
         reference = pie.model(theirs)[0]
         hook.remove()
-        own = tables.panel.index("GB")
+        own = tables.panel.index("GE")  # in the second of two gene chunks
         result = pp.forward(pie, ours, own, heads=True, logits=True)
     decoded = torch.cat(features, dim=1)
     assert np.allclose(result.dp_logits, reference.dp_logits.numpy(), atol=1e-5)
@@ -259,6 +263,46 @@ def test_mixed_precision_pass_returns_float32(tiny_pie):
         value = getattr(result, name)
         assert value.dtype == np.float32, name
         assert np.allclose(value, getattr(exact, name), atol=0.05), name
+
+
+def test_cached_decode_equals_a_fresh_one(tiny_pie):
+    pie, tables = tiny_pie
+    assert pie.model.cfg.inference_chunk_size < len(PANEL)
+    ctrl = tables.pie_input.to_numpy(dtype=np.float32)
+
+    def run(gene):
+        batch = pp.build_batch(
+            pie, list(LINES), gene, ctrl, pp.gene_evidence(pie, gene)
+        )
+        return pp.forward(pie, batch, 3, heads=True)
+
+    first = run("GA")
+    assert any(key[0] == "control" for key in pie.cache)
+    other = run("GC")  # another perturbation reads the cached control encoding
+    again = run("GA")
+    pie.cache.clear()
+    fresh = run("GC")
+    for name in ("latent", "features", "own", "change"):
+        assert np.array_equal(getattr(first, name), getattr(again, name)), name
+        assert np.array_equal(getattr(other, name), getattr(fresh, name)), name
+    assert not np.array_equal(first.change, other.change)
+
+
+def test_agreement_reports_float32_and_bf16(tiny_pie):
+    import dataclasses
+
+    pie, tables = tiny_pie
+    exact = pp.agreement(pie, tables, ["GA", "GC"])
+    assert set(exact) == {"float32"} and exact["float32"] < 1e-5
+    mixed = dataclasses.replace(
+        pie,
+        config=SimpleNamespace(trainer=SimpleNamespace(precision="bf16-mixed")),
+        cache={},
+    )
+    both = pp.agreement(mixed, tables, ["GA", "GC"])
+    assert both["float32"] < 1e-5
+    assert 0 < both["pie_bf16"] and 0 < both["ours_bf16"]
+    assert both["ours_bf16"] <= pp.BF16_ERROR_RATIO * both["pie_bf16"] + 1e-3
 
 
 def test_reference_pass_reads_context_alone(tiny_pie):

@@ -52,7 +52,7 @@ import logging
 import os
 import time
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Final
@@ -82,6 +82,9 @@ TASK_ONE_RUN: Final[Path] = (
 #: Our batches against PIE's own dataset and collate, on the same pairs.
 AGREEMENT_PAIRS: Final[int] = 4
 AGREEMENT_TOLERANCE: Final[float] = 1e-3
+#: Our (compiled) bf16 decode may be at most this many times as far from PIE's
+#: float32 logits as PIE's own bf16 forward is, plus the tolerance.
+BF16_ERROR_RATIO: Final[float] = 2.0
 SHARD_ARRAYS: Final[tuple[str, ...]] = ("dH", "dL", "own_h", "own_dp", "own_x")
 
 
@@ -363,6 +366,8 @@ class Pie:
     device: Any
     pert_sources: tuple[str, ...]
     context_sources: tuple[str, ...]
+    #: Run-level caches of the decode and the batches (see ``forward_tensors``).
+    cache: dict[Any, Any] = field(default_factory=dict)
 
 
 def load_pie(out: Layout, tables: Tables, device: str) -> Pie:
@@ -460,18 +465,10 @@ def gene_evidence(pie: Pie, perturbation: str) -> dict[str, np.ndarray]:
 NO_PERTURBATION: Final[str] = "__no_perturbation__"
 
 
-def build_batch(
-    pie: Pie,
-    lines: Sequence[str],
-    perturbation: str | None,
-    ctrl: np.ndarray,
-    evidence: Mapping[str, np.ndarray],
-) -> Any:
-    """The batch PIE's dataset and collate build for ``lines`` x one
-    perturbation (None: the reference pass), the perturbation's tokens and
-    evidence shared across rows, no DepMap token, on the device."""
+def _context_tokens(pie: Pie, lines: Sequence[str]) -> tuple[dict, dict, Any]:
+    """The lines' context-indexed source tokens and masks on the device, and
+    which lines have any (CPU)."""
     import torch
-    from pie.data.dataset import NO_SOURCE, Batch, GeneGroup
 
     device, b = pie.device, len(lines)
     lookup = pie.dataset.sources
@@ -494,6 +491,30 @@ def build_batch(
         tokens[name] = torch.from_numpy(padded).to(device)
         masks[name] = torch.from_numpy(mask).to(device)
         present |= torch.from_numpy(mask.any(axis=1))
+    return tokens, masks, present
+
+
+def build_batch(
+    pie: Pie,
+    lines: Sequence[str],
+    perturbation: str | None,
+    ctrl: np.ndarray,
+    evidence: Mapping[str, np.ndarray],
+) -> Any:
+    """The batch PIE's dataset and collate build for ``lines`` x one
+    perturbation (None: the reference pass), the perturbation's tokens and
+    evidence shared across rows, no DepMap token, on the device."""
+    import torch
+    from pie.data.dataset import NO_SOURCE, Batch, GeneGroup
+
+    device, b = pie.device, len(lines)
+    lookup = pie.dataset.sources
+    context_tokens, context_masks, context_present = _cached(
+        pie, ("context", tuple(lines)), lambda: _context_tokens(pie, lines)
+    )
+    tokens: dict[str, Any] = dict(context_tokens)
+    masks: dict[str, Any] = dict(context_masks)
+    present = context_present.clone()
     if perturbation is not None:
         for name in pie.pert_sources:
             row = lookup.tokens(name, context="", perturbation=perturbation)
@@ -549,6 +570,219 @@ class PassOutput:
     dp_logits: np.ndarray | None  # (b, P, n_bins), only when asked (agreement)
 
 
+# --- the decode, as PIE runs it, with what does not change hoisted --------------
+#
+# PieModel._decode_group step for step (third_party/pie/src/pie/model/pie.py,
+# trunk.py, evidence.py), with three exact hoists: the decoder's memory keys and
+# values once per batch, not per gene chunk; the control-mean encoding once per
+# line batch and chunk for the whole run (it depends on the line, not on the
+# perturbation); the evidence-block encoders on one row, then expanded (the
+# blocks are the perturbation's, the same on every line). Under bf16 the chunk
+# runs through torch.compile, which fuses the norms, casts and the delta-p
+# expectation; the agreement check holds it to PIE's own forward.
+
+
+def _norm(norm: Any, x: Any) -> Any:
+    """PIE's RMSNorm forward (``pie.model.layers.rms_norm``) without its
+    autograd wrapper: the same ``F.rms_norm`` call, eps resolved by input dtype."""
+    import torch.nn.functional as F
+
+    return F.rms_norm(x, (x.shape[-1],), norm.weight, norm.eps)
+
+
+def _sequential(layers: Any, x: Any) -> Any:
+    from torch import nn
+
+    for layer in layers:
+        x = _norm(layer, x) if isinstance(layer, nn.RMSNorm) else layer(x)
+    return x
+
+
+def _heads(attention: Any, x: Any) -> Any:
+    b, s, _ = x.shape
+    return x.view(b, s, attention.num_heads, attention.head_dim).transpose(1, 2)
+
+
+def memory_keys(model: Any, memory: Any) -> list[tuple[Any, Any]]:
+    """Each decoder layer's normalised keys and values of the latents."""
+    keys = []
+    for block in model.decoder:
+        attention = block.attn
+        kv = _norm(block.norm_kv, memory)
+        k = _heads(attention, attention.k_proj(kv))
+        v = _heads(attention, attention.v_proj(kv))
+        keys.append((_norm(attention.k_norm, k), v))
+    return keys
+
+
+def _decoder_block(block: Any, x: Any, k: Any, v: Any) -> Any:
+    import torch.nn.functional as F
+
+    attention = block.attn
+    b, s, d = x.shape
+    q = _heads(attention, attention.q_proj(_norm(block.norm_attn, x)))
+    q = _norm(attention.q_norm, q) * attention.attn_scale.view(1, -1, 1, 1)
+    out = F.scaled_dot_product_attention(
+        q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False, scale=1.0
+    )
+    x = x + attention.out_proj(out.transpose(1, 2).contiguous().view(b, s, d))
+    return x + block.ff(_norm(block.norm_ff, x))
+
+
+def control_encoding(model: Any, ctrl_means: Any) -> Any:
+    """(b, chunk) control means -> (b, chunk, width), as ``_fuse_evidence``."""
+    from pie.model import evidence as ev
+
+    return _sequential(model.evidence_ctrl_enc, ev.ctrl_query_features(ctrl_means))
+
+
+def block_encodings(model: Any, evidence: Mapping[str, Any]) -> list[Any]:
+    """The evidence blocks' gated encodings in ``_fuse_evidence``'s order, after
+    the control one; ``evidence`` holds (1, chunk, k) float32 rows."""
+    from pie.data.evidence import HAVE_COL
+
+    def gated(encoder: Any, key: str) -> Any:
+        x = evidence[key]
+        return _sequential(encoder, x) * x[..., HAVE_COL : HAVE_COL + 1]
+
+    parts = [
+        gated(model.evidence_dp_enc, "evidence_dp"),
+        gated(model.evidence_de_enc, "evidence_de"),
+        gated(model.evidence_lfc_enc, "evidence_lfc"),
+    ]
+    if model.n_donor_datasets > 1:
+        any_donor = evidence["evidence_dp"][..., HAVE_COL : HAVE_COL + 1]
+        parts.append(
+            _sequential(model.evidence_prov_enc, evidence["evidence_prov"]) * any_donor
+        )
+    parts.append(gated(model.evidence_ctx_dp_enc, "evidence_ctx_dp"))
+    parts.append(gated(model.evidence_ctx_de_enc, "evidence_ctx_de"))
+    parts.append(gated(model.evidence_ctx_lfc_enc, "evidence_ctx_lfc"))
+    return parts
+
+
+def decode_chunk(
+    model: Any,
+    centres: Any,
+    temperature: float,
+    query: Any,
+    control: Any,
+    blocks: Sequence[Any],
+    keys: Sequence[tuple[Any, Any]],
+    heads: bool,
+) -> tuple[Any, Any, Any, Any]:
+    """One gene chunk: decoded features (b, c, d), their float32 sum over the
+    chunk, the delta-p expectation (b, c) and the delta-p logits (heads only)."""
+    import torch
+
+    b = control.shape[0]
+    parts = [control, *(part.expand(b, -1, -1) for part in blocks)]
+    fused = _sequential(model.evidence_fuse, torch.cat(parts, dim=-1))
+    x = _norm(
+        model.gene_norm,
+        query.unsqueeze(0).expand(b, -1, -1)
+        + _sequential(model.evidence_query_adapter, fused),
+    )
+    for block, (k, v) in zip(model.decoder, keys, strict=True):
+        x = _decoder_block(block, x, k, v)
+    pooled = x.float().sum(dim=1)
+    if not heads:
+        return x, pooled, None, None
+    adapter = model.evidence_output_adapters["delta_p"]
+    logits = model.delta_p_head(x + _sequential(adapter, torch.cat([fused, x], dim=-1)))
+    probabilities = torch.softmax(logits.float() / temperature, dim=-1)
+    return x, pooled, (probabilities * centres).sum(dim=-1), logits
+
+
+def _chunk_function(pie: Pie, mixed: bool) -> Any:
+    """``decode_chunk``, compiled for bf16 on CUDA (compiled once per process)."""
+    import torch
+
+    if not (mixed and pie.device.type == "cuda"):
+        return decode_chunk
+    if "compiled" not in pie.cache:
+        pie.cache["compiled"] = torch.compile(decode_chunk, dynamic=False)
+    return pie.cache["compiled"]
+
+
+def _cached(pie: Pie, key: tuple, make: Any) -> Any:
+    if key not in pie.cache:
+        pie.cache[key] = make()
+    return pie.cache[key]
+
+
+def forward_tensors(
+    pie: Pie,
+    batch: Any,
+    own_index: int | None,
+    *,
+    heads: bool,
+    logits: bool = False,
+    precise: bool = False,
+) -> dict[str, Any]:
+    """PIE's forward on one batch, on the device: the mean latent, the decoder
+    features pooled over the panel and at ``own_index``, the delta-p expectation
+    per panel gene (heads) and its logits (``logits``); ``precise`` runs in
+    float32 instead of the checkpoint's precision. The control and query caches
+    (``pie.cache``) are keyed by precision and the batch's lines."""
+    import torch
+
+    model = pie.model
+    mixed = _mixed(pie, precise)
+    if not mixed:
+        # As PIE's full-precision path: token sources in the parameter dtype.
+        batch = _float_tokens(batch)
+    chunk_function = _chunk_function(pie, mixed)
+    group = batch.groups[0]
+    lines = tuple(batch.ctx_names)
+    with torch.inference_mode(), _autocast(pie, precise):
+        memory = model._encode(batch)[group.rows]
+        keys = memory_keys(model, memory)
+        total = int(group.gene_ids.shape[0])
+        size = model.cfg.inference_chunk_size
+        pooled = torch.zeros(memory.shape[0], memory.shape[2], device=memory.device)
+        own = None
+        changes, all_logits = [], []
+        for start in range(0, total, size):
+            end = min(start + size, total)
+            ids = group.gene_ids[start:end]
+            query = _cached(
+                pie,
+                ("query", mixed, start),
+                lambda: _sequential(model.gene_query_mlp, model.gene_query_text[ids]),
+            )
+            control = _cached(
+                pie,
+                ("control", mixed, lines, start),
+                lambda: control_encoding(model, group.ctrl_means[:, start:end]),
+            )
+            blocks = block_encodings(
+                model,
+                {key: value[:1, start:end] for key, value in group.evidence.items()},
+            )
+            x, chunk_sum, change, chunk_logits = chunk_function(
+                model, pie.centres, pie.temperature, query, control, blocks, keys, heads
+            )
+            pooled += chunk_sum
+            if own_index is not None and start <= own_index < end:
+                own = x[:, own_index - start].float()
+            if heads:
+                changes.append(change)
+                if logits:
+                    all_logits.append(chunk_logits.float())
+        return {
+            "latent": memory.float().mean(dim=1),
+            "features": pooled / total,
+            "own": own,
+            "change": torch.cat(changes, dim=1) if heads else None,
+            "dp_logits": torch.cat(all_logits, dim=1) if logits else None,
+        }
+
+
+def _numpy(value: Any) -> np.ndarray | None:
+    return None if value is None else value.cpu().numpy()
+
+
 def forward(
     pie: Pie,
     batch: Any,
@@ -558,52 +792,11 @@ def forward(
     logits: bool = False,
     precise: bool = False,
 ) -> PassOutput:
-    """PIE's forward on one batch, as ``PieModel._decode_group`` runs it, keeping
-    the latents, the pooled and own decoder features and the delta-p expectation;
-    ``precise`` runs it in float32 instead of the checkpoint's precision."""
-    import torch
-
-    model = pie.model
-    if not _mixed(pie, precise):
-        # As PIE's full-precision path: token sources in the parameter dtype.
-        batch = _float_tokens(batch)
-    with torch.inference_mode(), _autocast(pie, precise):
-        memory = model._encode(batch)
-        group = batch.groups[0]
-        mem = memory[group.rows]
-        total = int(group.gene_ids.shape[0])
-        chunk = model.cfg.inference_chunk_size
-        pooled = torch.zeros(mem.shape[0], mem.shape[2], device=mem.device)
-        own = None
-        changes, all_logits = [], []
-        adapter = model.evidence_output_adapters["delta_p"]
-        for start in range(0, total, chunk):
-            end = min(start + chunk, total)
-            feats, fused = model._decode_chunk(
-                mem,
-                group.gene_ids[start:end],
-                group.ctrl_means[:, start:end],
-                {key: value[:, start:end] for key, value in group.evidence.items()},
-            )
-            pooled += feats.float().sum(dim=1)
-            if own_index is not None and start <= own_index < end:
-                own = feats[:, own_index - start].float()
-            if heads:
-                dp = model.delta_p_head(
-                    feats + adapter(torch.cat([fused, feats], dim=-1))
-                )
-                probabilities = torch.softmax(dp.float() / pie.temperature, dim=-1)
-                # Not a matmul: autocast would run that in bf16.
-                changes.append((probabilities * pie.centres).sum(dim=-1))
-                if logits:
-                    all_logits.append(dp.float())
-        return PassOutput(
-            latent=memory.float().mean(dim=1).cpu().numpy(),
-            features=(pooled / total).cpu().numpy(),
-            own=None if own is None else own.cpu().numpy(),
-            change=torch.cat(changes, dim=1).cpu().numpy() if heads else None,
-            dp_logits=torch.cat(all_logits, dim=1).cpu().numpy() if logits else None,
-        )
+    """``forward_tensors`` as numpy."""
+    result = forward_tensors(
+        pie, batch, own_index, heads=heads, logits=logits, precise=precise
+    )
+    return PassOutput(**{name: _numpy(value) for name, value in result.items()})
 
 
 def _batches(lines: Sequence[str], size: int) -> Iterator[slice]:
@@ -653,7 +846,7 @@ def gene_pass(
     own_index = tables.panel.index(gene)
     evidence = gene_evidence(pie, key)
     ctrl = tables.pie_input.to_numpy(dtype=np.float32)
-    parts: dict[str, list[np.ndarray]] = {
+    parts: dict[str, list[Any]] = {
         "latent": [],
         "features": [],
         "own": [],
@@ -662,14 +855,19 @@ def gene_pass(
     size = int(out.config["pie"]["lines_per_batch"])
     for part in _batches(lines, size):
         batch = build_batch(pie, lines[part], key, ctrl[part], evidence)
-        result = forward(pie, batch, own_index, heads=True)
+        # On the device until the gene ends: no synchronisation per batch.
+        result = forward_tensors(pie, batch, own_index, heads=True)
         for name in parts:
-            parts[name].append(getattr(result, name))
-    change = np.vstack(parts["change"]).astype(np.float32)
+            parts[name].append(result[name])
+    stacked = {
+        name: np.vstack([_numpy(value) for value in values])
+        for name, values in parts.items()
+    }
+    change = stacked["change"].astype(np.float32)
     arrays = {
-        "dH": np.vstack(parts["features"]) - reference["features"],
-        "dL": np.vstack(parts["latent"]) - reference["latent"],
-        "own_h": np.vstack(parts["own"]),
+        "dH": stacked["features"] - reference["features"],
+        "dL": stacked["latent"] - reference["latent"],
+        "own_h": stacked["own"],
         "own_dp": change[:, own_index],
         "own_x": ctrl[:, own_index],
     }
@@ -700,10 +898,18 @@ def run_genes(
     with pie_environment(out):
         pie = load_pie(out, tables, device)
         difference = agreement(pie, tables, todo)
-        if not difference <= AGREEMENT_TOLERANCE:
+        if not difference["float32"] <= AGREEMENT_TOLERANCE:
             raise ValueError(
-                f"our batches differ from PIE's own data path by {difference:.3g} in "
-                "the float32 delta-p logits"
+                f"our batches differ from PIE's own data path by "
+                f"{difference['float32']:.3g} in the float32 delta-p logits"
+            )
+        if "ours_bf16" in difference and not (
+            difference["ours_bf16"]
+            <= BF16_ERROR_RATIO * difference["pie_bf16"] + AGREEMENT_TOLERANCE
+        ):
+            raise ValueError(
+                f"our bf16 decode is {difference['ours_bf16']:.3g} from PIE's float32 "
+                f"delta-p logits, PIE's own bf16 forward {difference['pie_bf16']:.3g}"
             )
         reference = reference_pass(out, pie, tables)
         seconds = []
@@ -841,10 +1047,12 @@ def _float_tokens(batch: Any) -> Any:
     )
 
 
-def agreement(pie: Pie, tables: Tables, genes: Sequence[str]) -> float:
-    """Largest absolute difference of the delta-p logits, in float32, between our
-    batches and PIE's own dataset and collate (DepMap masked) on a training line
-    with cells, a bulk-only line and a test line, for two genes."""
+def agreement(pie: Pie, tables: Tables, genes: Sequence[str]) -> dict[str, float]:
+    """Largest absolute differences of the delta-p logits on a training line with
+    cells, a bulk-only line and a test line, for two genes, against PIE's own
+    dataset, collate and forward (DepMap masked) in float32: ``float32`` for our
+    batches and decode in float32; under bf16 also ``pie_bf16`` for PIE's own bf16
+    forward and ``ours_bf16`` for our (compiled) bf16 decode."""
     import torch
     from pie.data.dataset import RowRef, collate
     from pie.predict import _batch_to
@@ -856,7 +1064,14 @@ def agreement(pie: Pie, tables: Tables, genes: Sequence[str]) -> float:
         for role in ("train_cells", "train_bulk", "test")
     ]
     position = [lines.index(m) for m in picks]
-    worst = 0.0
+    mixed = _mixed(pie, False)
+    worst: dict[str, float] = {"float32": 0.0}
+    if mixed:
+        worst |= {"pie_bf16": 0.0, "ours_bf16": 0.0}
+
+    def update(name: str, value: np.ndarray, reference: np.ndarray) -> None:
+        worst[name] = max(worst[name], float(np.abs(value - reference).max()))
+
     for gene in genes[: AGREEMENT_PAIRS // 2]:
         key = tables.genes.at[gene, "gene_text_key"]
         rows = [RowRef(0, -1, m, key) for m in picks]
@@ -864,9 +1079,13 @@ def agreement(pie: Pie, tables: Tables, genes: Sequence[str]) -> float:
         batch = mask_depmap(
             collate([dataset[i] for i in range(len(rows))], pie.module.source_dims)
         )
-        theirs = _batch_to(batch, pie.device, torch.float32)
         with torch.inference_mode():
+            theirs = _batch_to(batch, pie.device, torch.float32)
             reference = pie.model(theirs)[0].dp_logits.float().cpu().numpy()
+            if mixed:
+                with _autocast(pie):
+                    own_bf16 = pie.model(_batch_to(batch, pie.device, None))[0]
+                update("pie_bf16", own_bf16.dp_logits.float().cpu().numpy(), reference)
         ours = build_batch(
             pie,
             picks,
@@ -874,8 +1093,11 @@ def agreement(pie: Pie, tables: Tables, genes: Sequence[str]) -> float:
             tables.pie_input.to_numpy(dtype=np.float32)[position],
             gene_evidence(pie, key),
         )
-        mine = forward(pie, ours, None, heads=True, logits=True, precise=True).dp_logits
-        worst = max(worst, float(np.abs(mine - reference).max()))
+        mine = forward(pie, ours, None, heads=True, logits=True, precise=True)
+        update("float32", mine.dp_logits, reference)
+        if mixed:
+            mine = forward(pie, ours, None, heads=True, logits=True)
+            update("ours_bf16", mine.dp_logits, reference)
     return worst
 
 
@@ -911,9 +1133,14 @@ def build_basis(out: Layout, tables: Tables, device: str, seed: int) -> dict[str
         "components": int(basis["components"].shape[0]),
         "variance_kept": float(basis["explained"].sum()),
         "variance_split": split,
-        "agreement_max_abs_logit_difference": max(
-            v["agreement"] for k, v in run["steps"].items() if k.startswith("pilot")
-        ),
+        "agreement": {
+            name: max(
+                v["agreement"][name]
+                for k, v in run["steps"].items()
+                if k.startswith("pilot") and "agreement" in v
+            )
+            for name in ("float32", "pie_bf16", "ours_bf16")
+        },
         "pilot_seconds_per_gene": [
             v["seconds_per_gene"]
             for k, v in run["steps"].items()
@@ -963,8 +1190,10 @@ def write_pilot_report(out: Layout, report: Mapping[str, Any]) -> None:
         "",
         f"Seconds per gene (all lines, per process): {seconds}.",
         "",
-        "Our batches against PIE's own dataset and collate: largest delta-p logit "
-        f"difference {report['agreement_max_abs_logit_difference']:.3g}.",
+        "Largest delta-p logit difference from PIE's own dataset, collate and "
+        f"float32 forward: our float32 decode {report['agreement']['float32']:.3g}; "
+        f"PIE's own bf16 forward {report['agreement']['pie_bf16']:.3g}, our compiled "
+        f"bf16 decode {report['agreement']['ours_bf16']:.3g}.",
         "",
     ]
     (out.pilot / "pilot.md").write_text("\n".join(lines))
