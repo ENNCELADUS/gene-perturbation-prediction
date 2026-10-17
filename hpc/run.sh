@@ -19,6 +19,8 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh stage-one-queue --gpus 0,1,2,3 [--folds main,0,1,2,3,4] CONFIG...   (stage-one runs, one per GPU)
        hpc/run.sh stage-one-report CONFIG [--device cuda]   (a stage-one report over runs, 1 GPU)
        hpc/run.sh stage-one-prior CONFIG --run-id ID   (the default prior refitted on the stage-one frame, CPU)
+       hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
+       hpc/run.sh pie-precompute CONFIG --steps states|assemble_states --set NAME[,NAME]|ALL [--shard I/N]   (frozen PIE on state inputs, GPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment; pie-reproduce,
 pie-precompute and the stage-one commands except stage-one-prior always run in
 .venv-pie.
@@ -56,6 +58,12 @@ process per listed GPU (other kinds of config are skipped); `stage-one-report`
 scores a report config's rows into outputs/stage_one/<task>/<config stem>/
 (results.md); `stage-one-prior` writes the prior reference the report and the
 components reader read.
+`cell-states` runs the state telemetry of a configs/stage_one/states config
+(src.experiments.state_telemetry): `fit` writes the fit samples and plan, runs
+src.data.prepare.state_programs in STATES_PYTHON (default .venv-states/bin/python,
+built by hpc/states/setup.sh) for the cNMF programs and scVI, then fits the
+mixtures; `project`, `inputs` and `report` follow. `pie-precompute` on the same
+config with `--steps states --set ALL` runs the frozen PIE on the state inputs.
 EOF
 }
 
@@ -65,7 +73,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior|cell-states) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -92,6 +100,9 @@ case "$command" in
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.pie_reproduction "$@" ;;
   ladder-inputs) exec "$python_bin" -m src.experiments.ladder_inputs "$@" ;;
+  cell-states)
+    export STATES_PYTHON=${STATES_PYTHON:-"$repo_root/.venv-states/bin/python"}
+    exec "$python_bin" -m src.experiments.state_telemetry "$@" ;;
   pie-precompute)
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.pie_precompute "$@" ;;

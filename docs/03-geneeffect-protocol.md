@@ -1107,3 +1107,94 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   is keyed by a fingerprint of the ladder config, labels, lines, panel and `dH.npy`, and refused on a mismatch.
   `outputs/stage_one/<task>/<report config stem>/results.md`.
 - **Scope.** Single-gene dependency on held-out lines; not SL evidence.
+
+## 17. Cell states
+
+Task 8 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) (§3.5; plan
+[2026-10-17](specs/2026-10-17-pie-stage-one-plan.md), Wave 1B): frozen cell-state vocabularies, the state inputs they
+give PIE and their controls, the frozen PIE on those inputs, and a telemetry report people read before choosing the
+vocabularies Task 9 precomputes. No model is trained on GeneEffect and nothing is chosen in code.
+`configs/stage_one/states/telemetry.yaml` names the stage-one inputs config (§15), whose ladder root holds `states/`,
+the frozen PIE's state outputs under `states/pie/` ([data card](data/cell-states.md)). `hpc/run.sh cell-states CONFIG --steps fit,project,inputs`, then
+`hpc/run.sh pie-precompute CONFIG --steps states --set ALL --shard I/N` and `--steps assemble_states --set ALL`, then
+`hpc/run.sh cell-states CONFIG --steps report` (`src/experiments/state_telemetry.py`, `src/data/cell_states.py`;
+`src/data/prepare/state_programs.py` in `.venv-states`, built by `hpc/states/setup.sh`). Every step skips what exists;
+`states/manifest.json` records the settings and refuses a root written under others (the projected roles may grow);
+moving `states/` aside moves the frozen PIE's state outputs with it.
+
+- **Fit scope.** Every vocabulary is fitted on the 377 labelled single-cell training lines alone (`fit_sample` runs
+  `assert_fit_eligible` and refuses any other role), on at most 500 distinct cells per line per fitting seed, drawn
+  without replacement: a line with fewer cells contributes each of them once and so weighs less. (Padding small lines
+  with copies, tried first, let a full-covariance mixture on 50 components spend whole components on one small line's
+  copies in a null simulation; the mixtures, the HVG and Tx1 principal components, scVI and cNMF all read distinct
+  cells.) Three fitting seeds (0, 1, 2) change the draw and every random start; seed 0's fit is the one projected into
+  state inputs.
+- **Vocabularies.** *Cycle*: a three-component Gaussian mixture (full covariances) on each cell's S and G2/M program
+  scores (§14, Task 2's `qc` columns), components named non-cycling (lowest on both), S and G2/M. *Recurrent programs*:
+  consensus NMF (cNMF 1.7.1) per training line on its drawn cells (each once), at K = 4, 6 and 8, 20 replicates, on the
+  line's 2,000 most overdispersed panel genes; robust programs (35 of the top 50 genes shared with a program at another
+  K), kept greedily unless they share 10 top genes with a kept one; a program sharing 10 top genes with Tirosh's S and
+  G2/M genes is a cycle program and set aside; the rest clustered across lines (average linkage on shared top genes, cut
+  at 10 of 50) and a cluster spanning 5 training lines is a recurrent program. The reference holds the recurrent programs,
+  the two cycle phases and a background program (the pooled sample's mean TPM profile): cNMF TPM spectra renormalised to
+  10⁶, averaged per line then over lines, divided by each gene's TPM SD over the pooled sample (starCAT's variance
+  normalisation with the SD fixed by the fit), on the pooled sample's overdispersed genes and the programs' top genes.
+  A cell's usages are starCAT's non-negative least squares of its scaled TPM on the fixed spectra, solved exactly per
+  cell (starCAT rescales by the query's own SD, which would make a cell's usages depend on the cells projected with it);
+  its memberships are its recurrent and background usages, cycle usages dropped, normalised to one (all background when
+  none): program-weighted pseudo-contexts, not exclusive states. *scVI* (scvi-tools 1.4.2, 10 latent dimensions) on the
+  pooled sample over STATE's HVGs, each cell's chemistry as the categorical nuisance
+  (`configs/benchmarks/single_cell_source_chemistry.csv`: a row per deposit, and for a deposit whose libraries mix kits
+  a row per line or per arm, the arm read from the cell's h5ad obs; the most specific matching row wins and a cell of
+  such a deposit matching none stops the step), the whole-library UMI as the size factor and the S and G2/M scores as
+  continuous covariates;
+  its encoder reads neither, so a cell's latent mean needs no category the fit saw; then a Gaussian mixture at K = 4, 6
+  and 8 on the latent, line-centred and absolute. *Baselines*: the same mixtures (line-centred) on the leading 50
+  principal components of the line-centred HVG cells and of the line-centred Tx1-3B embeddings. *QC states*: the same
+  mixtures on line-centred log UMI, genes detected and mitochondrial fraction, standardised by the pooled sample's SD.
+  Line-centring subtracts the line's mean over all of its cells.
+- **Projection.** Every cell of the lines in `project.roles` (training and validation lines; test lines are added after
+  the vocabulary choice is recorded) and of their second deposits (the noise diagnosis's, §14; no Tx1 there) under every
+  vocabulary and fitting seed: responsibilities computed row by row from the stored parameters, so projecting a line
+  twice, or with other cells, gives identical memberships (`memberships/`, `second/`).
+- **State inputs.** For line c with per-cell `u_i = log1p(CP10K_i)` recomputed from its raw h5ad as §15 computes PIE's
+  input (whole-library denominator, upper-case symbols, duplicates summed; an unlisted gene takes PIE's input value,
+  the frame mean) and memberships `q_ik`: mass `π_ck = Σ_i q_ik / n_c`, input `x_ck = Σ_i q_ik u_i / Σ_i q_ik`, so
+  `Σ_k π_ck x_ck` is the line's PIE input; the step stops if any set misses it by more than 10⁻⁴. A state of effective
+  cell count `(Σ_i q_ik)² / Σ_i q_ik²` below 10 is merged, smallest first, into the state whose input is nearest, its
+  membership column added (mass and weighted expression kept); a line can end with one state. Sets, at fitting seed 0:
+  every vocabulary; the cycling-weighted input (each cell weighted by its S plus G2/M membership plus 0.05, normalised;
+  a sensitivity row for proliferation weighting, not a growth model); and every vocabulary but the QC states with its
+  memberships permuted across the line's cells at seeds 0, 1 and 2 (every state's mass, effective count and overlap and
+  the line input kept, the link to expression broken). Each set also holds the line's whole-line input as a `|whole`
+  context. Per (line, state) the step also stores the membership-weighted mean of the cells' line-centred reference
+  program scores (Kinker's 12 recurrent programs, Gavish's 41 meta-programs, MSigDB hallmarks, Tirosh's S and G2/M, scored
+  as §14 scores programs over the panel; a program with no panel gene among its symbols, such as an outdated alias,
+  is not scored) and of their line-centred QC values.
+- **The frozen PIE on states.** Each (line, state) is a PIE context of its own, `<ModelID>|<set>|<state>`, with the
+  state's input as control mean, its line's Cellosaurus text and the masked sources of §15, on the dataset and
+  checkpoint of §15, for the pilot's 200 genes. Batches of 64 contexts, context-major: a batch runs its own reference
+  pass, then every gene, and its cached context tokens and control encodings are evicted after it; the encoder (which
+  reads no expression) runs once per distinct line in a batch; the last batch is padded with copies of its last context.
+  Stored per (gene, context): `dH` and `dE` (on the §15 basis) and the own feature (float16), the own predicted change
+  and own input (float32), with the fingerprint (SHA-256) of the line's state contexts, inputs and masses; a line's
+  pass of another fingerprint is refused, as is an assembly or a report over one. `assemble_states` centres them on the
+  main pass's frame means of the gene and records every line's fingerprint; an assembled set is skipped by the pass
+  and by assembly. The agreement check of §15 runs before each pass.
+- **Report** (`outputs/stage_one/state_telemetry/<config stem>/results.md`, `report.json`). Per vocabulary, on the
+  training lines at seed 0: each state's identity (the three highest reference programs and each group's best); the
+  states' mass explained by deposit (η² against permutations within lineage, deposits with under 5 lines pooled) and
+  by the lines' median log UMI, genes detected and mitochondrial fraction (R²), and each state's within-line QC shift
+  in pooled within-line SD units; recurrence (the share of lines holding a state with mass ≥ 0.05) and each state's
+  spread across lines; the shares of variance of the singular values of the line × state masses in centred log-ratio
+  form (floor 10⁻⁴), its K − 1 contrasts; agreement of masses between a line's two deposits (per-state Pearson across
+  lines, per-line total-variation distance beside that between different lines); stability across fitting seeds (states
+  matched by the Hungarian method on their memberships' correlation over a fixed draw of 200 cells per training line,
+  the matched correlations and the training lines' masses' distance). Validation lines from deposits no training line comes from are projected again and
+  compared. The frozen PIE's gap `Σ_k π_ck Δ(x_ck, g) − Δ(x̄_c, g)` for dH, dE and the own feature and own predicted
+  change (dL reads no expression), against the set's `|whole` context: pooled over genes and the role's lines, its energy
+  and its spread across lines within a gene, each over the whole-line delta's spread across lines within the gene; the
+  noise floor is the `|whole` context against the main pass on the same scale; per-shard seconds per context.
+- **Reading.** People choose which vocabularies Task 9 precomputes. A gap no larger than the permuted control's is not
+  by itself a reason to stop (design §5, Task 8). The per-state scores Task 9 produces are model-implied, never measured
+  per-state GeneEffects (design §3.5).
