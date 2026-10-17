@@ -231,6 +231,53 @@ def test_state_inputs_reproduce_pies_input_in_every_set(world):
     assert len(cycling) == 2 * len(t.projected)
 
 
+def test_permuted_sets_keep_the_real_states_masses_and_effective_counts(world):
+    _, config, t = world
+    merged_somewhere = False
+    for set_name in cs.state_sets(config):
+        vocabulary = cs.base_vocabulary(set_name)
+        if set_name == vocabulary:
+            continue
+        real = pd.read_parquet(t.layout.state_set(vocabulary) / "masses.parquet")
+        permuted = pd.read_parquet(t.layout.state_set(set_name) / "masses.parquet")
+        assert real["state"].tolist() == permuted["state"].tolist()
+        assert real["model_id"].tolist() == permuted["model_id"].tolist()
+        assert np.allclose(real["mass"], permuted["mass"], equal_nan=True)
+        assert np.allclose(real["effective_count"], permuted["effective_count"])
+        assert real["merged"].tolist() == permuted["merged"].tolist()
+        merged_somewhere |= (real["merged"] != "").any()
+    assert merged_somewhere  # the world's settings do merge small states
+
+
+def test_matched_states_count_unmatched_mass_against_zero():
+    rng = np.random.default_rng(3)
+    qa = rng.dirichlet([1.0, 1.0, 1.0], size=200)
+    qb = qa[:, :2]  # the second fit lacks state 2
+    ma = np.tile([0.5, 0.3, 0.2], (4, 1))
+    mb = np.tile([0.6, 0.4], (4, 1))
+    result = st.matched_states(qa, qb, ma, mb)
+    assert result["states"] == [3, 2] and result["unmatched_states"] == [1, 0]
+    assert np.isclose(result["unmatched_mass_mean"], 0.2)
+    # Matched |0.5 - 0.6| + |0.3 - 0.4| plus the unmatched 0.2, halved.
+    assert np.isclose(result["matched_mass_tvd_mean"], 0.2)
+    same = st.matched_states(qa, qa, ma, ma)
+    assert same["unmatched_mass_mean"] == 0 and same["matched_mass_tvd_mean"] == 0
+
+
+def test_deposit_share_is_reported_per_state():
+    rng = np.random.default_rng(4)
+    lines = [f"ACH-{i}" for i in range(40)]
+    deposit = pd.Series(["d1"] * 20 + ["d2"] * 20, index=lines)
+    driven = np.where(deposit == "d1", 0.2, 0.6) + rng.normal(0, 0.02, 40)
+    frame = pd.DataFrame({"driven": driven, "free": rng.uniform(0, 1, 40)}, index=lines)
+    shares = st.per_state_group_share(
+        frame, deposit, pd.Series("Lung", index=lines), permutations=200, seed=0
+    )
+    assert shares["driven"]["observed"] > 0.9 > shares["driven"]["null_q95"]
+    assert shares["driven"]["p_value"] < 0.01
+    assert shares["free"]["observed"] < 0.3
+
+
 def _write_pie(root: Path, t: st.Telemetry, set_name: str, bump: float) -> None:
     """A main pass and an assembled state pass on two genes where every context
     reads its line's main-pass deltas, one state of one line moved by ``bump``."""
@@ -315,6 +362,8 @@ def test_report_writes_every_section(world):
     assert set(entry["identity"]["members_listed"]) == set(st.REFERENCE_GROUPS)
     assert entry["second_deposit"]["lines"] == len(SECOND)
     assert set(entry["stability"]) == {"0-1"}
+    assert "unmatched_mass_mean" in entry["stability"]["0-1"]
+    assert set(entry["confound"]["deposit_per_state"]) == set(entry["states"])
     assert report["pie_gap"]["cycle"] is not None
     assert report["pie_gap"]["hvg_k2"] is None
     assert set(report["determinism"]["lines"]) == set(VAL)

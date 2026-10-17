@@ -243,10 +243,14 @@ hpc/run.sh stage-one-report configs/stage_one/architecture/report_3a.yaml
 
 **Launch:**
 ```
-STATES_PYTHON=.venv-states/bin/python hpc/run.sh cell-states configs/stage_one/states/telemetry.yaml --steps fit,project,inputs
-for i in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$i nohup hpc/run.sh pie-precompute configs/stage_one/states/telemetry.yaml --steps states --set ALL --shard $i/4 > outputs/launches/states_$i.log 2>&1 & done
-hpc/run.sh cell-states configs/stage_one/states/telemetry.yaml --steps report
+CFG=configs/stage_one/states/telemetry.yaml
+CUDA_VISIBLE_DEVICES=0 STATES_PYTHON=.venv-states/bin/python hpc/run.sh cell-states $CFG --steps fit,project,inputs
+for i in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$i nohup hpc/run.sh pie-precompute $CFG --steps states --set ALL --shard $i/4 > outputs/launches/states_$i.log 2>&1 & done
+wait   # every shard has exited (from another shell: until no pie_precompute process is left)
+hpc/run.sh pie-precompute $CFG --steps assemble_states --set ALL
+hpc/run.sh cell-states $CFG --steps report
 ```
+`hpc/README.md` ("The cell states") gives the same recipe.
 Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each take their own GPU ids, set at launch.
 
 ## Waves 2–5 (outline)
