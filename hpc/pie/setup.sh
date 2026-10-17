@@ -3,7 +3,8 @@
 #
 # PIE is vendored and tracked in third_party/pie (commit in third_party/pie/VENDORED.md), so it arrives with git pull.
 # uv syncs its lock into .venv-pie at the repo root: Python 3.12 (from the npmmirror copy of python-build-standalone),
-# PIE installed editable, torch 2.10.0 from the PyTorch cu128 index, and PIE's dev group (pytest).
+# PIE installed editable, torch 2.10.0 from the PyTorch cu128 index, PIE's dev group (pytest), and the `geneeffect`
+# group the stage-one runs add (scikit-learn, for the project's scorer).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -12,7 +13,7 @@ export UV_PYTHON_INSTALL_DIR=/2023533015/.uv/python
 export UV_PYTHON_INSTALL_MIRROR=https://registry.npmmirror.com/-/binary/python-build-standalone
 
 "$UV" python install 3.12
-UV_PROJECT_ENVIRONMENT="$(pwd)/.venv-pie" "$UV" sync --frozen --python 3.12 --project third_party/pie
+UV_PROJECT_ENVIRONMENT="$(pwd)/.venv-pie" "$UV" sync --frozen --python 3.12 --project third_party/pie --group geneeffect
 
 # cu128 wheels nominally need driver 570 or newer; fail here if this driver cannot run them.
 echo "driver $(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1)"

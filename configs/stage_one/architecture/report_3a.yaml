@@ -1,0 +1,66 @@
+# Task 3's report (PIE stage-one design §5 Task 3; protocol §16): every architecture row, trained and untrained,
+# on validation, test and out of fold over the single-cell training lines, with the listed contrasts' 95% paired
+# line-bootstrap intervals. `hpc/run.sh stage-one-report CONFIG` -> outputs/stage_one/architecture/report_3a/.
+# The untrained rows: the base m_g, the default prior refitted on the frame (stage_one_prior.py), and a per-gene
+# ridge on the line-centred ΔH at three penalties. People read it; nothing is chosen in code.
+kind: report
+task: architecture
+output_root: outputs/stage_one
+ladder_config: configs/stage_one/ladder_inputs.yaml
+bootstrap_repeats: 1000
+rows:
+  - {name: base, kind: base}
+  - {name: prior, kind: prior, run: outputs/stage_one/architecture/prior_reference_seed0}
+  - {name: dH ridge 10, kind: dh_ridge, penalty: 10.0}
+  - {name: dH ridge 100, kind: dh_ridge, penalty: 100.0}
+  - {name: dH ridge 1000, kind: dh_ridge, penalty: 1000.0}
+  - {name: direct readout, kind: run, config: configs/stage_one/architecture/direct_readout.yaml}
+  - {name: direct readout warm, kind: run, config: configs/stage_one/architecture/direct_readout_warm.yaml}
+  - {name: film dH, kind: run, config: configs/stage_one/architecture/film_dH.yaml}
+  - {name: film dE, kind: run, config: configs/stage_one/architecture/film_dE.yaml}
+  - {name: film dL, kind: run, config: configs/stage_one/architecture/film_dL.yaml}
+  - {name: multi dH, kind: run, config: configs/stage_one/architecture/multi_dH.yaml}
+  - {name: multi dE, kind: run, config: configs/stage_one/architecture/multi_dE.yaml}
+  - {name: multi dL, kind: run, config: configs/stage_one/architecture/multi_dL.yaml}
+  - {name: nodelta film, kind: run, config: configs/stage_one/architecture/nodelta_film.yaml}
+  - {name: permuted film dH, kind: run, config: configs/stage_one/architecture/permuted_film_dH.yaml}
+  - {name: permuted film dE, kind: run, config: configs/stage_one/architecture/permuted_film_dE.yaml}
+  - {name: permuted film dL, kind: run, config: configs/stage_one/architecture/permuted_film_dL.yaml}
+  - {name: permuted multi dH, kind: run, config: configs/stage_one/architecture/permuted_multi_dH.yaml}
+  - {name: permuted multi dE, kind: run, config: configs/stage_one/architecture/permuted_multi_dE.yaml}
+  - {name: permuted multi dL, kind: run, config: configs/stage_one/architecture/permuted_multi_dL.yaml}
+  - {name: components reader, kind: run, config: configs/stage_one/architecture/components_reader.yaml}
+  - {name: lineage only, kind: run, config: configs/stage_one/architecture/lineage_only.yaml}
+  - {name: text only, kind: run, config: configs/stage_one/architecture/text_only.yaml}
+  - {name: own x only, kind: run, config: configs/stage_one/architecture/own_x_only.yaml}
+contrasts:
+  - [film dH, direct readout]
+  - [film dE, direct readout]
+  - [multi dH, direct readout]
+  - [multi dE, direct readout]
+  - [direct readout warm, direct readout]
+  - [film dH, film dL]
+  - [film dE, film dL]
+  - [multi dH, multi dL]
+  - [multi dE, multi dL]
+  - [multi dH, film dH]
+  - [multi dE, film dE]
+  - [multi dH, nodelta film]
+  - [multi dE, nodelta film]
+  - [film dH, permuted film dH]
+  - [film dE, permuted film dE]
+  - [film dL, permuted film dL]
+  - [multi dH, permuted multi dH]
+  - [multi dE, permuted multi dE]
+  - [multi dL, permuted multi dL]
+  - [film dH, dH ridge 100]
+  - [components reader, prior]
+  - [direct readout, prior]
+  - [film dH, prior]
+  - [film dE, prior]
+  - [multi dH, prior]
+  - [multi dE, prior]
+  - [film dL, text only]
+  - [film dH, own x only]
+  - [film dE, own x only]
+  - [text only, lineage only]

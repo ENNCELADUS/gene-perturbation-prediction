@@ -1,0 +1,187 @@
+"""The default prior refitted on the stage-one frame (PIE stage-one design Task 3:
+the like-for-like linear reference), in the project environment.
+
+``python -m src.experiments.stage_one_prior CONFIG --run-id ID``
+(``hpc/run.sh stage-one-prior``; a ``kind: prior_reference`` config) fits the
+default prior's reference row (the ladder config's ``prior_config``: 128
+expression components at their penalty, then the data-selected genes at the gene
+penalty) on the 981 frame lines' mean channel (``mean/mean_channel.parquet``, the
+same input every stage-one arm reads) and their labels, ``(GeneEffect - mu_g) /
+sigma_g``; the components are fitted on the frame rows. It writes, in
+``<output_root>/<task>/<ID>/``:
+
+- ``predictions_val.parquet``, ``predictions_test.parquet``: the fit on the whole
+  frame, in scoring units;
+- ``predictions_oof.parquet``: every frame line predicted by the fit without its
+  frame fold (``crossfit``);
+- ``components/main.parquet`` (every line's 128 component scores, components fitted
+  on the frame) and ``components/fold<k>.parquet`` (fitted on the frame without
+  fold k), which the shared nonlinear components reader reads;
+- ``row.json``: validation and test scores, and the out-of-fold scores over the
+  single-cell training lines.
+
+It decides nothing.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from src.experiments.run_dir import bind, write_json
+
+
+def _write_parquet(path: Path, frame: pd.DataFrame) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    frame.astype(np.float32).to_parquet(temporary)
+    os.replace(temporary, path)
+
+
+def run(config: Mapping[str, Any], run_id: str) -> Path:
+    from src.context_prior.prior import (
+        PriorInputs,
+        PriorSpec,
+        crossfit,
+        fit_prior,
+        total,
+    )
+    from src.context_prior.reference import load_reference
+    from src.context_prior.views import expression_components, fit_expression_components
+    from src.eval.geneeffect import wide_accuracy
+    from src.experiments.config import load_prior_config
+    from src.experiments.context_prior import stages
+    from src.experiments.stage_one import load_setup
+
+    run_dir = Path(config["output_root"]) / config["task"] / run_id
+    (run_dir / "components").mkdir(parents=True, exist_ok=True)
+    bind(run_dir, config)
+    if (run_dir / "row.json").is_file():
+        print(f"{run_dir}: done", flush=True)
+        return run_dir
+    setup = load_setup(config["ladder_config"])
+    ladder = setup.ladder
+    prior = load_prior_config(Path(setup.ladder_config["prior_config"]))
+    reference = prior["reference"]
+    frame = ladder.frame
+    # The labels' guard: every frame line must be a fit-eligible training line.
+    setup.targets(None)
+    folds = ladder.folds
+    expression = _mean_channel(setup)
+    components = fit_expression_components(
+        expression.loc[frame], int(prior["prior"]["components"])
+    )
+    inputs = PriorInputs(
+        expression=expression.loc[frame],
+        residual=setup.truth(frame),
+        components=components,
+        reference=load_reference(
+            Path(prior["paths"]["reference"]),
+            blocked={*ladder.role_lines("val", "test"), *setup.excluded},
+        ),
+        lineage=ladder.lines.loc[frame, "lineage"],
+        patients=ladder.lines["patient_id"].astype(str).to_dict(),
+    )
+    spec = PriorSpec(
+        tuple(
+            stages(
+                prior,
+                reference["block_set"],
+                reference["components_penalty"],
+                reference["gene_penalty"],
+            )
+        )
+    )
+    fitted = fit_prior(spec, inputs, fit_lines=frame, encoder_lines=frame)
+    held = ladder.role_lines("val", "test")
+    predictions = total(fitted.predict(expression.loc[held]))
+    oof = total(
+        crossfit(
+            spec,
+            inputs,
+            folds=folds,
+            queries={
+                k: expression.loc[[m for m in frame if folds[m] == k]]
+                for k in sorted(set(folds.values()))
+            },
+            labelled=frame,
+            encoder_lines=frame,
+        )
+    ).loc[frame]
+    split = {
+        "val": predictions.loc[ladder.role_lines("val")],
+        "test": predictions.loc[ladder.role_lines("test")],
+        "oof": oof,
+    }
+    for name, values in split.items():
+        _write_parquet(run_dir / f"predictions_{name}.parquet", values)
+    lines = ladder.line_ids
+    _write_parquet(
+        run_dir / "components" / "main.parquet",
+        expression_components(components, expression.loc[lines]),
+    )
+    for k in sorted(set(folds.values())):
+        kept = [m for m in frame if folds[m] != k]
+        fold_components = fit_expression_components(
+            expression.loc[kept], int(prior["prior"]["components"])
+        )
+        _write_parquet(
+            run_dir / "components" / f"fold{k}.parquet",
+            expression_components(fold_components, expression.loc[lines]),
+        )
+    cells = ladder.role_lines("train_cells")
+    scored = {
+        "val": split["val"],
+        "test": split["test"],
+        "oof": oof.loc[cells],
+    }
+    write_json(
+        run_dir / "row.json",
+        {
+            "reference_row": reference,
+            "frame_lines": len(frame),
+            "space_genes": int(expression.shape[1]),
+            "scores": {
+                name: wide_accuracy(
+                    values,
+                    setup.truth(list(values.index)),
+                    setup.definitions,
+                    panel=ladder.panel,
+                )
+                for name, values in scored.items()
+            },
+        },
+    )
+    print(f"{run_dir}: done", flush=True)
+    return run_dir
+
+
+def _mean_channel(setup: Any) -> pd.DataFrame:
+    from src.data.ladder_reader import mean_channel
+
+    return mean_channel(setup.ladder).astype(np.float64)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("config", type=Path)
+    parser.add_argument("--run-id", required=True)
+    args = parser.parse_args(argv)
+    from src.experiments.config import load_stage_one_config
+
+    config = load_stage_one_config(args.config)
+    if config["kind"] != "prior_reference":
+        parser.error(f"{args.config} is a {config['kind']} config")
+    run(config, args.run_id)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
