@@ -103,9 +103,9 @@ def test_fit_sample_weighs_lines_equally_and_rejects_held_out_lines():
     sample = cs.fit_sample(
         {"ACH-T0": 40, "ACH-T1": 7}, roles, _split(), cells_per_line=20, seed=0
     )
-    assert sample.groupby("model_id").size().to_dict() == {"ACH-T0": 20, "ACH-T1": 20}
+    assert sample.groupby("model_id").size().to_dict() == {"ACH-T0": 20, "ACH-T1": 7}
     small = sample.loc[sample["model_id"] == "ACH-T1", "row"]
-    assert set(small) == set(range(7))  # every cell, then draws with replacement
+    assert list(small) == list(range(7))  # every cell once, never duplicated
     big = sample.loc[sample["model_id"] == "ACH-T0", "row"]
     assert big.is_unique
     again = cs.fit_sample(
@@ -122,6 +122,129 @@ def test_fit_sample_weighs_lines_equally_and_rejects_held_out_lines():
             cells_per_line=5,
             seed=0,
         )
+
+
+def _null_component_shares(padded: bool) -> np.ndarray:
+    """Per component of a 50-d mixture fitted on line-centred null cells (no
+    states), the largest share of its responsibility held by one line."""
+    rng = np.random.default_rng(6)
+    counts = {f"ACH-T{i}": (12 if i < 5 else 300) for i in range(30)}
+    cells = {m: rng.normal(size=(n, 50)) for m, n in counts.items()}
+    split = FixedSplit(train=tuple(counts), val=(), test=())
+    roles = dict.fromkeys(counts, "train_cells")
+    sample = cs.fit_sample(counts, roles, split, cells_per_line=200, seed=0)
+    parts, owners = [], []
+    for model_id, group in sample.groupby("model_id", sort=False):
+        rows = group["row"].to_numpy()
+        if padded and len(rows) < 200:  # the replaced rule: copies up to 200
+            extra = np.random.default_rng(1).choice(rows, size=200 - len(rows))
+            rows = np.concatenate([rows, extra])
+        x = cells[model_id]
+        parts.append(x[rows] - x.mean(axis=0))
+        owners += [model_id] * len(rows)
+    features = np.vstack(parts)
+    params = cs.fit_mixture(features, 6, seed=0, inits=1)
+    q = cs.mixture_responsibilities(params, features)
+    owners = np.asarray(owners)
+    shares = np.stack([q[owners == m].sum(axis=0) for m in counts]) / q.sum(axis=0)
+    return shares.max(axis=0)
+
+
+def test_null_mixture_components_are_not_one_lines_duplicated_cells():
+    # 30 lines: no line holds more than a tenth of any component.
+    assert (_null_component_shares(padded=False) < 0.1).all()
+    # Sensitivity: with the 5 small lines padded by copies, components lock on them.
+    assert (_null_component_shares(padded=True) > 0.25).sum() >= 3
+
+
+def test_chemistry_resolves_per_cell_and_fails_closed():
+    import pandas as pd
+
+    table = pd.DataFrame(
+        [
+            ("mixseq", "", "", "mixed"),
+            ("mixseq", "", "DMSO_6hr_expt3", "10x 3' v2"),
+            ("mixseq", "", "DMSO_24hr_expt10", "10x 3' v3"),
+            ("mixseq", "ACH-2", "DMSO_24hr_expt10", "10x 3' v3.1"),
+            ("perturb", "", "", "mixed"),
+            ("perturb", "ACH-9", "", "10x 5' v3"),
+            ("kinker", "", "", "10x 3' v2"),
+        ],
+        columns=["source", "model_id", "arm", "chemistry"],
+    )
+    arms = ["DMSO_24hr_expt10", "DMSO_6hr_expt3", "DMSO_24hr_expt10"]
+    assert list(cs.resolve_chemistry(table, "mixseq", "ACH-1", arms)) == [
+        "10x 3' v3",
+        "10x 3' v2",
+        "10x 3' v3",
+    ]
+    # A ModelID and arm row is more specific than the arm alone.
+    assert cs.resolve_chemistry(table, "mixseq", "ACH-2", arms[:1])[0] == "10x 3' v3.1"
+    assert cs.resolve_chemistry(table, "perturb", "ACH-9", [""])[0] == "10x 5' v3"
+    assert (
+        cs.resolve_chemistry(table, "kinker", "ACH-5", ["", "x"]).tolist()
+        == ["10x 3' v2"] * 2
+    )
+    with pytest.raises(ValueError, match="covers arm 'DMSO_3hr'"):
+        cs.resolve_chemistry(table, "mixseq", "ACH-1", ["DMSO_3hr"])
+    with pytest.raises(ValueError, match="no chemistry row"):
+        cs.resolve_chemistry(table, "perturb", "ACH-8", [""])  # mixed, no line row
+
+
+def test_chemistry_table_rows_are_unique_and_mixed_sources_resolve():
+    import pandas as pd
+
+    table = pd.read_csv(
+        "configs/benchmarks/single_cell_source_chemistry.csv",
+        keep_default_na=False,
+        dtype=str,
+    )
+    assert not table.duplicated(["source", "model_id", "arm"]).any()
+    assert set(table.loc[table["chemistry"] == "mixed", "source"]) == {
+        "mixseq",
+        "Perturb-seq non-targeting control",
+        "gse147405",
+        "gse182694",
+        "gse331320",
+    }
+    expt3, expt10 = "DMSO_6hr_expt3", "DMSO_24hr_expt10"
+    spanning = cs.resolve_chemistry(table, "mixseq", "ACH-000035", [expt10, expt3])
+    assert spanning.tolist() == ["10x 3' v3", "10x 3' v2"]
+    hct116 = cs.resolve_chemistry(
+        table, "Perturb-seq non-targeting control", "ACH-000971", [""]
+    )
+    assert hct116.tolist() == ["10x 5' v3"]
+
+
+def test_kinker_provenance_hashes_the_tracked_table():
+    import hashlib
+    import json
+
+    folder = Path("configs/context_prior/reference")
+    provenance = json.loads((folder / "kinker_programs_provenance.json").read_text())
+    table = (folder / "kinker_programs.tsv").read_bytes()
+    assert hashlib.sha256(table).hexdigest() == provenance["tsv_sha256"]
+    assert provenance["source_sha256"] != provenance["tsv_sha256"]
+
+
+def test_state_fingerprints_change_with_inputs_masses_and_names():
+    import pandas as pd
+
+    names = ["L1|s|0", "L1|s|whole", "L2|s|0", "L2|s|whole"]
+    inputs = pd.DataFrame(np.arange(8, dtype=np.float32).reshape(4, 2), index=names)
+    masses = pd.DataFrame(
+        {"model_id": ["L1", "L1", "L2", "L2"], "mass": [1.0, np.nan, 1.0, np.nan]},
+        index=names,
+    )
+    base = cs.set_fingerprints(inputs, masses)
+    assert set(base) == {"L1", "L2"} and base == cs.set_fingerprints(inputs, masses)
+    moved = inputs.copy()
+    moved.iloc[0, 0] += 1e-3
+    assert cs.set_fingerprints(moved, masses)["L1"] != base["L1"]
+    assert cs.set_fingerprints(moved, masses)["L2"] == base["L2"]
+    weighed = masses.copy()
+    weighed.iloc[2, 1] = 0.5
+    assert cs.set_fingerprints(inputs, weighed)["L2"] != base["L2"]
 
 
 def test_projection_is_deterministic_and_row_independent():

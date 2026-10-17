@@ -69,13 +69,24 @@ def world(tmp_path_factory):
         {"model_id": list(deposits), "expression_source": list(deposits.values())}
     ).to_csv(root / "split.csv", index=False)
     pd.DataFrame(
-        {
-            "source": ["dep_a", "dep_b", "dep_c"],
-            "chemistry": ["10x 3' v2", "10x 3' v3", "unknown"],
-            "evidence": "synthetic",
-            "note": "",
-        }
-    ).to_csv(root / "chemistry.csv", index=False)
+        [
+            ("dep_a", "", "", "10x 3' v2"),
+            ("dep_b", "", "", "mixed"),
+            ("dep_b", "", "expt_a", "10x 3' v2"),
+            ("dep_b", "", "expt_b", "10x 3' v3"),
+            ("dep_b", TRAIN[9], "", "10x 5' v2"),
+            ("dep_c", "", "", "unknown"),
+        ],
+        columns=["source", "model_id", "arm", "chemistry"],
+    ).assign(evidence="synthetic", note="").to_csv(root / "chemistry.csv", index=False)
+    # dep_b's lines carry each cell's experiment in obs, as MIX-seq's do.
+    for model_id in TRAIN[5:9]:
+        path = root / "basal_raw_umi" / f"{model_id}.h5ad"
+        source = ad.read_h5ad(path)
+        source.obs["arm"] = [
+            "expt_a" if i % 3 else "expt_b" for i in range(source.n_obs)
+        ]
+        source.write_h5ad(path)
     rng = np.random.default_rng(7)
     for model_id in (*TRAIN, *VAL, *TEST):
         cells = ladder.read_cells(root / "ladder", model_id)
@@ -153,7 +164,26 @@ def test_fit_samples_read_training_lines_only(world):
     sample = pd.read_parquet(t.layout.sample(0))
     assert set(sample["model_id"]) == set(TRAIN)
     assert (sample.groupby("model_id").size() == 20).all()
-    assert set(sample["chemistry"]) == {"10x 3' v2", "10x 3' v3"}
+    assert not sample.duplicated(["model_id", "row"]).any()
+    # Chemistry per cell: dep_a by source, dep_b by each cell's arm, one line by
+    # its own row.
+    by_line = sample.groupby("model_id")["chemistry"].agg(set)
+    assert by_line[TRAIN[0]] == {"10x 3' v2"}
+    assert by_line[TRAIN[9]] == {"10x 5' v2"}
+    for model_id in TRAIN[5:9]:
+        rows = sample.loc[sample["model_id"] == model_id]
+        expected = np.where(rows["row"] % 3 == 0, "10x 3' v3", "10x 3' v2")
+        assert rows["chemistry"].tolist() == expected.tolist()
+
+
+def test_a_mixed_source_cell_without_a_row_fails_closed(world):
+    root, config, _ = world
+    table = pd.read_csv(root / "chemistry.csv", keep_default_na=False)
+    t = st.Telemetry(config, "telemetry")
+    t.chemistry_table = table.loc[table["arm"] != "expt_b"]  # expt_b cells uncovered
+    ids = t.cell_arrays(TRAIN[5], "cell_ids")[0]
+    with pytest.raises(ValueError, match="covers arm 'expt_b'"):
+        t.cell_chemistry(TRAIN[5], ids)
     params = st.load_mixture(t, 0, "hvg_k3")
     assert params["pca_components"].shape == (3, 4) and bool(params["centred"])
     assert list(st.load_mixture(t, 0, "cycle")["states"]) != ["0", "1", "2"]
@@ -239,11 +269,16 @@ def _write_pie(root: Path, t: st.Telemetry, set_name: str, bump: float) -> None:
             array.astype(np.float16 if width > 1 else np.float32),
         )
     contexts.to_parquet(folder / "contexts.parquet")
-    (folder / "index.json").write_text(json.dumps({"genes": genes}))
+    inputs = pd.read_parquet(t.layout.state_set(set_name) / "inputs.parquet")
+    fingerprints = cs.set_fingerprints(inputs, contexts)
+    (folder / "index.json").write_text(
+        json.dumps({"genes": genes, "fingerprints": fingerprints})
+    )
 
 
 def test_gap_is_zero_when_states_read_the_line_and_grows_with_a_moved_state(world):
     root, _, t = world
+    assert t.layout.pie_states == t.layout.root / "pie"  # moves with states/
     _write_pie(root, t, "cycle", 0.0)
     gap = st.gap_section(t, "cycle")
     for name in st.DELTAS:
@@ -255,9 +290,25 @@ def test_gap_is_zero_when_states_read_the_line_and_grows_with_a_moved_state(worl
     assert moved["dH"]["val"]["gap_ratio"] < 1e-5
 
 
+def test_gap_refuses_a_pass_over_other_state_inputs(world):
+    root, _, t = world
+    _write_pie(root, t, "programs", 0.0)
+    index = t.layout.pie_states / "programs" / "index.json"
+    payload = json.loads(index.read_text())
+    payload["fingerprints"][TRAIN[0]] = "an earlier state input"
+    index.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="other state inputs"):
+        st.gap_section(t, "programs")
+    shutil.rmtree(t.layout.pie_states / "programs")
+
+
 def test_report_writes_every_section(world):
     root, config, t = world
     st.run(config, "telemetry", ["report"])
+    # Stability reads training lines only: 10 cells from each of the 10.
+    t_report = st.Telemetry(config, "telemetry")
+    st.stability_section(t_report, "cycle")
+    assert t_report.cache["stability_draw"]["cycle@seed0"].shape[0] == 10 * len(TRAIN)
     report = json.loads((root / "out" / "telemetry" / "report.json").read_text())
     assert set(report["vocabularies"]) == set(cs.vocabularies(config))
     entry = report["vocabularies"]["hvg_k2"]

@@ -34,9 +34,10 @@ what exists:
   query's own SD). ``manifest.json`` records these rules, the counts, each
   recurrent program's member lines and leading genes, and starCAT's own
   ``fit_transform`` on one training line beside ours.
-- ``scvi/seed<s>/``. scVI on the pooled sample (each line ``cells_per_line``
-  cells) over STATE's HVGs: the chemistry as the categorical nuisance
-  (``batch_key``), the whole-library UMI as the size factor, the S and G2/M
+- ``scvi/seed<s>/``. scVI on the pooled sample (each line's distinct sampled
+  cells) over STATE's HVGs: each cell's chemistry (resolved by deposit, line and
+  arm) as the categorical nuisance (``batch_key``), the whole-library UMI as the
+  size factor, the S and G2/M
   scores as continuous covariates; the encoder reads neither (scVI's default),
   so a cell's latent mean needs no category the fit saw. Latent means of every
   cell of the plan's lines and second deposits (``latent/``,

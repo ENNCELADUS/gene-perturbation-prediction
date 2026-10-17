@@ -13,8 +13,8 @@ seed: 0
 ladder_config: configs/stage_one/ladder_inputs.yaml
 output_root: outputs/stage_one/state_telemetry
 fit:
-  # Each training line weighs equally: exactly this many cells per line, drawn without replacement, a line with fewer
-  # cells resampled with replacement up to it.
+  # At most this many distinct cells per training line, drawn without replacement: a line with fewer cells contributes
+  # all of them once and weighs less (copies would let a full-covariance mixture spend components on them).
   cells_per_line: 500
   # The first seed's fit is the one projected into state inputs and read by PIE; the others are stability telemetry.
   seeds: [0, 1, 2]
