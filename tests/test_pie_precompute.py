@@ -383,3 +383,164 @@ def test_reference_pass_refuses_other_lines(tmp_path):
     pp._save_npz(path, latent=latent[:2], features=latent[:2])
     with pytest.raises(ValueError, match="other lines"):
         pp.reference_pass(out, None, tables)
+
+
+# --- state pseudo-contexts (design §3.5, Task 8) --------------------------------------
+
+STATE_GENES = [("GA", 0), ("GE", 4)]  # GE is in the second of two gene chunks
+
+
+def _evidence(pie, keys=("GA", "GE")):
+    return {k: pp.gene_evidence(pie, k) for k in [pp.NO_PERTURBATION, *keys]}
+
+
+def test_whole_context_equals_the_main_pass(tiny_pie):
+    pie, tables = tiny_pie
+    ctrl = tables.pie_input.to_numpy(dtype=np.float32)
+    evidence = _evidence(pie)
+    names = [f"{m}|set|whole" for m in LINES]
+    arrays = pp.state_batch(
+        pie, names, list(LINES), ctrl, STATE_GENES, evidence, None, 4
+    )
+    assert "dE" not in arrays and arrays["dH"].shape[:2] == (3, 2)
+    reference = pp.forward(
+        pie,
+        pp.build_batch(pie, list(LINES), None, ctrl, evidence[pp.NO_PERTURBATION]),
+        None,
+        heads=False,
+    )
+    for g, (key, own) in enumerate(STATE_GENES):
+        main = pp.forward(
+            pie,
+            pp.build_batch(pie, list(LINES), key, ctrl, evidence[key]),
+            own,
+            heads=True,
+        )
+        assert np.allclose(
+            arrays["dH"][:, g], main.features - reference.features, atol=1e-5
+        )
+        assert np.allclose(arrays["own_h"][:, g], main.own, atol=1e-5)
+        assert np.allclose(arrays["own_dp"][:, g, 0], main.change[:, own], atol=1e-6)
+        assert np.array_equal(arrays["own_x"][:, g, 0], ctrl[:, own])
+
+
+def test_two_states_of_one_line_differ_and_each_batch_empties_the_cache(tiny_pie):
+    pie, tables = tiny_pie
+    line = tables.pie_input.to_numpy(dtype=np.float32)[0]
+    ctrl = np.vstack([line, 0.5 * line])
+    names, owners = ["L1|set|0", "L1|set|1"], ["L1", "L1"]
+    evidence = _evidence(pie)
+    arrays = pp.state_batch(pie, names, owners, ctrl, STATE_GENES, evidence, None, 2)
+    assert not np.allclose(arrays["dH"][0], arrays["dH"][1])
+    assert not np.allclose(arrays["own_dp"][0], arrays["own_dp"][1])
+    assert not any(key[0] in ("context", "control") for key in pie.cache)
+    # A context name read again with another input is decoded afresh.
+    again = pp.state_batch(
+        pie, names[:1], owners[:1], ctrl[1:], STATE_GENES, evidence, None, 1
+    )
+    assert np.allclose(again["dH"][0], arrays["dH"][1], atol=1e-5)
+
+
+def test_padding_changes_nothing(tiny_pie):
+    pie, tables = tiny_pie
+    ctrl = tables.pie_input.to_numpy(dtype=np.float32)[:2]
+    names, owners = ["L1|set|0", "L2|set|0"], ["L1", "L2"]
+    evidence = _evidence(pie)
+    exact = pp.state_batch(pie, names, owners, ctrl, STATE_GENES, evidence, None, 2)
+    padded = pp.state_batch(pie, names, owners, ctrl, STATE_GENES, evidence, None, 5)
+    for name, value in exact.items():
+        assert padded[name].shape == value.shape
+        assert np.allclose(padded[name], value, atol=1e-6), name
+
+
+def test_hoisted_owner_encoder_equals_the_unhoisted_one(tiny_pie):
+    pie, tables = tiny_pie
+    full = tables.pie_input.to_numpy(dtype=np.float32)
+    ctrl = np.vstack([full[0], 0.3 * full[0], full[2]])
+    names, owners = ["L1|set|0", "L1|set|1", "L3|set|0"], ["L1", "L1", "L3"]
+    evidence = pp.gene_evidence(pie, "GA")
+    batch = pp.build_batch(pie, names, "GA", ctrl, evidence, owners=owners)
+    plain = pp.forward_tensors(pie, batch, 1, heads=True)
+    hoisted = pp.forward_tensors(
+        pie, batch, 1, heads=True, memory=pp.owner_memory(pie, owners, "GA", evidence)
+    )
+    for name in ("latent", "features", "own", "change"):
+        assert np.allclose(hoisted[name].numpy(), plain[name].numpy(), atol=1e-5), name
+    # The owner's text, not the context's name, reaches the encoder.
+    other = pp.owner_memory(pie, ["L2", "L2", "L3"], "GA", evidence)
+    assert not np.allclose(
+        other.float().mean(dim=1)[0].numpy(), hoisted["latent"][0].numpy()
+    )
+
+
+def _state_tables_on_disk(root, tables, name):
+    line = tables.pie_input.to_numpy(dtype=np.float32)
+    contexts = ["L1|set|0", "L1|set|1", "L1|set|whole", "L3|set|0", "L3|set|whole"]
+    inputs = np.vstack([line[0], 0.5 * line[0], 0.75 * line[0], line[2], line[2]])
+    masses = pd.DataFrame(
+        {
+            "model_id": ["L1", "L1", "L1", "L3", "L3"],
+            "state": ["0", "1", "whole", "0", "whole"],
+            "mass": [0.5, 0.5, np.nan, 1.0, np.nan],
+            "effective_count": 10.0,
+            "merged": "",
+        },
+        index=pd.Index(contexts, name="context"),
+    )
+    folder = root / "states" / name
+    folder.mkdir(parents=True)
+    pd.DataFrame(inputs, index=masses.index, columns=tables.panel).to_parquet(
+        folder / "inputs.parquet"
+    )
+    masses.to_parquet(folder / "masses.parquet")
+    return pp.read_state_tables(root / "states", name, tables)
+
+
+def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
+    import torch
+
+    pie, tables = tiny_pie
+    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {"seed": 0})
+    states = _state_tables_on_disk(tmp_path, tables, "set")
+    assert states.lines() == ["L1", "L3"]
+    config = {"pie": {"genes": 2, "contexts_per_batch": 2}}
+    genes = pp.state_genes(tables, config, 0)
+    rng = np.random.default_rng(3)
+    basis = {
+        "mean": torch.zeros(len(PANEL)),
+        "components": torch.from_numpy(
+            rng.normal(size=(2, len(PANEL))).astype(np.float32)
+        ),
+    }
+    layout = pp.StateLayout(tmp_path / "pie_states")
+    first = pp.states_pass(pie, tables, states, genes, basis, ["L1"], layout, 2, {})
+    assert first["contexts"] == 3
+    assert layout.line("set", "L1").is_file()
+    assert not layout.line("set", "L3").is_file()
+    again = pp.states_pass(
+        pie, tables, states, genes, basis, ["L1", "L3"], layout, 2, {}
+    )
+    assert again["contexts"] == 2
+    with np.load(layout.line("set", "L1")) as payload:
+        stored = {k: payload[k] for k in payload.files}
+    assert stored["contexts"].tolist() == states.contexts[:3]
+    assert stored["dH"].dtype == np.float16 and stored["dH"].shape[:2] == (2, 3)
+    d = pie.model.cfg.d_model
+    out.pie.mkdir(parents=True, exist_ok=True)
+    means = {
+        "dH": rng.normal(size=(len(PANEL), d)),
+        "dE": rng.normal(size=(len(PANEL), 2)),
+        "own_h": rng.normal(size=(len(PANEL), d)),
+        "own_dp": rng.normal(size=(len(PANEL), 1)),
+        "own_x": rng.normal(size=(len(PANEL), 1)),
+    }
+    np.savez(out.pie / "frame_means.npz", **means)
+    assert pp.assemble_states(out, tables, config, "set") == {
+        "contexts": 5,
+        "genes": 2,
+    }
+    dE = np.load(tmp_path / "pie_states" / "set" / "dE.npy")
+    position = [tables.panel.index(g) for g in genes]
+    expected = stored["dE"].astype(np.float32) - means["dE"][position][:, None, :]
+    assert np.allclose(dE[:, :3].astype(np.float32), expected, atol=1e-2)
+    assert not layout.lines("set").exists()

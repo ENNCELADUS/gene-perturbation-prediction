@@ -223,6 +223,27 @@ src.data.prepare.cellosaurus_context --out DIR`, with `OPENAI_API_KEY` and optio
 command line only; a SOCKS `ALL_PROXY` in the shell needs `--with socksio`) and copied to `ladder/context_text/` with a
 SHA-256 check.
 
+## The cell states
+
+Task 8 of the stage-one design ([protocol §17](../docs/03-geneeffect-protocol.md#17-cell-states),
+[data card](../docs/data/cell-states.md)) writes `states/` and `pie_states/` beside the stage-one inputs from
+`configs/stage_one/states/telemetry.yaml`. The cNMF, starCAT and scVI fits run in `.venv-states` (`hpc/states/setup.sh`:
+cnmf 1.7.1, starcatpy 1.0.10, scvi-tools 1.4.2, torch 2.10.0 cu128), which the project environment's `fit` step calls
+through `STATES_PYTHON` (default `.venv-states/bin/python`); the two exchange files only. `fit` needs one GPU visible
+for scVI; the rest of `fit`, `project` and `inputs` is CPU. Every step skips what exists.
+
+```bash
+hpc/states/setup.sh                                                                        # once
+CFG=configs/stage_one/states/telemetry.yaml
+CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=32 hpc/run.sh cell-states $CFG --steps fit,project,inputs
+CUDA_VISIBLE_DEVICES=$i hpc/run.sh pie-precompute $CFG --steps states --set ALL --shard $i/4   # one per GPU
+hpc/run.sh pie-precompute $CFG --steps assemble_states --set ALL                           # after every shard
+hpc/run.sh cell-states $CFG --steps report                                                 # results.md
+```
+
+`--set ALL` runs the real sets and permutation seed 0 before seeds 1 and 2; a shard can be stopped there and the others
+assembled by name (`--set cycle,programs,…`). A one-set trial before the queue: `--steps states --set cycle --shard 0/16`.
+
 ## The `prior` command
 
 `hpc/run.sh prior CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear context prior

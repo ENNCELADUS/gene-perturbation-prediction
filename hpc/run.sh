@@ -15,6 +15,8 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh ladder-inputs CONFIG [--steps lines,cells,mean,summaries|tx1] [--shard I/N]   (stage-one inputs; tx1 on a GPU)
        hpc/run.sh pie-precompute CONFIG --steps rescore|pilot|basis|full|assemble [--shard I/N] [--device cuda]   (frozen-PIE deltas, GPU)
        hpc/run.sh gene-sources proteins|afdb|esm|align ARGS   (the gene encoder's sources)
+       hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
+       hpc/run.sh pie-precompute CONFIG --steps states|assemble_states --set NAME[,NAME]|ALL [--shard I/N]   (frozen PIE on state inputs, GPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment; pie-reproduce
 and pie-precompute always run in .venv-pie.
 `all` uses every visible GPU (CUDA_VISIBLE_DEVICES is respected) for every
@@ -43,6 +45,12 @@ runs one step of the gene sources: `proteins` (.venv-pie), `afdb` and `esm`
 (ESM_PYTHON, default the H20's existing esm environment, with ESM_HF_HOME its
 shared Hugging Face cache; hpc/esm/setup.sh builds .venv-esm), `align` (this
 environment).
+`cell-states` runs the state telemetry of a configs/stage_one/states config
+(src.experiments.state_telemetry): `fit` writes the fit samples and plan, runs
+src.data.prepare.state_programs in STATES_PYTHON (default .venv-states/bin/python,
+built by hpc/states/setup.sh) for the cNMF programs and scVI, then fits the
+mixtures; `project`, `inputs` and `report` follow. `pie-precompute` on the same
+config with `--steps states --set ALL` runs the frozen PIE on the state inputs.
 EOF
 }
 
@@ -52,7 +60,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|cell-states) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -79,6 +87,9 @@ case "$command" in
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.pie_reproduction "$@" ;;
   ladder-inputs) exec "$python_bin" -m src.experiments.ladder_inputs "$@" ;;
+  cell-states)
+    export STATES_PYTHON=${STATES_PYTHON:-"$repo_root/.venv-states/bin/python"}
+    exec "$python_bin" -m src.experiments.state_telemetry "$@" ;;
   pie-precompute)
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.pie_precompute "$@" ;;
