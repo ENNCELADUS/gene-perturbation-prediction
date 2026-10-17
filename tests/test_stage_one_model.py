@@ -127,34 +127,76 @@ def test_a_masked_source_contributes_nothing():
     assert torch.allclose(out[1:], alone)
 
 
-def test_the_profile_delta_reads_before_and_after_states():
-    """ΔE = E(after) - E(before), beside its value at the frame-mean states; a
-    linear E makes the centred part the change of the stored coordinates alone."""
+def _profile_model(width: int = 5, components: int = 5) -> DeltaFiLM:
     torch.manual_seed(0)
-    dims = InputDims(gene_sources={"gene_text": 6}, delta=5, own=0, text=3)
+    dims = InputDims(gene_sources={"gene_text": 6}, delta=components, own=0, text=3)
     config = {
         "data": {"input": "dE"},
         "model": {
             "arm": "film",
             "gene_width": 8,
             "hidden": 16,
-            "state_width": 5,
+            "state_width": width,
             "context": None,
             "trunk": None,
         },
     }
-    model = build_model(config, dims)
-    linear = torch.nn.Linear(5, 5)
-    model.state.net = torch.nn.Sequential(linear)
+    return build_model(config, dims)
+
+
+def _profile_batch(scale: float, components: int = 5, seed: int = 0) -> PairBatch:
+    generator = torch.Generator().manual_seed(seed)
     batch = _batch(2, 3)
     batch.line = None
-    batch.before = torch.randn(3, 5)
-    batch.delta = torch.randn(2, 3, 5)
-    batch.shift = torch.randn(2, 5)
+    batch.before = torch.randn(3, components, generator=generator)
+    batch.delta = scale * torch.randn(2, 3, components, generator=generator)
+    batch.shift = scale * torch.randn(2, components, generator=generator)
+    return batch
+
+
+def test_the_profile_delta_reads_before_and_after_states():
+    """ΔE = E(after) - E(before), minus its value at the frame-mean states (before
+    0, after shift_g), beside that frame-mean term."""
+    model = _profile_model()
+    batch = _profile_batch(1.0)
+    encoder = model.state.double()
+    before = batch.before.double().unsqueeze(0)
+    after = before + batch.delta.double() + batch.shift.double().unsqueeze(1)
+    shift = batch.shift.double()
     with torch.no_grad():
+        mean = encoder(shift) - encoder(torch.zeros_like(shift))
+        expected = encoder(after) - encoder(before) - mean.unsqueeze(1)
+        model.state.float()
         pair = model.pair_input(batch)
-        expected = batch.delta @ linear.weight.T
-    assert torch.allclose(pair[..., :5], expected, atol=1e-5)
+    assert torch.allclose(pair[..., :5].double(), expected, atol=1e-5)
+    assert torch.allclose(pair[0, 0, 5:].double(), mean[0], atol=1e-5)
+
+
+def test_the_profile_delta_keeps_small_changes_under_bf16_autocast():
+    """A knockdown moves the state by ~1% of its size: under bf16 autocast ΔE must
+    match its fp32 value, not the difference of two rounded encodings."""
+    model = _profile_model(width=64, components=32)
+    batch = _profile_batch(0.01, components=32)
+    batch.before = 10 * batch.before
+    with torch.no_grad():
+        exact = model.pair_input(batch)
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            mixed = model.pair_input(batch)
+    error = (mixed - exact).norm() / exact.norm()
+    assert mixed.dtype == torch.float32 and float(error) < 1e-5
+
+
+def test_the_tail_output_is_fp32_under_autocast():
+    tail = CilantroTail(16)
+    with torch.no_grad():
+        tail.l4.weight.normal_()
+        tail.l4.bias.fill_(0.123456789)
+        x = torch.randn(4, 3, 16)
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            z, v = tail(x)
+        expected = tail.l4(torch.relu(v.float())).squeeze(-1)
+    assert z.dtype == torch.float32
+    assert torch.equal(z, expected)
 
 
 # --- the calibration slope ---------------------------------------------------------
