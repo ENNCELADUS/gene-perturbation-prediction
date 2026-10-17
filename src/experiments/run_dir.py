@@ -70,6 +70,18 @@ def locked(run_dir: Path) -> Iterator[None]:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
+def assert_bound(run_dir: Path, config: Mapping[str, Any]) -> None:
+    """Read-only: raise unless ``run_dir`` was bound to ``config`` (before its
+    results are skipped over or read)."""
+    path = run_dir / "run_config.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"{run_dir} has no run_config.json; it is not a run")
+    if read_json(path) != jsonable({"config": config}):
+        raise ValueError(
+            f"{run_dir} was written under another config ({path}); move it aside"
+        )
+
+
 def bind(run_dir: Path, config: Mapping[str, Any]) -> None:
     """A run directory belongs to one config: finished steps are skipped by file
     existence, so resuming under another would mix experiments."""

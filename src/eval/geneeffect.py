@@ -398,9 +398,11 @@ def gain(
     truth: pd.DataFrame,
     definitions: Definitions,
     repeats: int,
+    genes: Sequence[str] | None = None,
 ) -> dict:
-    """Selective-Spearman difference and its 95% paired line-bootstrap interval."""
-    genes = list(definitions.selective)
+    """Selective-Spearman difference and its 95% paired line-bootstrap interval,
+    over ``genes`` (default: every selective gene)."""
+    genes = list(definitions.selective if genes is None else genes)
     result = paired_line_bootstrap(
         long_frame(better.loc[:, genes], truth, definitions),
         long_frame(reference.loc[:, genes], truth, definitions),
@@ -464,4 +466,79 @@ def wide_accuracy(
         ].dropna()
         out["selective_spearman_panel"] = float(inside.mean()) if len(inside) else None
         out["selective_spearman_panel_scored"] = len(inside)
+    return out
+
+
+def defined_genes(
+    prediction: pd.DataFrame, truth: pd.DataFrame, genes: Sequence[str]
+) -> list[str]:
+    """``genes`` whose Spearman across the prediction's lines is defined: at least
+    ``MIN_OBSERVATIONS`` labelled lines, with neither the truth nor the prediction
+    constant over them (a row that predicts the base for a gene is undefined there)."""
+    from src.eval.metrics import MIN_OBSERVATIONS
+
+    lines = list(prediction.index)
+    predicted = prediction.loc[lines, list(genes)].to_numpy(dtype=np.float64)
+    measured = truth.loc[lines, list(genes)].to_numpy(dtype=np.float64)
+    finite = np.isfinite(measured) & np.isfinite(predicted)
+    kept = []
+    for column, gene in enumerate(genes):
+        rows = finite[:, column]
+        x, y = predicted[rows, column], measured[rows, column]
+        if rows.sum() >= MIN_OBSERVATIONS and np.ptp(x) > 0 and np.ptp(y) > 0:
+            kept.append(gene)
+    return kept
+
+
+#: Metrics that rank or correlate lines within a gene. Out of fold, each fold's lines
+#: are predicted around their own base ``m_g`` without the fold, which moves with
+#: the fold's labels (a fold of dependent lines leaves a higher base), so pooling
+#: folds makes these anti-correlated with the truth by construction: they are scored
+#: within each fold and averaged over folds.
+WITHIN_FOLD_METRICS = (
+    "selective_spearman",
+    "selective_spearman_panel",
+    "aupr_lift",
+    "residual_pearson",
+    "calibration_slope",
+)
+
+
+def fold_accuracy(
+    prediction: pd.DataFrame,
+    truth: pd.DataFrame,
+    definitions: Definitions,
+    folds: Mapping[str, int],
+    *,
+    panel: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """``wide_accuracy`` of an out-of-fold prediction: the metrics of
+    ``WITHIN_FOLD_METRICS`` scored within each fold's lines and averaged over the
+    folds where they are defined; within-gene R², RMSE and the per-line Pearson
+    pooled over every line (they compare each line with its own truth). ``per_fold``
+    keeps each fold's scores and line count."""
+    lines = list(prediction.index)
+    out: dict[str, Any] = wide_accuracy(prediction, truth, definitions, panel=panel)
+    groups: dict[int, list[str]] = {}
+    for line in lines:
+        groups.setdefault(int(folds[line]), []).append(line)
+    per_fold = {
+        k: wide_accuracy(
+            prediction.loc[members], truth.loc[members], definitions, panel=panel
+        )
+        for k, members in sorted(groups.items())
+    }
+    for key in WITHIN_FOLD_METRICS:
+        if key not in out:
+            continue
+        values = [
+            float(scores[key])
+            for scores in per_fold.values()
+            if scores[key] is not None and np.isfinite(float(scores[key]))
+        ]
+        out[key] = float(np.mean(values)) if values else None
+    for key in ("selective_spearman_scored", "selective_spearman_panel_scored"):
+        if key in out:
+            out[key] = min(int(scores[key]) for scores in per_fold.values())
+    out["per_fold"] = {str(k): scores for k, scores in per_fold.items()}
     return out

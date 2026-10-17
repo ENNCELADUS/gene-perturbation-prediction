@@ -50,7 +50,13 @@ import torch
 from src.context_prior.targets import Definitions
 from src.data import ladder_reader as reader
 from src.data.splits import FixedSplit
-from src.experiments.run_dir import bind, read_json, write_json, write_text
+from src.experiments.run_dir import (
+    assert_bound,
+    bind,
+    read_json,
+    write_json,
+    write_text,
+)
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +65,7 @@ ROW = "row.json"
 #: The metrics of the report's tables, in order.
 REPORTED = (
     ("selective_spearman", "Selective Spearman"),
+    ("selective_spearman_scored", "Genes scored"),
     ("within_gene_r2", "Within-gene R²"),
     ("selective_spearman_panel", "Selective Spearman, panel"),
     ("aupr_lift", "AUPR lift"),
@@ -83,6 +90,8 @@ class Setup:
     #: Lines outside the split sharing a patient with a held-out line.
     excluded: tuple[str, ...]
     gene_effect: pd.DataFrame
+    #: The GeneEffect matrix the labels were read from.
+    label_source: Path
 
     @property
     def definitions(self) -> Definitions:
@@ -134,6 +143,7 @@ def load_setup(ladder_config_path: str | Path) -> Setup:
         bulk_labelled=tuple(bulk.labelled),
         excluded=tuple(bulk.excluded),
         gene_effect=read_depmap_matrix(Path(joint["paths"]["gene_effect"])),
+        label_source=Path(joint["paths"]["gene_effect"]),
     )
 
 
@@ -525,6 +535,9 @@ def queue(configs: Sequence[Path], gpus: Sequence[str], folds: Sequence[str]) ->
         for value in folds:
             fold = None if value == "main" else int(value)
             run_dir = run_directory(config, Path(path).stem, fold)
+            if (run_dir / "run_config.json").is_file():
+                # Every existing run directory is checked before anything starts.
+                assert_bound(run_dir, {"run": config, "fold": fold})
             if (run_dir / ROW).is_file():
                 print(f"skip {run_dir}: done", flush=True)
                 continue
@@ -638,11 +651,108 @@ def dh_ridge(
     }
 
 
+def ridge_fingerprint(setup: Setup, ladder_config: str | Path) -> dict[str, Any]:
+    """What the ridge's predictions depend on: the ladder config, the label file,
+    the lines with their roles and folds, the panel and the dH file."""
+
+    def stat(path: Path) -> list:
+        info = Path(path).stat()
+        return [str(Path(path).resolve()), info.st_size, info.st_mtime_ns]
+
+    ladder = setup.ladder
+    return {
+        "ladder_config": str(Path(ladder_config).resolve()),
+        "ladder": dict(setup.ladder_config),
+        "labels": stat(setup.label_source),
+        "lines": {
+            m: [str(ladder.lines.at[m, "role"]), int(ladder.lines.at[m, "fold"])]
+            for m in ladder.line_ids
+        },
+        "panel": ladder.panel,
+        "dH": stat(ladder.root / "pie" / "dH.npy"),
+    }
+
+
+def cached_ridge(
+    setup: Setup,
+    ladder_config: str | Path,
+    penalties: Sequence[float],
+    out: Path,
+    device: str,
+) -> dict[float, pd.DataFrame]:
+    """The ridge's predictions per penalty, from ``out/dh_ridge/`` when its
+    ``fingerprint.json`` matches the current inputs (refused otherwise), else
+    computed and written with the fingerprint."""
+    from src.experiments.run_dir import jsonable
+
+    folder = out / "dh_ridge"
+    fingerprint = jsonable(ridge_fingerprint(setup, ladder_config))
+    record = folder / "fingerprint.json"
+    if record.is_file() and read_json(record) != fingerprint:
+        raise ValueError(f"{folder} was computed from other inputs; move it aside")
+    cached = {p: folder / f"penalty_{p:g}.parquet" for p in penalties}
+    if any(not path.is_file() for path in cached.values()):
+        folder.mkdir(exist_ok=True)
+        write_json(record, fingerprint)
+        for penalty, frame in dh_ridge(setup, penalties, torch.device(device)).items():
+            frame.astype(np.float32).to_parquet(cached[penalty])
+    return {penalty: pd.read_parquet(path) for penalty, path in cached.items()}
+
+
+def split_scores(
+    setup: Setup, split: str, frame: pd.DataFrame, truth: pd.DataFrame
+) -> dict[str, Any]:
+    """A row's scores on one split; out of fold, the rank metrics are scored within
+    each fold and averaged (``fold_accuracy``), since each fold's base differs."""
+    from src.eval.geneeffect import fold_accuracy
+
+    ladder = setup.ladder
+    if split == "oof":
+        return fold_accuracy(
+            frame, truth, setup.definitions, ladder.folds, panel=ladder.panel
+        )
+    return wide_scores(frame, truth, setup.definitions, ladder.panel)
+
+
 # --- the report -----------------------------------------------------------------------
 
 
+def _same_ladder(path: str | Path, report_ladder: str | Path, what: str) -> None:
+    if Path(path).resolve() != Path(report_ladder).resolve():
+        raise ValueError(f"{what} read {path}, the report {report_ladder}")
+
+
+def finished_run(
+    config: Mapping[str, Any], stem: str, fold: int | None, report_ladder: str | Path
+) -> Path | None:
+    """A finished run's directory (its ``row.json`` exists), checked to be bound to
+    this config and fold and to read the report's ladder; None when not finished."""
+    run_dir = run_directory(config, stem, fold)
+    if not (run_dir / ROW).is_file():
+        return None
+    assert_bound(run_dir, {"run": config, "fold": fold})
+    _same_ladder(config["data"]["ladder_config"], report_ladder, str(run_dir))
+    return run_dir
+
+
+def finished_prior(run: str | Path, report_ladder: str | Path) -> Path | None:
+    """The prior reference's run directory once its ``row.json`` exists, checked to
+    read the report's ladder."""
+    run_dir = Path(run)
+    if not (run_dir / "row.json").is_file():
+        return None
+    bound = read_json(run_dir / "run_config.json")["config"]
+    if bound["kind"] != "prior_reference":
+        raise ValueError(f"{run_dir} is not a prior reference run")
+    _same_ladder(bound["ladder_config"], report_ladder, str(run_dir))
+    return run_dir
+
+
 def _row_predictions(
-    setup: Setup, row: Mapping[str, Any], ridge: Mapping[float, pd.DataFrame]
+    setup: Setup,
+    row: Mapping[str, Any],
+    ridge: Mapping[float, pd.DataFrame],
+    report_ladder: str | Path,
 ) -> dict[str, pd.DataFrame | None]:
     """A report row's predictions (scoring units) on ``val``, ``test`` and, out of
     fold, ``oof`` (the single-cell training lines); None where a run is missing."""
@@ -667,25 +777,27 @@ def _row_predictions(
     if kind == "dh_ridge":
         frame = ridge[float(row["penalty"])]
         return {"val": frame.loc[val], "test": frame.loc[test], "oof": frame.loc[cells]}
+    out: dict[str, pd.DataFrame | None] = {"val": None, "test": None, "oof": None}
     if kind == "prior":
-        out = {}
+        run_dir = finished_prior(row["run"], report_ladder)
+        if run_dir is None:
+            return out
         for split, wanted in (("val", val), ("test", test), ("oof", cells)):
-            path = Path(row["run"]) / f"predictions_{split}.parquet"
-            out[split] = pd.read_parquet(path).loc[wanted] if path.is_file() else None
+            frame = pd.read_parquet(run_dir / f"predictions_{split}.parquet")
+            out[split] = frame.loc[wanted]
         return out
     config = load_stage_one_config(Path(row["config"]))
     stem = Path(row["config"]).stem
-    main = run_directory(config, stem, None) / "predictions.parquet"
-    out: dict[str, pd.DataFrame | None] = {"val": None, "test": None, "oof": None}
-    if main.is_file() and (main.parent / ROW).is_file():
-        frame = pd.read_parquet(main)
+    main = finished_run(config, stem, None, report_ladder)
+    if main is not None:
+        frame = pd.read_parquet(main / "predictions.parquet")
         out["val"], out["test"] = frame.loc[val], frame.loc[test]
     parts = []
     for k in folds:
-        path = run_directory(config, stem, k) / "predictions.parquet"
-        if not (path.is_file() and (path.parent / ROW).is_file()):
+        run_dir = finished_run(config, stem, k, report_ladder)
+        if run_dir is None:
             return out
-        parts.append(pd.read_parquet(path).loc[by_fold[k]])
+        parts.append(pd.read_parquet(run_dir / "predictions.parquet").loc[by_fold[k]])
     out["oof"] = pd.concat(parts).loc[cells]
     return out
 
@@ -698,26 +810,38 @@ def _contrast(
     repeats: int,
 ) -> dict[str, Any]:
     """Selective-Spearman and within-gene R² differences, left minus right, with
-    95% paired line-bootstrap intervals (the same resamples for both)."""
+    95% paired line-bootstrap intervals (the same resamples for both). The Spearman
+    difference is over the selective genes defined on both sides (a row predicting
+    the base for a gene, as every row does outside the decode panel, is undefined
+    there), so the two macro means cover the same genes; within-gene R² is defined
+    for every gene and covers them all."""
     from src.context_prior.noise import line_sums, r2_gain
-    from src.eval.geneeffect import BOOTSTRAP_SEED, gain
+    from src.eval.geneeffect import BOOTSTRAP_SEED, defined_genes, gain
 
     definitions = setup.definitions
     selective = list(definitions.selective)
+    common = set(defined_genes(left, truth, selective)) & set(
+        defined_genes(right, truth, selective)
+    )
+    genes = [g for g in selective if g in common]
     sums = [
         line_sums(
             frame[selective].to_numpy(np.float64), truth[selective].to_numpy(np.float64)
         )
         for frame in (left, right)
     ]
-    return {
-        "selective_spearman": gain(
+    spearman = {"difference": None, "interval": [None, None]}
+    if genes:
+        spearman = gain(
             left.astype(np.float64),
             right.astype(np.float64),
             truth,
             definitions,
             repeats,
-        ),
+            genes=genes,
+        )
+    return {
+        "selective_spearman": spearman | {"genes": len(genes)},
         "within_gene_r2": r2_gain(
             sums[0][0], sums[1][0], sums[0][1], repeats=repeats, seed=BOOTSTRAP_SEED
         ),
@@ -733,7 +857,7 @@ def report(config_path: Path, device: str) -> Path:
     out = Path(config["output_root"]) / config["task"] / Path(config_path).stem
     out.mkdir(parents=True, exist_ok=True)
     setup = load_setup(config["ladder_config"])
-    ladder, definitions = setup.ladder, setup.definitions
+    ladder = setup.ladder
     groups = {
         "val": ladder.role_lines("val"),
         "test": ladder.role_lines("test"),
@@ -743,27 +867,16 @@ def report(config_path: Path, device: str) -> Path:
     penalties = sorted(
         {float(r["penalty"]) for r in config["rows"] if r["kind"] == "dh_ridge"}
     )
-    ridge: dict[float, pd.DataFrame] = {}
-    cached = {p: out / "dh_ridge" / f"penalty_{p:g}.parquet" for p in penalties}
-    if any(not path.is_file() for path in cached.values()):
-        (out / "dh_ridge").mkdir(exist_ok=True)
-        for penalty, frame in dh_ridge(setup, penalties, torch.device(device)).items():
-            frame.astype(np.float32).to_parquet(cached[penalty])
-    expected = {*ladder.role_lines("val", "test"), *ladder.frame}
-    for penalty, path in cached.items():
-        ridge[penalty] = pd.read_parquet(path)
-        if set(ridge[penalty].index) != expected or list(
-            ridge[penalty].columns
-        ) != list(definitions.genes):
-            raise ValueError(f"{path} predicts other lines or genes; move it aside")
+    ridge = cached_ridge(setup, config["ladder_config"], penalties, out, device)
     predictions = {
-        row["name"]: _row_predictions(setup, row, ridge) for row in config["rows"]
+        row["name"]: _row_predictions(setup, row, ridge, config["ladder_config"])
+        for row in config["rows"]
     }
     scores = {
         name: {
             split: None
             if frame is None
-            else wide_scores(frame, truth[split], definitions, ladder.panel)
+            else split_scores(setup, split, frame, truth[split])
             for split, frame in splits.items()
         }
         for name, splits in predictions.items()
@@ -785,8 +898,12 @@ def report(config_path: Path, device: str) -> Path:
     for row in config["rows"]:
         if row["kind"] == "run":
             run_config = load_stage_one_config(Path(row["config"]))
-            path = run_directory(run_config, Path(row["config"]).stem, None) / ROW
-            training[row["name"]] = read_json(path) if path.is_file() else None
+            run_dir = finished_run(
+                run_config, Path(row["config"]).stem, None, config["ladder_config"]
+            )
+            training[row["name"]] = (
+                None if run_dir is None else read_json(run_dir / ROW)
+            )
     payload = {
         "config": config,
         "lines": {name: len(lines) for name, lines in groups.items()},
@@ -833,8 +950,13 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
         "measured residual on predicted, each gene's offset removed). "
         f"Validation {counts['val']} lines, test {counts['test']}, out of fold "
         f"{counts['oof']} single-cell training lines (each scored by the run without "
-        "its fold). `undefined`: a prediction constant within every gene, or a run "
-        "not finished. Nothing is chosen here; this is not SL evidence.",
+        "its fold; each fold's base differs, so the rank metrics are scored within "
+        "each fold and averaged, and within-gene R², RMSE and per-line Pearson are "
+        "pooled). Selective Spearman covers the 4,323 protocol genes (genes scored: "
+        "those defined), the panel column the selective genes in the decode panel; a "
+        "contrast's Spearman difference covers the genes defined on both sides. "
+        "`undefined`: a prediction constant within every gene, or a run not "
+        "finished. Nothing is chosen here; this is not SL evidence.",
     ]
     titles = {"val": "Validation", "test": "Test", "oof": "Out of fold (telemetry)"}
     for split, title in titles.items():
@@ -866,9 +988,10 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
         for metric in ("selective_spearman", "within_gene_r2"):
             for split in SPLITS:
                 result = entry[split]
-                cells.append(
-                    "undefined" if result is None else _interval(result[metric])
-                )
+                text = "undefined" if result is None else _interval(result[metric])
+                if result is not None and metric == "selective_spearman":
+                    text += f" ({result[metric]['genes']} genes)"
+                cells.append(text)
         out.append("| " + " | ".join(cells) + " |")
     out += [
         "",
