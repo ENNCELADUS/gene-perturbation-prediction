@@ -124,7 +124,28 @@ def test_programs_and_scvi_on_synthetic_lines(tmp_path):
     reference = dict(np.load(folder / "reference.npz"))
     kinds = list(reference["kinds"])
     assert kinds.count("recurrent") >= 1 and kinds[-1] == "background"
-    assert reference["spectra"].shape == (len(kinds), len(reference["genes"]))
+    spectra = reference["spectra"]
+    assert spectra.shape == (len(kinds), len(reference["genes"]))
+    assert (spectra.sum(axis=1) > 0).all()
+    # Each recurrent program's spectrum itself (not only its top genes) sits on
+    # one planted gene block, and the two recurrent programs on different ones.
+    genes = list(reference["genes"])
+    planted = []
+    for row in np.flatnonzero(np.asarray(kinds) == "recurrent"):
+        means = {
+            name: spectra[
+                row, [genes.index(GENES[i]) for i in block if GENES[i] in genes]
+            ].mean()
+            for name, block in BLOCKS.items()
+        }
+        rest = spectra[row, [i for i, g in enumerate(genes) if int(g[1:]) >= 90]].mean()
+        best = max(means, key=means.get)
+        assert means[best] > 2 * rest
+        planted.append(best)
+    assert set(planted) == {"a", "b"}
+    # Per-line cNMF spectra are programs x genes and non-zero.
+    line = dict(np.load(folder / "cnmf" / "ACH-L1.npz"))
+    assert line["tpm_k3"].shape == (3, len(GENES)) and (line["tpm_k3"].sum(1) > 0).all()
     manifest = json.loads((folder / "manifest.json").read_text())
     assert "usage_to_weight" in manifest and manifest["starcat_check"]["cells"] == 15
     for model_id, path in paths.items():
@@ -137,3 +158,37 @@ def test_programs_and_scvi_on_synthetic_lines(tmp_path):
         assert latent.shape == (n, 3)
     assert (folder / "usages_second" / "ACH-L1.npy").is_file()
     sp.run(plan)  # resumes: every output exists
+    # A resumed run reloads the saved scVI model (with its AnnData) and encodes
+    # the same latents again.
+    latent_dir = tmp_path / "states" / "scvi" / "seed0" / "latent"
+    first = np.load(latent_dir / "ACH-L3.npy")
+    (latent_dir / "ACH-L3.npy").unlink()
+    sp.run(plan)
+    assert np.allclose(np.load(latent_dir / "ACH-L3.npy"), first, atol=1e-5)
+
+
+def test_program_spectra_orientation_and_alignment():
+    pytest.importorskip("cnmf")
+    from src.data.prepare import state_programs as sp
+
+    panel = [f"G{i}" for i in range(6)]
+    # cNMF's load_results: genes x programs, programs labelled 1..K.
+    spectra = pd.DataFrame(
+        [[9.0, 0.1], [8.0, 0.1], [0.1, 7.0], [0.1, 9.0], [1.0, 1.0]],
+        index=panel[:5],
+        columns=[1, 2],
+    )
+    top = pd.DataFrame({1: ["G0", "G1"], 2: ["G3", "G2"]})
+    out = sp.program_spectra(spectra, top, panel)
+    assert list(out.index) == [1, 2] and list(out.columns) == panel
+    assert out.loc[1, "G0"] == 9.0 and out.loc[2, "G3"] == 9.0
+    assert out.loc[2, "G5"] == 0.0  # a panel gene the line lacks
+    # Rows follow top's program order, by label.
+    flipped = sp.program_spectra(spectra, top[[2, 1]], panel)
+    assert list(flipped.index) == [2, 1] and flipped.loc[2, "G3"] == 9.0
+    with pytest.raises(ValueError, match="as columns"):
+        sp.program_spectra(spectra.T, top, panel)
+    empty = spectra.copy()
+    empty[2] = 0.0
+    with pytest.raises(ValueError, match="empty program spectrum"):
+        sp.program_spectra(empty, top, panel)

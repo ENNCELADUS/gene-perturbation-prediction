@@ -264,8 +264,9 @@ for scVI; the rest of `fit`, `project` and `inputs` is CPU. Every step skips wha
 hpc/states/setup.sh                                                                        # once
 CFG=configs/stage_one/states/telemetry.yaml
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=32 hpc/run.sh cell-states $CFG --steps fit,project,inputs
-CUDA_VISIBLE_DEVICES=$i hpc/run.sh pie-precompute $CFG --steps states --set ALL --shard $i/4   # one per GPU
-hpc/run.sh pie-precompute $CFG --steps assemble_states --set ALL                           # after every shard
+for i in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$i nohup hpc/run.sh pie-precompute $CFG --steps states --set ALL --shard $i/4 > outputs/launches/states_$i.log 2>&1 & done
+wait                                                                                        # every shard has exited
+hpc/run.sh pie-precompute $CFG --steps assemble_states --set ALL
 hpc/run.sh cell-states $CFG --steps report                                                 # results.md
 ```
 

@@ -1179,8 +1179,9 @@ moving `states/` aside moves the frozen PIE's state outputs with it.
   membership column added (mass and weighted expression kept); a line can end with one state. Sets, at fitting seed 0:
   every vocabulary; the cycling-weighted input (each cell weighted by its S plus G2/M membership plus 0.05, normalised;
   a sensitivity row for proliferation weighting, not a growth model); and every vocabulary but the QC states with its
-  memberships permuted across the line's cells at seeds 0, 1 and 2 (every state's mass, effective count and overlap and
-  the line input kept, the link to expression broken). Each set also holds the line's whole-line input as a `|whole`
+  merged memberships permuted across the line's cells at seeds 0, 1 and 2 (the merge runs once, on the real
+  memberships, so every permuted set has the real set's states, masses, effective counts and overlap, and the line
+  input; the link to expression is broken). Each set also holds the line's whole-line input as a `|whole`
   context. Per (line, state) the step also stores the membership-weighted mean of the cells' line-centred reference
   program scores (Kinker's 12 recurrent programs, Gavish's 41 meta-programs, MSigDB hallmarks, Tirosh's S and G2/M, scored
   as §14 scores programs over the panel; a program with no panel gene among its symbols, such as an outdated alias,
@@ -1197,15 +1198,17 @@ moving `states/` aside moves the frozen PIE's state outputs with it.
   and by assembly. The agreement check of §15 runs before each pass.
 - **Report** (`outputs/stage_one/state_telemetry/<config stem>/results.md`, `report.json`). Per vocabulary, on the
   training lines at seed 0: each state's identity (the three highest reference programs and each group's best); the
-  states' mass explained by deposit (η² against permutations within lineage, deposits with under 5 lines pooled) and
-  by the lines' median log UMI, genes detected and mitochondrial fraction (R²), and each state's within-line QC shift
+  share of each state's mass across lines explained by deposit (η² against deposit labels permuted within lineage,
+  deposits with under 5 lines pooled; the mean over states beside it) and by the lines' median log UMI, genes
+  detected and mitochondrial fraction (R²), and each state's within-line QC shift
   in pooled within-line SD units; recurrence (the share of lines holding a state with mass ≥ 0.05) and each state's
   spread across lines; the shares of variance of the singular values of the line × state masses in centred log-ratio
   form (floor 10⁻⁴), its K − 1 contrasts; agreement of masses between a line's two deposits (per-state Pearson across
   lines, per-line total-variation distance beside that between different lines); stability across fitting seeds (states
   matched by the Hungarian method on their memberships' correlation over a fixed draw of 200 cells per training line,
-  the matched correlations and the training lines' masses' distance). Validation lines from deposits no training line comes from are projected again and
-  compared. The frozen PIE's gap `Σ_k π_ck Δ(x_ck, g) − Δ(x̄_c, g)` for dH, dE and the own feature and own predicted
+  the matched correlations and the training lines' masses' total-variation distance, a state left unmatched when the
+  fits' state counts differ counted against zero mass, and the unmatched mass per line). Validation lines from
+  deposits no training line comes from are projected again and compared. The frozen PIE's gap `Σ_k π_ck Δ(x_ck, g) − Δ(x̄_c, g)` for dH, dE and the own feature and own predicted
   change (dL reads no expression), against the set's `|whole` context: pooled over genes and the role's lines, its energy
   and its spread across lines within a gene, each over the whole-line delta's spread across lines within the gene; the
   noise floor is the `|whole` context against the main pass on the same scale; per-shard seconds per context.
