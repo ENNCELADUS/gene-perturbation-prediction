@@ -217,3 +217,34 @@ def load_noise_config(path: Path) -> dict[str, Any]:
     """Load and validate a noise-diagnosis YAML config."""
     with Path(path).open() as handle:
         return validate_noise_config(yaml.safe_load(handle))
+
+
+_LADDER_GROUPS = {
+    "paths": "gene_text pie_checkpoint context_text tx1_cache",
+    "frame": "folds",
+    "pie": "pilot_genes components lines_per_batch",
+    "tx1": "batch_size max_length",
+}
+_LADDER_TOP_LEVEL = "seed prior_config noise_config ladder_root"
+
+
+def validate_ladder_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Keys of the stage-one inputs config: the default prior's config (split,
+    labels, bulk RNA, lineage drop), the noise diagnosis's (programs, clusters),
+    the ladder root, and the frozen PIE and Tx1 settings."""
+    _require_keys(config, {*_LADDER_GROUPS, *_LADDER_TOP_LEVEL.split()}, "config")
+    for name, keys in _LADDER_GROUPS.items():
+        _require_keys(config[name], set(keys.split()), name)
+    if not (isinstance(config["frame"]["folds"], int) and config["frame"]["folds"] > 1):
+        raise ValueError("frame.folds must be an integer above 1")
+    for key in ("pilot_genes", "components", "lines_per_batch"):
+        value = config["pie"][key]
+        if not (isinstance(value, int) and value > 0):
+            raise ValueError(f"pie.{key} must be a positive integer")
+    return dict(config)
+
+
+def load_ladder_config(path: Path) -> dict[str, Any]:
+    """Load and validate a stage-one inputs YAML config."""
+    with Path(path).open() as handle:
+        return validate_ladder_config(yaml.safe_load(handle))

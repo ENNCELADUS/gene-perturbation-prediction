@@ -214,29 +214,34 @@ def cluster_proportions(
     components: int,
     counts: Sequence[int],
     seed: int,
+    assigned: Mapping[str, np.ndarray] | None = None,
 ) -> dict[int, pd.DataFrame]:
     """Per cluster count ``k``, each line's share of cells nearest each centroid.
 
     Each line's cells are centred on its own mean (line identity removed),
     projected on the leading principal components of the training lines'
-    centred cells, and K-means is fitted on the training cells only."""
+    centred cells, and K-means is fitted on the training cells only. With
+    ``assigned`` (other cells of the same lines, e.g. all of them where ``cells``
+    holds a sample), the shares are of those cells, each centred on its own
+    line's mean, under the same fit."""
     from sklearn.cluster import KMeans
     from sklearn.decomposition import PCA
 
     centred = {m: x - x.mean(axis=0) for m, x in cells.items()}
     pca = PCA(n_components=components, random_state=seed)
     pca.fit(np.vstack([centred[m] for m in training]))
-    projected = {m: pca.transform(x) for m, x in centred.items()}
-    fitted_on = np.vstack([projected[m] for m in training])
+    fitted_on = np.vstack([pca.transform(centred[m]) for m in training])
+    shared = cells if assigned is None else assigned
+    projected = {m: pca.transform(x - x.mean(axis=0)) for m, x in shared.items()}
     out = {}
     for k in counts:
         model = KMeans(n_clusters=k, n_init=10, random_state=seed).fit(fitted_on)
         out[int(k)] = pd.DataFrame(
             [
-                np.bincount(model.predict(projected[m]), minlength=k) / len(cells[m])
-                for m in cells
+                np.bincount(model.predict(projected[m]), minlength=k) / len(shared[m])
+                for m in shared
             ],
-            index=list(cells),
+            index=list(shared),
             columns=[f"cluster_{i}" for i in range(k)],
         )
     return out
