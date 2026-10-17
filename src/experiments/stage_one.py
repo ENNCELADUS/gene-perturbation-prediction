@@ -53,6 +53,7 @@ from src.data.splits import FixedSplit
 from src.experiments.run_dir import (
     assert_bound,
     bind,
+    locked,
     read_json,
     write_json,
     write_text,
@@ -186,6 +187,22 @@ def run_genes(setup: Setup, config: Mapping[str, Any]) -> tuple[list[str], dict]
     }
 
 
+def bind_genes(run_dir: Path, genes: Sequence[str]) -> None:
+    """A run keeps the genes it started with: the full-panel set is found from the
+    files present, so a resume after files were added or removed would train on
+    another set; it is refused instead."""
+    path = run_dir / "genes.json"
+    with locked(run_dir):
+        if path.is_file():
+            if read_json(path) != list(genes):
+                raise ValueError(
+                    f"{run_dir} was started on another gene set ({path}); "
+                    "use a new --run-id"
+                )
+            return
+        write_json(path, list(genes))
+
+
 # --- inputs on the device ------------------------------------------------------------
 
 
@@ -236,7 +253,7 @@ class Resident:
         self.width, self.own_width, self.variance_kept = 0, 0, None
         self.line_classes: list[str] | None = None
         slots = list(data["own_slots"]) + (["own_x"] if kind == "own_x" else [])
-        if kind in reader.PIE_ARRAYS or slots:
+        if kind in reader.PIE_ARRAYS or kind == "dE_full" or slots:
             index = reader.check_pie_index(ladder)
             means = reader.frame_means(ladder, index)
         if kind in ("dH", "dE", "dL"):
@@ -464,6 +481,7 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
     targets = setup.targets(fold)
     torch_device = torch.device(device)
     genes, coverage = run_genes(setup, config)
+    bind_genes(run_dir, genes)
     resident = Resident(setup, config, fold, targets, torch_device, genes)
     model = make_model(config, resident)
     fresh = None

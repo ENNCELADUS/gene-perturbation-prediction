@@ -1043,13 +1043,18 @@ def per_state_group_share(
         for block in blocks:
             shuffled[block] = labels[rng.permutation(block)]
         null[k] = share(shuffled)
+    # A state whose mass does not vary has no defined share: NaN, not a p-value.
     return {
         str(state): {
             "observed": float(observed[j]),
-            "null_q95": float(np.nanquantile(null[:, j], 0.95)),
+            "null_q95": float(np.nanquantile(null[:, j], 0.95))
+            if np.isfinite(observed[j])
+            else float("nan"),
             "p_value": float(
                 (1 + (null[:, j] >= observed[j]).sum()) / (1 + permutations)
-            ),
+            )
+            if np.isfinite(observed[j])
+            else float("nan"),
         }
         for j, state in enumerate(frame.columns)
     }
