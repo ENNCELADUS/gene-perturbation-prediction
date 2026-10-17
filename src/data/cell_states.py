@@ -472,13 +472,50 @@ def state_masses_and_inputs(
     """Masses, effective counts and inputs of one line's states after
     ``merge_small``; ``sum_k mass_k inputs_k`` is the line's PIE input."""
     q, labels, merged = merge_small(q, cells, labels, minimum)
+    return state_inputs(q, cells, labels, merged)
+
+
+def state_inputs(
+    q: np.ndarray,
+    cells: LineCells,
+    labels: Sequence[str],
+    merged: Sequence[Sequence[str]],
+) -> StateInputs:
+    """Masses, effective counts and inputs of already merged memberships."""
     return StateInputs(
-        labels=labels,
+        labels=list(labels),
         mass=q.sum(axis=0) / cells.n_cells,
         effective=effective_count(q),
         inputs=cells.weighted_inputs(q),
-        merged=merged,
+        merged=[list(m) for m in merged],
     )
+
+
+def permuted_state_inputs(
+    q: np.ndarray,
+    cells: LineCells,
+    labels: Sequence[str],
+    minimum: float,
+    *,
+    model_id: str,
+    vocabulary: str,
+    seeds: Sequence[int],
+) -> tuple[StateInputs, dict[int, StateInputs]]:
+    """The real states (merged once, by their inputs) and, per seed, the same
+    merged membership rows permuted across the line's cells: every permuted set
+    has the real set's states, masses, effective counts and overlap."""
+    merged_q, labels, merged = merge_small(q, cells, labels, minimum)
+    real = state_inputs(merged_q, cells, labels, merged)
+    permuted = {
+        seed: state_inputs(
+            permute_memberships(merged_q, model_id, vocabulary, seed),
+            cells,
+            labels,
+            merged,
+        )
+        for seed in seeds
+    }
+    return real, permuted
 
 
 def permute_memberships(

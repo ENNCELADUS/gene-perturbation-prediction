@@ -79,6 +79,26 @@ def test_permuted_memberships_keep_mass_effective_count_and_line_input():
     assert not np.array_equal(cs.permute_memberships(q, "ACH-1", "hvg_k4", 1), permuted)
 
 
+def test_permuted_sets_permute_the_merged_states():
+    cells, pie_input = _line()
+    rng = np.random.default_rng(8)
+    q = rng.dirichlet([2.0, 2.0, 2.0], size=cells.n_cells)
+    q = np.column_stack([q, np.zeros(cells.n_cells)])
+    q[:3, :3] *= 0.2
+    q[:3, 3] = 0.8  # a small state the merge absorbs by its input
+    labels = ["a", "b", "c", "small"]
+    real, permuted = cs.permuted_state_inputs(
+        q, cells, labels, 10.0, model_id="ACH-1", vocabulary="hvg_k4", seeds=[0, 1]
+    )
+    assert "small" not in real.labels  # merging happened
+    for state in permuted.values():
+        assert state.labels == real.labels and state.merged == real.merged
+        assert np.allclose(state.mass, real.mass)
+        assert np.allclose(state.effective, real.effective)
+        assert np.allclose(state.mass @ state.inputs, pie_input, atol=1e-6)
+        assert not np.allclose(state.inputs, real.inputs)
+
+
 def test_cycling_weights_and_input():
     cells, _ = _line()
     p = np.linspace(0, 1, cells.n_cells)

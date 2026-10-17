@@ -779,6 +779,8 @@ def line_inputs(t: Telemetry, model_id: str) -> dict[str, Any]:
     memberships = read_memberships(t, model_id)
     minimum = float(t.config["inputs"]["merge_effective_count"])
     out: dict[str, Any] = {"whole": cells.mean().astype(np.float32)}
+    states: dict[str, tuple[cs.StateInputs, dict[int, cs.StateInputs]]] = {}
+    permutation_seeds = [int(s) for s in t.config["inputs"]["permutation_seeds"]]
     for set_name in cs.state_sets(t.config):
         if set_name == cs.CYCLING_SET:
             q = memberships[cs.membership_key(cs.CYCLE, t.seed)]
@@ -793,12 +795,25 @@ def line_inputs(t: Telemetry, model_id: str) -> dict[str, Any]:
             )
         else:
             vocabulary = cs.base_vocabulary(set_name)
-            q = memberships[cs.membership_key(vocabulary, t.seed)]
-            if set_name != vocabulary:
-                seed = int(set_name.rpartition("__perm")[2])
-                q = cs.permute_memberships(q, model_id, vocabulary, seed)
-            state = cs.state_masses_and_inputs(
-                q, cells, vocabulary_labels(t, t.seed, vocabulary), minimum
+            if vocabulary not in states:
+                # Merged once on the real memberships; the permuted sets permute
+                # the merged rows, so they keep the real states and masses.
+                states[vocabulary] = cs.permuted_state_inputs(
+                    memberships[cs.membership_key(vocabulary, t.seed)],
+                    cells,
+                    vocabulary_labels(t, t.seed, vocabulary),
+                    minimum,
+                    model_id=model_id,
+                    vocabulary=vocabulary,
+                    seeds=permutation_seeds
+                    if cs.family(vocabulary) in cs.PERMUTED_FAMILIES
+                    else [],
+                )
+            real, permuted = states[vocabulary]
+            state = (
+                real
+                if set_name == vocabulary
+                else permuted[int(set_name.rpartition("__perm")[2])]
             )
             _check_identity(model_id, set_name, state.mass @ state.inputs, line)
         out[f"inputs__{set_name}"] = state.inputs.astype(np.float32)
@@ -993,6 +1008,53 @@ def line_qc(t: Telemetry) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     return t.cached("line_qc", make)
 
 
+def per_state_group_share(
+    frame: pd.DataFrame,
+    groups: pd.Series,
+    strata: pd.Series,
+    *,
+    permutations: int,
+    seed: int,
+) -> dict[str, dict[str, float]]:
+    """Per state (column of lines x states masses), the share of its mass's
+    variance across lines explained by ``groups`` (eta squared), against
+    ``groups`` permuted among the lines of each stratum (the noise diagnosis's
+    null, state by state)."""
+    from src.context_prior.noise import _between_share
+
+    lines = list(frame.index)
+    labels = groups.loc[lines].astype(str).to_numpy()
+    levels = np.asarray(sorted(set(labels)))
+    values = frame.to_numpy(dtype=np.float64)
+    finite = np.isfinite(values).astype(np.float64)
+    values = np.where(finite > 0, values, 0.0)
+    stratum = strata.loc[lines].to_numpy()
+    blocks = [np.flatnonzero(stratum == s) for s in sorted(set(stratum))]
+
+    def share(assigned: np.ndarray) -> np.ndarray:
+        onehot = (assigned[:, None] == levels[None, :]).astype(np.float64)
+        return _between_share(values, finite, onehot)
+
+    observed = share(labels)
+    rng = np.random.default_rng(seed)
+    null = np.empty((permutations, values.shape[1]))
+    for k in range(permutations):
+        shuffled = labels.copy()
+        for block in blocks:
+            shuffled[block] = labels[rng.permutation(block)]
+        null[k] = share(shuffled)
+    return {
+        str(state): {
+            "observed": float(observed[j]),
+            "null_q95": float(np.nanquantile(null[:, j], 0.95)),
+            "p_value": float(
+                (1 + (null[:, j] >= observed[j]).sum()) / (1 + permutations)
+            ),
+        }
+        for j, state in enumerate(frame.columns)
+    }
+
+
 def confound_section(
     t: Telemetry, vocabulary: str, frame: pd.DataFrame
 ) -> dict[str, Any]:
@@ -1008,6 +1070,13 @@ def confound_section(
     grouped = deposit.where(~deposit.isin(small), "other")
     lineage = t.lines.loc[train, "lineage"].astype(str)
     share = group_share(
+        frame,
+        grouped,
+        lineage,
+        permutations=int(t.config["report"]["permutations"]),
+        seed=t.seed,
+    )
+    per_state = per_state_group_share(
         frame,
         grouped,
         lineage,
@@ -1038,6 +1107,8 @@ def confound_section(
         / np.maximum(w.sum(axis=0), 1e-12)[:, None]
     )
     return {
+        "deposit_per_state": per_state,
+        # The mean over states of the same share (noise.group_share).
         "deposit": share,
         "pooled_as_other": sorted(small),
         "qc_r2": r2,
@@ -1109,10 +1180,7 @@ def second_section(t: Telemetry, vocabulary: str) -> dict[str, Any] | None:
 def stability_section(t: Telemetry, vocabulary: str) -> dict[str, Any]:
     """States of each pair of fitting seeds matched by the Hungarian method on
     the correlation of their memberships over a fixed draw of cells per training
-    line; the matched correlations and the training lines' masses' mean
-    total-variation distance after matching."""
-    from scipy.optimize import linear_sum_assignment
-
+    line (``matched_states``)."""
     from src.data.ladder_cells import line_rng
 
     def draw() -> dict[str, np.ndarray]:
@@ -1135,24 +1203,41 @@ def stability_section(t: Telemetry, vocabulary: str) -> dict[str, Any]:
         s: [table[m][cs.membership_key(vocabulary, s)] for m in t.train]
         for s in t.seeds
     }
-    pairs = {}
-    for i, a in enumerate(t.seeds):
-        for b in t.seeds[i + 1 :]:
-            qa, qb = stacked[a], stacked[b]
-            ka = qa.shape[1]
-            corr = np.corrcoef(qa.T, qb.T)[:ka, ka:]
-            corr = np.nan_to_num(corr)
-            rows, cols = linear_sum_assignment(-corr)
-            ma = np.asarray(line_masses_by_seed[a])[:, rows]
-            mb = np.asarray(line_masses_by_seed[b])[:, cols]
-            pairs[f"{a}-{b}"] = {
-                "matched_correlation": corr[rows, cols].tolist(),
-                "matched_mass_tvd_mean": float(
-                    0.5 * np.abs(ma - mb).sum(axis=1).mean()
-                ),
-                "states": [int(ka), int(qb.shape[1])],
-            }
-    return pairs
+    return {
+        f"{a}-{b}": matched_states(
+            stacked[a],
+            stacked[b],
+            np.asarray(line_masses_by_seed[a]),
+            np.asarray(line_masses_by_seed[b]),
+        )
+        for i, a in enumerate(t.seeds)
+        for b in t.seeds[i + 1 :]
+    }
+
+
+def matched_states(
+    qa: np.ndarray, qb: np.ndarray, ma: np.ndarray, mb: np.ndarray
+) -> dict[str, Any]:
+    """Two fits' states matched by the Hungarian method on the correlation of
+    their memberships (cells x states ``qa``, ``qb``); per line (lines x states
+    masses ``ma``, ``mb``), the total-variation distance with every unmatched
+    state set against a zero-mass counterpart, and the unmatched mass."""
+    from scipy.optimize import linear_sum_assignment
+
+    ka = qa.shape[1]
+    corr = np.nan_to_num(np.corrcoef(qa.T, qb.T)[:ka, ka:])
+    rows, cols = linear_sum_assignment(-corr)
+    unmatched_a = np.setdiff1d(np.arange(ka), rows)
+    unmatched_b = np.setdiff1d(np.arange(qb.shape[1]), cols)
+    unmatched = ma[:, unmatched_a].sum(axis=1) + mb[:, unmatched_b].sum(axis=1)
+    distance = 0.5 * (np.abs(ma[:, rows] - mb[:, cols]).sum(axis=1) + unmatched)
+    return {
+        "matched_correlation": corr[rows, cols].tolist(),
+        "matched_mass_tvd_mean": float(distance.mean()),
+        "unmatched_states": [int(unmatched_a.size), int(unmatched_b.size)],
+        "unmatched_mass_mean": float(unmatched.mean()),
+        "states": [int(ka), int(qb.shape[1])],
+    }
 
 
 def determinism_section(t: Telemetry) -> dict[str, Any]:
@@ -1315,17 +1400,25 @@ def results_markdown(t: Telemetry, report: Mapping[str, Any]) -> str:
         "",
         "## Composition, confound and stability (training lines, first fitting seed)",
         "",
-        "| Vocabulary | States | States per line ≥ mass | Deposit η² (null q95) | "
-        "QC R² max | Second deposit TVD (between lines) | Seed match (mean corr) |",
-        "| --- | ---: | ---: | --- | ---: | --- | ---: |",
+        "Deposit η²: the mean over states of the share of each state's mass across "
+        "lines explained by deposit (null q95), then the largest state's; per state "
+        "in the identity tables. Seed match: the matched states' mean correlation "
+        "(the mean unmatched mass per line, when the fits' state counts differ).",
+        "",
+        "| Vocabulary | States | States per line ≥ mass | Deposit η² mean (null q95); "
+        "max state | QC R² max | Second deposit TVD (between lines) | "
+        "Seed match (unmatched mass) |",
+        "| --- | ---: | ---: | --- | ---: | --- | --- |",
     ]
     for vocabulary, entry in report["vocabularies"].items():
         deposit = entry["confound"]["deposit"]
+        per_state = entry["confound"]["deposit_per_state"]
+        largest = max((v["observed"] for v in per_state.values()), default=None)
         r2 = [v for v in entry["confound"]["qc_r2"].values() if np.isfinite(v)]
         second = entry["second_deposit"]
-        matched = [
-            np.mean(p["matched_correlation"]) for p in entry["stability"].values()
-        ]
+        stability = list(entry["stability"].values())
+        matched = [np.mean(p["matched_correlation"]) for p in stability]
+        unmatched = [p["unmatched_mass_mean"] for p in stability]
         agreement = (
             f"{_f(second['tvd_median'])} ({_f(second['tvd_between_lines_median'])}), "
             f"{second['lines']} lines"
@@ -1336,10 +1429,11 @@ def results_markdown(t: Telemetry, report: Mapping[str, Any]) -> str:
             vocabulary,
             str(len(entry["states"])),
             _f(entry["composition"]["states_per_line_median"], 1),
-            f"{_f(deposit['observed'])} ({_f(deposit['null_q95'])})",
+            f"{_f(deposit['observed'])} ({_f(deposit['null_q95'])}); {_f(largest)}",
             _f(max(r2) if r2 else None),
             agreement,
-            _f(float(np.mean(matched)) if matched else None),
+            f"{_f(float(np.mean(matched)) if matched else None)} "
+            f"({_f(float(np.mean(unmatched)) if unmatched else None)})",
         ]
         lines.append("| " + " | ".join(cells) + " |")
     lines += ["", "## Identity (best reference program per state)", ""]
@@ -1347,13 +1441,21 @@ def results_markdown(t: Telemetry, report: Mapping[str, Any]) -> str:
         lines += [
             f"### {vocabulary}",
             "",
-            "| State | Mass (mean) | Top programs |",
-            "| --- | ---: | --- |",
+            "| State | Mass (mean) | Deposit η² (null q95) | Top programs |",
+            "| --- | ---: | --- | --- |",
         ]
         composition = entry["composition"]
+        per_state = entry["confound"]["deposit_per_state"]
         for state, identity in entry["identity"]["states"].items():
             top = "; ".join(f"{name} {value:+.3f}" for name, value in identity["top"])
-            lines.append(f"| {state} | {_f(composition['mass_mean'][state])} | {top} |")
+            share = per_state[state]
+            cells = [
+                state,
+                _f(composition["mass_mean"][state]),
+                f"{_f(share['observed'])} ({_f(share['null_q95'])})",
+                top,
+            ]
+            lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
     lines += [
         "## The frozen PIE's gap",
