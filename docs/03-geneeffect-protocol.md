@@ -961,3 +961,72 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   Cell-state arms add at most +0.0010 and fractions never beat means; Cilantro's rank-value
   encoding ties (−0.0022 [−0.0076, +0.0033]) and its top-2,048 truncations lose (−0.019, −0.014).
 - **Scope.** A diagnosis result is single-gene dependency evidence on held-out lines; it is not an SL result.
+
+## 15. Stage-one inputs
+
+Task 2 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) (plan
+[2026-10-16](specs/2026-10-16-pie-ladder-inputs-plan.md)) writes the fixed inputs every stage-one arm reads under
+`data/geneeffect_joint/v2/ladder/` (`configs/stage_one/ladder_inputs.yaml`, which names the default prior's config for
+the split, labels, bulk RNA and dropped lineages and the noise diagnosis's for programs and clusters).
+`hpc/run.sh ladder-inputs CONFIG --steps lines,cells,mean,summaries` (`src/experiments/ladder_inputs.py`, project
+environment) and `--steps tx1 --shard I/N` (one GPU per shard); `hpc/run.sh pie-precompute CONFIG --steps …`
+(`src/experiments/pie_precompute.py`, `.venv-pie`); `hpc/run.sh gene-sources STEP …`. Every step skips what exists;
+`manifest.json` records the settings (a root written under others is refused) and each step's counts. Nothing is chosen
+in code.
+
+- **Frame.** The 981 labelled lines every arm trains on: the split's 377 labelled single-cell training lines (lymphoid,
+  myeloid and lines without bulk RNA included) and the 604 bulk-only labelled lines with bulk RNA outside the default
+  prior's dropped lineages; five patient-grouped folds of them (seed 0); validation and test as in §6. A frame line sharing
+  a patient with a held-out line is refused. Per gene of the §6 definitions: the base `m_g` (mean GeneEffect over the
+  frame), the 377-line mean, residual SD, selective and variable flags, and the `gene_text` key (case-insensitive); the
+  **decode panel** is the definitions' genes with a key (`lines.parquet`, `genes.parquet`).
+- **Cells** (`cells/<ModelID>.npz`, every split line, all of its cells; `src/data/ladder_cells.py`). Source symbols are
+  matched upper-cased. PIE's input is the mean over cells of `log1p` CP10K; pseudo-bulk is `log1p` of the mean over cells
+  of each cell's CP10K; per gene the detected fraction and the SD of `log1p` CP10K beside their depth-expected values
+  (`mean_i(1 − exp(−μ_g L_i / 10⁴))`; the SD of one Poisson replicate at `μ_g L_i / 10⁴`, seed 0), over the panel and the
+  bulk genes. Per cell: log UMI, genes detected, `MT-` and `RPS`/`RPL` fractions, the noise diagnosis's S and G2/M program
+  scores (§14), a Scrublet doublet score (NaN below 100 cells). HVG cells are STATE's HVGs in the prepared space
+  (`log1p(x T / L)`), the shuffled cells each HVG permuted across the line's cells (seeded by line), and the mean as one
+  cell `log1p` of the line's mean normalised HVG profile.
+- **Mean channel** (`mean/`). The default prior's space (§10: bulk genes every held-out line measures, a gap given the
+  training mean, quantile-normalised to the training side's bulk profile), on the per-cell CP10K pseudo-bulk. A line with
+  cells always reads its cells, through an affine bridge refitted on the paired lines (343): a training line's fitted
+  outside its frame fold, a held-out line's on all of them. A bulk-only line reads its bulk. No held-out line's bulk RNA
+  is read. PIE's input for every line on the panel: a bulk-only line's `log2(TPM + 1)` as `log1p(TPM / 100)`; a gene the
+  source does not list takes the frame lines' mean (`pie_listed.parquet` marks it).
+- **Summaries** (`summaries.parquet`). §14's program fractions and means from all cells, and cluster shares at its cluster
+  counts: PCA and K-means fitted as §14 fits them, on the training lines' prepared context cells, then every cell assigned.
+- **Tx1 cells** (`data/tx1_basal_embeddings/v2_all/{real,shuffled}/`). Tx1-3B embeddings of every cell of the labelled
+  lines with cells, and of the same cells with each gene's raw counts permuted across the line's cells (seeded by line),
+  in the §3 cache format.
+- **Gene sources** (`gene_sources/`). `gene_text` and `string_space` from PIE's sources; ESM C 600M and ESM3-open (sequence
+  and its AlphaFold DB structure when the structure's sequence equals the UniProt one, else masked) over the reviewed
+  human UniProt sequences PIE's `esm2` uses (`src/data/prepare/embed_protein_sources.py`, an `esm` environment); Gene2vec through
+  Geneformer's symbol map as Cilantro reads it. Aligned case-insensitively to the gene axis, coverage per source
+  (`src/data/gene_sources.py`).
+- **Cellosaurus text** (`context_text/`). A PIE `context_text` source keyed by ModelID
+  (`src/data/prepare/cellosaurus_context.py`, on the Mac: the H20 cannot reach Cellosaurus or OpenAI). A line whose
+  Cellosaurus accession PIE released a basal context for takes PIE's vector and text byte for byte; every other line with
+  an RRID is rendered by PIE's template from its Cellosaurus 56.0 record under its accession and embedded with
+  `text-embedding-3-large`. Before embedding, the endpoint (OpenAI or a relay named by `OPENAI_BASE_URL`) re-embeds the
+  reused lines' released texts and must reproduce PIE's vectors (cosine ≥ 0.999 each), else the run stops.
+- **Frozen PIE** (`pie/`). `PIE_replogle_xdataset` `best_auprc.ckpt`, loaded strictly, in bf16, over our lines as a
+  controls-only PIE dataset (one context per line, the panel as the gene axis, PIE's input as the control means) with
+  the Cellosaurus text; PIE's `depmap_gene_effect` token is removed from every batch. `rescore`: the checkpoint on
+  Replogle `test_seen` and `test_unseen` with that mask, beside Task 1. Per gene g and line c, PIE reads g's perturbation
+  sources and same-perturbation evidence (our dataset is outside PIE's evidence, so nothing is excluded and the
+  same-context blocks are empty); the reference pass reads the line's context alone. Stored: `dH` (last decoder-layer
+  features pooled over the panel, knockdown minus reference), `dE` (the predicted change in mean expression, the softmax
+  expectation over the delta-p bin centres at PIE's temperature, as coordinates on 512 principal components fitted on
+  the pilot's frame-line pairs; the full panel kept for the selective and pilot genes; the before-state is not stored:
+  a reader projects the line's PIE input, centred on the frame mean, onto the same components), `dL` (mean-pooled latents,
+  knockdown minus reference), and g's own feature, predicted change and control mean. The decode is PIE's
+  (`PieModel._decode_group`) re-implemented step for step with three exact hoists (the decoder's memory keys and values
+  once per batch, the control-mean encoding once per line batch and chunk for the run, the evidence-block encoders on one
+  row) and, under bf16, compiled with `torch.compile`. Before each pass a training line with cells, a bulk-only line and
+  a test line are run for two genes through PIE's own dataset, collate and forward: our float32 decode must agree with
+  PIE's float32 delta-p logits to 1e-3, and our bf16 decode may be at most twice as far from them as PIE's own bf16
+  forward is (plus 1e-3), else the pass stops.
+  `pilot` (200 random panel genes), `basis` (the components and `pilot/pilot.md`: timing, the variance across lines
+  within a gene against the variance between genes per delta, the variance the basis keeps) are read before `full`;
+  `assemble` centres every delta within its gene on the frame lines' mean (`frame_means.npz`) into gene × line arrays.
