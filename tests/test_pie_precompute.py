@@ -348,3 +348,38 @@ def test_dataset_opens_as_pie_preprocessed(tmp_path):
     assert opened.dataset == pp.DATASET and opened.controls_only
     assert opened.contexts == list(LINES) and opened.genes == list(PANEL)
     assert np.allclose(opened.ctrl_means, tables.pie_input.to_numpy())
+
+
+def test_dataset_refuses_other_lines_or_control_means(tmp_path):
+    pytest.importorskip("pie")
+    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {})
+    tables = _tables()
+    pp.write_dataset(out, tables)
+    assert pp.write_dataset(out, tables) == out.dataset
+    with pytest.raises(ValueError, match="other lines or genes"):
+        pp.write_dataset(out, _tables(n_lines=2))
+    moved = _tables()
+    moved.pie_input.iloc[0, 0] += 1.0
+    with pytest.raises(ValueError, match="other control means"):
+        pp.write_dataset(out, moved)
+
+
+def test_reference_pass_refuses_other_lines(tmp_path):
+    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {})
+    tables = _tables()
+    path = out.pie / "reference.npz"
+    latent = np.zeros((3, 4), dtype=np.float32)
+    pp._save_npz(
+        path, lines=np.asarray(["L1", "L2", "L9"]), latent=latent, features=latent
+    )
+    with pytest.raises(ValueError, match="other lines"):
+        pp.reference_pass(out, None, tables)
+    pp._save_npz(path, lines=np.asarray(list(LINES)), latent=latent, features=latent)
+    assert set(pp.reference_pass(out, None, tables)) == {"latent", "features"}
+    pp._save_npz(
+        path, latent=latent, features=latent
+    )  # written before lines were recorded
+    assert pp.reference_pass(out, None, tables)["latent"].shape == (3, 4)
+    pp._save_npz(path, latent=latent[:2], features=latent[:2])
+    with pytest.raises(ValueError, match="other lines"):
+        pp.reference_pass(out, None, tables)
