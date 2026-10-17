@@ -190,6 +190,39 @@ source the checkpoints pin (all five cross-dataset training sets; `ncbi_text` al
 `data/pie/hf/`; PIE checks each array against its `meta.json` SHA-256. Output: `outputs/pie_reproduction/<id>/`
 (`run.json` with pins, environment and step times).
 
+## The stage-one inputs
+
+Task 2 of the stage-one design ([protocol §15](../docs/03-geneeffect-protocol.md#15-stage-one-inputs),
+[data card](../docs/data/ladder-inputs.md)) writes under `data/geneeffect_joint/v2/ladder/` from
+`configs/stage_one/ladder_inputs.yaml`. Every step skips what exists, so a rerun resumes; shards on one host share the
+reference pass and `run.json` through a lock file (`pie/.lock`). Launch each with `setsid nohup … > outputs/launches/<name>.log 2>&1 < /dev/null &`.
+
+```bash
+CFG=configs/stage_one/ladder_inputs.yaml
+OMP_NUM_THREADS=32 hpc/run.sh ladder-inputs $CFG --steps lines,cells,mean,summaries       # CPU, ~20 min
+CUDA_VISIBLE_DEVICES=$i hpc/run.sh ladder-inputs $CFG --steps tx1 --shard $i/4            # one per GPU, ~7 cells/s each
+SRC=data/pie/hf/datasets/arcinstitute/pie_sources/cb1aaa4e7655605bdc70a9bd77bbd62016b8c7d7
+OUT=data/geneeffect_joint/v2/ladder/gene_sources
+hpc/run.sh gene-sources proteins --pie-sources $SRC --out $OUT/protein                    # .venv-pie, CPU
+hpc/run.sh gene-sources afdb --afdb-dir data/afdb --out $OUT/protein                      # EBI FTP, 5.2 GB
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh gene-sources esm --out $OUT/protein                       # ESM C, ESM3 (afdb.json), 1 GPU
+hpc/run.sh gene-sources align --genes data/geneeffect_joint/v2/ladder/genes.parquet --pie-sources $SRC \
+  --protein $OUT/protein --gene2vec data/cilantro/official/gene2vec_embs.pt \
+  --gene-names data/cilantro/geneformer/geneformer/gene_dictionaries_30m/gene_name_id_dict_gc30M.pkl --out $OUT
+hpc/run.sh pie-precompute $CFG --steps rescore                                            # 1 GPU
+CUDA_VISIBLE_DEVICES=$i hpc/run.sh pie-precompute $CFG --steps pilot --shard $i/N         # then --steps basis: pilot/pilot.md
+CUDA_VISIBLE_DEVICES=$i hpc/run.sh pie-precompute $CFG --steps full --shard $i/N          # after pilot.md is read
+hpc/run.sh pie-precompute $CFG --steps assemble
+```
+
+The ESM steps run in `ESM_PYTHON` (default the H20's
+`/2023533015/ppi-mutation-ddg/.venv`, `esm` 3.2.1) with `ESM_HF_HOME` (default `/2023533015/.cache/huggingface`) offline;
+`hpc/esm/setup.sh` builds an own `.venv-esm` should that environment go. The Cellosaurus text is built on the Mac
+(`uv run --isolated --no-project --python 3.12 --with-editable 'third_party/pie[sources]' python -m
+src.data.prepare.cellosaurus_context --out DIR`, with `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` set on that
+command line only; a SOCKS `ALL_PROXY` in the shell needs `--with socksio`) and copied to `ladder/context_text/` with a
+SHA-256 check.
+
 ## The `prior` command
 
 `hpc/run.sh prior CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear context prior

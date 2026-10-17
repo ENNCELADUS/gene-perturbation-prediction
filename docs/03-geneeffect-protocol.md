@@ -1001,12 +1001,15 @@ in code.
   in the §3 cache format.
 - **Gene sources** (`gene_sources/`). `gene_text` and `string_space` from PIE's sources; ESM C 600M and ESM3-open (sequence
   and its AlphaFold DB structure when the structure's sequence equals the UniProt one, else masked) over the reviewed
-  human UniProt sequences PIE's `esm2` uses (`src/data/prepare/embed_protein_sources.py`, `.venv-esm`); Gene2vec through
+  human UniProt sequences PIE's `esm2` uses (`src/data/prepare/embed_protein_sources.py`, an `esm` environment); Gene2vec through
   Geneformer's symbol map as Cilantro reads it. Aligned case-insensitively to the gene axis, coverage per source
   (`src/data/gene_sources.py`).
-- **Cellosaurus text** (`context_text/`). Cellosaurus 56.0 records of every line with an RRID, rendered by PIE's template
-  and embedded with `text-embedding-3-large` on the Mac (the H20 cannot reach OpenAI), as a PIE `context_text` source keyed
-  by ModelID (`src/data/prepare/cellosaurus_context.py`).
+- **Cellosaurus text** (`context_text/`). A PIE `context_text` source keyed by ModelID
+  (`src/data/prepare/cellosaurus_context.py`, on the Mac: the H20 cannot reach Cellosaurus or OpenAI). A line whose
+  Cellosaurus accession PIE released a basal context for takes PIE's vector and text byte for byte; every other line with
+  an RRID is rendered by PIE's template from its Cellosaurus 56.0 record under its accession and embedded with
+  `text-embedding-3-large`. Before embedding, the endpoint (OpenAI or a relay named by `OPENAI_BASE_URL`) re-embeds the
+  reused lines' released texts and must reproduce PIE's vectors (cosine ≥ 0.999 each), else the run stops.
 - **Frozen PIE** (`pie/`). `PIE_replogle_xdataset` `best_auprc.ckpt`, loaded strictly, in bf16, over our lines as a
   controls-only PIE dataset (one context per line, the panel as the gene axis, PIE's input as the control means) with
   the Cellosaurus text; PIE's `depmap_gene_effect` token is removed from every batch. `rescore`: the checkpoint on
@@ -1016,8 +1019,13 @@ in code.
   features pooled over the panel, knockdown minus reference), `dE` (the predicted change in mean expression, the softmax
   expectation over the delta-p bin centres at PIE's temperature, as coordinates on 512 principal components fitted on
   the pilot's frame-line pairs; the full panel kept for the selective and pilot genes), `dL` (mean-pooled latents,
-  knockdown minus reference), and g's own feature, predicted change and control mean. Each gene's batches are checked
-  against PIE's own dataset and collate in float32 (largest delta-p logit difference ≤ 1e-3, else the pass stops).
+  knockdown minus reference), and g's own feature, predicted change and control mean. The decode is PIE's
+  (`PieModel._decode_group`) re-implemented step for step with three exact hoists (the decoder's memory keys and values
+  once per batch, the control-mean encoding once per line batch and chunk for the run, the evidence-block encoders on one
+  row) and, under bf16, compiled with `torch.compile`. Before each pass a training line with cells, a bulk-only line and
+  a test line are run for two genes through PIE's own dataset, collate and forward: our float32 decode must agree with
+  PIE's float32 delta-p logits to 1e-3, and our bf16 decode may be at most twice as far from them as PIE's own bf16
+  forward is (plus 1e-3), else the pass stops.
   `pilot` (200 random panel genes), `basis` (the components and `pilot/pilot.md`: timing, the variance across lines
   within a gene against the variance between genes per delta, the variance the basis keeps) are read before `full`;
   `assemble` centres every delta within its gene on the frame lines' mean (`frame_means.npz`) into gene × line arrays.

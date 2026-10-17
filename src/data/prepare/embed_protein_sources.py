@@ -14,8 +14,9 @@ these steps in order, each skipped when its output exists, so rerunning resumes:
   release is PIE's).
 - ``afdb`` (any env, CPU): the AlphaFold DB v6 human-proteome archive from EBI's FTP
   host into ``--afdb-dir`` (resumed by byte range), with its SHA-256 in ``afdb.json``.
-- ``esmc`` (``.venv-esm``, 1 GPU): ESM C 600M over every protein.
-- ``esm3`` (``.venv-esm``, 1 GPU): ESM3-open over sequence and structure, for the
+- ``esmc`` (an ``esm`` environment, ``ESM_PYTHON`` in ``hpc/run.sh``; 1 GPU): ESM C
+  600M over every protein.
+- ``esm3`` (the same environment; 1 GPU): ESM3-open over sequence and structure, for the
   proteins whose AFDB model (``AF-<accession>-F1``) has exactly the UniProt sequence;
   every other protein has no ESM3 entry (masked, never sequence-only). The status of
   every protein is written to ``esm3_open_structures.tsv``.
@@ -334,7 +335,7 @@ def afdb(afdb_dir: Path, out: Path) -> None:
     )
 
 
-# --- models (.venv-esm) ---------------------------------------------------------------
+# --- models (the esm environment) -----------------------------------------------------
 
 
 def _pinned_snapshot(pin: ModelPin) -> Path:
