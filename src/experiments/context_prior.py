@@ -16,13 +16,8 @@ different experiments may share it, since rows are per setting.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import importlib
-import json
-import math
-import os
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -46,18 +41,14 @@ from src.context_prior.views import fit_expression_components
 from src.data.depmap import read_depmap_matrix, read_models
 from src.data.extra_lines import load_bulk_lines
 from src.data.splits import FixedSplit, load_geneeffect_split
-from src.eval.metrics import paired_line_bootstrap
+from src.eval.geneeffect import gain, score
 from src.experiments.all import _number, _read_json
 from src.experiments.config import load_config, load_prior_config
+from src.experiments.run_dir import bind as _bind
+from src.experiments.run_dir import locked as _locked
+from src.experiments.run_dir import write_json as _write_json
+from src.experiments.run_dir import write_text as _write_text
 
-BOOTSTRAP_SEED = 0
-METRICS = (
-    "selective_spearman",
-    "selective_aupr_lift",
-    "residual_pearson_macro_per_gene",
-    "geneeffect_loss",
-    "residual_sd_ratio_macro_per_gene",
-)
 SCORED = ("val", "test")
 
 
@@ -229,67 +220,6 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
 # ----------------------------------------------------------------------------
 # Scoring
 # ----------------------------------------------------------------------------
-
-
-def long_frame(
-    prediction: pd.DataFrame, truth: pd.DataFrame, definitions: Definitions
-) -> pd.DataFrame:
-    """Finite-label rows in GeneEffect units, as ``aggregate_geneeffect`` reads them."""
-    lines, genes = list(prediction.index), list(prediction.columns)
-    scale = definitions.residual_scale.loc[genes].to_numpy()
-    residual = truth.loc[lines, genes].to_numpy() * scale
-    predicted = prediction.to_numpy() * scale
-    keep = np.isfinite(residual)
-    line_index, gene_index = np.nonzero(keep)
-    means = definitions.gene_means.loc[genes].to_numpy()[gene_index]
-    return pd.DataFrame(
-        {
-            "model_id": np.asarray(lines)[line_index],
-            "gene_symbol": np.asarray(genes)[gene_index],
-            "residual": residual[keep],
-            "residual_prediction": predicted[keep],
-            "gene_effect": residual[keep] + means,
-            "geneeffect_prediction": predicted[keep] + means,
-        }
-    )
-
-
-def score(
-    prediction: pd.DataFrame, truth: pd.DataFrame, definitions: Definitions
-) -> dict:
-    from src.eval.geneeffect import aggregate_geneeffect
-
-    frame = long_frame(prediction, truth, definitions)
-    metrics, _, _ = aggregate_geneeffect(
-        frame,
-        model_ids=list(prediction.index),
-        genes=list(definitions.genes),
-        variable_genes=list(definitions.variable),
-        selective_genes=list(definitions.selective),
-    )
-    return {key: metrics[key] for key in METRICS}
-
-
-def gain(
-    better: pd.DataFrame,
-    reference: pd.DataFrame,
-    truth: pd.DataFrame,
-    definitions: Definitions,
-    repeats: int,
-) -> dict:
-    """Selective-Spearman difference and its 95% paired line-bootstrap interval."""
-    genes = list(definitions.selective)
-    result = paired_line_bootstrap(
-        long_frame(better.loc[:, genes], truth, definitions),
-        long_frame(reference.loc[:, genes], truth, definitions),
-        genes,
-        repeats=repeats,
-        seed=BOOTSTRAP_SEED,
-    )
-    return {
-        "difference": float(result["difference"]),
-        "interval": [float(value) for value in result["interval"]],
-    }
 
 
 # ----------------------------------------------------------------------------
@@ -480,69 +410,6 @@ def _facts(base: RunBase) -> dict:
 # ----------------------------------------------------------------------------
 # Files and results.md
 # ----------------------------------------------------------------------------
-
-
-def _jsonable(value: Any) -> Any:
-    """Plain JSON values: numpy scalars become Python numbers, NaN becomes None
-    (undefined, never 0) and an infinite float the string ``"inf"``."""
-    if isinstance(value, Mapping):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, np.ndarray)):
-        return [_jsonable(item) for item in value]
-    if isinstance(value, (bool, np.bool_)):
-        return bool(value)
-    if isinstance(value, (int, np.integer)):
-        return int(value)
-    if isinstance(value, (float, np.floating)):
-        value = float(value)
-        if math.isnan(value):
-            return None
-        if math.isinf(value):
-            return "inf" if value > 0 else "-inf"
-        return value
-    if value is None or isinstance(value, str):
-        return value
-    raise TypeError(f"{type(value).__name__} is not JSON-serialisable")
-
-
-def _write_text(path: Path, text: str) -> None:
-    """Atomic, and safe when several processes write the same path."""
-    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(text)
-    os.replace(temporary, path)
-
-
-def _write_json(path: Path, payload: Any) -> None:
-    _write_text(path, json.dumps(_jsonable(payload), indent=2, allow_nan=False) + "\n")
-
-
-@contextmanager
-def _locked(run_dir: Path) -> Iterator[None]:
-    """Serialises the run directory's shared files across processes: the config
-    check and its creation, and a results scan with its replacement (so an older
-    scan never overwrites a newer one)."""
-    with open(run_dir / ".lock", "w") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
-
-
-def _bind(run_dir: Path, config: Mapping[str, Any]) -> None:
-    """A run directory belongs to one config: finished settings are skipped by
-    file existence, so resuming under another would mix experiments."""
-    record = _jsonable({"config": config})
-    path = run_dir / "run_config.json"
-    with _locked(run_dir):
-        if path.is_file():
-            if _read_json(path) != record:
-                raise ValueError(
-                    f"{run_dir} was started with a different config ({path}); "
-                    "use a new --run-id"
-                )
-            return
-        _write_json(path, record)
 
 
 def _row_path(run_dir: Path, experiment: str, index: int) -> Path:

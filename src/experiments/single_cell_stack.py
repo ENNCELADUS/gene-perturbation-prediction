@@ -36,15 +36,14 @@ from src.data.prepared import read_manifest
 from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.experiments.all import _number
 from src.experiments.config import load_config, load_stack_config
+from src.eval.geneeffect import gain, score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,
     _bind,
     _write_json,
     _write_text,
-    gain,
     load_base,
-    score,
 )
 
 OUT_DIR = "single_cell_stack"
