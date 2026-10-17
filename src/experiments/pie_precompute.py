@@ -593,7 +593,8 @@ def forward(
                     feats + adapter(torch.cat([fused, feats], dim=-1))
                 )
                 probabilities = torch.softmax(dp.float() / pie.temperature, dim=-1)
-                changes.append(probabilities @ pie.centres)
+                # Not a matmul: autocast would run that in bf16.
+                changes.append((probabilities * pie.centres).sum(dim=-1))
                 if logits:
                     all_logits.append(dp.float())
         return PassOutput(

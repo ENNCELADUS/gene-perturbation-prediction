@@ -239,6 +239,28 @@ def test_our_batches_match_pies_data_path(tiny_pie, perturbation):
     assert np.allclose(result.own, decoded[:, own].numpy(), atol=1e-5)
 
 
+def test_mixed_precision_pass_returns_float32(tiny_pie):
+    import dataclasses
+
+    pie, tables = tiny_pie
+    mixed = dataclasses.replace(
+        pie, config=SimpleNamespace(trainer=SimpleNamespace(precision="bf16-mixed"))
+    )
+    batch = pp.build_batch(
+        mixed,
+        list(LINES),
+        "GA",
+        tables.pie_input.to_numpy(dtype=np.float32),
+        pp.gene_evidence(mixed, "GA"),
+    )
+    result = pp.forward(mixed, batch, 1, heads=True)
+    exact = pp.forward(pie, batch, 1, heads=True)
+    for name in ("latent", "features", "own", "change"):
+        value = getattr(result, name)
+        assert value.dtype == np.float32, name
+        assert np.allclose(value, getattr(exact, name), atol=0.05), name
+
+
 def test_reference_pass_reads_context_alone(tiny_pie):
     from pie.data.dataset import NO_SOURCE
 
