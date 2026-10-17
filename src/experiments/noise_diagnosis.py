@@ -65,8 +65,8 @@ from src.context_prior.ridge import shared_ridge
 from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.experiments.all import _number
 from src.experiments.config import load_config, load_noise_config
+from src.eval.geneeffect import BOOTSTRAP_SEED, gain, long_frame, score
 from src.experiments.context_prior import (
-    BOOTSTRAP_SEED,
     SCORED,
     RunBase,
     _bind,
@@ -74,11 +74,8 @@ from src.experiments.context_prior import (
     _Fitter,
     _write_json,
     _write_text,
-    gain,
     load_base,
-    long_frame,
     prior_inputs,
-    score,
     stages,
 )
 

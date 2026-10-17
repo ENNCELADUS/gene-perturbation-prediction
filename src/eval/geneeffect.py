@@ -5,11 +5,13 @@ column); absolute predictions add the fixed training mean to the predicted resid
 Correlations of a constant prediction are undefined (NaN, counted), never zero.
 """
 
+from __future__ import annotations
+
 from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +23,20 @@ from torch.nn import functional as F
 from src.data.datasets import DependencyDataset
 from src.data.geneeffect import DEPENDENCY_THRESHOLD
 from src.data.prepared import PreparedInputs
-from src.eval.metrics import _unit_pearson, _unit_spearman
+from src.eval.metrics import _unit_pearson, _unit_spearman, paired_line_bootstrap
+
+if TYPE_CHECKING:
+    from src.context_prior.targets import Definitions
+
+#: The metrics ``score`` keeps, and the seed of every paired line bootstrap.
+METRICS = (
+    "selective_spearman",
+    "selective_aupr_lift",
+    "residual_pearson_macro_per_gene",
+    "geneeffect_loss",
+    "residual_sd_ratio_macro_per_gene",
+)
+BOOTSTRAP_SEED = 0
 
 
 @dataclass
@@ -331,3 +346,122 @@ def evaluate_model(
     if isinstance(payload[0], str):
         raise RuntimeError(f"rank zero evaluation failed: {payload[0]}")
     return EvalResult(payload[0], predictions, per_line, per_gene)
+
+
+# --- wide predictions in residual-SD units ------------------------------------------
+#
+# A prediction table is lines x genes in units of the per-gene residual SD, centred
+# on the training gene mean of ``definitions`` (the scorer re-centres every
+# prediction on it); the truth table is ``(y - mu_g) / sigma_g`` on the same axes.
+
+
+def long_frame(
+    prediction: pd.DataFrame, truth: pd.DataFrame, definitions: Definitions
+) -> pd.DataFrame:
+    """Finite-label rows in GeneEffect units, as ``aggregate_geneeffect`` reads them."""
+    lines, genes = list(prediction.index), list(prediction.columns)
+    scale = definitions.residual_scale.loc[genes].to_numpy()
+    residual = truth.loc[lines, genes].to_numpy() * scale
+    predicted = prediction.to_numpy() * scale
+    keep = np.isfinite(residual)
+    line_index, gene_index = np.nonzero(keep)
+    means = definitions.gene_means.loc[genes].to_numpy()[gene_index]
+    return pd.DataFrame(
+        {
+            "model_id": np.asarray(lines)[line_index],
+            "gene_symbol": np.asarray(genes)[gene_index],
+            "residual": residual[keep],
+            "residual_prediction": predicted[keep],
+            "gene_effect": residual[keep] + means,
+            "geneeffect_prediction": predicted[keep] + means,
+        }
+    )
+
+
+def score(
+    prediction: pd.DataFrame, truth: pd.DataFrame, definitions: Definitions
+) -> dict:
+    frame = long_frame(prediction, truth, definitions)
+    metrics, _, _ = aggregate_geneeffect(
+        frame,
+        model_ids=list(prediction.index),
+        genes=list(definitions.genes),
+        variable_genes=list(definitions.variable),
+        selective_genes=list(definitions.selective),
+    )
+    return {key: metrics[key] for key in METRICS}
+
+
+def gain(
+    better: pd.DataFrame,
+    reference: pd.DataFrame,
+    truth: pd.DataFrame,
+    definitions: Definitions,
+    repeats: int,
+) -> dict:
+    """Selective-Spearman difference and its 95% paired line-bootstrap interval."""
+    genes = list(definitions.selective)
+    result = paired_line_bootstrap(
+        long_frame(better.loc[:, genes], truth, definitions),
+        long_frame(reference.loc[:, genes], truth, definitions),
+        genes,
+        repeats=repeats,
+        seed=BOOTSTRAP_SEED,
+    )
+    return {
+        "difference": float(result["difference"]),
+        "interval": [float(value) for value in result["interval"]],
+    }
+
+
+def wide_accuracy(
+    prediction: pd.DataFrame,
+    truth: pd.DataFrame,
+    definitions: Definitions,
+    *,
+    panel: Sequence[str] | None = None,
+) -> dict[str, float | int | None]:
+    """The stage-one metrics of a wide prediction on its lines (PIE stage-one
+    design §4.1): selective Spearman; within-gene R² pooled over the selective
+    genes (``1 - SSE / sum truth^2``, the truth centred on the training gene mean,
+    which scores 0); selective AUPR lift; residual Pearson; per-line absolute
+    Pearson; RMSE; the calibration slope over the selective genes. With ``panel``,
+    also the selective Spearman over the selective genes in it."""
+    from src.eval.metrics import calibration_slope
+
+    lines, genes = list(prediction.index), list(definitions.genes)
+    prediction, truth = prediction.loc[lines, genes], truth.loc[lines, genes]
+    metrics, _, per_gene = aggregate_geneeffect(
+        long_frame(prediction, truth, definitions),
+        model_ids=lines,
+        genes=genes,
+        variable_genes=list(definitions.variable),
+        selective_genes=list(definitions.selective),
+    )
+    selective = list(definitions.selective)
+    predicted = prediction[selective].to_numpy(dtype=np.float64)
+    measured = truth[selective].to_numpy(dtype=np.float64)
+    finite = np.isfinite(measured)
+    if not np.isfinite(predicted[finite]).all():
+        raise ValueError("a prediction is missing where the truth is finite")
+    error = np.where(finite, predicted - measured, 0.0)
+    total = float(np.square(np.where(finite, measured, 0.0)).sum())
+    out: dict[str, float | int | None] = {
+        "lines": len(lines),
+        "selective_spearman": metrics["selective_spearman"],
+        "selective_spearman_scored": metrics["selective_spearman_scored"],
+        "within_gene_r2": 1.0 - float(np.square(error).sum()) / total,
+        "aupr_lift": metrics["selective_aupr_lift"],
+        "residual_pearson": metrics["residual_pearson_macro_per_gene"],
+        "absolute_pearson": metrics["geneeffect_pearson_macro_per_line"],
+        "rmse": metrics["geneeffect_rmse"],
+        "calibration_slope": calibration_slope(predicted, measured),
+    }
+    if panel is not None:
+        inside = per_gene.loc[
+            per_gene["selective"] & per_gene["gene_symbol"].isin(set(panel)),
+            "spearman",
+        ].dropna()
+        out["selective_spearman_panel"] = float(inside.mean()) if len(inside) else None
+        out["selective_spearman_panel_scored"] = len(inside)
+    return out
