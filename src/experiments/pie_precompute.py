@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import fcntl
 import json
 import logging
 import os
@@ -133,14 +134,14 @@ def layout(config: Mapping[str, Any]) -> Layout:
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
     os.replace(temporary, path)
 
 
 def _save_npz(path: Path, **arrays: np.ndarray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     with temporary.open("wb") as handle:
         np.savez(handle, **arrays)
     os.replace(temporary, path)
@@ -148,21 +149,35 @@ def _save_npz(path: Path, **arrays: np.ndarray) -> None:
 
 def _save_npy(path: Path, array: np.ndarray) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     with temporary.open("wb") as handle:
         np.save(handle, array)
     os.replace(temporary, path)
 
 
+@contextlib.contextmanager
+def exclusive(out: Layout) -> Iterator[None]:
+    """Shards on one host take turns at what they share: the dataset, the run
+    root's links, the reference pass and ``run.json``. Not reentrant."""
+    out.pie.mkdir(parents=True, exist_ok=True)
+    with (out.pie / ".lock").open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def record(out: Layout, step: str, payload: Mapping[str, Any]) -> None:
     """Add a step's record to ``pie/run.json``, re-read so shards keep theirs."""
     path = out.pie / "run.json"
-    run = json.loads(path.read_text()) if path.is_file() else {"steps": {}}
-    run["steps"][step] = {
-        **payload,
-        "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-    }
-    _write_json(path, run)
+    with exclusive(out):
+        run = json.loads(path.read_text()) if path.is_file() else {"steps": {}}
+        run["steps"][step] = {
+            **payload,
+            "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        _write_json(path, run)
 
 
 # --- the ladder's tables ------------------------------------------------------------
@@ -270,13 +285,14 @@ def pie_environment(out: Layout) -> Iterator[Path]:
     runs = out.pie / "runs"
     experiment = runs / EXPERIMENT
     experiment.mkdir(parents=True, exist_ok=True)
-    for name in CHECKPOINT_FILES:
-        link = experiment / name
-        target = out.checkpoint.parent / name
-        if link.is_symlink() and link.resolve() != target.resolve():
-            link.unlink()
-        if not link.is_symlink():
-            link.symlink_to(target)
+    with exclusive(out):
+        for name in CHECKPOINT_FILES:
+            link = experiment / name
+            target = out.checkpoint.parent / name
+            if link.is_symlink() and link.resolve() != target.resolve():
+                link.unlink()
+            if not link.is_symlink():
+                link.symlink_to(target)
     os.environ["PIE_RUNS_ROOT"] = str(runs)
     with contextlib.chdir(experiment):
         yield experiment
@@ -595,25 +611,27 @@ def _batches(lines: Sequence[str], size: int) -> Iterator[slice]:
 
 
 def reference_pass(out: Layout, pie: Pie, tables: Tables) -> dict[str, np.ndarray]:
-    """Every line's reference pass (``pie/reference.npz``), computed once."""
+    """Every line's reference pass (``pie/reference.npz``), computed once: a
+    shard that finds it reads it, so every shard subtracts the same one."""
     path = out.pie / "reference.npz"
-    if path.is_file():
-        with np.load(path) as payload:
-            return {key: payload[key] for key in payload.files}
-    lines = list(tables.lines.index)
-    blank = gene_evidence(pie, NO_PERTURBATION)
-    latent, features = [], []
-    size = int(out.config["pie"]["lines_per_batch"])
-    for part in _batches(lines, size):
-        batch = build_batch(
-            pie, lines[part], None, tables.pie_input.to_numpy()[part], blank
-        )
-        result = forward(pie, batch, None, heads=False)
-        latent.append(result.latent)
-        features.append(result.features)
-    payload = {"latent": np.vstack(latent), "features": np.vstack(features)}
-    _save_npz(path, **payload)
-    return payload
+    with exclusive(out):
+        if path.is_file():
+            with np.load(path) as payload:
+                return {key: payload[key] for key in payload.files}
+        lines = list(tables.lines.index)
+        blank = gene_evidence(pie, NO_PERTURBATION)
+        latent, features = [], []
+        size = int(out.config["pie"]["lines_per_batch"])
+        for part in _batches(lines, size):
+            batch = build_batch(
+                pie, lines[part], None, tables.pie_input.to_numpy()[part], blank
+            )
+            result = forward(pie, batch, None, heads=False)
+            latent.append(result.latent)
+            features.append(result.features)
+        payload = {"latent": np.vstack(latent), "features": np.vstack(features)}
+        _save_npz(path, **payload)
+        return payload
 
 
 def gene_pass(
@@ -1022,7 +1040,8 @@ def run(
     if set(steps) - {"rescore"}:
         # The re-score reads PIE's own data alone; every other step our lines.
         tables = read_tables(out.root)
-        write_dataset(out, tables)
+        with exclusive(out):
+            write_dataset(out, tables)
     seed = int(config["seed"])
     for step in steps:
         if step == "rescore":
