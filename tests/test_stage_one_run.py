@@ -559,3 +559,10 @@ def test_matched_profile_rows_train_on_the_same_genes_and_are_contrasted(world):
     results = json.loads((stage_one.report(path, "cpu") / "results.json").read_text())
     contrast = results["contrasts"][0]["val"]["selective_spearman"]
     assert contrast["genes"] <= len(selective) - 1
+
+
+def test_a_run_refuses_a_changed_gene_set(tmp_path):
+    stage_one.bind_genes(tmp_path, ["GA", "GB"])
+    stage_one.bind_genes(tmp_path, ["GA", "GB"])
+    with pytest.raises(ValueError, match="another gene set"):
+        stage_one.bind_genes(tmp_path, ["GA"])

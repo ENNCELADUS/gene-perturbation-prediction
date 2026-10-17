@@ -278,6 +278,18 @@ def test_deposit_share_is_reported_per_state():
     assert shares["free"]["observed"] < 0.3
 
 
+def test_a_state_with_constant_mass_gets_no_deposit_p_value():
+    lines = [f"ACH-{i}" for i in range(10)]
+    deposit = pd.Series(["d1"] * 5 + ["d2"] * 5, index=lines)
+    frame = pd.DataFrame({"constant": np.full(10, 0.5)}, index=lines)
+    shares = st.per_state_group_share(
+        frame, deposit, pd.Series("Lung", index=lines), permutations=50, seed=0
+    )
+    assert np.isnan(shares["constant"]["observed"])
+    assert np.isnan(shares["constant"]["p_value"])
+    assert np.isnan(shares["constant"]["null_q95"])
+
+
 def _write_pie(root: Path, t: st.Telemetry, set_name: str, bump: float) -> None:
     """A main pass and an assembled state pass on two genes where every context
     reads its line's main-pass deltas, one state of one line moved by ``bump``."""
