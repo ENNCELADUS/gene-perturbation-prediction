@@ -118,15 +118,20 @@ def _offline_client(cache: Path) -> contexts.CellosaurusClient:
 
 
 class FakeEmbedder:
-    """Stands in for PIE's embed_texts; records every batch of texts it is given."""
+    """Stands in for PIE's embed_texts; records every batch of texts it is given and
+    returns PIE's released vector for a released text (``known``), 0.5 otherwise."""
 
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
+        self.known: dict[str, np.ndarray] = {}
 
     def __call__(self, texts, *, client=None, resume_dir=None, encoder=None):
         openai_embed.require_openai_key()
         self.calls.append(list(texts))
         rows = np.full((len(texts), openai_embed.DIM), 0.5, dtype=np.float32)
+        for i, text in enumerate(texts):
+            if text in self.known:
+                rows[i] = self.known[text]
         return rows
 
 
@@ -137,6 +142,8 @@ def setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(openai_embed, "embed_texts", embedder)
     monkeypatch.setenv("OPENAI_API_KEY", FAKE_KEY)
     released = _write_released(tmp_path)
+    source, texts = read_source(released), read_descriptions(released)
+    embedder.known = {text: source.tokens(key)[0] for key, text in texts.items()}
     return tmp_path, released, embedder
 
 
@@ -199,7 +206,8 @@ def test_reused_lines_copy_pie_and_only_the_rest_are_embedded(
     assert source.embeddings.dtype == np.float32
 
     y003 = contexts.render_context("CVCL_Y003", _record("CVCL_Y003"), None)
-    assert embedder.calls == [[y003]]
+    theirs = read_descriptions(released)
+    assert embedder.calls == [[theirs["CVCL_Y001"], theirs["translineb"]], [y003]]
     pie = read_source(released)
     for line, key in [("ACH-000001", "CVCL_Y001"), ("ACH-000002", "translineb")]:
         assert source.tokens(line).tobytes() == pie.tokens(key).tobytes()
@@ -238,6 +246,26 @@ def test_provenance_records_each_line(setup, monkeypatch: pytest.MonkeyPatch) ->
     assert {"meta.json", "embeddings.npy", "descriptions.json"} <= set(files)
     source_dir = out / "context_text"
     assert all(files[name] == sha256_file(source_dir / name) for name in files)
+
+
+def test_endpoint_check_is_recorded_and_refuses_another_model(
+    setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, released, embedder = setup
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://relay.example/v1")
+    out = _build(root, released, LINES, monkeypatch)
+    check = json.loads((out / "provenance.json").read_text())["endpoint_check"]
+    assert check["endpoint_host"] == "relay.example"
+    assert check["keys"] == ["CVCL_Y001", "translineb"]
+    assert check["min_cosine"] > 0.999999
+
+    embedder.known = {}  # the relay answers with another model's vectors
+    split_path, models_path = _write_inputs(root, LINES)
+    again = root / "again"
+    client = _offline_client(again / "cellosaurus")
+    with pytest.raises(ValueError, match="does not reproduce"):
+        cc.build_context_text(again, split_path, models_path, released, client=client)
+    assert not (again / "context_text").exists()
 
 
 def test_all_lines_reused_needs_no_key(setup, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -22,7 +22,11 @@ next to those without an RRID.
 
 This module imports only the standard library and PIE (with PIE's numpy and requests),
 never ``src.*``, because it runs in PIE's environment; OPENAI_API_KEY is read from the
-environment by PIE's embedder, only when some line needs embedding, and never written::
+environment by PIE's embedder, only when some line needs embedding, and never written.
+An OpenAI-compatible relay is used by setting OPENAI_BASE_URL (read by the ``openai``
+client). Before any line is embedded, the released texts of the reused lines are
+embedded through the same endpoint and compared with PIE's released vectors; a cosine
+below ``ENDPOINT_MIN_COSINE`` (another model, or truncated vectors) stops the run::
 
     uv run --isolated --no-project --python 3.12 \\
         --with-editable 'third_party/pie[sources]' \\
@@ -39,9 +43,11 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import numpy as np
 import requests
@@ -75,6 +81,9 @@ SPLIT_KEYS = ("train", "val", "test", "bulk_labelled")
 CELLOSAURUS_RELEASE = "56.0"
 SOURCE_NAME = "context_text"
 PROVENANCE = "provenance.json"
+#: Lowest cosine allowed between the endpoint's vector of a released text and PIE's
+#: released vector of it; text-embedding-3-large reproduces its own vectors to ~1e-5.
+ENDPOINT_MIN_COSINE = 0.999
 #: The same pattern PIE's client accepts (pie.sources.text.context_file._ACCESSION).
 ACCESSION = re.compile(r"CVCL_[A-Z0-9]{4}", re.ASCII)
 #: PIE's released keys that are names, with the accession their dataset's context map
@@ -210,6 +219,43 @@ def _check_released(source: Source) -> None:
         raise ValueError(f"PIE's released context_text is {found}, expected {expected}")
 
 
+def check_endpoint(
+    pie_source: Source,
+    released_texts: Mapping[str, str],
+    pie_keys: Sequence[str],
+    resume_dir: Path,
+) -> dict[str, object]:
+    """Embed the released texts of ``pie_keys`` through the configured endpoint and
+    compare each with PIE's released vector; raise if any cosine is below the bound."""
+    if not pie_keys:
+        raise ValueError("no reused line to check the embedding endpoint against")
+    ours = openai_embed.embed_texts(
+        [released_texts[key] for key in pie_keys], resume_dir=resume_dir
+    ).astype(np.float64)
+    theirs = np.stack(
+        [np.asarray(pie_source.tokens(key)[0], dtype=np.float64) for key in pie_keys]
+    )
+    cosine = (ours * theirs).sum(axis=1) / (
+        np.linalg.norm(ours, axis=1) * np.linalg.norm(theirs, axis=1)
+    )
+    endpoint = os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+    result = {
+        "endpoint_host": urlsplit(endpoint).hostname,
+        "keys": list(pie_keys),
+        "min_cosine": float(cosine.min()),
+        "median_cosine": float(np.median(cosine)),
+        "bound": ENDPOINT_MIN_COSINE,
+    }
+    if cosine.min() < ENDPOINT_MIN_COSINE:
+        worst = pie_keys[int(cosine.argmin())]
+        raise ValueError(
+            f"endpoint {result['endpoint_host']} does not reproduce PIE's "
+            f"{openai_embed.MODEL} vectors: cosine {cosine.min():.6f} on {worst} "
+            f"(median {result['median_cosine']:.6f}, bound {ENDPOINT_MIN_COSINE})"
+        )
+    return result
+
+
 def build_context_text(
     out: Path,
     split_path: Path,
@@ -248,6 +294,17 @@ def build_context_text(
     plans = plan_lines(accessions, released, released_texts, client)
 
     embedded = [line for line, plan in plans.items() if plan["status"] == "embedded"]
+    reused = [line for line, plan in plans.items() if plan["status"] == "reused"]
+    endpoint = (
+        check_endpoint(
+            pie_source,
+            released_texts,
+            sorted({str(plans[line]["pie_key"]) for line in reused}),
+            out / "embed" / "endpoint_check",
+        )
+        if embedded
+        else None
+    )
     fresh = (
         openai_embed.embed_texts(
             [str(plans[line]["text"]) for line in embedded],
@@ -322,7 +379,6 @@ def build_context_text(
     )
     write_source(source_dir, meta, embeddings, descriptions=descriptions)
 
-    reused = [line for line, plan in plans.items() if plan["status"] == "reused"]
     no_text = {
         line: str(plan["reason"])
         for line, plan in plans.items()
@@ -334,6 +390,7 @@ def build_context_text(
             "cellosaurus": record,
             "embedding_model": openai_embed.MODEL,
             "embedding_dim": openai_embed.DIM,
+            "endpoint_check": endpoint,
             "split": {
                 "path": str(split_path),
                 "sha256": split_sha256,
