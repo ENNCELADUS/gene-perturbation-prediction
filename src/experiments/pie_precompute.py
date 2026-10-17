@@ -244,17 +244,31 @@ def shard_genes(genes: Sequence[str], shard: tuple[int, int]) -> list[str]:
 def write_dataset(out: Layout, tables: Tables) -> Path:
     """Our lines as PIE's controls-only preprocessed dir: one context per line
     (its ModelID), the decode panel as the gene axis, PIE's input as the control
-    means."""
+    means. An existing dir is reused only when it holds these lines, genes and
+    control means."""
     from pie.data.preprocessed import (
         CTRL_MEANS,
         FORMAT_VERSION,
+        PreprocessedDir,
         PreprocessedMeta,
         write_preprocessed,
     )
 
-    if (out.dataset / "meta.json").is_file():
-        return out.dataset
     lines = list(tables.lines.index)
+    if (out.dataset / "meta.json").is_file():
+        existing = PreprocessedDir.open(out.dataset)
+        if existing.contexts != lines or existing.genes != list(tables.keys):
+            raise ValueError(
+                f"{out.dataset} holds other lines or genes than these tables; "
+                "move it aside before writing another dataset"
+            )
+        if not np.array_equal(
+            existing.ctrl_means, tables.pie_input.to_numpy(dtype=np.float32)
+        ):
+            raise ValueError(
+                f"{out.dataset} holds other control means than these tables"
+            )
+        return out.dataset
     meta = PreprocessedMeta(
         format_version=FORMAT_VERSION,
         dataset=DATASET,
@@ -806,13 +820,19 @@ def _batches(lines: Sequence[str], size: int) -> Iterator[slice]:
 
 def reference_pass(out: Layout, pie: Pie, tables: Tables) -> dict[str, np.ndarray]:
     """Every line's reference pass (``pie/reference.npz``), computed once: a
-    shard that finds it reads it, so every shard subtracts the same one."""
+    shard that finds it reads it, so every shard subtracts the same one. A file
+    for other lines is refused (one written before it recorded its lines is
+    checked by its row count)."""
     path = out.pie / "reference.npz"
+    lines = list(tables.lines.index)
     with exclusive(out):
         if path.is_file():
             with np.load(path) as payload:
-                return {key: payload[key] for key in payload.files}
-        lines = list(tables.lines.index)
+                stored = payload["lines"].tolist() if "lines" in payload.files else None
+                rows = payload["latent"].shape[0]
+                if (stored is not None and stored != lines) or rows != len(lines):
+                    raise ValueError(f"{path} holds the reference pass of other lines")
+                return {key: payload[key] for key in ("latent", "features")}
         blank = gene_evidence(pie, NO_PERTURBATION)
         latent, features = [], []
         size = int(out.config["pie"]["lines_per_batch"])
@@ -824,7 +844,7 @@ def reference_pass(out: Layout, pie: Pie, tables: Tables) -> dict[str, np.ndarra
             latent.append(result.latent)
             features.append(result.features)
         payload = {"latent": np.vstack(latent), "features": np.vstack(features)}
-        _save_npz(path, **payload)
+        _save_npz(path, lines=np.asarray(lines), **payload)
         return payload
 
 
