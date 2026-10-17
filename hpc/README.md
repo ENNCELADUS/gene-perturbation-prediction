@@ -226,7 +226,7 @@ SHA-256 check.
 ## The cell states
 
 Task 8 of the stage-one design ([protocol §17](../docs/03-geneeffect-protocol.md#17-cell-states),
-[data card](../docs/data/cell-states.md)) writes `states/` and `pie_states/` beside the stage-one inputs from
+[data card](../docs/data/cell-states.md)) writes `states/` (the frozen PIE's state outputs under `states/pie/`) beside the stage-one inputs from
 `configs/stage_one/states/telemetry.yaml`. The cNMF, starCAT and scVI fits run in `.venv-states` (`hpc/states/setup.sh`:
 cnmf 1.7.1, starcatpy 1.0.10, scvi-tools 1.4.2, torch 2.10.0 cu128), which the project environment's `fit` step calls
 through `STATES_PYTHON` (default `.venv-states/bin/python`); the two exchange files only. `fit` needs one GPU visible

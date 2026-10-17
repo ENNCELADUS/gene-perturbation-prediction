@@ -40,7 +40,7 @@ is refused), the expression space of each channel and each step's counts.
 | `gene_sources/` | `gene_text`, `esmc_600m`, `esm3_open`, `string_space`, `gene2vec` on the gene axis; `coverage.json`; `protein/` (sequences, raw ESM tables, structure status) | see below |
 | `context_text/` | PIE `context_text` source keyed by ModelID; `context_text_provenance.json` beside it | 1,108 lines with text (42 reused from PIE, 1,066 embedded) |
 | `pie/` | frozen-PIE re-score, reference pass, per-gene shards, basis, assembled deltas, `run.json` | see the results record |
-| `states/`, `pie_states/` | Task 8's cell-state vocabularies, state inputs and the frozen PIE on them ([card](cell-states.md)) | not yet built |
+| `states/` (with `states/pie/`) | Task 8's cell-state vocabularies, state inputs and the frozen PIE on them ([card](cell-states.md)) | not yet built |
 
 Gene-source coverage of the 17,787 genes (selective share in brackets): `gene_text` 17,607 (0.988), ESM C 17,708
 (0.993), ESM3-open 17,449 (0.978), `string_space` 17,503 (0.983), Gene2vec 15,922 (0.901). ESM3-open reads a

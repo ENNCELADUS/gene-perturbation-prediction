@@ -65,14 +65,14 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
   and the selective genes stay the protocol's; selection stays on validation.
 - **State pseudo-contexts in `pie_precompute`.**
   - Name each context `ACH-x|<set>|<k>`, with a map from name to owning line; context text is looked up by owner.
-  - Reuse the main `pie/dataset`; write outputs to `ladder/pie_states/<set>/`.
+  - Reuse the main `pie/dataset`; write outputs to `ladder/states/pie/<set>/` (under the state inputs, with a fingerprint of them; revised 2026-10-17 after review).
   - Run context-major batches of 64, each running its reference pass inside the batch and evicting its cache entries
     afterwards. Pad the last batch so `torch.compile` doesn't recompile.
   - Run the encoder once per owner (exact, because the latents read no expression).
   - Each set includes a `|whole` context per line as a bf16 noise floor.
   - Centre state deltas on the main pass's `frame_means`.
 - **New tracked tables.**
-  - `configs/benchmarks/single_cell_source_chemistry.csv`: the assay per deposit, for scVI's nuisance and Task 5's
+  - `configs/benchmarks/single_cell_source_chemistry.csv`: the assay per deposit (per line or arm where a deposit mixes kits), for scVI's nuisance and Task 5's
     covariate.
   - `configs/context_prior/reference/kinker_programs.tsv`: Kinker's 12 programs, with provenance.
   - Task 5's ambient score doesn't exist; it is reported as unavailable.

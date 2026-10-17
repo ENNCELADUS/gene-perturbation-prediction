@@ -6,8 +6,9 @@ config names gives the ladder root, whose ``states/`` this writes. Steps, each
 skipping what exists, so rerunning resumes:
 
 - ``fit``: per fitting seed, the cells each single-cell training line
-  contributes (``fit/sample_seed<s>.parquet``: exactly ``fit.cells_per_line``
-  per line, each line weighing equally); ``fit/plan.json`` and, in
+  contributes (``fit/sample_seed<s>.parquet``: at most ``fit.cells_per_line``
+  distinct cells per line, so smaller lines weigh less; each cell's chemistry
+  from the reviewed table by its deposit, line and arm); ``fit/plan.json`` and, in
   ``.venv-states`` (``STATES_PYTHON``), ``src.data.prepare.state_programs``:
   consensus NMF programs and their starCAT-style reference, scVI, and program
   usages and scVI latents for every cell of the projected lines and their second
@@ -34,6 +35,10 @@ skipping what exists, so rerunning resumes:
   two deposits; stability across fitting seeds (states matched by the
   Hungarian method); the frozen PIE's gap ``sum_k pi_k D(x_k) - D(x)`` for dH,
   dE and the own slots, against its ``|whole`` context and the main pass.
+
+The frozen PIE's state outputs live under ``states/pie/``, so moving ``states/``
+aside moves them too; each line's carries the fingerprint of the state inputs
+it was computed from, and the report refuses outputs of other inputs.
 
 It reports and decides nothing.
 """
@@ -114,7 +119,7 @@ def _npz_keys(path: Path, *keys: str) -> dict[str, np.ndarray]:
 
 @dataclass(frozen=True)
 class Layout:
-    """``<ladder_root>/states/`` and the frozen PIE's ``pie_states/``."""
+    """``<ladder_root>/states/``, the frozen PIE's state outputs (``pie/``) in it."""
 
     root: Path
 
@@ -153,7 +158,7 @@ class Layout:
 
     @property
     def pie_states(self) -> Path:
-        return self.root.parent / "pie_states"
+        return self.root / "pie"
 
 
 def usage_path(layout: Layout, seed: int, model_id: str, second: bool) -> Path:
@@ -259,15 +264,23 @@ class Telemetry:
         return sources.replace(PRIMARY_KEYS)
 
     @cached_property
-    def chemistry(self) -> pd.Series:
-        """Each line's chemistry, through its deposit's reviewed row."""
-        table = pd.read_csv(_absolute(self.config["references"]["chemistry"]))
-        by_source = table.set_index("source")["chemistry"].astype(str)
-        deposits = self.deposits.loc[self.projected]
-        unknown = sorted(set(deposits) - set(by_source.index))
-        if unknown:
-            raise ValueError(f"deposits without a chemistry row: {unknown}")
-        return deposits.map(by_source)
+    def chemistry_table(self) -> pd.DataFrame:
+        path = _absolute(self.config["references"]["chemistry"])
+        return pd.read_csv(path, keep_default_na=False, dtype=str)
+
+    def cell_chemistry(self, model_id: str, cell_ids: np.ndarray) -> np.ndarray:
+        """Each cell's chemistry from its line's primary deposit and the cell's
+        arm in the h5ad's obs (none: the whole line), through the reviewed table
+        (``cell_states.resolve_chemistry``, which fails closed)."""
+        import anndata as ad
+
+        obs = ad.read_h5ad(self.source(model_id), backed="r").obs
+        if list(obs.index.astype(str)) != [str(c) for c in cell_ids]:
+            raise ValueError(f"{model_id}: the h5ad's cells are not the line's cells")
+        arms = obs["arm"].astype(str).to_numpy() if "arm" in obs else [""] * len(obs)
+        return cs.resolve_chemistry(
+            self.chemistry_table, str(self.deposits[model_id]), model_id, arms
+        )
 
     @cached_property
     def second_sources(self) -> dict[str, Path]:
@@ -333,7 +346,8 @@ def open_manifest(t: Telemetry) -> dict[str, Any]:
         manifest = json.loads(path.read_text())
         if manifest["settings"] != current:
             raise ValueError(
-                f"{t.layout.root} was written under other settings; move it aside"
+                f"{t.layout.root} was written under other settings; move it aside "
+                "(it holds the frozen PIE's state outputs too, under pie/)"
             )
         return manifest
     manifest = {"settings": current, "steps": {}}
@@ -396,13 +410,18 @@ def _features(representation: Mapping[str, Any], name: str, seed: int) -> np.nda
 
 
 def write_samples(t: Telemetry) -> None:
+    if all(t.layout.sample(seed).is_file() for seed in t.seeds):
+        return
     counts, scores = {}, {}
     for model_id in t.train:
         ids, qc = t.cell_arrays(model_id, "cell_ids", "qc")
         counts[model_id] = int(ids.shape[0])
-        scores[model_id] = (ids, qc[:, list(cs.CYCLE_FEATURES)])
+        scores[model_id] = (
+            ids,
+            qc[:, list(cs.CYCLE_FEATURES)],
+            t.cell_chemistry(model_id, ids),
+        )
     roles = t.lines["role"].to_dict()
-    chemistry = t.chemistry
     for seed in t.seeds:
         path = t.layout.sample(seed)
         if path.is_file():
@@ -416,9 +435,10 @@ def write_samples(t: Telemetry) -> None:
         )
         ids = np.concatenate([scores[m][0][r] for m, r in _by_line(sample)])
         cycle = np.vstack([scores[m][1][r] for m, r in _by_line(sample)])
+        chemistry = np.concatenate([scores[m][2][r] for m, r in _by_line(sample)])
         sample = sample.assign(
             cell_id=ids.astype(str),
-            chemistry=sample["model_id"].map(chemistry).to_numpy(),
+            chemistry=chemistry,
             s_score=cycle[:, 0],
             g2m_score=cycle[:, 1],
         )
@@ -1088,9 +1108,9 @@ def second_section(t: Telemetry, vocabulary: str) -> dict[str, Any] | None:
 
 def stability_section(t: Telemetry, vocabulary: str) -> dict[str, Any]:
     """States of each pair of fitting seeds matched by the Hungarian method on
-    the correlation of their memberships over a fixed draw of cells per line;
-    the matched correlations and the masses' mean total-variation distance
-    after matching."""
+    the correlation of their memberships over a fixed draw of cells per training
+    line; the matched correlations and the training lines' masses' mean
+    total-variation distance after matching."""
     from scipy.optimize import linear_sum_assignment
 
     from src.data.ladder_cells import line_rng
@@ -1100,7 +1120,7 @@ def stability_section(t: Telemetry, vocabulary: str) -> dict[str, Any]:
         memberships file read once."""
         per_line = int(t.config["report"]["stability_cells"])
         parts: dict[str, list[np.ndarray]] = {}
-        for model_id in t.projected:
+        for model_id in t.train:
             memberships = read_memberships(t, model_id)
             n = next(iter(memberships.values())).shape[0]
             rows = line_rng(model_id, 0, "state_stability").permutation(n)[:per_line]
@@ -1112,7 +1132,7 @@ def stability_section(t: Telemetry, vocabulary: str) -> dict[str, Any]:
     table = membership_masses(t)
     stacked = {s: drawn[cs.membership_key(vocabulary, s)] for s in t.seeds}
     line_masses_by_seed = {
-        s: [table[m][cs.membership_key(vocabulary, s)] for m in t.projected]
+        s: [table[m][cs.membership_key(vocabulary, s)] for m in t.train]
         for s in t.seeds
     }
     pairs = {}
@@ -1184,6 +1204,15 @@ def gap_section(t: Telemetry, set_name: str) -> dict[str, Any] | None:
     if not (folder / "index.json").is_file():
         return None
     index = json.loads((folder / "index.json").read_text())
+    current = cs.set_fingerprints(
+        pd.read_parquet(t.layout.state_set(set_name) / "inputs.parquet"),
+        pd.read_parquet(t.layout.state_set(set_name) / "masses.parquet"),
+    )
+    if index.get("fingerprints") != current:
+        raise ValueError(
+            f"{folder} was computed from other state inputs than "
+            f"{t.layout.state_set(set_name)}; move it aside and rerun the pass"
+        )
     contexts = pd.read_parquet(folder / "contexts.parquet")
     genes = list(index["genes"])
     pie_root = t.ladder_root / "pie"
@@ -1278,8 +1307,8 @@ def results_markdown(t: Telemetry, report: Mapping[str, Any]) -> str:
     lines = [
         f"# State telemetry ({t.name})",
         "",
-        "Frozen state vocabularies fitted on the single-cell training lines (each "
-        "line weighing equally) and projected on the lines of "
+        "Frozen state vocabularies fitted on the single-cell training lines (at "
+        "most 500 distinct cells each) and projected on the lines of "
         f"{', '.join(t.config['project']['roles'])}; the frozen PIE on their state "
         "inputs. Telemetry only: nothing here says whether states help predict "
         "GeneEffect, and nothing is chosen in code.",

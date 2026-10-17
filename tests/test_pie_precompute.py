@@ -496,6 +496,28 @@ def _state_tables_on_disk(root, tables, name):
     return pp.read_state_tables(root / "states", name, tables)
 
 
+def test_assembly_refuses_a_line_pass_from_other_state_inputs(tmp_path):
+    tables = _tables()
+    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {"seed": 0})
+    states = _state_tables_on_disk(tmp_path, tables, "set")
+    config = {"pie": {"genes": 2, "contexts_per_batch": 2}}
+    genes = pp.state_genes(tables, config, 0)
+    layout = pp.state_layout(out)
+    for model_id, fingerprint in (("L1", "stale"), ("L3", states.fingerprints["L3"])):
+        k = states.owners.count(model_id)
+        pp._save_npz(
+            layout.line("set", model_id),
+            contexts=np.asarray([c for c in states.contexts if c.startswith(model_id)]),
+            genes=np.asarray(genes),
+            fingerprint=np.asarray(fingerprint),
+            own_x=np.zeros((2, k, 1), dtype=np.float32),
+        )
+    out.pie.mkdir(parents=True)
+    np.savez(out.pie / "frame_means.npz", own_x=np.zeros((len(PANEL), 1)))
+    with pytest.raises(ValueError, match="L1: the pass was computed from other"):
+        pp.assemble_states(out, tables, config, "set")
+
+
 def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
     import torch
 
@@ -512,7 +534,8 @@ def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
             rng.normal(size=(2, len(PANEL))).astype(np.float32)
         ),
     }
-    layout = pp.StateLayout(tmp_path / "pie_states")
+    layout = pp.state_layout(out)
+    assert layout.root == tmp_path / "states" / "pie"  # moves with states/
     first = pp.states_pass(pie, tables, states, genes, basis, ["L1"], layout, 2, {})
     assert first["contexts"] == 3
     assert layout.line("set", "L1").is_file()
@@ -525,6 +548,19 @@ def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
         stored = {k: payload[k] for k in payload.files}
     assert stored["contexts"].tolist() == states.contexts[:3]
     assert stored["dH"].dtype == np.float16 and stored["dH"].shape[:2] == (2, 3)
+    assert str(stored["fingerprint"]) == states.fingerprints["L1"]
+    # The same context names over other state inputs: the stale pass is refused.
+    folder = tmp_path / "states" / "set"
+    inputs = pd.read_parquet(folder / "inputs.parquet")
+    original = inputs.copy()
+    inputs.iloc[0, 0] += 0.25
+    inputs.to_parquet(folder / "inputs.parquet")
+    moved = pp.read_state_tables(tmp_path / "states", "set", tables)
+    assert moved.fingerprints["L1"] != states.fingerprints["L1"]
+    assert moved.fingerprints["L3"] == states.fingerprints["L3"]
+    with pytest.raises(ValueError, match="other state inputs"):
+        pp.states_pass(pie, tables, moved, genes, basis, ["L1"], layout, 2, {})
+    original.to_parquet(folder / "inputs.parquet")
     d = pie.model.cfg.d_model
     out.pie.mkdir(parents=True, exist_ok=True)
     means = {
@@ -539,8 +575,23 @@ def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
         "contexts": 5,
         "genes": 2,
     }
-    dE = np.load(tmp_path / "pie_states" / "set" / "dE.npy")
+    dE = np.load(layout.root / "set" / "dE.npy")
     position = [tables.panel.index(g) for g in genes]
     expected = stored["dE"].astype(np.float32) - means["dE"][position][:, None, :]
     assert np.allclose(dE[:, :3].astype(np.float32), expected, atol=1e-2)
     assert not layout.lines("set").exists()
+    index = json.loads(layout.index("set").read_text())
+    assert index["fingerprints"] == states.fingerprints
+    # An assembled set is skipped by the pass and by assembly, not recomputed.
+    assert pp.states_pass(pie, tables, states, genes, basis, ["L1"], layout, 2, {}) == {
+        "contexts": 0,
+        "assembled": True,
+    }
+    assert pp.assemble_states(out, tables, config, "set")["skipped"]
+    # Changed state inputs refuse the assembly at pass and assembly alike.
+    inputs.to_parquet(folder / "inputs.parquet")  # the moved inputs
+    moved = pp.read_state_tables(tmp_path / "states", "set", tables)
+    with pytest.raises(ValueError, match="assembled from other state inputs"):
+        pp.states_pass(pie, tables, moved, genes, basis, ["L1"], layout, 2, {})
+    with pytest.raises(ValueError, match="assembled from other state inputs"):
+        pp.assemble_states(out, tables, config, "set")

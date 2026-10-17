@@ -66,7 +66,7 @@ def test_programs_and_scvi_on_synthetic_lines(tmp_path):
     rows = []
     for model_id in train:
         n = ad.read_h5ad(paths[model_id]).n_obs
-        chosen = np.sort(rng.choice(n, size=40, replace=n < 40))
+        chosen = np.sort(rng.choice(n, size=min(n, 40), replace=False))
         rows.append(
             pd.DataFrame(
                 {

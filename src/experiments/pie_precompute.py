@@ -30,9 +30,11 @@ Task 8; ``src.experiments.state_telemetry`` writes the inputs):
   (``<ModelID>|<set>|<state>``, the line's Cellosaurus text, the state's input
   as control mean, the set's ``|whole`` context among them) for the pilot's
   genes; ``--shard I/N`` takes every N-th line. Per line
-  ``pie_states/<set>/lines/<ModelID>.npz``, skipped when present.
+  ``states/pie/<set>/lines/<ModelID>.npz`` (with the line's state-input
+  fingerprint), skipped when present with the same fingerprint, refused with
+  another; an assembled set is skipped.
 - ``assemble_states``: per set, genes x contexts arrays centred on the main
-  pass's frame means, ``pie_states/<set>/``.
+  pass's frame means, ``states/pie/<set>/``, with each line's fingerprint.
 
 The gene pass, for gene g and every line c: PIE's inputs are the line's control
 mean on the decode panel (``pie_input``), its Cellosaurus text where a record
@@ -1337,6 +1339,9 @@ class StateTables:
     owners: list[str]
     masses: pd.DataFrame
     inputs: np.ndarray  # contexts x panel, float32
+    #: Each line's ``cell_states.state_fingerprint`` of its contexts, inputs
+    #: and masses: a pass or assembly made from other inputs is refused.
+    fingerprints: dict[str, str]
 
     def lines(self) -> list[str]:
         return list(dict.fromkeys(self.owners))
@@ -1345,7 +1350,7 @@ class StateTables:
 def read_state_tables(states_root: Path, name: str, tables: Tables) -> StateTables:
     """A set's state inputs; refuses a table over another panel, with other
     contexts than its masses, or owned by a line PIE's dataset lacks."""
-    from src.data.cell_states import context_owner
+    from src.data.cell_states import context_owner, set_fingerprints
 
     inputs = pd.read_parquet(states_root / name / "inputs.parquet")
     masses = pd.read_parquet(states_root / name / "masses.parquet")
@@ -1367,6 +1372,7 @@ def read_state_tables(states_root: Path, name: str, tables: Tables) -> StateTabl
         owners=owners,
         masses=masses,
         inputs=inputs.to_numpy(dtype=np.float32),
+        fingerprints=set_fingerprints(inputs, masses),
     )
 
 
@@ -1470,8 +1476,9 @@ def state_batch(
 
 @dataclass(frozen=True)
 class StateLayout:
-    """``pie_states/`` beside ``pie/``: per set, the per-line pass outputs, then
-    the assembled arrays."""
+    """``states/pie/`` under the state inputs' root, so moving ``states/`` aside
+    moves these too: per set, the per-line pass outputs, then the assembled
+    arrays."""
 
     root: Path
 
@@ -1480,6 +1487,32 @@ class StateLayout:
 
     def line(self, name: str, model_id: str) -> Path:
         return self.lines(name) / f"{model_id}.npz"
+
+    def index(self, name: str) -> Path:
+        return self.root / name / "index.json"
+
+
+def state_layout(out: Layout) -> StateLayout:
+    return StateLayout(out.root / "states" / "pie")
+
+
+def stored_fingerprint(path: Path) -> str:
+    """The state-input fingerprint a per-line pass file was computed from."""
+    with np.load(path) as payload:
+        return str(payload["fingerprint"]) if "fingerprint" in payload.files else ""
+
+
+def assembled(layout: StateLayout, states: StateTables) -> bool:
+    """Whether the set is assembled from these state inputs; an assembly from
+    other inputs is refused."""
+    path = layout.index(states.name)
+    if not path.is_file():
+        return False
+    if json.loads(path.read_text()).get("fingerprints") != states.fingerprints:
+        raise ValueError(
+            f"{path.parent} was assembled from other state inputs; move it aside"
+        )
+    return True
 
 
 def states_pass(
@@ -1495,8 +1528,22 @@ def states_pass(
 ) -> dict[str, Any]:
     """The state pass over this shard's lines lacking an output: context-major
     batches of ``size``; a line's ``<set>/lines/<ModelID>.npz`` (arrays
-    genes x the line's contexts x width) is written once all its contexts ran."""
-    todo = {m for m in lines if not layout.line(states.name, m).is_file()}
+    genes x the line's contexts x width, and the line's state-input
+    fingerprint) is written once all its contexts ran. A line whose file holds
+    another fingerprint is refused; an assembled set is skipped."""
+    if assembled(layout, states):
+        return {"contexts": 0, "assembled": True}
+    todo = set()
+    for model_id in lines:
+        if model_id not in states.fingerprints:
+            continue
+        path = layout.line(states.name, model_id)
+        if not path.is_file():
+            todo.add(model_id)
+        elif stored_fingerprint(path) != states.fingerprints[model_id]:
+            raise ValueError(
+                f"{path} was computed from other state inputs; move it aside"
+            )
     order = [i for i, owner in enumerate(states.owners) if owner in todo]
     if not order:
         return {"contexts": 0}
@@ -1537,6 +1584,7 @@ def states_pass(
                 layout.line(states.name, owner),
                 contexts=np.asarray([states.contexts[j] for j in rows]),
                 genes=np.asarray(list(genes)),
+                fingerprint=np.asarray(states.fingerprints[owner]),
                 **payload,
             )
     seconds = time.monotonic() - start
@@ -1544,8 +1592,8 @@ def states_pass(
 
 
 def record_states(out: Layout, name: str, payload: Mapping[str, Any]) -> None:
-    """Add a set's shard record to ``pie_states/run.json``."""
-    path = out.root / "pie_states" / "run.json"
+    """Add a set's shard record to ``states/pie/run.json``."""
+    path = state_layout(out).root / "run.json"
     with exclusive(out):
         run = json.loads(path.read_text()) if path.is_file() else {"sets": {}}
         run["sets"].setdefault(name, {})[payload["shard"]] = {
@@ -1573,7 +1621,7 @@ def run_states(
     import torch
 
     genes = state_genes(tables, states_config, int(out.config["seed"]))
-    layout = StateLayout(out.root / "pie_states")
+    layout = state_layout(out)
     lines = shard_genes(list(tables.lines.index), shard)
     stored = dict(np.load(out.pie / "basis.npz"))
     size = int(states_config["pie"]["contexts_per_batch"])
@@ -1608,16 +1656,20 @@ def run_states(
 def assemble_states(
     out: Layout, tables: Tables, states_config: Mapping[str, Any], name: str
 ) -> dict[str, Any]:
-    """``pie_states/<set>/<array>.npy`` (genes x contexts x width, in the set's
+    """``states/pie/<set>/<array>.npy`` (genes x contexts x width, in the set's
     context order), each centred on the main pass's frame means of its gene
     (``pie/frame_means.npz``) as the assembled main arrays are; then the
-    per-line files, which they replace, are removed."""
+    per-line files, which they replace, are removed. A set assembled from these
+    state inputs is skipped; a line's pass or an assembly from other inputs is
+    refused (``index.json`` records each line's fingerprint)."""
     import shutil
 
-    layout = StateLayout(out.root / "pie_states")
+    layout = state_layout(out)
     folder = layout.root / name
     states = read_state_tables(out.root / "states", name, tables)
     genes = state_genes(tables, states_config, int(out.config["seed"]))
+    if assembled(layout, states):
+        return {"contexts": len(states.contexts), "genes": len(genes), "skipped": True}
     missing = [m for m in states.lines() if not layout.line(name, m).is_file()]
     if missing:
         raise FileNotFoundError(
@@ -1634,6 +1686,10 @@ def assemble_states(
         if part["contexts"].tolist() != expected or part["genes"].tolist() != genes:
             raise ValueError(
                 f"{name} {model_id}: the pass holds other contexts or genes"
+            )
+        if str(part.get("fingerprint", "")) != states.fingerprints[model_id]:
+            raise ValueError(
+                f"{name} {model_id}: the pass was computed from other state inputs"
             )
         width = len(expected)
         for array in STATE_ARRAYS:
@@ -1663,6 +1719,7 @@ def assemble_states(
                 "each gene's main-pass frame mean subtracted (pie/frame_means.npz)"
             ),
             "contexts_table": "contexts.parquet, the set's masses.parquet",
+            "fingerprints": states.fingerprints,
         },
     )
     shutil.rmtree(layout.lines(name))

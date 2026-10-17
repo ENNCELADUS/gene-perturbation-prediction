@@ -159,11 +159,11 @@ def fit_sample(
     cells_per_line: int,
     seed: int,
 ) -> pd.DataFrame:
-    """Row positions of the cells each training line contributes to a fit:
-    exactly ``cells_per_line`` per line (each line weighs equally), drawn without
-    replacement, a line with fewer cells taking all of them and the rest drawn
-    with replacement. Refuses any line that is not a labelled single-cell
-    training line."""
+    """Row positions of the distinct cells each training line contributes to a
+    fit: at most ``cells_per_line``, drawn without replacement, so a line with
+    fewer cells contributes all of them and weighs less (duplicated cells would
+    let a full-covariance mixture spend components on a small line's copies).
+    Refuses any line that is not a labelled single-cell training line."""
     from src.data.splits import assert_fit_eligible
 
     rows = []
@@ -172,13 +172,67 @@ def fit_sample(
             raise ValueError(f"{model_id} ({roles[model_id]}) may not enter a fit")
         assert_fit_eligible(model_id, split)
         rng = line_rng(model_id, seed, "state_fit_sample")
-        if n >= cells_per_line:
-            chosen = np.sort(rng.choice(n, size=cells_per_line, replace=False))
-        else:
-            extra = rng.choice(n, size=cells_per_line - n, replace=True)
-            chosen = np.concatenate([np.arange(n), np.sort(extra)])
+        chosen = np.sort(rng.choice(n, size=min(n, cells_per_line), replace=False))
         rows.append(pd.DataFrame({"model_id": model_id, "row": chosen}))
     return pd.concat(rows, ignore_index=True)
+
+
+def resolve_chemistry(
+    table: pd.DataFrame, source: str, model_id: str, arms: Sequence[str]
+) -> np.ndarray:
+    """Each cell's chemistry from the reviewed table (``source``, ``model_id``,
+    ``arm``, ``chemistry``; an empty ``model_id`` or ``arm`` matches any): the
+    most specific matching row (source, ModelID and arm, then ModelID, then arm,
+    then the source) that names a chemistry, a ``mixed`` row naming none. Fails
+    closed when a cell resolves to no row."""
+    rows = table.loc[table["source"].astype(str) == source].fillna("")
+    out = np.empty(len(arms), dtype=object)
+    by_arm: dict[str, str] = {}
+    for arm in dict.fromkeys(str(a) for a in arms):
+        candidates = rows.loc[
+            rows["model_id"].isin(["", model_id])
+            & rows["arm"].isin(["", arm])
+            & (rows["chemistry"] != "mixed")
+        ]
+        if candidates.empty:
+            raise ValueError(
+                f"{model_id}: no chemistry row of source {source!r} covers arm {arm!r}"
+            )
+        rank = (candidates["model_id"] != "") * 2 + (candidates["arm"] != "")
+        by_arm[arm] = str(candidates.loc[rank.idxmax(), "chemistry"])
+    for i, arm in enumerate(arms):
+        out[i] = by_arm[str(arm)]
+    return out.astype(str)
+
+
+def state_fingerprint(
+    contexts: Sequence[str], inputs: np.ndarray, mass: np.ndarray
+) -> str:
+    """SHA-256 of a line's contexts, their inputs (float32) and masses (float64),
+    to refuse frozen-PIE outputs computed from other state inputs."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    digest.update("\n".join(contexts).encode())
+    digest.update(np.ascontiguousarray(inputs, dtype=np.float32).tobytes())
+    digest.update(np.ascontiguousarray(mass, dtype=np.float64).tobytes())
+    return digest.hexdigest()
+
+
+def set_fingerprints(inputs: pd.DataFrame, masses: pd.DataFrame) -> dict[str, str]:
+    """Each line's ``state_fingerprint`` in a set's ``inputs.parquet`` and
+    ``masses.parquet`` (contexts in their table order)."""
+    owners = masses["model_id"].astype(str).to_numpy()
+    values = inputs.to_numpy(dtype=np.float32)
+    mass = masses["mass"].to_numpy(dtype=np.float64)
+    names = [str(c) for c in inputs.index]
+    out = {}
+    for owner in dict.fromkeys(owners):
+        rows = np.flatnonzero(owners == owner)
+        out[owner] = state_fingerprint(
+            [names[i] for i in rows], values[rows], mass[rows]
+        )
+    return out
 
 
 # --- mixtures ---------------------------------------------------------------------
@@ -477,6 +531,9 @@ __all__ = [
     "permuted_set",
     "program_memberships",
     "project",
+    "resolve_chemistry",
+    "set_fingerprints",
+    "state_fingerprint",
     "state_masses_and_inputs",
     "state_sets",
     "vocabularies",
