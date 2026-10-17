@@ -1055,7 +1055,9 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   (`[γ, β] = Linear(gene encoder)`) → tail. The pair input is `[Δ centred within gene ; frame mean Δ̄_g]` for ΔH and
   ΔL, and for ΔE `[E(after) − E(before)` minus its value at the frame-mean states `; E(shift_g) − E(0)]` with the state
   encoder E trained, the before-state `(x_c − x̄_frame) Cᵀ` read from PIE's input, the after-state
-  `before + dE + frame_mean_dE[g] + μ_Δ Cᵀ`. ΔH and ΔE rows append the own-gene slots `own_dp` (g's predicted change)
+  `before + dE + frame_mean_dE[g] + μ_Δ Cᵀ`; the change is computed in fp32 outside bf16 autocast, from E's first
+  layer's pre-activations (before, and before plus the step), so a step of ~1% of the state is not lost to
+  rounding, and the tail's output layer runs in fp32 too. ΔH and ΔE rows append the own-gene slots `own_dp` (g's predicted change)
   and `own_x` (its basal value), each `[centred ; frame mean]`; ΔL, which reads no expression, has none. *Multi-encoder*:
   the FiLM condition is the gene encoder ⊕ a context encoder (learned queries attending the line's tokens and its
   Cellosaurus text, one attention per channel, outputs summed). A line token is one per gene in the panel ∪ the mean
@@ -1074,7 +1076,8 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   through the FiLM head; untrained in the report: the base, the default prior refitted on the frame
   (`hpc/run.sh stage-one-prior`, `src/experiments/stage_one_prior.py`, project environment: its reference row on the
   981 lines' mean channel with components fitted on the frame rows; validation and test from the whole frame, out of
-  fold from the frame folds; it also writes the 128 component scores, fitted on the frame and outside each fold), and a
+  fold from the frame folds with the components refitted outside each fold, the scores the components reader's fold
+  runs read; it writes the 128 component scores, fitted on the frame and outside each fold), and a
   per-gene ridge on the line-centred ΔH (no intercept, solved in its dual on the GPU at the report's penalties).
 - **Training** (`src/training/stage_one_trainer.py`, one GPU, no accelerate). An update is a block of genes by a block
   of training lines; AdamW, linear warmup then cosine (`src/training/schedule.py`); EMA weights when `train.ema_decay`
@@ -1083,7 +1086,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   gene, so epoch 0's selective Spearman is undefined: epoch 0 is a candidate only when it is defined, otherwise it is
   telemetry (its within-gene R² is the base row's). The delta lives on the GPU in bf16, copied by gene chunk from its
   memory map; checkpoints record the split membership and load strictly; a resume or a run directory refuses another
-  config.
+  config. `last.pt` is written before `best.pt`, and a resume rewrites a `best.pt` that lags the recorded best epoch.
 - **Outputs.** `outputs/stage_one/<task>/<config stem>[__fold<k>]/`: `best.pt`, `last.pt`, `predictions.parquet` (every
   line × every gene, scoring units), `V.npy` (the 32-d viability embedding, Cilantro's `l3` output before its ReLU,
   every line × panel gene, fp16; `V.json` marks the lines trained on as in-sample) and `row.json`. A main run scores
@@ -1091,7 +1094,16 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   (`--fold k`: fold k dropped, `m_g` refitted without it; `μ_g`, `σ_g` and the selective genes stay §6's; selection stays
   on validation) scores its fold's single-cell training lines out of fold.
 - **Report.** Validation, test and out-of-fold tables (the five folds' predictions over the 377 single-cell training
-  lines, telemetry) of every row; each listed contrast's selective-Spearman and within-gene-R² difference with 95%
-  paired line-bootstrap intervals (1,000 resamples) on validation and test; each trained row's selected epoch and
-  training-to-validation gap. `outputs/stage_one/<task>/<report config stem>/results.md`.
+  lines, telemetry) of every row, with selective Spearman over the 4,323 genes (and the count defined) and over the
+  4,269 in the panel. Out of fold each fold's lines are predicted around their own `m_g` without the fold, which
+  moves with the fold's labels, so pooled rank metrics are anti-correlated with the truth by construction (a base
+  scores below zero): selective Spearman, AUPR lift, residual Pearson and the calibration slope are scored within
+  each fold and averaged (per-fold counts kept), within-gene R², RMSE and per-line Pearson pooled. Each listed
+  contrast's selective-Spearman difference (over the selective genes defined on both sides, counted; a row predicts
+  the base outside the panel) and within-gene-R² difference, with 95% paired line-bootstrap intervals (1,000
+  resamples) on validation and test; each trained row's selected epoch and training-to-validation gap. The report
+  and the queue read or skip a finished run only after checking its `run_config.json` against the config and fold,
+  and a run or prior reads the report's ladder config; a prior counts once its `row.json` exists; the ridge's cache
+  is keyed by a fingerprint of the ladder config, labels, lines, panel and `dH.npy`, and refused on a mismatch.
+  `outputs/stage_one/<task>/<report config stem>/results.md`.
 - **Scope.** Single-gene dependency on held-out lines; not SL evidence.
