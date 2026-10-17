@@ -345,3 +345,101 @@ def test_prior_reference_components_reader_and_report(world):
     text = (out / "results.md").read_text()
     assert "## Contrasts" in text and "| components reader |" in text
     assert load_stage_one_config(CONFIGS / "report_3a.yaml")["kind"] == "report"
+    # Out of fold, each fold's base differs: rank metrics are scored within folds.
+    base_oof = results["scores"]["base"]["oof"]
+    assert base_oof["selective_spearman"] is None
+    assert sum(f["lines"] for f in base_oof["per_fold"].values()) == len(TRAIN)
+    # A contrast's Spearman covers the genes defined on both sides.
+    assert (
+        0 < contrast["selective_spearman"]["genes"] <= len(setup.definitions.selective)
+    )
+    against_base = results["contrasts"][1]["val"]["selective_spearman"]
+    assert against_base["genes"] == 0 and against_base["difference"] is None
+    _check_prior_out_of_fold(setup, prior_dir, root)
+    _check_reads_are_bound(root, path, reader_path, prior_dir, out)
+
+
+def _check_prior_out_of_fold(setup, prior_dir: Path, root: Path) -> None:
+    """The prior's fold-0 lines are predicted with the components fitted without
+    fold 0, the components the reader's fold-0 run reads."""
+    from src.context_prior.prior import PriorInputs, PriorSpec, fit_prior, total
+    from src.context_prior.reference import load_reference
+    from src.context_prior.views import fit_expression_components
+    from src.experiments.config import load_prior_config
+    from src.experiments.context_prior import stages
+
+    ladder = setup.ladder
+    prior = load_prior_config(Path(setup.ladder_config["prior_config"]))
+    reference = prior["reference"]
+    expression = reader.mean_channel(ladder).astype(np.float64)
+    kept = [m for m in ladder.frame if ladder.folds[m] != 0]
+    held = [m for m in ladder.frame if ladder.folds[m] == 0]
+    inputs = PriorInputs(
+        expression=expression.loc[ladder.frame],
+        residual=setup.truth(ladder.frame),
+        components=fit_expression_components(expression.loc[kept], 3),
+        reference=load_reference(
+            Path(prior["paths"]["reference"]),
+            blocked={*ladder.role_lines("val", "test"), *setup.excluded},
+        ),
+        lineage=ladder.lines.loc[ladder.frame, "lineage"],
+        patients=ladder.lines["patient_id"].astype(str).to_dict(),
+    )
+    spec = PriorSpec(
+        tuple(
+            stages(
+                prior,
+                reference["block_set"],
+                reference["components_penalty"],
+                reference["gene_penalty"],
+            )
+        )
+    )
+    fitted = fit_prior(spec, inputs, fit_lines=kept, encoder_lines=kept)
+    expected = total(fitted.predict(expression.loc[held]))
+    written = pd.read_parquet(prior_dir / "predictions_oof.parquet").loc[held]
+    assert np.allclose(written.to_numpy(), expected.to_numpy(), atol=1e-5)
+
+
+def _check_reads_are_bound(
+    root: Path, report_path: Path, reader_path: Path, prior_dir: Path, out: Path
+) -> None:
+    """The queue and the report read a finished run only under the config it was
+    bound to, a prior only from the report's ladder and with its row.json, and the
+    ridge's cache only from the inputs it was computed from."""
+    run_dir = root / "outputs" / "architecture" / "components_reader"
+    bound = run_dir / "run_config.json"
+    original = bound.read_text()
+    assert stage_one.queue([reader_path], ["0"], ["main", "0", "1"]) == 0  # all done
+    changed = json.loads(original)
+    changed["config"]["run"]["train"]["learning_rate"] = 0.5
+    bound.write_text(json.dumps(changed))
+    with pytest.raises(ValueError, match="another config"):
+        stage_one.queue([reader_path], ["0"], ["main"])
+    with pytest.raises(ValueError, match="another config"):
+        stage_one.report(report_path, "cpu")
+    bound.write_text(original)
+
+    prior_bound = prior_dir / "run_config.json"
+    original = prior_bound.read_text()
+    changed = json.loads(original)
+    changed["config"]["ladder_config"] = str(root / "elsewhere.yaml")
+    prior_bound.write_text(json.dumps(changed))
+    with pytest.raises(ValueError, match="the report"):
+        stage_one.report(report_path, "cpu")
+    prior_bound.write_text(original)
+    (prior_dir / "row.json").rename(prior_dir / "row.json.aside")
+    results = json.loads(
+        (stage_one.report(report_path, "cpu") / "results.json").read_text()
+    )
+    assert results["scores"]["prior"]["val"] is None
+    (prior_dir / "row.json.aside").rename(prior_dir / "row.json")
+
+    fingerprint = out / "dh_ridge" / "fingerprint.json"
+    original = fingerprint.read_text()
+    changed = json.loads(original)
+    changed["lines"] = {}
+    fingerprint.write_text(json.dumps(changed))
+    with pytest.raises(ValueError, match="other inputs"):
+        stage_one.report(report_path, "cpu")
+    fingerprint.write_text(original)

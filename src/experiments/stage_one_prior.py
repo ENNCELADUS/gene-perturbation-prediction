@@ -13,12 +13,13 @@ sigma_g``; the components are fitted on the frame rows. It writes, in
 - ``predictions_val.parquet``, ``predictions_test.parquet``: the fit on the whole
   frame, in scoring units;
 - ``predictions_oof.parquet``: every frame line predicted by the fit without its
-  frame fold (``crossfit``);
+  frame fold, the components refitted without the fold too;
 - ``components/main.parquet`` (every line's 128 component scores, components fitted
   on the frame) and ``components/fold<k>.parquet`` (fitted on the frame without
-  fold k), which the shared nonlinear components reader reads;
+  fold k): what the shared nonlinear components reader reads in its main and fold
+  runs, so the reader and this prior are out of fold alike;
 - ``row.json``: validation and test scores, and the out-of-fold scores over the
-  single-cell training lines.
+  single-cell training lines (rank metrics within each fold, averaged).
 
 It decides nothing.
 """
@@ -26,6 +27,7 @@ It decides nothing.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -47,13 +49,12 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     from src.context_prior.prior import (
         PriorInputs,
         PriorSpec,
-        crossfit,
         fit_prior,
         total,
     )
     from src.context_prior.reference import load_reference
     from src.context_prior.views import expression_components, fit_expression_components
-    from src.eval.geneeffect import wide_accuracy
+    from src.eval.geneeffect import fold_accuracy, wide_accuracy
     from src.experiments.config import load_prior_config
     from src.experiments.context_prior import stages
     from src.experiments.stage_one import load_setup
@@ -100,19 +101,20 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     fitted = fit_prior(spec, inputs, fit_lines=frame, encoder_lines=frame)
     held = ladder.role_lines("val", "test")
     predictions = total(fitted.predict(expression.loc[held]))
-    oof = total(
-        crossfit(
+    count = int(prior["prior"]["components"])
+    fold_components, parts = {}, []
+    for k in sorted(set(folds.values())):
+        kept = [m for m in frame if folds[m] != k]
+        fold_components[k] = fit_expression_components(expression.loc[kept], count)
+        fitted_k = fit_prior(
             spec,
-            inputs,
-            folds=folds,
-            queries={
-                k: expression.loc[[m for m in frame if folds[m] == k]]
-                for k in sorted(set(folds.values()))
-            },
-            labelled=frame,
-            encoder_lines=frame,
+            dataclasses.replace(inputs, components=fold_components[k]),
+            fit_lines=kept,
+            encoder_lines=kept,
         )
-    ).loc[frame]
+        held_k = [m for m in frame if folds[m] == k]
+        parts.append(total(fitted_k.predict(expression.loc[held_k])))
+    oof = pd.concat(parts, verify_integrity=True).loc[frame]
     split = {
         "val": predictions.loc[ladder.role_lines("val")],
         "test": predictions.loc[ladder.role_lines("test")],
@@ -125,14 +127,10 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         run_dir / "components" / "main.parquet",
         expression_components(components, expression.loc[lines]),
     )
-    for k in sorted(set(folds.values())):
-        kept = [m for m in frame if folds[m] != k]
-        fold_components = fit_expression_components(
-            expression.loc[kept], int(prior["prior"]["components"])
-        )
+    for k, fitted_components in fold_components.items():
         _write_parquet(
             run_dir / "components" / f"fold{k}.parquet",
-            expression_components(fold_components, expression.loc[lines]),
+            expression_components(fitted_components, expression.loc[lines]),
         )
     cells = ladder.role_lines("train_cells")
     scored = {
@@ -147,10 +145,11 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
             "frame_lines": len(frame),
             "space_genes": int(expression.shape[1]),
             "scores": {
-                name: wide_accuracy(
+                name: (fold_accuracy if name == "oof" else wide_accuracy)(
                     values,
                     setup.truth(list(values.index)),
                     setup.definitions,
+                    **({"folds": folds} if name == "oof" else {}),
                     panel=ladder.panel,
                 )
                 for name, values in scored.items()
