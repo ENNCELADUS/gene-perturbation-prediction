@@ -66,7 +66,11 @@ class CilantroTail(nn.Module):
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
         viability = self.l3(F.relu(self.l2(x)))
-        return self.l4(F.relu(viability)).squeeze(-1), viability
+        # The output layer runs in fp32 outside autocast, so a stored z is not
+        # rounded to bf16.
+        with torch.autocast(x.device.type, enabled=False):
+            z = self.l4(F.relu(viability.float())).squeeze(-1)
+        return z, viability
 
 
 def source_projection(dim: int, width: int) -> nn.Sequential:
@@ -159,16 +163,29 @@ class ContextEncoder(nn.Module):
 
 
 class StateEncoder(nn.Module):
-    """The profile delta's state encoder E: ``Delta E = E(after) - E(before)``."""
+    """The profile delta's state encoder ``E(x) = second(relu(first(x)))``.
+
+    ``change(state, step)`` is ``E(state + step) - E(state)`` computed without
+    cancellation: the first layer is linear, so the after-state's pre-activation is
+    the before-state's plus ``first.weight @ step``, the two activations are
+    subtracted before the second layer, whose bias cancels exactly; all of it in
+    fp32 outside autocast (a knockdown moves the state by ~1% of its size, which a
+    bf16 difference of two encodings would lose)."""
 
     def __init__(self, components: int, width: int) -> None:
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(components, width), nn.ReLU(), nn.Linear(width, width)
-        )
+        self.first = nn.Linear(components, width)
+        self.second = nn.Linear(width, width)
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.net(x)
+        return self.second(F.relu(self.first(x)))
+
+    def change(self, state: Tensor, step: Tensor) -> Tensor:
+        with torch.autocast(step.device.type, enabled=False):
+            state, step = state.float(), step.float()
+            before = self.first(state)
+            after = before + F.linear(step, self.first.weight)
+            return F.linear(F.relu(after) - F.relu(before), self.second.weight)
 
 
 @dataclass
@@ -261,10 +278,9 @@ class DeltaFiLM(nn.Module):
             before = batch.before
             if before.dim() == 2:  # one state per line, shared by the genes
                 before = before.unsqueeze(0)
-            after = before + batch.delta + batch.shift.unsqueeze(1)
-            change = self.state(after) - self.state(before)
-            zero = torch.zeros_like(batch.shift[:1])
-            mean = self.state(batch.shift) - self.state(zero)
+            step = batch.delta.float() + batch.shift.float().unsqueeze(1)
+            change = self.state.change(before, step)
+            mean = self.state.change(torch.zeros_like(batch.shift), batch.shift)
             parts = [change - mean.unsqueeze(1), _per_gene(mean, lines)]
         elif self.input == "own_x":
             parts = [batch.own, _per_gene(batch.own_mean, lines)]
