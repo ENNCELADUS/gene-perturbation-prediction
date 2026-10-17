@@ -367,3 +367,37 @@ def test_a_resumed_run_ends_where_an_uninterrupted_one_does(tmp_path):
         _validator(data, targets, config),
     )
     assert resumed.history == whole.history
+
+
+def test_a_crash_between_last_and_best_is_reconciled_on_resume(tmp_path):
+    """last.pt records a new best epoch but best.pt still holds the previous one
+    (or none): the resume rewrites best.pt from the restored weights."""
+    config = _loop_config(max_epochs=3, patience=5)
+    data, targets = _toy()
+    torch.manual_seed(0)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        trainer.fit(
+            _line_film(),
+            data,
+            config,
+            tmp_path,
+            SPLIT,
+            _validator(data, targets, config, fail_after=2),
+        )
+    last = torch.load(tmp_path / "last.pt", weights_only=True)
+    assert last["train_state"]["best_epoch"] == 1
+    (tmp_path / "best.pt").unlink()
+    model = _line_film()
+    with pytest.raises(RuntimeError, match="interrupted"):
+        trainer.fit(
+            model,
+            data,
+            config,
+            tmp_path,
+            SPLIT,
+            _validator(data, targets, config, fail_after=0),
+        )
+    best = torch.load(tmp_path / "best.pt", weights_only=True)
+    assert best["epoch"] == 1 and best["score"] == last["train_state"]["best_score"]
+    for key, value in last["weights"].items():
+        assert torch.equal(best["weights"][key], value)
