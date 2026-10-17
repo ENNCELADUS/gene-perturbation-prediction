@@ -10,6 +10,8 @@ output_root: outputs/stage_one
 data:
   ladder_config: configs/stage_one/ladder_inputs.yaml
   gene_sources: [gene_text]
+  # Off for the warm row: PIE's gene query MLP was trained on the uncentred vectors.
+  centre_gene_sources: false
   input: none
   own_slots: []
   permuted: false

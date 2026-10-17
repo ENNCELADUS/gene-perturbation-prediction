@@ -206,6 +206,11 @@ def bind_genes(run_dir: Path, genes: Sequence[str]) -> None:
 # --- inputs on the device ------------------------------------------------------------
 
 
+def centred(vectors: np.ndarray, present: np.ndarray, mean: np.ndarray) -> np.ndarray:
+    """Source vectors minus the source's panel mean; an absent gene stays zero."""
+    return np.where(present[:, None], vectors - mean, 0.0).astype(np.float32)
+
+
 class Resident:
     """The inputs a training config reads, on the device: gene sources on the
     panel; the delta (bf16 on CUDA, by gene chunk from its memory map) with its
@@ -238,9 +243,21 @@ class Resident:
         position = {g: i for i, g in enumerate(str(g) for g in ladder.genes.index)}
         on_panel = [position[g] for g in panel]
         sources = reader.gene_sources(ladder, data["gene_sources"])
+        # Each source's mean over the panel genes it covers (label-free, over the
+        # gene axis; no per-gene parameter): gene_text vectors share half their
+        # energy along it, which leaves the gene encoder's conditions nearly equal
+        # across genes and the FiLM arms learning almost nothing gene-specific.
+        self.source_means = {
+            name: vectors[on_panel][present[on_panel]].mean(axis=0)
+            if data["centre_gene_sources"]
+            else np.zeros(vectors.shape[1], np.float32)
+            for name, (vectors, present) in sources.items()
+        }
         self.gene_vectors = {
-            name: torch.from_numpy(vectors[on_panel]).to(device)
-            for name, (vectors, _) in sources.items()
+            name: torch.from_numpy(
+                centred(vectors[on_panel], present[on_panel], self.source_means[name])
+            ).to(device)
+            for name, (vectors, present) in sources.items()
         }
         self.gene_present = {
             name: torch.from_numpy(present[on_panel]).to(device)
@@ -372,6 +389,7 @@ class Resident:
             else:
                 values = np.zeros((len(axis), dim), np.float32)
                 listed = np.zeros(len(axis), bool)
+            values = centred(values, listed, self.source_means[name])
             vectors[name] = torch.from_numpy(values).to(self.device)
             present[name] = torch.from_numpy(listed).to(self.device)
         return vectors, present

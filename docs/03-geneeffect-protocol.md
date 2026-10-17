@@ -1069,7 +1069,13 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   source does not list g) decodes `h(c, g)` → Linear 256 → ReLU → tail; tokens are dropped at `train.token_dropout`,
   own evidence at `train.evidence_dropout`. Its warm row loads PIE's latents, norms, blocks, gene query MLP, control
   evidence encoder and text projection by an explicit, strict name map (the token channel's attention starts fresh).
-  The gene encoder in Task 3 is a projection of `gene_text` (PIE's `gene_query_mlp` shape).
+  The gene encoder in Task 3 is a projection of `gene_text` (PIE's `gene_query_mlp` shape). Each gene source is
+  centred on its mean over the panel genes it covers (`data.centre_gene_sources`; label-free, over the gene axis,
+  not a per-gene parameter; the line tokens' gene vectors take the same mean): `gene_text` vectors have a mean
+  pairwise cosine of 0.51 and half their energy along their mean, and uncentred the FiLM arms' gene conditions
+  were nearly equal across genes, so the first H20 trials learned almost nothing gene-specific (the components
+  reader at validation selective Spearman ~0.02; centred, ~0.17 in its first epoch). The warm direct readout keeps
+  them uncentred, as PIE's gene query MLP was trained on.
 - **Full-panel profile delta** (design §3.2's check of the compression). `data.genes: selective_full` restricts a run
   to the selective genes in the panel with a full-panel predicted change (`pie/full/<gene>.npy`, lines × panel,
   uncentred; `row.json` reports how many of the 4,269 have one and which lack it); every other gene predicts the base,

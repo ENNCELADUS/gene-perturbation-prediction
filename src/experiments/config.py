@@ -280,7 +280,10 @@ _STAGE_ONE_TOP_LEVEL = {
     "report": "kind task output_root ladder_config bootstrap_repeats rows contrasts",
 }
 _STAGE_ONE_GROUPS = {
-    "data": "ladder_config gene_sources input own_slots permuted prior_run genes",
+    "data": (
+        "ladder_config gene_sources centre_gene_sources input own_slots permuted "
+        "prior_run genes"
+    ),
     "model": "arm gene_width hidden state_width context trunk",
     "train": (
         "max_epochs patience warmup_epochs learning_rate weight_decay ema_decay "
@@ -321,6 +324,8 @@ def _validate_stage_one_data(data: Mapping[str, Any]) -> None:
         raise ValueError(
             f"data.gene_sources: distinct names from {STAGE_ONE_GENE_SOURCES}"
         )
+    if data["centre_gene_sources"] not in (True, False):
+        raise ValueError("data.centre_gene_sources must be a boolean")
     if data["input"] not in STAGE_ONE_INPUTS:
         raise ValueError(f"data.input must be one of {STAGE_ONE_INPUTS}")
     slots = data["own_slots"]
