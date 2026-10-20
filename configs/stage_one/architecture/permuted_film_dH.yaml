@@ -30,6 +30,7 @@ train:
   learning_rate: 1.0e-3
   weight_decay: 0.01
   ema_decay: null
+  dependency_weight: 1.0
   lines_per_step: 64
   genes_per_step: 256
   token_dropout: 0.0

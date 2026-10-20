@@ -300,7 +300,15 @@ def _toy(seed: int = 0):
 
     labels = targets.clone()
     labels[8:] = torch.nan
-    data = trainer.TrainingData(batch, labels, torch.arange(8), genes)
+    data = trainer.TrainingData(
+        batch,
+        labels,
+        torch.arange(8),
+        genes,
+        m_g=torch.zeros(genes),
+        sigma_g=torch.ones(genes),
+        selective=torch.ones(genes, dtype=torch.bool),
+    )
     return data, targets
 
 
@@ -333,6 +341,40 @@ def test_epoch_zero_is_the_base_and_never_a_candidate_when_undefined(tmp_path):
     assert first["val_mse"] == pytest.approx(float((targets[8:] ** 2).mean()))
     assert result.state.best_epoch >= 1
     assert (tmp_path / "best.pt").is_file() and (tmp_path / "last.pt").is_file()
+
+
+def test_the_dependency_term_is_the_call_on_selective_genes_only():
+    """In GeneEffect units: z = 0 with m_g = -0.5 sits on the threshold (p = 1/2),
+    so the term is log 2 whatever the label; a non-selective gene and an unlabelled
+    pair add nothing."""
+    _, targets = _toy()
+    data = trainer.TrainingData(
+        None,
+        targets,
+        torch.arange(8),
+        5,
+        m_g=torch.full((5,), -0.5),
+        sigma_g=torch.full((5,), 2.0),
+        selective=torch.tensor([True, True, False, False, False]),
+    )
+    genes = torch.arange(5)
+    target = targets[:4].T.clone()
+    target[1, 0] = torch.nan
+    term = trainer.dependency_term(torch.zeros(5, 4), target, genes, data)
+    assert float(term) == pytest.approx(np.log(2.0))
+    # A confident, correct call on every selective pair costs almost nothing.
+    sure = torch.where(target < 0, -50.0, 50.0)
+    assert float(trainer.dependency_term(sure, target, genes, data)) < 1e-6
+    none = trainer.TrainingData(
+        None,
+        targets,
+        torch.arange(8),
+        5,
+        data.m_g,
+        data.sigma_g,
+        torch.zeros(5, dtype=torch.bool),
+    )
+    assert float(trainer.dependency_term(sure, target, genes, none)) == 0.0
 
 
 def test_resume_refuses_another_config_and_checkpoints_another_membership(tmp_path):
