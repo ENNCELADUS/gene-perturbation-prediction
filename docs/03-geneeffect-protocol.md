@@ -1043,8 +1043,15 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
 - **Target and base.** `z = (GeneEffect − m_g) / σ_g` on the 981 frame lines, `m_g` their mean, `σ_g` the §6 residual SD;
   the loss is the mean squared error in `σ_g` units over the labelled pairs (`src/data/ladder_reader.py`
   `training_targets`, which refuses any line but a fit-eligible single-cell training line or a labelled bulk-only
-  line). Every arm ends in Cilantro's tail (`FiLMNet128`'s `→ 64 → ReLU → 32 → ReLU → 1`) with a zero-initialised output,
+  line). Every arm ends in Cilantro's tail (`FiLMNet128`'s `→ 64 → act → 32 → act → 1`) with a zero-initialised output,
   so the untrained model predicts the base; no module holds a per-gene parameter (a gene enters through its sources).
+  The activation is a leaky ReLU of slope 0.01, not Cilantro's ReLU (`src/model/stage_one.py` `TAIL_SLOPE`). On the
+  H20 (2026-10-20, `outputs/stage_one_debug/`, learning rate 1e-3, 30 epochs) the ReLU tail died: 30 of the 32
+  viability units were never active by epoch 1 and all 32 by epoch 6 in `film_dH`, so z became one constant and
+  `lineage_only` and `film_dH` returned the base, with a selective Spearman read off near-constant outputs. GELU and
+  SiLU died the same way on `lineage_only` (constant predictions), as did ReLU with an RMSNorm after FiLM; the leaky
+  tail stayed alive on both (validation selective Spearman 0.106 and within-gene R² +0.017 for `lineage_only`,
+  0.073 for `film_dH`).
   The 180 GeneEffect genes outside the decode panel predict the base.
 - **Scoring.** The scorer receives `(m_g − μ_g) / σ_g + z` and re-centres on the §6 377-line mean `μ_g`
   (`src/eval/geneeffect.py` `wide_accuracy`): selective Spearman (4,323 genes) and, beside it, over the 4,269 in the
@@ -1108,7 +1115,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   memory map; checkpoints record the split membership and load strictly; a resume or a run directory refuses another
   config. `last.pt` is written before `best.pt`, and a resume rewrites a `best.pt` that lags the recorded best epoch.
 - **Outputs.** `outputs/stage_one/<task>/<config stem>[__fold<k>]/`: `best.pt`, `last.pt`, `predictions.parquet` (every
-  line × every gene, scoring units), `V.npy` (the 32-d viability embedding, Cilantro's `l3` output before its ReLU,
+  line × every gene, scoring units), `V.npy` (the 32-d viability embedding, Cilantro's `l3` output before its activation,
   every line × panel gene, fp16; `V.json` marks the lines trained on as in-sample) and `row.json`. A main run scores
   validation, test once, and its single-cell training lines in-sample (the train-versus-validation gap); a fold run
   (`--fold k`: fold k dropped, `m_g` refitted without it; `μ_g`, `σ_g` and the selective genes stay §6's; selection stays

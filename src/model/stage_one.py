@@ -2,9 +2,12 @@
 
 Every arm predicts ``z``, a (gene, line) pair's GeneEffect minus the base ``m_g`` in
 units of the residual SD ``sigma_g``, and ends in Cilantro's tail
-(``-> 64 -> ReLU -> 32 -> ReLU -> 1``, from ``FiLMNet128``) whose 32-d layer is the
-viability embedding ``V(c, g)``. The tail's output layer starts at zero, so an
-untrained arm predicts the base. No module holds a per-gene parameter: a gene enters
+(``-> 64 -> act -> 32 -> act -> 1``, from ``FiLMNet128``) whose 32-d layer is the
+viability embedding ``V(c, g)``. Cilantro's ReLUs are leaky (slope 0.01) here: on the
+residual target, whose learnable part is a few per cent of its variance, the ReLU
+tail's units died within an epoch on the H20 and the arms collapsed to the base
+(protocol §16). The tail's output layer starts at zero, so an untrained arm predicts
+the base. No module holds a per-gene parameter: a gene enters
 only through its sources (``GeneEncoder``), so a gene never seen in training decodes.
 
 Arms, by what comes before the tail:
@@ -36,6 +39,8 @@ from torch import Tensor, nn
 #: Cilantro's FiLMNet128: cell embedding 256, gene condition 128.
 HIDDEN = 256
 VIABILITY_WIDTH = 32
+#: The tail's activation slope below zero; 0 is Cilantro's ReLU.
+TAIL_SLOPE = 0.01
 
 
 class FiLM(nn.Module):
@@ -52,12 +57,14 @@ class FiLM(nn.Module):
 
 
 class CilantroTail(nn.Module):
-    """``FiLMNet128``'s layers after FiLM: ``l2`` (-> 64) -> ReLU -> ``l3`` (-> 32,
-    the viability embedding V, taken before its ReLU as Cilantro saves it) -> ReLU
-    -> ``l4`` (-> 1). ``l4`` starts at zero: an untrained tail outputs 0."""
+    """``FiLMNet128``'s layers after FiLM: ``l2`` (-> 64) -> act -> ``l3`` (-> 32,
+    the viability embedding V, taken before its activation as Cilantro saves it) ->
+    act -> ``l4`` (-> 1), where act is a leaky ReLU of ``negative_slope`` (0 gives
+    Cilantro's ReLU). ``l4`` starts at zero: an untrained tail outputs 0."""
 
-    def __init__(self, width: int = HIDDEN) -> None:
+    def __init__(self, width: int = HIDDEN, negative_slope: float = TAIL_SLOPE) -> None:
         super().__init__()
+        self.negative_slope = negative_slope
         self.l2 = nn.Linear(width, 64)
         self.l3 = nn.Linear(64, VIABILITY_WIDTH)
         self.l4 = nn.Linear(VIABILITY_WIDTH, 1)
@@ -65,11 +72,12 @@ class CilantroTail(nn.Module):
         nn.init.zeros_(self.l4.bias)
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        viability = self.l3(F.relu(self.l2(x)))
+        slope = self.negative_slope
+        viability = self.l3(F.leaky_relu(self.l2(x), slope))
         # The output layer runs in fp32 outside autocast, so a stored z is not
         # rounded to bf16.
         with torch.autocast(x.device.type, enabled=False):
-            z = self.l4(F.relu(viability.float())).squeeze(-1)
+            z = self.l4(F.leaky_relu(viability.float(), slope)).squeeze(-1)
         return z, viability
 
 
