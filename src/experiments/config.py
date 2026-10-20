@@ -287,7 +287,7 @@ _STAGE_ONE_GROUPS = {
     "model": "arm gene_width hidden state_width context trunk",
     "train": (
         "max_epochs patience warmup_epochs learning_rate weight_decay ema_decay "
-        "lines_per_step genes_per_step token_dropout evidence_dropout"
+        "dependency_weight lines_per_step genes_per_step token_dropout evidence_dropout"
     ),
     "eval": "lines_per_chunk genes_per_chunk",
 }
@@ -421,6 +421,8 @@ def _validate_stage_one_train(config: Mapping[str, Any]) -> None:
         raise ValueError(
             "train.learning_rate must be positive, weight_decay non-negative"
         )
+    if not train["dependency_weight"] >= 0:
+        raise ValueError("train.dependency_weight must be non-negative")
     if train["ema_decay"] is not None and not 0 < train["ema_decay"] < 1:
         raise ValueError("train.ema_decay must lie in (0, 1), or be null for no EMA")
     for key in ("token_dropout", "evidence_dropout"):

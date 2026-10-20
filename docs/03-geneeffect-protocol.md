@@ -1041,9 +1041,11 @@ config per run (`configs/stage_one/architecture/`, `kind: train`), with `hpc/run
 reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config). Nothing is chosen in code.
 
 - **Target and base.** `z = (GeneEffect − m_g) / σ_g` on the 981 frame lines, `m_g` their mean, `σ_g` the §6 residual SD;
-  the loss is the mean squared error in `σ_g` units over the labelled pairs (`src/data/ladder_reader.py`
-  `training_targets`, which refuses any line but a fit-eligible single-cell training line or a labelled bulk-only
-  line). Every arm ends in Cilantro's tail (`FiLMNet128`'s `→ 64 → act → 32 → act → 1`) with a zero-initialised output,
+  the labelled pairs come from `src/data/ladder_reader.py` `training_targets`, which refuses any line but a
+  fit-eligible single-cell training line or a labelled bulk-only line. The loss is the mean squared error in `σ_g`
+  units over the labelled pairs plus `train.dependency_weight` (1) times the §5 `dependency_classification`
+  cross-entropy over the labelled pairs of selective genes (`src/training/stage_one_trainer.py`): stage one hands
+  stage two calibrated context effects (design §4.1). Every arm ends in Cilantro's tail (`FiLMNet128`'s `→ 64 → act → 32 → act → 1`) with a zero-initialised output,
   so the untrained model predicts the base; no module holds a per-gene parameter (a gene enters through its sources).
   The activation is a leaky ReLU of slope 0.01, not Cilantro's ReLU (`src/model/stage_one.py` `TAIL_SLOPE`). On the
   H20 (2026-10-20, `outputs/stage_one_debug/`, learning rate 1e-3, 30 epochs) the ReLU tail died: 30 of the 32

@@ -4,7 +4,12 @@ on one device, no accelerate (it runs in ``.venv-pie``).
 An update is one block of panel genes by one block of training lines (every pair of
 the two blocks); an epoch visits every gene block with every line block once, in a
 random order. The loss is the mean squared error in units of the residual SD over
-the pairs with a label. AdamW, linear warmup then cosine (``schedule``), optional
+the pairs with a label, plus ``train.dependency_weight`` times the binary
+cross-entropy of the dependency call (GeneEffect below -0.5) over the labelled pairs
+of selective genes, the protocol's ``dependency_classification`` term
+(``losses.dependency_loss``): stage one hands stage two calibrated context
+effects, so the call that the size of z implies is trained as well as the size.
+AdamW, linear warmup then cosine (``schedule``), optional
 EMA weights (``torch.optim.swa_utils.AveragedModel``), which then are the weights
 validated and saved as ``best.pt``.
 
@@ -38,6 +43,7 @@ from torch import Tensor, nn
 from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
 from src.data.splits import FixedSplit, assert_same_membership, membership
+from src.model.losses import dependency_loss
 from src.training.checkpoint import (
     TrainState,
     capture_rng_state,
@@ -55,12 +61,17 @@ class TrainingData:
     """What the loop reads: ``batch(genes, lines)`` builds a ``PairBatch`` from
     panel-gene and line positions; ``targets`` (lines x panel genes, on the device)
     is NaN wherever a pair is not a training label; ``train_lines`` are the line
-    positions fitted."""
+    positions fitted. ``m_g`` and ``sigma_g`` (the run's genes, on the device) turn a
+    target back into GeneEffect for the dependency call, which ``selective`` limits to
+    the selective genes."""
 
     batch: Callable[[Tensor, Tensor], Any]
     targets: Tensor
     train_lines: Tensor
     n_genes: int
+    m_g: Tensor
+    sigma_g: Tensor
+    selective: Tensor
 
 
 def autocast(device: torch.device):
@@ -109,6 +120,23 @@ def masked_mse(z: Tensor, target: Tensor) -> Tensor | None:
         return None
     error = torch.where(keep, z.float() - torch.nan_to_num(target), 0.0)
     return error.square().sum() / keep.sum()
+
+
+def dependency_term(
+    z: Tensor, target: Tensor, genes: Tensor, data: TrainingData
+) -> Tensor:
+    """The dependency call's cross-entropy over the finite targets of selective
+    genes in a (genes x lines) block, in GeneEffect units; zero without such a pair."""
+    keep = torch.isfinite(target) & data.selective[genes].unsqueeze(1)
+    gene = genes.unsqueeze(1).expand_as(target)[keep]
+    sigma = data.sigma_g[gene]
+    return dependency_loss(
+        z.float()[keep] * sigma,
+        target[keep] * sigma,
+        sigma,
+        data.m_g[gene],
+        torch.ones_like(sigma, dtype=torch.bool),
+    )
 
 
 def _checkpoint(path: Path, payload: Mapping[str, Any]) -> None:
@@ -247,6 +275,7 @@ def fit(
                 if key
                 in (
                     "train_loss",
+                    "train_dependency",
                     "epoch_seconds",
                     "val_selective_spearman",
                     "val_within_gene_r2",
@@ -263,7 +292,7 @@ def fit(
         epoch = state.next_epoch
         model.train()
         started = time.monotonic()
-        losses = []
+        losses, dependency = [], []
         for genes, lines in epoch_steps(data, config, generator):
             target = data.targets[lines][:, genes].T
             with autocast(device):
@@ -271,6 +300,9 @@ def fit(
             loss = masked_mse(z, target)
             if loss is None:
                 continue
+            call = dependency_term(z, target, genes, data)
+            loss = loss + train["dependency_weight"] * call
+            dependency.append(float(call.detach()))
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
@@ -281,6 +313,7 @@ def fit(
             losses.append(float(loss.detach()))
         metrics = {
             "train_loss": float(np.mean(losses)) if losses else None,
+            "train_dependency": float(np.mean(dependency)) if dependency else None,
             # The updates alone, without validation: a streamed input's I/O shows here.
             "epoch_seconds": time.monotonic() - started,
         }

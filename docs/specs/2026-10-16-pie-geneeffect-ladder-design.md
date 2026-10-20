@@ -275,7 +275,12 @@ are paired views of a line for stability telemetry, never extra lines.
 - **Base and target.** `m_g` is the gene's mean measured GeneEffect over the 981 frame lines (single-cell training
   lines admitted by `assert_fit_eligible`, bulk-only labelled lines from `load_bulk_lines`, which refuses any overlap
   with validation and test; lymphoid and myeloid bulk-only lines dropped). The target is `GeneEffect(c, g) − m_g`; the loss is MSE in units of the 377-line residual SD
-  `σ_g` over every labelled gene.
+  `σ_g` over every labelled gene, plus (weight 1, `train.dependency_weight`) the binary cross-entropy of the
+  dependency call (GeneEffect below −0.5, logit `(−0.5 − m_g − σ_g z) / σ_g`) over the labelled pairs of selective
+  genes, protocol §5's `dependency_classification` term. Stage one hands stage two **calibrated context effects**
+  (decided 2026-10-20): stage two ranks many partners within one line, so it needs effect sizes comparable across
+  genes and a correct dependent call, not only each gene's ranking of lines; selective Spearman stays the selection
+  metric, and within-gene R² and the calibration slope are read beside it as equals.
 - **Scoring.** The tail outputs `z`; the scorer receives GeneEffect `m_g + σ_g · z` and re-centres it on the protocol's
   377-line mean `μ_g` as every prediction is; it never receives `z`. The base is a row of its own (its within-gene R²
   is that of `m_g − μ_g`). One Task 3 row trains the winning family around the 377-line mean instead (target

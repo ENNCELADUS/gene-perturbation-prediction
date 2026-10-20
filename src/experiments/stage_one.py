@@ -512,7 +512,20 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
     labels = torch.full((len(lines), len(genes)), torch.nan, device=torch_device)
     trained = torch.tensor([position[m] for m in targets.lines], device=torch_device)
     labels[trained] = torch.from_numpy(table).to(torch_device)
-    data = TrainingData(resident.batch, labels, trained, len(genes))
+    gene_table = ladder.genes.loc[list(genes)]
+
+    def gene_tensor(values: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
+        return torch.as_tensor(values, dtype=dtype, device=torch_device)
+
+    data = TrainingData(
+        resident.batch,
+        labels,
+        trained,
+        len(genes),
+        m_g=gene_tensor(targets.m_g.loc[list(genes)].to_numpy(), torch.float32),
+        sigma_g=gene_tensor(gene_table["sigma_g"].to_numpy(), torch.float32),
+        selective=gene_tensor(gene_table["selective"].to_numpy(bool), torch.bool),
+    )
     definitions = setup.definitions
     val = ladder.role_lines("val")
     val_positions = torch.tensor([position[m] for m in val], device=torch_device)
