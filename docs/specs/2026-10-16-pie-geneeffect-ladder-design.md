@@ -131,7 +131,8 @@ expression never reaches the latents: it enters only as each decoded gene's own 
 
 ### 3.3 Stage-one architecture arms (Task 3)
 
-Every arm ends in **Cilantro's tail** (`→ 64 → ReLU → 32 → ReLU → 1`, from `FiLMNet128`); its 32-d layer is the
+Every arm ends in **Cilantro's tail** (`→ 64 → act → 32 → act → 1`, from `FiLMNet128`, with its ReLUs made leaky at slope
+0.01 after the ReLU tail collapsed to the base on the H20, protocol §16); its 32-d layer is the
 viability embedding `V(c, g)`, saved for every line × gene for stage two. Arms differ only before the tail.
 
 | Arm | Before the tail |
@@ -152,7 +153,7 @@ validation selective Spearman; the winner carries to Tasks 4–7.
 - the line-permuted control permutes, per gene, across all 1,036 lines, and moves the delta, its slots and (for ΔE)
   the before-state together;
 - a line token is one per gene of the panel ∪ the mean channel's space, carrying both values with their flags;
-- `V(c, g)` is Cilantro's `l3` output before its ReLU, as `FiLMNet128` returns it;
+- `V(c, g)` is Cilantro's `l3` output before its activation, as `FiLMNet128` returns it;
 - each gene source is centred on its mean over the panel genes it covers before the gene encoder (label-free; the
   `gene_text` vectors share half their energy along that mean, which left the FiLM conditions nearly equal across
   genes); the warm direct readout reads them uncentred, as PIE's gene query MLP did;

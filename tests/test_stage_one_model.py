@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+import torch.nn.functional as F
 import yaml
 
 from src.data.splits import FixedSplit
@@ -23,6 +24,7 @@ from src.model.stage_one import (
     FiLM,
     GeneEncoder,
     InputDims,
+    TAIL_SLOPE,
     PairBatch,
     build_model,
 )
@@ -75,7 +77,8 @@ def test_film_and_tail_match_cilantros_filmnet128():
     net_layers = _load("net_layers", CILANTRO / "net_layers.py")
     torch.manual_seed(0)
     theirs = net_layers.FiLMNet128().eval()
-    inflow, film, tail = torch.nn.Linear(512, 256), FiLM(256, 128), CilantroTail(256)
+    inflow, film = torch.nn.Linear(512, 256), FiLM(256, 128)
+    tail = CilantroTail(256, negative_slope=0.0)
     with torch.no_grad():
         inflow.load_state_dict(theirs.l1.state_dict())
         film.cond_gen.load_state_dict(theirs.film_layer.cond_gen.state_dict())
@@ -96,6 +99,21 @@ def test_the_untrained_tail_outputs_zero():
     model = _line_film()
     z, _ = model(_batch(4, 3))
     assert torch.equal(z, torch.zeros(4, 3))
+
+
+def test_a_tail_unit_below_zero_everywhere_still_learns():
+    """The collapse on the H20: every viability unit's input below zero for every
+    pair. Cilantro's ReLU passes no gradient back from there; the leaky tail does."""
+    x = torch.randn(64, 16)
+    for slope, learns in ((0.0, False), (TAIL_SLOPE, True)):
+        torch.manual_seed(0)
+        tail = CilantroTail(16, negative_slope=slope)
+        with torch.no_grad():
+            tail.l3.bias.fill_(-100.0)
+            tail.l4.weight.fill_(0.1)
+        z, _ = tail(x)
+        (z - 1.0).square().mean().backward()
+        assert (tail.l3.weight.grad.abs().sum() > 0) == learns
 
 
 def test_a_gene_never_trained_on_decodes_from_its_sources():
@@ -194,7 +212,7 @@ def test_the_tail_output_is_fp32_under_autocast():
         x = torch.randn(4, 3, 16)
         with torch.autocast("cpu", dtype=torch.bfloat16):
             z, v = tail(x)
-        expected = tail.l4(torch.relu(v.float())).squeeze(-1)
+        expected = tail.l4(F.leaky_relu(v.float(), tail.negative_slope)).squeeze(-1)
     assert z.dtype == torch.float32
     assert torch.equal(z, expected)
 
