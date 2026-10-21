@@ -459,12 +459,18 @@ def make_model(config: Mapping[str, Any], resident: Resident) -> torch.nn.Module
     return model.to(resident.device)
 
 
-def warm_start_trunk(model: torch.nn.Module, path: str | Path) -> list[str]:
+def warm_start_trunk(
+    model: torch.nn.Module, path: str | Path, run_dir: Path
+) -> list[str]:
     """The direct readout's shared modules from a released PIE checkpoint (at PIE's
     width), by ``trunk_name_map`` and the gene encoder's ``gene_text`` projection
     from PIE's gene query MLP; returns the tensors left fresh."""
     from pie.model.geneeffect import trunk_name_map, warm_start
     from pie.predict import load_checkpoint
+
+    # The checkpoint's config saves its run_dir as ${PIE_RUNS_ROOT}/<experiment>,
+    # which loading resolves (as in pie_reproduction); nothing is read there.
+    os.environ["PIE_RUNS_ROOT"] = str(run_dir / "pie_runs")
 
     from src.model.stage_one import direct_readouts
 
@@ -505,7 +511,7 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
     fresh = None
     trunk = config["model"]["trunk"]
     if trunk is not None and trunk["warm_start"] is not None:
-        fresh = warm_start_trunk(model, trunk["warm_start"])
+        fresh = warm_start_trunk(model, trunk["warm_start"], run_dir)
     panel, lines = ladder.panel, ladder.line_ids
     position = {m: i for i, m in enumerate(lines)}
     table = targets.values.loc[:, genes].to_numpy(np.float32)

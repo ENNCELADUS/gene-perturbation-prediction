@@ -24,6 +24,7 @@ checked against ``lines.parquet`` and the decode panel before use:
 from __future__ import annotations
 
 import json
+import resource
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -238,6 +239,24 @@ def full_profile(
     )
 
 
+#: Open files kept free beside the full-panel maps (logs, checkpoints, libraries).
+FILE_HEADROOM: Final = 1024
+
+
+def open_file_limit(needed: int) -> None:
+    """Raise the soft limit on open files to ``needed`` when it is lower; a hard
+    limit below ``needed`` is an error, not a later failure mid-construction."""
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft >= needed:
+        return
+    if hard != resource.RLIM_INFINITY and hard < needed:
+        raise OSError(
+            f"{needed} open files are needed and the hard limit is {hard}; "
+            "raise it (ulimit -Hn) before streaming the full-panel profile delta"
+        )
+    resource.setrlimit(resource.RLIMIT_NOFILE, (needed, hard))
+
+
 class FullStream:
     """The full-panel profile delta streamed to a device by gene chunk: far too
     large to be resident (~300 GB fp32 for the selective genes), it stays in its
@@ -247,6 +266,8 @@ class FullStream:
     The frame means are computed once at construction, one pass over every gene's
     frame rows (which also brings the files into the host page cache: later epochs
     read from memory when it holds them); ``seconds`` and ``bytes_read`` record it.
+    Every gene's map stays open, and each holds a file descriptor, so the process's
+    soft limit on open files is raised to cover them (``open_file_limit``).
     """
 
     def __init__(
@@ -258,6 +279,7 @@ class FullStream:
     ) -> None:
         import time
 
+        open_file_limit(len(profile.genes) + FILE_HEADROOM)
         self.arrays = [profile.change(g) for g in profile.genes]
         self.device, self.dtype = device, dtype
         frame = np.asarray(sorted(frame_rows))
