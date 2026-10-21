@@ -192,3 +192,23 @@ def test_program_spectra_orientation_and_alignment():
     empty[2] = 0.0
     with pytest.raises(ValueError, match="empty program spectrum"):
         sp.program_spectra(empty, top, panel)
+
+
+def test_the_worker_pool_spawns_rather_than_forks(monkeypatch):
+    """A pool forked after the scVI fit (torch threads, a CUDA context) deadlocked
+    on the H20; workers are spawned, and the calls still run."""
+    from functools import partial
+
+    from src.data.prepare import state_programs
+
+    contexts = []
+    real = state_programs.ProcessPoolExecutor
+
+    def recording(*args, **kwargs):
+        contexts.append(kwargs.get("mp_context"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(state_programs, "ProcessPoolExecutor", recording)
+    monkeypatch.setattr(state_programs, "_workers", lambda: 2)
+    state_programs._in_processes([partial(int, "7"), partial(int, "8")], "test")
+    assert [c.get_start_method() for c in contexts] == ["spawn"]

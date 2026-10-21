@@ -49,6 +49,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import multiprocessing
 import os
 import shutil
 import tempfile
@@ -694,10 +695,17 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
 
 
 def _in_processes(calls: Sequence[Any], label: str) -> None:
+    """The calls in a pool of spawned workers. Not forked: after the first seed's
+    scVI fit the process holds torch's threads and a CUDA context, and workers
+    forked from it deadlock on locks those threads held (the H20's seed-1 cNMF hung
+    for three days, every worker in a futex wait)."""
     if not calls:
         return
     _LOGGER.info("%s: %d jobs", label, len(calls))
-    with ProcessPoolExecutor(max_workers=min(_workers(), len(calls))) as pool:
+    with ProcessPoolExecutor(
+        max_workers=min(_workers(), len(calls)),
+        mp_context=multiprocessing.get_context("spawn"),
+    ) as pool:
         for done, _ in enumerate(pool.map(_call, calls), start=1):
             if done % 25 == 0 or done == len(calls):
                 _LOGGER.info("%s: %d of %d", label, done, len(calls))
