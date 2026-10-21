@@ -307,7 +307,32 @@ pairs and the same train-defined variable-gene and selective-gene sets. Let $y_{
 fitted training gene mean, $r_{cg}=y_{cg}-\mu_g$ the target residual and $\hat r_{cg}$
 the predicted residual.
 
-### Selective-gene Spearman ↑ (selection criterion)
+### Per-line residual Spearman ↑ (selection criterion of stage one)
+
+For each evaluated line, the Spearman correlation across the selective genes between the predicted and measured
+residuals, over the genes labelled in that line, averaged over the lines with a defined value (lines scored are
+counted):
+
+$$
+\rho^{\mathrm{L}}_c=\operatorname{Spearman}_{g\in\mathcal G_{\mathrm{sel}}}(r_{cg},\hat r_{cg}),\qquad
+\rho^{\mathrm{L}}=\frac{1}{|C_{\mathrm L}|}\sum_{c\in C_{\mathrm L}}\rho^{\mathrm L}_c .
+$$
+
+Residuals are in scoring units (centred on $\mu_g$, divided by $\sigma_g$), so the gene mean, which a context-blind
+model already knows, is removed: in each line the metric asks which genes that line needs more or less than usual.
+It is `val_line_spearman`, the stage-one selector (§16, adopted 2026-10-21); contrasts resample lines in a paired
+bootstrap over the lines defined on both sides (`src/eval/geneeffect.py` `line_spearmans`, `line_spearman_gain`).
+Out of fold it is pooled over every line, since each line is compared with its own truth.
+
+**Why this metric.** Stage two is scored one held-out line at a time (blueprint §3.7, Task B: AUPRC over the line's
+pairs), and definition 1 compares a line with the *training* lines, whose GeneEffect is measured, never with other
+held-out lines' predictions. What stage two consumes is therefore each held-out line's own vector of context effects,
+comparable across genes; the line is the unit. Selective Spearman (below) takes the transposed view, the gene as unit
+and the order of the held-out lines within it, which accurate per-line effects imply but stage two never uses. On the
+first Task 3 rows the two pick the same winner, and the per-line metric is the stricter on controls: the
+line-permuted ΔE control scored 0.067 selective Spearman but 0.014 per line, the base's level (§16).
+
+### Selective-gene Spearman ↑ (selection criterion of the joint model and the correction runs)
 
 A gene is **selective** when it has a dependent tail among the labeled training lines but is
 not essential almost everywhere. With dependent meaning $y_{cg}<-0.5$, let $n_g$ be the number
@@ -328,7 +353,8 @@ excluded ([design](specs/2026-10-03-geneeffect-revision-design.md) §2). The per
 constant, so $\rho^{\mathrm S}_g$ is the rank correlation of the predicted and observed
 GeneEffect of gene $g$ across lines (the centring rules below apply). Undefined correlations are
 excluded and counted. This quantity is the selection criterion of §5
-(`val_selective_spearman`).
+(`val_selective_spearman`) for the joint model and the correction runs; stage one reports it beside its own selector,
+the per-line residual Spearman.
 
 **Why this metric.** Stage two reasons by the blueprint's definition 1
 ([§3.1](01-blueprint.md#31-synthetic-lethality-two-operational-definitions)), as cohort-based
@@ -1056,8 +1082,8 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   0.073 for `film_dH`).
   The 180 GeneEffect genes outside the decode panel predict the base.
 - **Scoring.** The scorer receives `(m_g − μ_g) / σ_g + z` and re-centres on the §6 377-line mean `μ_g`
-  (`src/eval/geneeffect.py` `wide_accuracy`): selective Spearman (4,323 genes) and, beside it, over the 4,269 in the
-  panel; within-gene R² pooled over the selective genes (§14); AUPR lift, residual Pearson, per-line absolute Pearson,
+  (`src/eval/geneeffect.py` `wide_accuracy`): the per-line residual Spearman over the 4,323 selective genes (§6, the
+  selector); selective Spearman (4,323 genes) and, beside it, over the 4,269 in the panel; within-gene R² pooled over the selective genes (§14); AUPR lift, residual Pearson, per-line absolute Pearson,
   RMSE; the calibration slope (`src/eval/metrics.py`: the measured residual on the predicted, pooled over the selective
   genes with each gene's own offset removed; undefined for a prediction constant within every gene).
 - **Arms** (`src/model/stage_one.py`). *Virtual cell + FiLM*: the pair input → Linear 256 → ReLU → FiLM
@@ -1111,9 +1137,10 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
 - **Training** (`src/training/stage_one_trainer.py`, one GPU, no accelerate). An update is a block of genes by a block
   of training lines; AdamW, linear warmup then cosine (`src/training/schedule.py`); EMA weights when `train.ema_decay`
   is set, which are then validated and saved. Validation runs before the first update (epoch 0) and after every
-  epoch; `best.pt` and early stopping follow validation selective Spearman alone. The base is constant within each
-  gene, so epoch 0's selective Spearman is undefined: epoch 0 is a candidate only when it is defined, otherwise it is
-  telemetry (its within-gene R² is the base row's). The delta lives on the GPU in bf16, copied by gene chunk from its
+  epoch; `best.pt` and early stopping follow the validation per-line residual Spearman alone (`val_line_spearman`,
+  from 2026-10-21; the first Task 3 queue selected on selective Spearman, and picked the same winner). Epoch 0 is the
+  base, a candidate when its score is defined (it usually is: the base varies across genes); its within-gene R² is
+  the base row's. The delta lives on the GPU in bf16, copied by gene chunk from its
   memory map; checkpoints record the split membership and load strictly; a resume or a run directory refuses another
   config. `last.pt` is written before `best.pt`, and a resume rewrites a `best.pt` that lags the recorded best epoch.
 - **Outputs.** `outputs/stage_one/<task>/<config stem>[__fold<k>]/`: `best.pt`, `last.pt`, `predictions.parquet` (every
@@ -1123,12 +1150,14 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   (`--fold k`: fold k dropped, `m_g` refitted without it; `μ_g`, `σ_g` and the selective genes stay §6's; selection stays
   on validation) scores its fold's single-cell training lines out of fold.
 - **Report.** Validation, test and out-of-fold tables (the five folds' predictions over the 377 single-cell training
-  lines, telemetry) of every row, with selective Spearman over the 4,323 genes (and the count defined) and over the
+  lines, telemetry) of every row, with the per-line residual Spearman (and the lines scored), selective Spearman over
+  the 4,323 genes (and the count defined) and over the
   4,269 in the panel. Out of fold each fold's lines are predicted around their own `m_g` without the fold, which
   moves with the fold's labels, so pooled rank metrics are anti-correlated with the truth by construction (a base
   scores below zero): selective Spearman, AUPR lift, residual Pearson and the calibration slope are scored within
-  each fold and averaged (per-fold counts kept), within-gene R², RMSE and per-line Pearson pooled. Each listed
-  contrast's selective-Spearman difference (over the selective genes defined on both sides, counted; a row predicts
+  each fold and averaged (per-fold counts kept), the per-line residual Spearman, within-gene R², RMSE and per-line
+  Pearson pooled. Each listed contrast's per-line residual Spearman difference (over the lines defined on both sides),
+  selective-Spearman difference (over the selective genes defined on both sides, counted; a row predicts
   the base outside the panel) and within-gene-R² difference, with 95% paired line-bootstrap intervals (1,000
   resamples) on validation and test; each trained row's selected epoch and training-to-validation gap. The report
   and the queue read or skip a finished run only after checking its `run_config.json` against the config and fold,

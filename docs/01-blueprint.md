@@ -1,6 +1,6 @@
 # Research Blueprint — Context-Specific Synthetic Lethality Prediction Based on AI Virtual Cell Foundation Model
 
-Updated 2026-10-16. This note is the project's introduction, related work, task formulation and research plan, written as
+Updated 2026-10-21. This note is the project's introduction, related work, task formulation and research plan, written as
 for an ML paper. Methods, experiment rules and results are kept in the repository: the GeneEffect protocol
 (`docs/03-geneeffect-protocol.md`), the SL protocol (`docs/04-sl-ranking-protocol.md`), the extended related
 work with full citations (`docs/02-literature-review.md`) and the result records under `results/`.
@@ -167,9 +167,11 @@ of a score memorising pairs alone would earn.
 
 ### 3.7 Evaluation
 
-**Task A.** Context accuracy is the headline: for each gene, the correlation across held-out lines between
+**Task A.** Context accuracy is the headline: for each held-out line, the rank correlation across genes between
 predicted and measured GeneEffect, taken as residuals over the training gene mean, on genes whose dependency
-varies between lines. Whole-matrix accuracy (Pearson, Spearman and RMSE over all (line, gene) entries) is
+varies between lines, averaged over lines. The line is the unit because Task B reads one held-out line at a time
+and compares it with measured training lines, never with other held-out lines; the correlation for each gene
+across held-out lines is reported beside it. Whole-matrix accuracy (Pearson, Spearman and RMSE over all (line, gene) entries) is
 reported beside it but decides nothing, because a context-blind gene mean already supplies almost all of it:
 whole-matrix Pearson 0.91 and Spearman 0.71 on our validation lines, within 0.01 of our best model, and the
 same holds for Cilantro-SL's reported stage-one fit. Context accuracy is read against the gene mean (the

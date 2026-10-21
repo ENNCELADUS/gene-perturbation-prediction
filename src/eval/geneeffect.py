@@ -416,6 +416,40 @@ def gain(
     }
 
 
+def line_spearmans(
+    prediction: pd.DataFrame, truth: pd.DataFrame, genes: Sequence[str]
+) -> np.ndarray:
+    """Each line's Spearman across ``genes`` between its predicted and measured
+    residuals (scoring units), over the genes labelled in that line: does the model
+    know which genes this line needs more or less than usual? NaN where undefined
+    (fewer than ``MIN_OBSERVATIONS`` genes, or a side constant across them)."""
+    predicted = prediction.loc[:, list(genes)].to_numpy(dtype=np.float64)
+    measured = truth.loc[prediction.index, list(genes)].to_numpy(dtype=np.float64)
+    return np.array(
+        [_unit_spearman(measured[i], predicted[i]) for i in range(len(predicted))]
+    )
+
+
+def line_spearman_gain(
+    better: np.ndarray, reference: np.ndarray, *, repeats: int
+) -> dict[str, Any]:
+    """Per-line residual Spearman difference, ``better`` minus ``reference`` (each
+    line's value, aligned), over the lines defined on both sides, with a 95%
+    paired line bootstrap (the same resample for both)."""
+    both = np.isfinite(better) & np.isfinite(reference)
+    difference = better[both] - reference[both]
+    if not both.any():
+        return {"difference": None, "interval": [None, None], "lines": 0}
+    rng = np.random.default_rng(BOOTSTRAP_SEED)
+    draws = rng.integers(0, len(difference), (repeats, len(difference)))
+    resampled = difference[draws].mean(axis=1)
+    return {
+        "difference": float(difference.mean()),
+        "interval": [float(q) for q in np.quantile(resampled, [0.025, 0.975])],
+        "lines": int(both.sum()),
+    }
+
+
 def wide_accuracy(
     prediction: pd.DataFrame,
     truth: pd.DataFrame,
@@ -424,7 +458,9 @@ def wide_accuracy(
     panel: Sequence[str] | None = None,
 ) -> dict[str, float | int | None]:
     """The stage-one metrics of a wide prediction on its lines (PIE stage-one
-    design §4.1): selective Spearman; within-gene R² pooled over the selective
+    design §4.1): the per-line residual Spearman over the selective genes (the
+    selection criterion, protocol §6: the mean over lines of ``line_spearmans``);
+    selective Spearman; within-gene R² pooled over the selective
     genes (``1 - SSE / sum truth^2``, the truth centred on the training gene mean,
     which scores 0); selective AUPR lift; residual Pearson; per-line absolute
     Pearson; RMSE; the calibration slope over the selective genes. With ``panel``,
@@ -448,8 +484,12 @@ def wide_accuracy(
         raise ValueError("a prediction is missing where the truth is finite")
     error = np.where(finite, predicted - measured, 0.0)
     total = float(np.square(np.where(finite, measured, 0.0)).sum())
+    per_line = line_spearmans(prediction, truth, selective)
+    defined = per_line[np.isfinite(per_line)]
     out: dict[str, float | int | None] = {
         "lines": len(lines),
+        "line_spearman": float(defined.mean()) if len(defined) else None,
+        "line_spearman_scored": len(defined),
         "selective_spearman": metrics["selective_spearman"],
         "selective_spearman_scored": metrics["selective_spearman_scored"],
         "within_gene_r2": 1.0 - float(np.square(error).sum()) / total,
@@ -514,8 +554,9 @@ def fold_accuracy(
 ) -> dict[str, Any]:
     """``wide_accuracy`` of an out-of-fold prediction: the metrics of
     ``WITHIN_FOLD_METRICS`` scored within each fold's lines and averaged over the
-    folds where they are defined; within-gene R², RMSE and the per-line Pearson
-    pooled over every line (they compare each line with its own truth). ``per_fold``
+    folds where they are defined; the per-line residual Spearman, within-gene R²,
+    RMSE and the per-line Pearson pooled over every line (they compare each line
+    with its own truth). ``per_fold``
     keeps each fold's scores and line count."""
     lines = list(prediction.index)
     out: dict[str, Any] = wide_accuracy(prediction, truth, definitions, panel=panel)

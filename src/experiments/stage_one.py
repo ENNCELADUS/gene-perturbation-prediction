@@ -5,7 +5,7 @@ protocol §16), in ``.venv-pie``.
 [--device cuda]`` (``hpc/run.sh stage-one``) trains one config (``kind: train``):
 the target is ``GeneEffect - m_g`` over the frame's 981 lines in units of
 ``sigma_g`` (``--fold K`` drops fold K from training and refits ``m_g`` without
-it); ``best.pt`` is chosen on validation selective Spearman; then every line is
+it); ``best.pt`` is chosen on validation per-line residual Spearman; then every line is
 predicted once by ``best.pt``: ``predictions.parquet`` (every line x every gene, in
 scoring units ``(m_g - mu_g) / sigma_g + z``; the 180 genes outside the decode
 panel predict the base), ``V.npy`` (lines x panel genes x 32, fp16: the viability
@@ -65,6 +65,8 @@ SPLITS = ("val", "test")
 ROW = "row.json"
 #: The metrics of the report's tables, in order.
 REPORTED = (
+    ("line_spearman", "Per-line residual Spearman"),
+    ("line_spearman_scored", "Lines scored"),
     ("selective_spearman", "Selective Spearman"),
     ("selective_spearman_scored", "Genes scored"),
     ("within_gene_r2", "Within-gene R²"),
@@ -602,7 +604,7 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
         {
             "fold": fold,
             "best_epoch": result.state.best_epoch,
-            "best_val_selective_spearman": result.state.best_score,
+            "best_val_line_spearman": result.state.best_score,
             "epochs": result.state.next_epoch - 1,
             "updates": result.state.global_step,
             "scores": scores,
@@ -616,9 +618,9 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
         },
     )
     log.info(
-        "%s: validation selective Spearman %s",
+        "%s: validation per-line residual Spearman %s",
         run_dir,
-        scores["val"]["selective_spearman"],
+        scores["val"]["line_spearman"],
     )
     return run_dir
 
@@ -925,14 +927,22 @@ def _contrast(
     truth: pd.DataFrame,
     repeats: int,
 ) -> dict[str, Any]:
-    """Selective-Spearman and within-gene R² differences, left minus right, with
-    95% paired line-bootstrap intervals (the same resamples for both). The Spearman
+    """Per-line residual Spearman, selective-Spearman and within-gene R²
+    differences, left minus right, with 95% paired line-bootstrap intervals (the
+    same resamples for both). The per-line difference covers the lines defined on
+    both sides. The selective Spearman
     difference is over the selective genes defined on both sides (a row predicting
     the base for a gene, as every row does outside the decode panel, is undefined
     there), so the two macro means cover the same genes; within-gene R² is defined
     for every gene and covers them all."""
     from src.context_prior.noise import line_sums, r2_gain
-    from src.eval.geneeffect import BOOTSTRAP_SEED, defined_genes, gain
+    from src.eval.geneeffect import (
+        BOOTSTRAP_SEED,
+        defined_genes,
+        gain,
+        line_spearman_gain,
+        line_spearmans,
+    )
 
     definitions = setup.definitions
     selective = list(definitions.selective)
@@ -957,6 +967,11 @@ def _contrast(
             genes=genes,
         )
     return {
+        "line_spearman": line_spearman_gain(
+            line_spearmans(left, truth, selective),
+            line_spearmans(right, truth, selective),
+            repeats=repeats,
+        ),
         "selective_spearman": spearman | {"genes": len(genes)},
         "within_gene_r2": r2_gain(
             sums[0][0], sums[1][0], sums[0][1], repeats=repeats, seed=BOOTSTRAP_SEED
@@ -1068,7 +1083,11 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
         f"{counts['oof']} single-cell training lines (each scored by the run without "
         "its fold; each fold's base differs, so the rank metrics are scored within "
         "each fold and averaged, and within-gene R², RMSE and per-line Pearson are "
-        "pooled). Selective Spearman covers the 4,323 protocol genes (genes scored: "
+        "pooled). The per-line residual Spearman (the selector, protocol §6) "
+        "correlates each line's predicted and measured residuals across the 4,323 "
+        "selective genes and averages over lines; it is pooled out of fold, as each "
+        "line is compared with its own truth. "
+        "Selective Spearman covers the 4,323 protocol genes (genes scored: "
         "those defined), the panel column the selective genes in the decode panel; a "
         "contrast's Spearman difference covers the genes defined on both sides. "
         "`undefined`: a prediction constant within every gene, or a run not "
@@ -1095,13 +1114,14 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
         "",
         "## Contrasts (left minus right; 95% paired line-bootstrap intervals)",
         "",
-        "| Left | Right | Val selective Spearman | Test selective Spearman "
+        "| Left | Right | Val per-line Spearman | Test per-line Spearman "
+        "| Val selective Spearman | Test selective Spearman "
         "| Val within-gene R² | Test within-gene R² |",
-        "|" + " --- |" * 6,
+        "|" + " --- |" * 8,
     ]
     for entry in payload["contrasts"]:
         cells = [entry["left"], entry["right"]]
-        for metric in ("selective_spearman", "within_gene_r2"):
+        for metric in ("line_spearman", "selective_spearman", "within_gene_r2"):
             for split in SPLITS:
                 result = entry[split]
                 text = "undefined" if result is None else _interval(result[metric])
@@ -1114,19 +1134,28 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
         "## Training (selected epoch, and the gap from training to validation)",
         "",
         "| Row | Best epoch | Epochs | Updates | Lines trained "
+        "| Train per-line Spearman | Val per-line Spearman "
         "| Train selective Spearman | Val selective Spearman "
         "| Train within-gene R² | Val within-gene R² |",
-        "|" + " --- |" * 9,
+        "|" + " --- |" * 11,
     ]
     for name, record in payload["training"].items():
         if record is None:
-            out.append(f"| {name} |" + " not run |" * 8)
+            out.append(f"| {name} |" + " not run |" * 10)
             continue
         train, val = record["train_in_sample"], payload["scores"][name]["val"]
+        # Rows trained before the per-line selector (2026-10-21) did not record it.
+        train_line = (
+            _number(train["line_spearman"])
+            if "line_spearman" in train
+            else "not recorded"
+        )
         out.append(
             f"| {name} | {record['best_epoch']} | {record['epochs']} "
             f"| {record['updates']} "
-            f"| {record['lines_trained']} | {_number(train['selective_spearman'])} "
+            f"| {record['lines_trained']} | {train_line} "
+            f"| {_number(None if val is None else val['line_spearman'])} "
+            f"| {_number(train['selective_spearman'])} "
             f"| {_number(None if val is None else val['selective_spearman'])} "
             f"| {_number(train['within_gene_r2'])} "
             f"| {_number(None if val is None else val['within_gene_r2'])} |"

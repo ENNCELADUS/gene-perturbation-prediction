@@ -104,7 +104,13 @@ masked; masking costs PIE 0.27 → 0.11 Spearman LFC on unseen Replogle perturba
 frozen PIE, the line's prediction a mixture of model-implied state scores, against permuted-membership and QC-state
 controls; the next builds are Task 3 and Task 8, in parallel. Task 3's shared stack (plan Wave 1A: the ladder
 reader, the FiLM, multi-encoder and direct-readout arms with Cilantro's tail, the trainer, the frame-refitted prior
-reference, the report; protocol §16) is built on `feat/stage-one` and not yet run.
+reference, the report; protocol §16) is built on `feat/stage-one` and ran on 2026-10-20/21
+(`outputs/stage_one/architecture/`, report pending). Three changes came out of its trials: the tail's ReLUs are leaky
+(Cilantro's ReLU tail died and returned the base), every run adds the BCE of the dependency call to the MSE (stage one
+hands stage two **calibrated context effects**), and the stage-one selector is the **per-line residual Spearman**
+(protocol §6: each held-out line's residuals across the selective genes, since stage two reads one line at a time;
+selective Spearman is reported beside it). On the main split no arm reaches the frame-refitted prior (validation
+per-line 0.215; best arm `film_dE_selective` 0.177).
 The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.

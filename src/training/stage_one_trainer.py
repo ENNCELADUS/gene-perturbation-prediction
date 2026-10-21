@@ -15,9 +15,11 @@ validated and saved as ``best.pt``.
 
 Validation runs before the first update (epoch 0: the zero-initialised tail is the
 base) and after every epoch; ``best.pt`` and early stopping follow
-``val_selective_spearman`` only (``checkpoint.record_validation``). The base is
-constant within each gene, so its selective Spearman is undefined: epoch 0 is a
-candidate only when its score is defined, and is otherwise recorded as telemetry.
+``val_line_spearman`` only (``SELECTOR``, ``checkpoint.record_validation``): the
+per-line residual Spearman over the selective genes, since stage two reads each
+held-out line on its own (protocol §6). An epoch is a candidate only when its score
+is defined (the base's usually is: it varies across genes), and is otherwise
+recorded as telemetry.
 ``last.pt`` holds everything a resume needs and is written before ``best.pt``, so a
 resume rewrites a ``best.pt`` left behind by a crash between the two from the
 restored weights; a resume refuses another config, and
@@ -54,6 +56,9 @@ from src.training.checkpoint import (
 from src.training.schedule import make_scheduler
 
 log = logging.getLogger(__name__)
+
+#: The validation metric ``best.pt`` and early stopping follow.
+SELECTOR = "val_line_spearman"
 
 
 @dataclass
@@ -174,7 +179,7 @@ def fit(
     validate: Callable[[nn.Module], dict[str, Any]],
 ) -> FitResult:
     """Train ``model`` (on the targets' device), validating each epoch with
-    ``validate`` (a module -> metrics with ``val_selective_spearman``); resumes from
+    ``validate`` (a module -> metrics with ``SELECTOR``); resumes from
     ``run_dir/last.pt`` when it exists."""
     device = data.targets.device
     train = config["train"]
@@ -256,9 +261,9 @@ def fit(
     def judge(epoch: int, metrics: dict[str, Any]) -> None:
         """A defined score is a candidate; an undefined one (a prediction constant
         within every gene) never is, and after epoch 0 counts as a bad epoch."""
-        score = metrics["val_selective_spearman"]
+        score = metrics[SELECTOR]
         candidate = score is not None and math.isfinite(float(score))
-        improved = candidate and record_validation(state, metrics, epoch)
+        improved = candidate and record_validation(state, metrics, epoch, key=SELECTOR)
         if not candidate:
             state.next_epoch = epoch + 1
             state.bad_epochs += int(epoch > 0)
@@ -277,6 +282,7 @@ def fit(
                     "train_loss",
                     "train_dependency",
                     "epoch_seconds",
+                    "val_line_spearman",
                     "val_selective_spearman",
                     "val_within_gene_r2",
                 )

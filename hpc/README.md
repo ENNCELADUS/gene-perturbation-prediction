@@ -248,8 +248,8 @@ fp32 file, so one run fits one H20. The exceptions are `film_dE_full` and `multi
 full-panel predicted change (~311 GB under `pie/full/`) from its memory maps every epoch: they want it in the host
 page cache (1.5 TB on the H20; the frame-mean pass at their start fills it), and each epoch's `epoch_seconds` in the
 log shows whether they read from memory (about 1–1.5 min) or from disk. The queue logs each run to `outputs/stage_one/<task>/logs/<run>.log`, where the
-epoch-0 line (before any update) shows validation within-gene R² equal to the base row's in the report (its selective
-Spearman is undefined: the base is constant within each gene).
+epoch-0 line (before any update) shows validation within-gene R² equal to the base row's in the report, and the
+base's per-line residual Spearman, the selector (protocol §6).
 
 ## The cell states
 
