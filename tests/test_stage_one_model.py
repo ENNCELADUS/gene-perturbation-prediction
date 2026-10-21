@@ -190,6 +190,39 @@ def test_the_profile_delta_reads_before_and_after_states():
     assert torch.allclose(pair[0, 0, 5:].double(), mean[0], atol=1e-5)
 
 
+def test_the_hybrid_reads_both_the_line_and_the_delta():
+    """The hybrid_dE row's model: its output moves with the line's tokens (the
+    direct part) and with ΔE (the FiLM part)."""
+    pytest.importorskip("pie")
+    torch.manual_seed(0)
+    config = _config("hybrid_dE")
+    config["model"].update(gene_width=8, hidden=16, state_width=5)
+    config["model"]["trunk"].update(d_model=8, n_latents=4, num_heads=2)
+    dims = InputDims(gene_sources={"gene_text": 6}, delta=5, own=0, text=3)
+    model = build_model(config, dims).eval()
+    torch.nn.init.normal_(model.tail.l4.weight)
+    batch = _profile_batch(1.0)
+    generator = torch.Generator().manual_seed(1)
+    tokens = 7
+    batch.token_genes = {"gene_text": torch.randn(tokens, 6, generator=generator)}
+    batch.token_gene_present = {"gene_text": torch.ones(tokens, dtype=torch.bool)}
+    batch.token_values = torch.randn(3, tokens, 4, generator=generator)
+    batch.token_present = torch.ones(3, tokens, dtype=torch.bool)
+    batch.text = torch.randn(3, 3, generator=generator)
+    batch.text_present = torch.ones(3, dtype=torch.bool)
+    batch.evidence = torch.randn(2, 3, generator=generator)
+    batch.evidence_have = torch.ones(2, 3, dtype=torch.bool)
+    with torch.no_grad():
+        z, _ = model(batch)
+        assert z.shape == (2, 3)
+        moved_tokens = copy.copy(batch)
+        moved_tokens.token_values = batch.token_values + 1.0
+        moved_delta = copy.copy(batch)
+        moved_delta.delta = batch.delta + 1.0
+        assert not torch.allclose(model(moved_tokens)[0], z)
+        assert not torch.allclose(model(moved_delta)[0], z)
+
+
 def test_the_profile_delta_keeps_small_changes_under_bf16_autocast():
     """A knockdown moves the state by ~1% of its size: under bf16 autocast ΔE must
     match its fp32 value, not the difference of two rounded encodings."""

@@ -1111,6 +1111,11 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   were nearly equal across genes, so the first H20 trials learned almost nothing gene-specific (the components
   reader at validation selective Spearman ~0.02; centred, ~0.17 in its first epoch). The warm direct readout keeps
   them uncentred, as PIE's gene query MLP was trained on.
+- **Hybrid** (`hybrid_dE`, added 2026-10-21 once the first queue had read ΔE best in both FiLM families):
+  `[direct readout features ; FiLM(ΔE) features]` → Linear 256 → ReLU → tail, the direct part with the cold
+  `direct_readout` row's trunk and training settings, the FiLM part with `film_dE`'s, on the panel genes;
+  `report_3a` contrasts it with both and with the prior. It trains after the per-line selector, so its `best.pt` is
+  chosen on per-line residual Spearman.
 - **Full-panel profile delta** (design §3.2's check of the compression). `data.genes: selective_full` restricts a run
   to the selective genes in the panel with a full-panel predicted change (`pie/full/<gene>.npy`, lines × panel,
   uncentred; `row.json` reports how many of the 4,269 have one and which lack it); every other gene predicts the base,
