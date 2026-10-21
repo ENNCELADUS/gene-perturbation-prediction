@@ -37,6 +37,7 @@ rows:
   - {name: film dE full, kind: run, config: configs/stage_one/architecture/film_dE_full.yaml}
   - {name: multi dE selective, kind: run, config: configs/stage_one/architecture/multi_dE_selective.yaml}
   - {name: multi dE full, kind: run, config: configs/stage_one/architecture/multi_dE_full.yaml}
+  - {name: hybrid dE, kind: run, config: configs/stage_one/architecture/hybrid_dE.yaml}
 contrasts:
   - [film dH, direct readout]
   - [film dE, direct readout]
@@ -70,3 +71,6 @@ contrasts:
   - [text only, lineage only]
   - [film dE full, film dE selective]
   - [multi dE full, multi dE selective]
+  - [hybrid dE, direct readout]
+  - [hybrid dE, film dE]
+  - [hybrid dE, prior]
