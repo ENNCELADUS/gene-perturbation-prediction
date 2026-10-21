@@ -603,3 +603,20 @@ def test_gene_sources_are_centred_on_their_panel_mean(world, centre):
 
 def resident_axis(setup):
     return reader.line_tokens(setup.ladder).axis
+
+
+def test_the_full_stream_raises_the_open_file_limit_its_maps_need(monkeypatch):
+    """One map per gene holds a file descriptor: thousands of genes exceed a
+    default soft limit of 1,024 (the H20's), which is raised up to the hard limit."""
+    calls = []
+    monkeypatch.setattr(reader.resource, "getrlimit", lambda _: (1024, 1_048_576))
+    monkeypatch.setattr(
+        reader.resource, "setrlimit", lambda _, limits: calls.append(limits)
+    )
+    reader.open_file_limit(512)
+    assert calls == []
+    reader.open_file_limit(5_347)
+    assert calls == [(5_347, 1_048_576)]
+    monkeypatch.setattr(reader.resource, "getrlimit", lambda _: (1024, 4_096))
+    with pytest.raises(OSError, match="hard limit is 4096"):
+        reader.open_file_limit(5_347)
