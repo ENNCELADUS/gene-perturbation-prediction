@@ -324,7 +324,7 @@ def _validator(data, targets, config, *, fail_after=None):
         z = trainer.predict(module, data.batch, torch.arange(8, 12), 5, config)
         error = float(np.mean((z.T - targets[8:].numpy()) ** 2))
         spearman = None if np.allclose(z, z[:, :1]) else -error
-        return {"val_selective_spearman": spearman, "val_mse": error}
+        return {"val_line_spearman": spearman, "val_mse": error}
 
     return validate
 

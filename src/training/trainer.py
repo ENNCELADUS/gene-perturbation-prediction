@@ -232,7 +232,9 @@ def fit(
         validation = evaluate_model(
             model, inputs, config, split="val", accelerator=accelerator
         ).metrics
-        improved = record_validation(state, validation, epoch)
+        improved = record_validation(
+            state, validation, epoch, key="val_selective_spearman"
+        )
         _log(
             run_dir,
             {

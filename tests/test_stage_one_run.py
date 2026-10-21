@@ -299,16 +299,21 @@ def test_a_run_trains_selects_on_validation_and_scores_test_once(world):
     row = json.loads((run_dir / "row.json").read_text())
     assert set(row["scores"]) == {"val", "test", "train_in_sample"}
     assert row["scores"]["val"]["lines"] == len(VAL)
-    assert row["history"][0]["epoch"] == 0 and not row["history"][0]["candidate"]
-    assert row["best_epoch"] >= 1
     setup = _setup(world)
     base = reader.base_prediction(setup.ladder, setup.ladder.genes["m_g"], list(VAL))
     from src.eval.geneeffect import wide_accuracy
 
     expected = wide_accuracy(base, setup.truth(list(VAL)), setup.definitions)
-    assert row["history"][0]["val_within_gene_r2"] == pytest.approx(
-        expected["within_gene_r2"]
-    )
+    first = row["history"][0]
+    assert first["val_within_gene_r2"] == pytest.approx(expected["within_gene_r2"])
+    # Selection is on the per-line residual Spearman: epoch 0 (the base) is a
+    # candidate exactly when the base's score is defined.
+    assert first["epoch"] == 0
+    assert first["candidate"] == (expected["line_spearman"] is not None)
+    if first["candidate"]:
+        assert first["val_line_spearman"] == pytest.approx(expected["line_spearman"])
+    scores = [h["val_line_spearman"] for h in row["history"] if h["candidate"]]
+    assert row["best_val_line_spearman"] == pytest.approx(max(scores))
     predictions = pd.read_parquet(run_dir / "predictions.parquet")
     lines = setup.ladder.line_ids
     assert list(predictions.index) == lines
@@ -423,9 +428,19 @@ def test_prior_reference_components_reader_and_report(world):
     assert base_oof["selective_spearman"] is None
     assert sum(f["lines"] for f in base_oof["per_fold"].values()) == len(TRAIN)
     # A contrast's Spearman covers the genes defined on both sides.
-    assert (
-        0 < contrast["selective_spearman"]["genes"] <= len(setup.definitions.selective)
+    from src.eval.geneeffect import defined_genes
+
+    val, selective = list(VAL), list(setup.definitions.selective)
+    truth = setup.truth(val)
+    left = pd.read_parquet(
+        root / "outputs" / "architecture" / "components_reader" / "predictions.parquet"
+    ).loc[val]
+    right = pd.read_parquet(prior_dir / "predictions_val.parquet").loc[val]
+    both = set(defined_genes(left, truth, selective)) & set(
+        defined_genes(right, truth, selective)
     )
+    assert contrast["selective_spearman"]["genes"] == len(both)
+    assert len(contrast["line_spearman"]["interval"]) == 2
     against_base = results["contrasts"][1]["val"]["selective_spearman"]
     assert against_base["genes"] == 0 and against_base["difference"] is None
     _check_prior_out_of_fold(setup, prior_dir, root)

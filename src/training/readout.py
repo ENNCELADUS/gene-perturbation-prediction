@@ -146,7 +146,9 @@ def fit_readout(
                 model, cache, "train", device=device, standardizer=scaler
             )
             val = evaluate_head(model, cache, "val", device=device, standardizer=scaler)
-            improved = record_validation(state, val.metrics, epoch)
+            improved = record_validation(
+                state, val.metrics, epoch, key="val_selective_spearman"
+            )
             metrics = {
                 "epoch": epoch + 1,
                 "global_step": state.global_step,

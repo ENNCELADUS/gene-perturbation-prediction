@@ -21,15 +21,17 @@ class TrainState:
 
 
 def record_validation(
-    state: TrainState, metrics: Mapping[str, Any], epoch: int
+    state: TrainState, metrics: Mapping[str, Any], epoch: int, *, key: str
 ) -> bool:
-    """Record a finished epoch; only a strict ``val_selective_spearman`` rise wins.
+    """Record a finished epoch; only a strict rise of the selector ``metrics[key]``
+    wins (``val_selective_spearman`` for the joint model, ``val_line_spearman`` for
+    stage one).
 
     An undefined (``None``) or non-finite selector raises before ``state`` changes.
     """
-    score = metrics["val_selective_spearman"]
+    score = metrics[key]
     if score is None or not math.isfinite(float(score)):
-        raise ValueError(f"val_selective_spearman must be finite, got {score!r}")
+        raise ValueError(f"{key} must be finite, got {score!r}")
     score = float(score)
     improved = score > state.best_score
     if improved:

@@ -8,7 +8,14 @@ import pandas as pd
 import pytest
 
 from src.context_prior.targets import Definitions
-from src.eval.geneeffect import defined_genes, fold_accuracy, gain, wide_accuracy
+from src.eval.geneeffect import (
+    defined_genes,
+    fold_accuracy,
+    gain,
+    line_spearman_gain,
+    line_spearmans,
+    wide_accuracy,
+)
 
 GENES = tuple(f"G{i}" for i in range(40))
 
@@ -80,3 +87,38 @@ def test_contrasts_cover_the_genes_defined_on_both_sides():
     assert same["difference"] == pytest.approx(0.0)
     unequal = gain(left, right, truth, _definitions(), 50)
     assert unequal["difference"] != pytest.approx(0.0)
+
+
+def test_the_per_line_spearman_reads_each_line_on_its_own():
+    """Each line's predicted residuals against its own truth across the selective
+    genes: a perfect prediction scores 1 in every line, a line whose prediction is
+    the same for every gene is undefined, and the mean is over defined lines."""
+    rng = np.random.default_rng(4)
+    index = [f"L{i}" for i in range(6)]
+    truth = pd.DataFrame(rng.normal(size=(6, len(GENES))), index=index, columns=GENES)
+    prediction = truth.copy()
+    prediction.loc["L0"] = 0.5
+    values = line_spearmans(prediction, truth, GENES)
+    assert np.isnan(values[0]) and np.allclose(values[1:], 1.0)
+    scores = wide_accuracy(prediction, truth, _definitions())
+    assert scores["line_spearman"] == pytest.approx(1.0)
+    assert scores["line_spearman_scored"] == 5
+
+
+def test_the_per_line_spearman_has_no_out_of_fold_bias_under_the_null():
+    """Unlike the within-gene rank metrics, a line is never ranked against the
+    lines its fold's base was fitted without, so it is pooled out of fold."""
+    truth, base, folds = _null_world(lines=200, seed=1)
+    noisy = base + 0.3 * np.random.default_rng(2).normal(size=base.shape)
+    pooled = fold_accuracy(noisy, truth, _definitions(), folds)
+    assert abs(pooled["line_spearman"]) < 0.02
+
+
+def test_the_per_line_contrast_pairs_lines_defined_on_both_sides():
+    better = np.array([0.3, 0.2, np.nan, 0.4])
+    reference = np.array([0.1, 0.1, 0.5, np.nan])
+    result = line_spearman_gain(better, reference, repeats=200)
+    assert result["lines"] == 2
+    assert result["difference"] == pytest.approx(0.15)
+    low, high = result["interval"]
+    assert 0.1 <= low <= 0.15 <= high <= 0.2
