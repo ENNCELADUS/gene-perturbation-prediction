@@ -16,13 +16,7 @@ from src.data.io import read_json, write_json, write_text
 from src.experiments.run_dir import assert_bound, interval, number
 from src.experiments.stage_one.resident import finished_prior, same_ladder
 from src.experiments.stage_one.ridge import cached_ridge
-from src.experiments.stage_one.run import (
-    REPORTED,
-    ROW,
-    SPLITS,
-    run_directory,
-    wide_scores,
-)
+from src.experiments.stage_one.run import REPORTED, ROW, SPLITS, run_directory
 from src.experiments.stage_one.setup import Setup, load_setup
 
 log = logging.getLogger(__name__)
@@ -33,14 +27,14 @@ def split_scores(
 ) -> dict[str, Any]:
     """A row's scores on one split; out of fold, the rank metrics are scored within
     each fold and averaged (``fold_accuracy``), since each fold's base differs."""
-    from src.eval.accuracy import fold_accuracy
+    from src.eval.accuracy import fold_accuracy, wide_accuracy
 
     ladder = setup.ladder
     if split == "oof":
         return fold_accuracy(
             frame, truth, setup.definitions, ladder.folds, panel=ladder.panel
         )
-    return wide_scores(frame, truth, setup.definitions, ladder.panel)
+    return wide_accuracy(frame, truth, setup.definitions, panel=ladder.panel)
 
 
 def finished_run(
@@ -120,11 +114,9 @@ def _contrast(
     """Per-line residual Spearman, selective-Spearman and within-gene R²
     differences, left minus right, with 95% paired line-bootstrap intervals (the
     same resamples for both). The per-line difference covers the lines defined on
-    both sides. The selective Spearman
-    difference is over the selective genes defined on both sides (a row predicting
-    the base for a gene, as every row does outside the decode panel, is undefined
-    there), so the two macro means cover the same genes; within-gene R² is defined
-    for every gene and covers them all."""
+    both sides, the selective Spearman difference the selective genes defined on
+    both sides (a row predicting the base for a gene is undefined there), and
+    within-gene R² every gene."""
     from src.context_prior.noise import line_sums, r2_gain
     from src.eval.accuracy import (
         BOOTSTRAP_SEED,

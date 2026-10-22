@@ -1,28 +1,7 @@
-"""The default prior refitted on the stage-one frame (PIE stage-one design Task 3:
-the like-for-like linear reference), in the project environment.
-
-``python -m src.experiments.stage_one.prior_reference CONFIG --run-id ID``
-(``hpc/run.sh stage-one-prior``; a ``kind: prior_reference`` config) fits the
-default prior's reference row (the ladder config's ``prior_config``: 128
-expression components at their penalty, then the data-selected genes at the gene
-penalty) on the 981 frame lines' mean channel (``mean/mean_channel.parquet``, the
-same input every stage-one arm reads) and their labels, ``(GeneEffect - mu_g) /
-sigma_g``; the components are fitted on the frame rows. It writes, in
-``<output_root>/<task>/<ID>/``:
-
-- ``predictions_val.parquet``, ``predictions_test.parquet``: the fit on the whole
-  frame, in scoring units;
-- ``predictions_oof.parquet``: every frame line predicted by the fit without its
-  frame fold, the components refitted without the fold too;
-- ``components/main.parquet`` (every line's 128 component scores, components fitted
-  on the frame) and ``components/fold<k>.parquet`` (fitted on the frame without
-  fold k): what the shared nonlinear components reader reads in its main and fold
-  runs, so the reader and this prior are out of fold alike;
-- ``row.json``: validation and test scores, and the out-of-fold scores over the
-  single-cell training lines (rank metrics within each fold, averaged).
-
-It decides nothing.
-"""
+"""The default prior's reference row refitted on the stage-one frame's mean channel,
+the like-for-like linear reference (PIE stage-one design Task 3; protocol §16), with
+its out-of-fold predictions and the expression components the components reader
+reads."""
 
 from __future__ import annotations
 
@@ -48,6 +27,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     )
     from src.context_prior.reference import load_reference
     from src.context_prior.views import expression_components, fit_expression_components
+    from src.data.ladder_reader import mean_channel
     from src.eval.accuracy import fold_accuracy, wide_accuracy
     from src.experiments.prior.base import stages
     from src.experiments.stage_one.setup import load_setup
@@ -66,7 +46,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     # The labels' guard: every frame line must be a fit-eligible training line.
     setup.targets(None)
     folds = ladder.folds
-    expression = _mean_channel(setup)
+    expression = mean_channel(ladder).astype(np.float64)
     components = fit_expression_components(
         expression.loc[frame], int(prior["prior"]["components"])
     )
@@ -155,12 +135,6 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     )
     print(f"{run_dir}: done", flush=True)
     return run_dir
-
-
-def _mean_channel(setup: Any) -> pd.DataFrame:
-    from src.data.ladder_reader import mean_channel
-
-    return mean_channel(setup.ladder).astype(np.float64)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

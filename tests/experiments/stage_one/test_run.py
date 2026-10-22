@@ -1,11 +1,6 @@
-"""Stage-one runs on a synthetic ladder: the reader's guards and targets, the
-profile delta's states, a training run with its fold, the prior reference, and the
-report.
-
-The ladder is the stage-one inputs test's world (``build_world``, then the
-``lines``, ``cells`` and ``mean`` steps), with synthetic frozen-PIE arrays, gene
-sources and Cellosaurus text written beside them.
-"""
+"""Stage-one runs on the stage-one inputs test's world, with synthetic frozen-PIE
+arrays, gene sources and Cellosaurus text beside it: the reader's guards and targets,
+the profile delta's states, training runs, the prior reference and the report."""
 
 from __future__ import annotations
 
@@ -133,9 +128,6 @@ def world(tmp_path_factory):
 def _setup(world) -> stage_one.Setup:
     root = world[0]
     return stage_one.load_setup(root / "ladder.yaml")
-
-
-# --- the reader --------------------------------------------------------------------
 
 
 def test_a_mismatched_pie_index_fails(world):
@@ -270,9 +262,6 @@ def test_the_full_panel_projects_onto_the_512_component_input(world):
                 torch.tensor(states.before), torch.tensor(projected)
             )
         assert torch.allclose(reads_full, reads_basis, atol=1e-4)
-
-
-# --- runs --------------------------------------------------------------------------
 
 
 def _config(root: Path, name: str, **data) -> Path:
@@ -589,9 +578,6 @@ def test_a_run_refuses_a_changed_gene_set(tmp_path):
 
 @pytest.mark.parametrize("centre", [True, False])
 def test_gene_sources_are_centred_on_their_panel_mean(world, centre):
-    """Gene-text vectors share half their energy along their mean; uncentred, the
-    FiLM arms' gene conditions were nearly equal across genes and the H20 trials
-    barely learned (validation selective Spearman ~0.02 against ~0.17 centred)."""
     root = world[0]
     setup = _setup(world)
     config = yaml.safe_load(_config(root, "multi_dL").read_text())
@@ -616,12 +602,8 @@ def test_gene_sources_are_centred_on_their_panel_mean(world, centre):
     assert np.allclose(tokens[~listed], 0.0)
     shift = mean if centre else 0.0
     text = Path(setup.config["paths"]["gene_text"])
-    expected, _ = reader.text_on_axis(text, resident_axis(setup))
+    expected, _ = reader.text_on_axis(text, reader.line_tokens(setup.ladder).axis)
     assert np.allclose(tokens[listed], expected[listed] - shift, atol=1e-5)
-
-
-def resident_axis(setup):
-    return reader.line_tokens(setup.ladder).axis
 
 
 def test_the_full_stream_raises_the_open_file_limit_its_maps_need(monkeypatch):

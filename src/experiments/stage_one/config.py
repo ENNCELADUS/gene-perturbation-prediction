@@ -18,9 +18,6 @@ _LADDER_TOP_LEVEL = "seed prior_config noise_config ladder_root"
 
 
 def validate_ladder_config(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Keys of the stage-one inputs config: the default prior's config (split,
-    labels, bulk RNA, lineage drop), the noise diagnosis's (programs, clusters),
-    the ladder root, and the frozen PIE and Tx1 settings."""
     require_keys(config, {*_LADDER_GROUPS, *_LADDER_TOP_LEVEL.split()}, "config")
     for name, keys in _LADDER_GROUPS.items():
         require_keys(config[name], set(keys.split()), name)
@@ -34,7 +31,6 @@ def validate_ladder_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def load_ladder_config(path: Path) -> dict[str, Any]:
-    """Load and validate a stage-one inputs YAML config."""
     return validate_ladder_config(read_yaml(path))
 
 
@@ -42,7 +38,6 @@ def load_ladder_config(path: Path) -> dict[str, Any]:
 
 STAGE_ONE_KINDS = ("train", "prior_reference", "report")
 STAGE_ONE_ARMS = ("film", "multi_encoder", "direct_readout", "hybrid")
-#: Arms with the direct readout's trunk.
 STAGE_ONE_TRUNK_ARMS = ("direct_readout", "hybrid")
 #: The pair input before the FiLM layer: a frozen-PIE delta, a learned constant
 #: (``none``), a line-level reference input, or the prior's prediction alone
@@ -279,5 +274,4 @@ def validate_stage_one_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def load_stage_one_config(path: Path) -> dict[str, Any]:
-    """Load and validate a stage-one YAML config."""
     return validate_stage_one_config(read_yaml(path))

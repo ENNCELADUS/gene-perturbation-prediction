@@ -52,9 +52,6 @@ def _tables(n_lines=len(LINES), panel=PANEL, roles=None) -> ppie.Tables:
     )
 
 
-# --- pure pieces ----------------------------------------------------------------
-
-
 def test_basis_keeps_low_rank_changes():
     rng = np.random.default_rng(1)
     changes = rng.normal(size=(400, 3)) @ rng.normal(size=(3, 50)) + 2.0
@@ -122,9 +119,6 @@ def test_assemble_centres_each_gene_on_the_frame(tmp_path):
     assert own_dp.shape == (p, 3, 1)
     index = json.loads((out.pie / "index.json").read_text())
     assert index["genes"] == list(PANEL) and index["lines"] == list(LINES)
-
-
-# --- PIE --------------------------------------------------------------------------
 
 
 def _load(name: str, path: Path):
@@ -388,8 +382,6 @@ def test_reference_pass_refuses_other_lines(tmp_path):
     with pytest.raises(ValueError, match="other lines"):
         pdecode.reference_pass(out, None, tables)
 
-
-# --- state pseudo-contexts (design §3.5, Task 8) --------------------------------------
 
 STATE_GENES = [("GA", 0), ("GE", 4)]  # GE is in the second of two gene chunks
 

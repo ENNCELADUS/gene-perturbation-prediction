@@ -21,17 +21,12 @@ DEPMAP_SOURCE: Final[str] = "depmap_gene_effect"
 #: Our lines' controls-only dataset, as PIE names a preprocessed dir.
 DATASET: Final[str] = "geneeffect_ladder"
 EXPERIMENT: Final[str] = "replogle_xdataset"
-
-
 ROW_SETS: Final[tuple[str, ...]] = ("test_seen", "test_unseen")
-
 SHARD_ARRAYS: Final[tuple[str, ...]] = ("dH", "dL", "own_h", "own_dp", "own_x")
 
 
 @dataclass(frozen=True)
 class Layout:
-    """Where the pass reads and writes."""
-
     root: Path  # the ladder root
     checkpoint: Path
     context_text: Path
@@ -417,8 +412,6 @@ def build_batch(
     from pie.data.dataset import NO_SOURCE, Batch, GeneGroup
 
     owners = list(lines) if owners is None else list(owners)
-    if len(owners) != len(lines):
-        raise ValueError("one owner per context")
     device, b = pie.device, len(lines)
     lookup = pie.dataset.sources
     context_tokens, context_masks, context_present = cached(

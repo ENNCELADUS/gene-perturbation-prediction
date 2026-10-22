@@ -1,6 +1,5 @@
-"""A ladder config and everything it names, shared by the ladder's builders, the
-stage-one runs and the cell-state telemetry: the prior, joint and noise configs at
-once, and the built ladder, the split and the labels on first use."""
+"""A ladder config and everything it names: the prior, joint and noise configs at once,
+and the built ladder, the split and the labels on first use."""
 
 from __future__ import annotations
 

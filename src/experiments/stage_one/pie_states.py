@@ -101,8 +101,6 @@ def owner_memory(
     owners: Sequence[str],
     perturbation: str | None,
     evidence: Mapping[str, np.ndarray],
-    *,
-    precise: bool = False,
 ) -> Any:
     """The encoded latents of a batch whose contexts belong to ``owners``,
     encoding each distinct owner once: the latents read the owner's text and the
@@ -119,9 +117,9 @@ def owner_memory(
         np.zeros((len(distinct), width), dtype=np.float32),
         evidence,
     )
-    if not is_mixed(pie, precise):
+    if not is_mixed(pie, False):
         batch = float_tokens(batch)
-    with torch.inference_mode(), autocast(pie, precise):
+    with torch.inference_mode(), autocast(pie):
         return pie.model._encode(batch)[inverse]
 
 
@@ -140,20 +138,16 @@ def state_batch(
     evidence: Mapping[str, Mapping[str, np.ndarray]],
     basis: Mapping[str, Any] | None,
     size: int,
-    *,
-    precise: bool = False,
 ) -> dict[str, np.ndarray]:
     """One batch of contexts x every gene (``(key, own_index)``): its reference
     pass, then per gene the knockdown minus reference of the pooled decoder
     features (``dH``), the predicted change on the basis (``dE``, when given),
     the own feature, own predicted change and own input. Arrays are
-    (contexts, genes, width); the batch is padded to ``size`` and the padding
-    dropped; its cache entries are evicted."""
+    (contexts, genes, width); the batch is padded to ``size`` (one shape for the
+    compiled decode) and the padding dropped; its cache entries are evicted."""
     import torch
 
     n = len(names)
-    if not 0 < n <= size:
-        raise ValueError(f"a state batch holds 1 to {size} contexts, got {n}")
     pad = size - n
     names = [*names, *[names[-1]] * pad]
     owners = [*owners, *[owners[-1]] * pad]
@@ -164,8 +158,7 @@ def state_batch(
         build_batch(pie, names, None, ctrl, blank, owners=owners),
         None,
         heads=False,
-        precise=precise,
-        memory=owner_memory(pie, owners, None, blank, precise=precise),
+        memory=owner_memory(pie, owners, None, blank),
     )["features"]
     parts: dict[str, list[Any]] = {name: [] for name in STATE_ARRAYS}
     for key, own_index in genes:
@@ -174,8 +167,7 @@ def state_batch(
             build_batch(pie, names, key, ctrl, evidence[key], owners=owners),
             own_index,
             heads=True,
-            precise=precise,
-            memory=owner_memory(pie, owners, key, evidence[key], precise=precise),
+            memory=owner_memory(pie, owners, key, evidence[key]),
         )
         change = result["change"].float()
         parts["dH"].append(result["features"] - reference)

@@ -1,38 +1,6 @@
-"""Stage-one inputs (PIE stage-one design §5 Task 2) under ``ladder_root``.
-
-``hpc/run.sh ladder-inputs CONFIG --steps lines,cells,mean,summaries``, and
-``--steps tx1 [--shard I/N]`` on a GPU. Steps,
-each skipping the outputs that exist, so rerunning resumes:
-
-- ``lines``: the **frame** of 981 labelled lines every arm trains on (the split's
-  labelled single-cell training lines, then the bulk-only labelled lines the
-  default prior fits, outside its dropped lineages), the held-out lines, five
-  patient-grouped folds of the frame; per gene the base ``m_g`` (mean GeneEffect
-  over the frame), the protocol's definitions (377-line mean, residual SD,
-  selective and variable genes) and its ``gene_text`` key: ``lines.parquet``,
-  ``genes.parquet``. The decode panel is the definitions' genes with a key.
-- ``cells``: per split line, from all of its cells (``src.data.ladder_cells``):
-  PIE's input, pseudo-bulk and per-gene spread over the panel and the bulk genes,
-  per-cell QC and cycle values (the noise diagnosis's S and G2/M program scores,
-  a Scrublet doublet score), HVG cells, their shuffle and the mean as one cell:
-  ``cells/<ModelID>.npz``.
-- ``mean``: the mean channel in the default prior's space (its genes, a gap
-  filled with the training mean, quantile-normalised to the training side's bulk
-  profile). A line with cells reads its cells through an affine bridge refitted
-  on the paired lines, a training line's outside its fold; a bulk-only line reads
-  its bulk. PIE's input for every line (a bulk-only line's bulk rescaled to
-  CP10K; an unlisted gene the frame mean). ``mean/``.
-- ``summaries``: the noise diagnosis's per-line features from all cells: the
-  fraction above threshold and mean of each program, cluster shares at its
-  cluster counts (fitted as it fits them, on the prepared 128-cell bags of the
-  training lines, then assigned every cell): ``summaries.parquet``.
-- ``tx1``: Tx1-3B embeddings of every cell and of every count-shuffled cell of
-  the lines with cells, under ``paths.tx1_cache`` (``real/``, ``shuffled/``), in
-  the existing cache format; ``--shard I/N`` takes every N-th line.
-
-``manifest.json`` records the settings (a root written under others is refused),
-the expression spaces and each step's counts. It decides nothing.
-"""
+"""The stage-one inputs under ``ladder_root`` (PIE stage-one design §5 Task 2; protocol
+§15): the frame and its genes, each line's cells, the mean channel and PIE's input,
+cell summaries and Tx1 embeddings, each step skipping what exists."""
 
 from __future__ import annotations
 
@@ -70,9 +38,6 @@ QC_COLUMNS: Final[tuple[str, ...]] = (
     "g2m_score",
     "doublet_score",
 )
-
-
-# --- configuration ------------------------------------------------------------
 
 
 def settings(setup: Setup) -> dict[str, Any]:
@@ -115,13 +80,8 @@ def open_manifest(setup: Setup) -> dict[str, Any]:
     )
 
 
-# --- the frame ------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class Frame:
-    """The lines of the ladder and their folds."""
-
     split: Any
     models: pd.DataFrame
     single_cell_train: tuple[str, ...]
@@ -280,9 +240,6 @@ def read_lines(root: Path) -> pd.DataFrame:
     return pd.read_parquet(Path(root) / "lines.parquet")
 
 
-# --- cells ----------------------------------------------------------------------
-
-
 def cell_genes(panel: Sequence[str], bulk_genes: Sequence[str]) -> list[str]:
     """The genes a line's cells are summarised over: the panel, then the bulk
     genes outside it."""
@@ -328,8 +285,7 @@ def _cells_line(
     source = read_basal_source(
         source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
     )
-    symbols = source.var[symbol_column(source.var)]
-    symbols = symbols.astype(str).tolist()
+    symbols = source.var[symbol_column(source.var)].astype(str).tolist()
     with np.load(programs_path) as payload:
         programs = payload["scores"]
     if programs.shape[0] != source.n_obs:
@@ -445,9 +401,6 @@ def bulk_gene_columns(path: Path) -> list[str]:
     return [depmap_symbol(c) for c in columns]
 
 
-# --- the mean channel and PIE's input ----------------------------------------------
-
-
 def _quartiles(values: pd.Series) -> list[float]:
     finite = values.dropna().to_numpy(dtype=np.float64)
     return [float(q) for q in np.quantile(finite, [0.0, 0.25, 0.5, 0.75, 1.0])]
@@ -538,9 +491,6 @@ def build_mean(setup: Setup, frame: Frame) -> dict[str, Any]:
     }
 
 
-# --- summaries ------------------------------------------------------------------
-
-
 def build_summaries(setup: Setup, frame: Frame) -> dict[str, Any]:
     """``summaries.parquet``: per split line, program fractions and means and
     cluster shares, from all cells."""
@@ -588,9 +538,6 @@ def build_summaries(setup: Setup, frame: Frame) -> dict[str, Any]:
         "features": int(table.shape[1]),
         "thresholds": dict(zip(programs, map(float, thresholds), strict=True)),
     }
-
-
-# --- Tx1 ------------------------------------------------------------------------
 
 
 def tx1_lines(frame: Frame) -> list[str]:
@@ -661,9 +608,6 @@ def build_tx1(setup: Setup, frame: Frame, shard: tuple[int, int]) -> dict[str, A
         "cells": cells,
         "cells_per_second": cells / max(seconds, 1e-9),
     }
-
-
-# --- entry point ----------------------------------------------------------------
 
 
 def _step_done(setup: Setup, step: str) -> bool:
