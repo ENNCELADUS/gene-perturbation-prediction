@@ -35,21 +35,19 @@ from src.context_prior.ridge import SelectedFit
 from src.eval.geneeffect import aggregate_geneeffect
 from src.experiments.all import _number
 from src.experiments.config import load_prior_config
+from src.eval.geneeffect import gain, long_frame, score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,
     _bind,
     _build,
-    _jsonable,
     _write_json,
     _write_text,
-    gain,
     load_base,
-    long_frame,
     prior_inputs,
-    score,
     stages,
 )
+from src.experiments.run_dir import jsonable as _jsonable
 
 #: Feature counts the ablation keeps or strips.
 TOP = (10, 50, 200, 1000)

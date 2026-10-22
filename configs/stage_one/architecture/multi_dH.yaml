@@ -1,0 +1,39 @@
+# Task 3 of the PIE stage-one design (docs/specs/2026-10-16-pie-geneeffect-ladder-design.md §3.3, §5;
+# protocol §16): multi-encoder on
+# the decoder-feature delta ΔH (768-d, PIE's last decoder layer pooled over the panel); FiLM condition: gene encoder (+) context encoder (the line's tokens and Cellosaurus text).
+# `hpc/run.sh stage-one CONFIG [--fold K]`, or every config through `hpc/run.sh stage-one-queue`.
+kind: train
+task: architecture
+seed: 0
+output_root: outputs/stage_one
+data:
+  ladder_config: configs/stage_one/ladder_inputs.yaml
+  gene_sources: [gene_text]
+  centre_gene_sources: true
+  input: dH
+  own_slots: [own_dp, own_x]
+  permuted: false
+  prior_run: null
+  genes: panel
+model:
+  arm: multi_encoder
+  gene_width: 128
+  hidden: 256
+  state_width: null
+  context: {width: 128, queries: 8}
+  trunk: null
+train:
+  max_epochs: 30
+  patience: 5
+  warmup_epochs: 1
+  learning_rate: 1.0e-3
+  weight_decay: 0.01
+  ema_decay: null
+  dependency_weight: 1.0
+  lines_per_step: 32
+  genes_per_step: 512
+  token_dropout: 0.0
+  evidence_dropout: 0.0
+eval:
+  lines_per_chunk: 64
+  genes_per_chunk: 2048

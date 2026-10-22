@@ -10,4 +10,9 @@ heads in one process, so the whole package is copied rather than installed from 
 (`docs/specs/2026-10-16-pie-geneeffect-ladder-design.md` §3.4). It is installed editable into `.venv-pie` by
 `hpc/pie/setup.sh`. Later tasks add `src/pie/model/geneeffect.py` beside PIE's model.
 
-Local changes: none yet.
+Local changes:
+- `src/pie/model/geneeffect.py` (new, 2026-10-17): the stage-one direct readout's trunk (per-channel attention over a
+  line's tokens into PIE's latents, gene queries with their own evidence) and a strict, name-mapped warm start from a
+  released checkpoint. It imports PIE's layers and changes none of PIE's files.
+- `pyproject.toml` and `uv.lock`: a `geneeffect` dependency group (scikit-learn) for the project's scorer; PIE's own
+  dependencies are unchanged.

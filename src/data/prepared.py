@@ -45,7 +45,13 @@ from src.data.prior_offsets import (
 from src.data.q_sc import QScFeatures, compute_q_sc
 from src.data.residual_target import fit_gene_means
 from src.data.response_cache import ResponseTargetsCache, open_response_targets
-from src.data.splits import FixedSplit, assert_fit_eligible, load_geneeffect_split
+from src.data.splits import (
+    FixedSplit,
+    assert_fit_eligible,
+    assert_same_membership,
+    load_geneeffect_split,
+    membership,
+)
 
 PREPARED_METADATA_FILENAME: Final[str] = "prepared_inputs.json"
 EXPRESSION_TRANSFORM: Final[str] = "log1p_normalize_total"
@@ -117,16 +123,8 @@ class PreparedInputs:
                 np.asarray(self.esm2_vectors, dtype=np.float32)
             ).clone(),
             "prior": None if self.prior is None else dict(self.prior.identity),
-            "split": _membership(self.split),
+            "split": membership(self.split),
         }
-
-
-def _membership(split: FixedSplit) -> dict[str, list[str]]:
-    """The split membership a checkpoint was fitted under, sorted per side."""
-    return {
-        side: sorted(getattr(split, side))
-        for side in ("train", "val", "test", "unlabeled_train")
-    }
 
 
 # --- one basal line --------------------------------------------------------------
@@ -266,16 +264,7 @@ def _restored_split(preprocessing: Mapping[str, Any], split: FixedSplit) -> None
             "2026-10-11 in-place re-split, so its fitted state used A549 as a "
             "training line that the current split scores as test; retrain it"
         )
-    saved, current = preprocessing["split"], _membership(split)
-    changed = {
-        side: sorted(set(saved.get(side, [])) ^ set(members))
-        for side, members in current.items()
-        if sorted(saved.get(side, [])) != members
-    }
-    if changed:
-        raise ValueError(
-            f"checkpoint was fitted under a different split membership: {changed}"
-        )
+    assert_same_membership(preprocessing["split"], split)
 
 
 def load_inputs(
