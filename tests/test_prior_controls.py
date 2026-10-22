@@ -90,10 +90,8 @@ def test_ridge_on_a_zero_prior_is_the_ladders_tx1_ridge():
         labels[["model_id", "gene_symbol", "gene_effect"]],
         {"tx1": view},
         None,
-        seed=0,
-        outer="fixed",
         split=FixedSplit(train=TRAIN, val=VAL, test=()),
-    ).predictions
+    )
     ridge = ladder.loc[ladder.method == "context_pca_ridge[tx1]"]
     key = ["model_id", "gene_symbol"]
     merged = stacked.merge(ridge, on=key, suffixes=("", "_ladder"))

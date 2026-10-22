@@ -238,10 +238,6 @@ def set_fingerprints(inputs: pd.DataFrame, masses: pd.DataFrame) -> dict[str, st
 # --- mixtures ---------------------------------------------------------------------
 
 
-def centre_lines(features: np.ndarray, centre: np.ndarray | None) -> np.ndarray:
-    return features if centre is None else features - centre
-
-
 def fit_pca(features: np.ndarray, components: int, seed: int) -> dict[str, np.ndarray]:
     """Leading principal components (mean, components)."""
     from sklearn.decomposition import PCA
@@ -466,15 +462,6 @@ def merge_small(
     return q, labels, merged
 
 
-def state_masses_and_inputs(
-    q: np.ndarray, cells: LineCells, labels: Sequence[str], minimum: float
-) -> StateInputs:
-    """Masses, effective counts and inputs of one line's states after
-    ``merge_small``; ``sum_k mass_k inputs_k`` is the line's PIE input."""
-    q, labels, merged = merge_small(q, cells, labels, minimum)
-    return state_inputs(q, cells, labels, merged)
-
-
 def state_inputs(
     q: np.ndarray,
     cells: LineCells,
@@ -571,7 +558,6 @@ __all__ = [
     "resolve_chemistry",
     "set_fingerprints",
     "state_fingerprint",
-    "state_masses_and_inputs",
     "state_sets",
     "vocabularies",
 ]

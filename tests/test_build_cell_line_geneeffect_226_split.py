@@ -77,6 +77,6 @@ def test_exact_authority_runs_with_two_unlabeled_train_members() -> None:
             for gene in range(6)
         ]
     )
-    result = run_r1_ladder(labels, {}, None, outer="fixed", split=split)
-    assert set(result.summary["slices"]) == {"val", "test"}
-    assert result.summary["split"]["train"] == list(split.train)
+    predictions = run_r1_ladder(labels, {}, None, split=split)
+    assert set(predictions["slice"]) == {"val", "test"}
+    assert set(predictions["model_id"]) == set(split.val) | set(split.test)

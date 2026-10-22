@@ -2,7 +2,7 @@
 
 The world has 4 anchors (one of them HCT116), 12 response genes, 8 control cells
 per anchor, 6 expression genes, 5-wide Tx1 cells and 4-wide ESM2 vectors. STATE
-is the small STATE-shaped ``LinearMockStateModel``; the released one-hot
+is the small STATE-shaped ``LinearMockStateModel`` below; the released one-hot
 vocabulary is a tiny ``pert_onehot_map.pt`` covering 9 of the 12 genes.
 """
 
@@ -16,9 +16,36 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+from torch import nn
 
 from src.experiments import response_comparison as rc
-from src.model.state import LinearMockStateModel
+
+
+class LinearMockStateModel(nn.Module):
+    """Small STATE-shaped model for tests without arc-state or a checkpoint.
+
+    It reads the same batch keys as STATE (``ctrl_cell_emb``, ``pert_emb``) and
+    returns one output row per input cell.
+    """
+
+    def __init__(
+        self, input_dim: int, output_dim: int, pert_dim: int, cell_set_len: int = 64
+    ) -> None:
+        super().__init__()
+        self.input_dim = int(input_dim)
+        self.output_dim = int(output_dim)
+        self.pert_dim = int(pert_dim)
+        self.cell_sentence_len = int(cell_set_len)
+        self.net = nn.Sequential(
+            nn.Linear(self.input_dim + self.pert_dim, 32),
+            nn.GELU(),
+            nn.Linear(32, self.output_dim),
+        )
+
+    def forward(self, batch: dict[str, torch.Tensor], padded: bool = True):
+        del padded
+        return self.net(torch.cat([batch["ctrl_cell_emb"], batch["pert_emb"]], dim=1))
+
 
 ANCHORS = ("ACH-000971", "ACH-A1", "ACH-A2", "ACH-A3")
 GENES = tuple(f"G{i}" for i in range(12))

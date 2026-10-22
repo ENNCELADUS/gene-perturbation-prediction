@@ -11,9 +11,6 @@ import pytest
 
 from src.data.geneeffect import (
     Exp13Split,
-    build_g_var,
-    build_residual_data,
-    build_scored_universe,
     fit_residual_scale,
     fit_selective_genes,
     load_exp13_split,
@@ -129,46 +126,6 @@ def test_geneeffect_long_rejects_nonnumeric_and_infinite_values(tmp_path: Path) 
     frame.to_csv(path)
     with pytest.raises(ValueError, match="infinite"):
         load_geneeffect_long(path, split)
-
-
-def test_scored_universe_intersection_preserves_esm2_order_and_drop_reasons() -> None:
-    universe = build_scored_universe(_labels(), _split(), ["B", "SPARSE", "A"])
-    assert universe.symbols == ("B", "A")
-    assert universe.manifest["scored_symbols"] == ["B", "A"]
-    reasons = universe.coverage.set_index("gene_symbol")["drop_reason"]
-    assert "train_finite_lt5" in reasons["SPARSE"]
-    assert reasons["TIE"] == "esm2_unresolved"
-
-
-def test_scored_universe_rejects_duplicate_gene_line_rows() -> None:
-    labels = pd.concat([_labels(), _labels().iloc[[0]]], ignore_index=True)
-    with pytest.raises(ValueError, match="duplicate"):
-        build_scored_universe(labels, _split(), ["A"])
-
-
-def test_residual_means_are_train_only_and_exclude_unlabeled_train() -> None:
-    labels = _labels()
-    universe = build_scored_universe(labels, _split(), ["A", "B"])
-    residual = build_residual_data(labels, _split(), universe)
-    assert residual.targets.gene_mean["A"] == 3.0
-    held_out = residual.targets.long.query("model_id == 'V1' and gene_symbol == 'A'")
-    assert held_out.iloc[0]["residual"] == -2.0
-    assert residual.manifest["fit_line_count"] == 5
-    assert residual.manifest["excluded_unlabeled_train"] == [
-        "ACH-000779",
-        "ACH-001086",
-    ]
-
-
-def test_g_var_uses_population_variance_percentile_and_includes_ties() -> None:
-    labels = _labels()
-    universe = build_scored_universe(labels, _split(), ["LOW", "A", "TIE", "B"])
-    residual = build_residual_data(labels, _split(), universe)
-    result = build_g_var(residual, _split(), universe)
-    # A and TIE both have population variance 2; B and LOW have zero.
-    assert result.threshold == 2.0
-    assert result.symbols == ("A", "TIE")
-    assert result.manifest["ties_included"] is True
 
 
 def _toy(column: str, values: dict[str, list[float]], lines: list[str]) -> pd.DataFrame:

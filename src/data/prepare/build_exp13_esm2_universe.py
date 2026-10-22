@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shlex
 import uuid
 import numpy as np
 import pandas as pd
@@ -118,12 +117,6 @@ def restrict_coverage_universe_to_copy_prior(
     return CoverageUniverse(kept, tuple(dropped))
 
 
-def coverage_qualified_symbols(
-    labels: pd.DataFrame, split: Exp13Split
-) -> tuple[str, ...]:
-    return build_coverage_universe(labels, split).symbols
-
-
 def build_embedding_union(
     scored_symbols: Sequence[str], response_symbols: Sequence[str]
 ) -> tuple[str, ...]:
@@ -171,80 +164,6 @@ def inspect_npz_coverage(
         int(vectors.shape[1]),
         _sha256(npz_path),
     )
-
-
-def require_npz_coverage(
-    npz_path: Path,
-    required_symbols: Sequence[str],
-    *,
-    must_resolve_symbols: Sequence[str] | None = None,
-    expected_width: int = 1_280,
-) -> NpzCoverage:
-    report = inspect_npz_coverage(npz_path, required_symbols)
-    required = _unique_symbols(required_symbols, "required universe")
-    must_resolve = _unique_symbols(
-        required if must_resolve_symbols is None else must_resolve_symbols,
-        "must-resolve ESM2 universe",
-    )
-    if not set(must_resolve).issubset(required):
-        raise ValueError("must-resolve ESM2 symbols must belong to the NPZ universe")
-    missing_required = tuple(
-        symbol for symbol in must_resolve if symbol in set(report.missing)
-    )
-    if missing_required:
-        raise ValueError(
-            "ESM2 NPZ must-resolve coverage incomplete: "
-            f"missing {len(missing_required)}/{len(must_resolve)} symbols; "
-            f"examples={list(missing_required[:20])}"
-        )
-    with np.load(npz_path, allow_pickle=True) as payload:
-        observed = tuple(str(symbol) for symbol in payload["symbols"].tolist())
-    if observed != required:
-        raise ValueError("ESM2 NPZ symbol order/universe does not exactly match target")
-    if report.vector_width != expected_width:
-        raise ValueError(
-            f"ESM2 NPZ vector width {report.vector_width} != {expected_width}"
-        )
-    with np.load(npz_path, allow_pickle=True) as payload:
-        if payload["vectors"].dtype != np.dtype(np.float32):
-            raise ValueError("ESM2 NPZ vectors must have dtype float32")
-    return report
-
-
-def build_precompute_command(
-    embedding_union_csv: Path,
-    esm_out: Path,
-    sequence_cache: Path,
-    *,
-    provenance_out: Path | None = None,
-    model: str = "facebook/esm2_t33_650M_UR50D",
-    cache_dir: Path | None = None,
-    local_files_only: bool = False,
-) -> str:
-    command = [
-        "uv",
-        "run",
-        "python",
-        "-m",
-        "src.data.prepare.precompute_esm2_embeddings",
-        "--benchmark-csv",
-        str(embedding_union_csv),
-        "--symbol-column",
-        "gene_symbol",
-        "--out",
-        str(esm_out),
-        "--seq-cache",
-        str(sequence_cache),
-        "--provenance-out",
-        str(provenance_out or esm_out.with_suffix(esm_out.suffix + ".provenance.json")),
-        "--model",
-        model,
-    ]
-    if cache_dir is not None:
-        command.extend(("--cache-dir", str(cache_dir)))
-    if local_files_only:
-        command.append("--local-files-only")
-    return shlex.join(command)
 
 
 def _atomic_write_text(path: Path, text: str) -> None:

@@ -66,7 +66,6 @@ QC_COLUMNS: Final[tuple[str, ...]] = (
     "g2m_score",
     "doublet_score",
 )
-ROLES: Final[tuple[str, ...]] = ("train_cells", "train_bulk", "val", "test")
 
 
 # --- configuration ------------------------------------------------------------

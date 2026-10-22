@@ -18,32 +18,6 @@ import torch
 from torch import nn
 
 
-class LinearMockStateModel(nn.Module):
-    """Small STATE-shaped model for tests without arc-state or a checkpoint.
-
-    It reads the same batch keys as STATE (``ctrl_cell_emb``, ``pert_emb``) and
-    returns one output row per input cell.
-    """
-
-    def __init__(
-        self, input_dim: int, output_dim: int, pert_dim: int, cell_set_len: int = 64
-    ) -> None:
-        super().__init__()
-        self.input_dim = int(input_dim)
-        self.output_dim = int(output_dim)
-        self.pert_dim = int(pert_dim)
-        self.cell_sentence_len = int(cell_set_len)
-        self.net = nn.Sequential(
-            nn.Linear(self.input_dim + self.pert_dim, 32),
-            nn.GELU(),
-            nn.Linear(32, self.output_dim),
-        )
-
-    def forward(self, batch: dict[str, torch.Tensor], padded: bool = True):
-        del padded
-        return self.net(torch.cat([batch["ctrl_cell_emb"], batch["pert_emb"]], dim=1))
-
-
 @contextmanager
 def _quiet():
     """arc-state prints model summaries while constructing; keep logs readable."""

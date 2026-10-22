@@ -390,23 +390,6 @@ def test_mean_pool_residues_all_special_falls_back_to_all_tokens() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_universe_symbols_returns_sorted_unique_upper(tmp_path: Path) -> None:
-    """universe_symbols deduplicates and upper-cases both symbol columns."""
-    csv = tmp_path / "benchmark.csv"
-    df = pd.DataFrame(
-        {
-            "gene_a_symbol": ["brca1", "tp53", "pten"],
-            "gene_b_symbol": ["TP53", "KRAS", "brca1"],
-        }
-    )
-    df.to_csv(csv, index=False)
-
-    result = MOD.universe_symbols(csv)
-
-    assert result == sorted({"BRCA1", "TP53", "PTEN", "KRAS"})
-    assert result == sorted(set(result))  # sorted
-
-
 def test_symbols_from_csv_supports_single_gene_column(tmp_path: Path) -> None:
     csv = tmp_path / "genes.csv"
     pd.DataFrame({"perturbation_gene": ["tp53", "KRAS", "TP53"]}).to_csv(

@@ -2,7 +2,21 @@
 
 import argparse
 import json
+from dataclasses import dataclass
 from pathlib import Path
+
+import pandas as pd
+
+
+@dataclass(frozen=True)
+class BaselineResult:
+    """What ``run_baselines`` writes: the ladder's predictions (one row per line,
+    gene and method) with their per-line and per-gene scores and the metrics."""
+
+    predictions: pd.DataFrame
+    per_line: pd.DataFrame
+    per_gene: pd.DataFrame
+    summary: dict[str, object]
 
 
 def run_baselines(config, *, split, out_dir, inputs=None):
@@ -10,8 +24,7 @@ def run_baselines(config, *, split, out_dir, inputs=None):
     (``paths.prior``) the prior alone and the prior plus the Tx1 ridge join the
     ladder. ``inputs`` replaces ``load_inputs`` (synthetic tests)."""
     import numpy as np
-    import pandas as pd
-    from src.baselines.residual import R1Result, run_r1_ladder
+    from src.baselines.residual import run_r1_ladder
     from src.eval.geneeffect import aggregate_geneeffect
     from src.data.splits import FixedSplit
 
@@ -57,12 +70,11 @@ def run_baselines(config, *, split, out_dir, inputs=None):
         val=requested if split == "val" else (),
         test=requested if split == "test" else (),
     )
-    result = run_r1_ladder(
-        labels, views, donor.loc[list(inputs.genes)], seed=0, outer="fixed", split=fixed
+    predictions = run_r1_ladder(
+        labels, views, donor.loc[list(inputs.genes)], split=fixed
     )
-    # Re-score on the model's absolute-per-line and residual-per-gene axes, adding
-    # back the same fixed training means the model uses.
-    predictions = result.predictions.copy()
+    # Scored on the model's absolute-per-line and residual-per-gene axes, adding back
+    # the same fixed training means the model uses.
     if inputs.prior is not None:
         from src.baselines.prior_controls import prior_control_rows
 
@@ -83,7 +95,7 @@ def run_baselines(config, *, split, out_dir, inputs=None):
         metrics[method] = {f"{split}_{key}": value for key, value in scalar.items()}
         per_line.append(lines.assign(method=method))
         per_gene.append(genes.assign(method=method))
-    result = R1Result(
+    result = BaselineResult(
         predictions=predictions,
         per_line=pd.concat(per_line, ignore_index=True),
         per_gene=pd.concat(per_gene, ignore_index=True),
