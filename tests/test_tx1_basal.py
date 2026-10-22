@@ -12,18 +12,21 @@ import pytest
 from scipy import sparse
 from scipy.sparse import csr_matrix
 
-from src.data.basal import (
+from src.data.response import (
     _cap_indices_by_group,
     _group_candidate_indices_by_label,
+    perturbseq_control_library_sizes,
+    read_perturbseq_response_cells,
+)
+
+from src.data.basal import (
     materialize_rows,
     align_columns,
     assert_tx1_input_contract,
-    perturbseq_control_library_sizes,
-    read_perturbseq_response_cells,
     require_raw_counts,
     symbol_column,
 )
-from src.data.response_streaming import read_xatlas_response_cells
+from src.data.response import read_xatlas_response_cells
 
 
 def _perturbseq_h5ad(path: Path, labels: list[str], *, ensembl_index=False) -> Path:

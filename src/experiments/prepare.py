@@ -300,7 +300,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         response_bags,
         write_response_part,
     )
-    from src.data.response_cache import write_response_targets
+    from src.data.response import write_response_targets
     from src.data.splits import assert_fit_eligible, load_geneeffect_split
     from src.data.tx1_cache import load_hvg_gene_order
 

@@ -6,7 +6,7 @@ Layout under ``config["prepared_root"]``:
   ``common_gene_panel``, ``hvg_order``, ``response_anchors``;
 - ``lines/<ModelID>.npz``: ``controls_tx1``, ``basal_hvg``, ``q_sc_values``,
   ``q_sc_available``;
-- ``response/``: log-space response targets (``src.data.response_cache``);
+- ``response/``: log-space response targets (``src.data.response``);
 - ``common_gene_panel.csv``, ``embedding_union.{csv,json}``.
 
 Every expression quantity is in STATE's space: whole-library normalize_total
@@ -44,7 +44,7 @@ from src.data.prior_offsets import (
 )
 from src.data.q_sc import QScFeatures, compute_q_sc
 from src.data.labels import fit_gene_means
-from src.data.response_cache import ResponseTargetsCache, open_response_targets
+from src.data.response import ResponseTargetsCache, open_response_targets
 from src.data.splits import (
     FixedSplit,
     assert_fit_eligible,

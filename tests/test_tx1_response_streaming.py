@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 
 import test_prepare as base
-from src.data import response_streaming
-from src.data.response_streaming import prefetched, read_xatlas_response_cells
+from src.data import response as response_streaming
+from src.data.response import prefetched, read_xatlas_response_cells
 from test_prepare_equivalence import CAPPED, _write_xatlas, naive_xatlas_cells
 
 
@@ -91,7 +91,7 @@ def test_only_rows_a_reservoir_keeps_are_converted(tmp_path, monkeypatch) -> Non
 
 def test_unknown_tokens_of_kept_cells_are_reported(tmp_path, caplog) -> None:
     source = _write_xatlas(tmp_path, seed=300)
-    with caplog.at_level("WARNING", logger="src.data.response_streaming"):
+    with caplog.at_level("WARNING", logger="src.data.response"):
         _read(source, CAPPED, seed=0)
     assert [r.message for r in caplog.records if "missing from" in r.message] == [
         f"{base.HCT116}: dropped 2 distinct gene tokens missing from the gene "
