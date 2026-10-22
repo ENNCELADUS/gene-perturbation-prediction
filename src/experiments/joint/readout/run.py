@@ -1,5 +1,6 @@
-"""Readout head with the explicit gene-specific context slope on a frozen joint
-backbone."""
+"""The readout-head run (``all``'s last step, and ``python -m
+src.experiments.joint.readout``): extract a frozen joint backbone's features once, fit
+the head with the explicit gene-specific context slope, score validation."""
 
 import argparse
 from contextlib import nullcontext
@@ -42,7 +43,7 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
     """Write train/val features of a joint checkpoint; ``inputs`` replaces
     ``load_inputs`` (synthetic tests)."""
     from src.data.datasets import DependencyDataset
-    from src.data.readout_cache import write_feature_cache
+    from src.experiments.joint.readout.cache import write_feature_cache
     from src.experiments.joint.config import mixed_precision
     from src.model.initialization import restore_joint_model
     from src.experiments.run_dir import git_revision
@@ -108,8 +109,8 @@ def run_readout(checkpoint, out_dir, *, device, inputs=None):
     seed 0), scores validation and writes ``out_dir/metrics.json``. Returns that
     file's contents at once when it already exists.
     """
-    from src.data.readout_cache import ReadoutCache
-    from src.training.readout import fit_readout
+    from src.experiments.joint.readout.cache import ReadoutCache
+    from src.experiments.joint.readout.heads import fit_readout
 
     out_dir = Path(out_dir)
     metrics_path = out_dir / "metrics.json"
@@ -222,14 +223,14 @@ def main(argv=None):
             batch_size=args.batch_size,
         )
     else:
-        from src.data.readout_cache import ReadoutCache
-        from src.eval.readout import export_checkpoint
-        from src.training.readout import fit_readout
+        from src.experiments.joint.readout.cache import ReadoutCache
+        from src.experiments.joint.readout.heads import export_checkpoint
+        from src.experiments.joint.readout.heads import fit_readout
 
         cache = ReadoutCache(args.cache)
         if args.command == "compare":
             import pandas as pd
-            from src.eval.readout_comparison import compare_runs
+            from src.experiments.joint.readout.compare import compare_runs
 
             mapping = pd.read_csv(args.context_map).set_index("model_id")
             ids = cache.metadata["split_lines"]["val"]

@@ -337,7 +337,7 @@ def comparison_and_training(
 def _validation(config: dict, run: Path, device: str) -> None:
     from src.experiments.joint.baselines import run_baselines
     from src.experiments.joint.evaluate import evaluate_checkpoint, export_evaluation
-    from src.experiments.joint.readout import run_readout
+    from src.experiments.joint.readout.run import run_readout
 
     best = run / "train" / "best.pt"
     evaluation = run / "evaluation" / "val"
