@@ -1,7 +1,6 @@
 # GeneEffect Head Revision — Design
 
-Date 2026-10-03. Follows [the revision design](2026-10-03-geneeffect-revision-design.md); decided with the user
-through a design interview after the objective screen.
+Date 2026-10-03, decided after the objective screen. Follows [the revision design](2026-10-03-geneeffect-revision-design.md).
 
 ## 1. Why
 
@@ -45,5 +44,5 @@ test is reported. The STATE screen follows on the head that wins.
 
 ## 4. Claim boundaries
 
-As in the revision design: validation chooses, test is reported, nothing here is SL evidence. PCA, gene means,
-selective genes and residual SD are fitted on labelled training lines only.
+As in the revision design; PCA, gene means, selective genes and residual SD are fitted on labelled training lines
+only.

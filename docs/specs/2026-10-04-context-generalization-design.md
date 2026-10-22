@@ -1,7 +1,6 @@
 # Design: a linear context prior and a single-cell correction for held-out-line GeneEffect
 
-**Status:** design, 2026-10-04, agreed section by section in a brainstorming session. Supersedes the
-2026-10-03 context-generalization proposal (untracked, removed). Evidence: the literature review
+**Status:** agreed 2026-10-04. Supersedes the 2026-10-03 context-generalization proposal (untracked, removed). Evidence: the literature review
 (`docs/notes/2026-10-03-context-generalization-litreview.md`, about 28 papers read at methods level) and the
 DepMap survey (`docs/notes/2026-10-03-depmap-context-data-survey.md`, tables in
 `docs/notes/2026-10-03-depmap-derived/`), both in the gitignored vault. Follows the [research blueprint](../01-blueprint.md)
@@ -39,7 +38,7 @@ no GeneEffect label, and gene-pair knowledge.
 | Hyperparameters | Penalties are tuned on validation by point estimate; which blocks and settings to keep is read from the reported rows (§7.1) |
 | Fitting scope | What defines the metric (selective genes, `mu_hat`, σ_g) stays on the 170 labelled training lines; model-side fits use the training side |
 | Virtual cell | STATE's predicted response enters the correction, projected onto program scores; the counterfactual SL composition is recorded as an interface (§6), not run |
-| Large files | Files over 5 GB are downloaded and processed only on the H20 host |
+| Large files | Files over 5 GB (TCGA, any new single-cell atlas) are downloaded and processed only on the H20 host |
 
 ## 3. Data
 
@@ -265,8 +264,7 @@ correction's STATE comparison against the prior.
 ### 7.4 Where things run
 
 The bulk-input learning curve uses only files already on the Mac and runs locally. Pseudo-bulk needs raw single
-cells, so the bridge, the prior and the correction run on the H20 host (prior on CPU, correction on GPU). Files
-over 5 GB (TCGA, any new single-cell atlas) are downloaded and processed only on the H20 host.
+cells, so the bridge, the prior and the correction run on the H20 host (prior on CPU, correction on GPU).
 
 ## 8. Evaluation
 
@@ -310,15 +308,13 @@ comparison row.
 - Unchanged: a query line supplies basal single cells only; validation tunes, test reported once per run; Tx1's
   Tahoe-100M exposure qualifies held-out results; nothing here is SL evidence; the counterfactual interface is not
   run.
-- `docs/03-geneeffect-protocol.md`, the data cards and `CLAUDE.md` change with the code that changes their
-  behaviour; results go under `results/`.
 
 ## 10. Order of work
 
 1. **Local groundwork (Mac):** the extra-line membership file and its builder; pinned Ensembl paralogs, CORUM,
    hallmark and PROGENy gene sets, `OmicsSignatures` MSI scores; the bulk-input learning curve; a search for
    public single-cell atlases covering CRISPR-screened lines outside the 226 (they would add single-cell lines
-   without a bridge; any download over 5 GB happens on the H20 host).
+   without a bridge).
 2. **Bridge and the extra-lines decision (H20):** pseudo-bulk in preparation; bridge and its quality; the curve
    rescored with bridged input; the extra lines read from the rows.
 3. **Prior build-up (H20 CPU):** block sets compared on validation and test, predicted-genotype encoders, the prior a person
@@ -327,9 +323,8 @@ comparison row.
 5. **Correction (H20 GPU):** the nested head on the prior's residual; the STATE comparison (absent, frozen,
    trainable); the cross-attention candidate; linear versus SwiGLU `C`.
 
-The first implementation plan covers local groundwork through the prior build-up. Inferred copy number and the
-correction get their own plans once the prior exists, because their inputs depend on its chosen settings and on
-the extra-lines decision.
+Inferred copy number and the correction are planned only once the prior exists: their inputs depend on its chosen
+settings and on the extra-lines decision.
 
 ## 11. Open checks
 
@@ -343,8 +338,7 @@ the extra-lines decision.
 
 ## 12. Amendments (2026-10-07)
 
-Agreed in the design interview after the default-prior follow-ups
-([results](../../results/default_prior_followups_seed0/README.md)); wave one ran
+Agreed after the default-prior follow-ups ([results](../../results/default_prior_followups_seed0/README.md)); wave one ran
 ([record](../../results/correction_wave_one_seed0/README.md)) and the second wave was never built.
 
 - **Prior.** The correction stacks on the affine bridge with expression components (penalty 1) and data-selected

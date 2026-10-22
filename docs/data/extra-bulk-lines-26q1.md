@@ -19,8 +19,6 @@ never arrives as one of them.
 
 ## Membership
 
-The file is the membership of the extra lines as built; the final split takes its roles from it.
-
 | Group | Lines | Definition |
 | --- | ---: | --- |
 | Labelled | 918 | Outside the 226, with 26Q1 bulk RNA and 26Q1 GeneEffect |
@@ -63,8 +61,8 @@ duplicate ModelIDs or any overlap between labelled, unlabelled, excluded and the
 ## Artifacts
 
 - `configs/benchmarks/extra_bulk_lines_26Q1.json`: membership, the exclusion reasons, the
-  policy text and the path and SHA-256 of the three source files (Model.csv,
-  CRISPRGeneEffect.csv, the protein-coding bulk TPM matrix).
+  policy text and the paths of the three source files (Model.csv, CRISPRGeneEffect.csv, the
+  protein-coding bulk TPM matrix).
 - `src/data/builders/build_extra_bulk_lines.py`: the builder.
 - `src/data/extra_lines.py`: the loader.
 

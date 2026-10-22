@@ -1,6 +1,6 @@
 # Design: reproducing Cilantro-SL, then porting it to the context screen and basal single cells
 
-**Status:** design agreed 2026-10-08 (grill session); updated 2026-10-11. Phase 1 is implemented
+**Status:** agreed 2026-10-08; updated 2026-10-11. Phase 1 is implemented
 (`hpc/cilantro/`, merged to `main`) and its as-released run is complete
 ([result](../../results/cilantro_reproduction_seed0/README.md), §4.5). Phase
 2 has only its coverage report (§5.2); the rest of §5 is not yet built and has no implementation
@@ -41,14 +41,14 @@ The Drive folder holds:
   computational prediction 9,327, CRISPR/CRISPRi 7,296, text mining 5,614, other 2,107.
 - `Human_nonSL.csv`: 2,899 rows, all CRISPR/CRISPRi.
 - `gene2vec_embs.pt`: 24,447 Ensembl IDs × 128.
-- `OmicsExpressionProteinCodingGenesTPMLogp1.csv`: DepMap **23Q4** (md5 `9402aa25a19279bb20a5d6cf8791a88f`
-  matches the 23Q4 release index), 1,479 lines × 19,193 genes.
+- `OmicsExpressionProteinCodingGenesTPMLogp1.csv`: DepMap **23Q4** (its md5 matches the 23Q4 release index),
+  1,479 lines × 19,193 genes.
 - `metadata.csv`, `Human_SL_pairs.pkl`, `ensembl_mapping_dict_gc95M.pkl`.
 
 Not released: the gene-effect matrix the code reads (`CRISPRGeneEffectProcessed.csv`), the list of
 genes to perturb (`Human_SL_genes.pkl`), the original-embedding table, the sampled negatives, fold
 assignments, trained weights and every Geneformer output. The paper's gene effect is DepMap 23Q4
-`CRISPRGeneEffect.csv` (md5 `8bfb35c18b7469020dbd5ae4b6274492`, 1,100 lines × 18,443 genes): its
+`CRISPRGeneEffect.csv` (1,100 lines × 18,443 genes): its
 lines meet the expression lines in exactly the paper's 1,021, and the paper's 1,078 × 17,453 come
 from the unreleased processing, which matters only before that intersection. Phase 1 runs on 26Q1
 instead (§4.4). NaN (line, gene) values are dropped, as the official `data_generator` does.
@@ -100,9 +100,8 @@ conformal prediction.
 
 The paper's other six baselines (KG4SL, SL2MF, SLMGAE, DDGCN, MVGCN-iSL, ESM4SL) are not run.
 
-Only the as-released run exists so far (§4.5). The other rows need their own runs: the matched
-dictionary is `hpc/cilantro/run.sh RUN_ID --dictionary gc30M`; the stage-one variants, the paper's
-ablations, gene-only and ESM+MLP are not yet implemented in the harness.
+Only the as-released run exists (§4.5). The matched dictionary is `hpc/cilantro/run.sh RUN_ID --dictionary gc30M`;
+the stage-one variants, the paper's ablations, gene-only and ESM+MLP are not implemented in the harness.
 
 ### 4.2 Metrics
 
@@ -131,7 +130,7 @@ python-build-standalone. Seeds are set at 0 in each step (Python, NumPy, torch, 
 which fixes the released code's unseeded shuffles without editing it. `gf-12L-30M-i2048` and both
 dictionary sets are those of `ctheodoris/Geneformer` revision `01d3ea8`; hf-mirror sends large files
 to Xet storage the H20 cannot resolve, so they come from ModelScope's copy
-(`ZhejiangLab-LifeScience/Geneformer`), checked against the SHA-256 values Hugging Face reports. Run outputs go to `outputs/cilantro_reproduction/`
+(`ZhejiangLab-LifeScience/Geneformer`). Run outputs go to `outputs/cilantro_reproduction/`
 on the H20; curated results to `results/cilantro_reproduction_seed0/`.
 
 ### 4.4 Amendments (2026-10-09)
@@ -145,7 +144,7 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
   HVG loop fails on a repeated ID, so the first column per ID (TWNK) is kept.
 - **The four small Drive files went through the laptop.** `Human_SL.csv`, `Human_nonSL.csv`,
   `Human_SL_pairs.pkl` and `gene2vec_embs.pt` (34 MB) were fetched on the laptop, copied to
-  `data/cilantro/official/` on the H20, checked by SHA-256 and deleted locally. SynLethDB's own site
+  `data/cilantro/official/` on the H20 and deleted locally. SynLethDB's own site
   now serves only release 3.0, from Zenodo, which the H20 cannot resolve either.
 - **What the released code needed to run.** `official.patch` makes the hard-coded `/work/magroup`
   paths configurable, passes the run's token dictionary to the perturber's extractor and perturber
@@ -268,8 +267,7 @@ Built (`hpc/cilantro/`, merged to `main` 2026-10-11):
   `perturb`, `generate_inputs`, `sample_negatives`, `setup_input`, `pretrain`, `classify`), chained by
   `run.sh` with done markers and resume; `report.py` for the metrics of §4.2.
 - The fast paths of §4.4 (`fast_perturb.py`, `fast_classifier.py`, `fast_core.py`) as defaults,
-  `--released` for the released classes, and `check_equivalence.py`.
-- Codex review round 1 adjudicated: all six findings fixed.
+  `--released` for the released classes, and `check_equivalence.py`; Codex review round 1's six findings fixed.
 
 Runs on the 30838 container (`outputs/cilantro_reproduction/`):
 
@@ -282,9 +280,8 @@ A batch-size benchmark of the deletion (`outputs/cilantro_benchmarks/deletion_ba
 GPU shared with the running deletion): 25.4 lines per second at the released batch of 50, 27.8 at
 400, with embeddings differing by up to 2.4e-7 at any other size. Batch 50 is kept.
 
-Still to do for phase 1: the remaining rows of §4.1, first the matched-dictionary run
-(`hpc/cilantro/run.sh RUN_ID --dictionary gc30M`), the most direct test of the gene-holdout gap. The
-result record also shows that stage one's fit equals the gene mean (a gene mean from other lines
+Still to do for phase 1: the remaining rows of §4.1, first the matched-dictionary run, the most direct test of the
+gene-holdout gap. The result record also shows that stage one's fit equals the gene mean (a gene mean from other lines
 reaches Spearman 0.854 and R² 0.850 on the same rows) and that every pair carries one label in every
 line.
 
@@ -311,8 +308,7 @@ reports rows, positives and negatives with both genes covered:
   on the stage-one lines' pseudo-bulk;
 - (b) per-cell bags under §5.3.
 
-The report is read before the deletion pass. Expected outcome: per-cell bags become the main arm, and
-pseudo-bulk stays as the paper-faithful arm, scored on its own covered rows.
+The report is read before the deletion pass.
 
 First measurement, 2026-10-09 (`src/experiments/historical/cilantro_coverage.py`, H20
 `outputs/cilantro_coverage/coverage_v1/`). The registry's raw sources hold a median of 212 cells per
@@ -432,21 +428,20 @@ not built here.
 
 1. Phase 1 environment, released code and patch; a smoke run end to end. Measure Geneformer
    throughput on 50 genes and record the estimate before the full pass. *Done (§4.5).*
-2. The as-released run, then the fix runs, ablations and controls of §4.1. *As-released run in
-   progress; the rest not started.*
+2. The as-released run, then the fix runs, ablations and controls of §4.1. *As-released run done
+   (§4.5); the rest not started.*
 3. The `src/` port: batched deletion with its equivalence check, then stage one, classifier and
    conformal, which must reproduce the as-released phase-1 numbers from the official Δ. *Not
    started; the harness's fast deletion (§4.4) is the starting point.* Before it: an implementation
    plan, and the minimum per-context gain over the context-ablated arm that the SL protocol (§6)
    asks to be declared before any test label is read.
-4. The coverage report (§5.2), read before GPU work. *Done; per-cell bags chosen.*
+4. The coverage report (§5.2), read before GPU work. *Done.*
 5. Measure per-cell throughput on one line and record a GPU-hour estimate. Rough figure: 226 lines ×
    128 cells × about 3k present genes is about 90M forward passes, on the order of 80 GPU-hours
    on the released perturber; the fast deletion (§4.4) should cut that several-fold, to be
    measured. Then the full deletion pass.
 6. The port: out-of-fold stage one, classifier, conformal, controls and secondary CV; test once.
-   Results go to `results/cilantro_port_seed0/` with a run manifest (commits, input hashes, line and
-   gene lists, seeds).
+   Results go to `results/cilantro_port_seed0/` with a run manifest (commits, line and gene lists, seeds).
 
 ## 7. Out of scope
 

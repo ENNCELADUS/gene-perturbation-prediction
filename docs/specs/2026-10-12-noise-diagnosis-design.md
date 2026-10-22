@@ -1,7 +1,6 @@
 # Design: diagnosing what limits cross-line GeneEffect prediction
 
-**Status:** agreed 2026-10-12 (grill session after the Cilantro-SL review); implemented and run on the H20 on
-2026-10-12 ([record](../../results/noise_diagnosis_seed0/README.md)). Task 1 of the research plan ([blueprint §5](../01-blueprint.md#5-research-plan)).
+**Status:** agreed 2026-10-12, after the Cilantro-SL review; implemented and run on the H20 on 2026-10-12 ([record](../../results/noise_diagnosis_seed0/README.md)). Task 1 of the research plan ([blueprint §5](../01-blueprint.md#5-research-plan)).
 Protocol §14 holds the executable description.
 
 ## 1. Why
@@ -59,8 +58,8 @@ line? Testing it needs that model's own draw curve (10 to all cells) against the
 ### 3.2 Learning curve (`learning_curve`)
 
 **Question.** Does using up DepMap's labelled lines make the prior predict GeneEffect more accurately, above all in
-the part it adjusts per line (beyond the training gene mean)? Redesigned 2026-10-14 (grill session): the first run
-scored selective Spearman only and had no baseline per fraction.
+the part it adjusts per line (beyond the training gene mean)? Redesigned 2026-10-14: the first run scored selective
+Spearman only and had no baseline per fraction.
 
 **Definition.**
 - *Fractions.* Patients of the training side are put in a seeded order; fraction `f` keeps the lines of the first

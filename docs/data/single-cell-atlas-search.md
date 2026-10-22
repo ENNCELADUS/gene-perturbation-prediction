@@ -47,7 +47,7 @@ Each line takes its cells from one source: among `ok` rows of an ingested wave, 
 `labelled` (26Q1 GeneEffect row and built cells, with source, identifiers, condition, patient,
 lineage, cells and arms), `pending` (labelled, source not built or no cell after QC), `unlabelled`
 (no GeneEffect row; never built) and `excluded` (shares a PatientID with a validation or test line).
-Preparation and the SL benchmark read only `labelled`. `inputs` records the SHA-256 of every input.
+Preparation and the SL benchmark read only `labelled`.
 
 **Second deposits** (2026-10-12, for the [noise diagnosis](../specs/2026-10-12-noise-diagnosis-design.md)'s deposit
 swap): `configs/data/second_source_lines_26Q1.json` (`src/data/builders/plan_second_sources.py`) names, for each labelled
@@ -278,13 +278,12 @@ refuses to overwrite an h5ad.
   identifier); columns above.
 - `configs/data/extra_single_cell_sources_26Q1.json`: the source spec, per wave.
 - `configs/benchmarks/extra_single_cell_lines_26Q1.json`: the membership file.
-- H20: `data/sl_dependency_v0/raw/extra_single_cell/<source>/` (deposits, whose SHA-256 the source's
-  QC report records under `inputs`, and for a re-counted source its `.sra` runs and `kb/<library>/`
-  matrices with `done.json`),
+- H20: `data/sl_dependency_v0/raw/extra_single_cell/<source>/` (deposits, and for a re-counted source its `.sra`
+  runs and `kb/<library>/` matrices with `done.json`),
   `data/references/gencode_v44/` (genome, GTF, kallisto index and its `kallisto_standard.json`),
   `data/sl_dependency_v0/processed/basal_raw_umi/` (one h5ad per prepared line, the 226 hard-linked
   from their builders' outputs, and `qc/<source>.json`), `data/superseded/extras_wave1_2026-10-11/`
-  (the wave-one files of the lines wave 2 rebuilt) and, once built,
+  (the wave-one files of the lines wave 2 rebuilt) and
   `data/sl_dependency_v0/processed/basal_raw_umi_second_source/` (the second deposits and their `qc/`).
 - `configs/data/second_source_lines_26Q1.json`: the second-deposit plan.
 

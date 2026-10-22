@@ -11,8 +11,7 @@ validation and test lines are GeneEffect training, validation and test lines. Th
 nine-context split is therefore no longer the plan; it remains a built artifact, and the facts below
 stand.
 
-This is the only card for this dataset. It supersedes the separate v1 and v2 cards; the v1
-artifact is preserved in the local 2026-09-05 archive as the pre-provenance snapshot.
+This card supersedes the separate v1 and v2 cards; the v1 artifact is in the local 2026-09-05 archive.
 
 The pre-split surface has 184,962 rows, 172,838 unique pairs, 15,694 genes, 10 contexts,
 11,999 multi-context pairs and 0 cross-context label changes. After registered-context
@@ -39,7 +38,7 @@ data/SL_Benchmark_Formal/sl_integrated_pairs.csv
 ```
 
 The builder reads no other pair-label source — not `sl_pairs_high_quality_labeled.csv`, Horlbeck,
-Feng or DepMap co-dependency labels. The manifest records the input SHA-256. The sole-input claim
+Feng or DepMap co-dependency labels. The sole-input claim
 is about pair labels, **not** split-registration evidence or a complete upstream-lineage audit: the integrated
 CSV has no study identifiers and cannot establish its upstream sources.
 
@@ -49,8 +48,7 @@ reason — no study or evidence identifier exists in the source.
 
 Registered contexts are locked by
 [`../../configs/benchmarks/context_screen_v2_split.json`](../../configs/benchmarks/context_screen_v2_split.json),
-which records DepMap ModelIDs, basal sources, and hashes for the 26Q1 GeneEffect file and
-the nine-context basal registry. Contexts are never joined by informal name.
+which records DepMap ModelIDs and basal sources. Contexts are never joined by informal name.
 
 ## Preprocessing Contract
 
@@ -84,7 +82,7 @@ keys are collapsed. No class balancing or negative sampling: natural imbalance i
 `src/experiments/historical/build_sl_context_benchmark.py` then:
 
 1. retains pre-split contexts with at least 10 rows in each class;
-2. keeps configured contexts with hash-pinned basal metadata; train and validation require
+2. keeps configured contexts with registered basal metadata; train and validation require
    GeneEffect, while an explicitly `sl_only` context is allowed only on test;
 3. applies the tracked explicit assignments, with response anchors pinned to train;
 4. removes every complete `source_row_id` group appearing on more than one split side.
@@ -140,11 +138,11 @@ three matrices; the source omits mitochondrial genes, so mitochondrial QC is una
 ## Generated Files
 
 Build: `uv run python -m src.experiments.historical.build_sl_context_benchmark`.
-PC9/HeLa basal build: `uv run python -m src.data.builders.build_pc9_hela_basal` on the HPC.
+PC9/HeLa basal build: `uv run python -m src.data.builders.build_pc9_hela_basal --candidate-root ROOT --gencode-gtf GTF
+[--context {PC9,HELA,all}]` on the HPC.
 Historical unsplit v1 is archived under `archive/2026-09-05-inactive-routes/data/SL_Benchmark_Formal/derived/context_screen_v1/` with `sl_context_pairs.csv`, `context_inventory.csv`, and `manifest.json`.
 The pair table has no split/fold; `source_row_min_fdr` is aggregate-row, not per-context. Its inventory reports unique
-genes and genes with both labels; the manifest freezes source/output hashes, filtering rules,
-Feng-alignment decisions and row counts.
+genes and genes with both labels; the manifest freezes filtering rules, Feng-alignment decisions and row counts.
 
 ```text
 configs/benchmarks/context_screen_v2_split.json and context_screen_v2_basal_registry.json   tracked authorities
@@ -154,7 +152,7 @@ data/SL_Benchmark_Formal/derived/context_screen_v2/
   context_inventory.csv       pre-split context eligibility
   filter_audit.csv            independent per-context positive failure counts
   context_statistics.csv      final class, prior and positive-anchor statistics
-  manifest.json               input/output/config hashes and split audit
+  manifest.json               split audit
 ```
 
 Everything under `derived/` is gitignored. The tracked split manifest and the dataset

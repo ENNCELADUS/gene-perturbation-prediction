@@ -12,7 +12,6 @@ Local path:
 `data/sl_dependency_v0/raw/jost_replogle_dual_sgrna/GSE205310_RAW.tar`
 
 - Source: GEO `GSE205310`.
-- Size: 1688791040 bytes.
 - Downloaded on 2026-06-17.
 
 Archive contents:

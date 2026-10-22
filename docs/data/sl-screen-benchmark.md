@@ -16,16 +16,15 @@ nested split. Labels are compared within one screen only: calls agree poorly acr
 
 ## Sources
 
-Fetched to `data/sl_screens/raw/` on the H20 on 2026-10-11. Hashes are recorded by the
-build in `manifest.json`.
+Fetched to `data/sl_screens/raw/` on the H20 on 2026-10-11.
 
-| Screen | File | Source | SHA-256 (first 12) | Licence |
-| --- | --- | --- | --- | --- |
-| Ito et al. 2021, Nat Genet | `ito_2021/41588_2021_967_MOESM2_ESM.xlsx` (Supplementary Tables 4, 8, 10) | [Springer](https://static-content.springer.com/esm/art%3A10.1038%2Fs41588-021-00967-z/MediaObjects/41588_2021_967_MOESM2_ESM.xlsx) | `c3dd8427d78b` | not verified |
-| Klingbeil et al. 2024, Cancer Discov | `klingbeil_2024/cd-23-1529_supplementary_table_s{2,4,6}_suppst{2,4,6}.xlsx` | PMC open-access bucket, `https://pmc-oa-opendata.s3.amazonaws.com/PMC11609825.1/` | S2 `897016827bef`, S4 `d29cb5951e1a`, S6 `ff5c25c4e457` | not verified |
-| Harle et al. 2025, Genome Biol | `harle_2025/13059_2025_3737_MOESM1_ESM.xlsx` (Tables S4, S5) | [Springer](https://static-content.springer.com/esm/art%3A10.1186%2Fs13059-025-03737-w/MediaObjects/13059_2025_3737_MOESM1_ESM.xlsx) | `297ed1ee52a7` | CC BY 4.0 |
-| MiT4SL (Tao et al. 2025) | `mit4sl/a549_bench.csv`, `mit4sl/Primenode.csv` | the repository's `data.zip` on [Google Drive](https://drive.google.com/drive/folders/1mVvm6yZTPhbjEXviYi5ZkXhMyqSrsj8C) | `7c5da2c0807d`, `267d39a6d285` | MIT |
-| HGNC complete set | `hgnc/hgnc_complete_set.txt` | `https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt` | `64fcdfcdf9bc` | HGNC |
+| Screen | File | Source | Licence |
+| --- | --- | --- | --- |
+| Ito et al. 2021, Nat Genet | `ito_2021/41588_2021_967_MOESM2_ESM.xlsx` (Supplementary Tables 4, 8, 10) | [Springer](https://static-content.springer.com/esm/art%3A10.1038%2Fs41588-021-00967-z/MediaObjects/41588_2021_967_MOESM2_ESM.xlsx) | not verified |
+| Klingbeil et al. 2024, Cancer Discov | `klingbeil_2024/cd-23-1529_supplementary_table_s{2,4,6}_suppst{2,4,6}.xlsx` | PMC open-access bucket, `https://pmc-oa-opendata.s3.amazonaws.com/PMC11609825.1/` | not verified |
+| Harle et al. 2025, Genome Biol | `harle_2025/13059_2025_3737_MOESM1_ESM.xlsx` (Tables S4, S5) | [Springer](https://static-content.springer.com/esm/art%3A10.1186%2Fs13059-025-03737-w/MediaObjects/13059_2025_3737_MOESM1_ESM.xlsx) | CC BY 4.0 |
+| MiT4SL (Tao et al. 2025) | `mit4sl/a549_bench.csv`, `mit4sl/Primenode.csv` | the repository's `data.zip` on [Google Drive](https://drive.google.com/drive/folders/1mVvm6yZTPhbjEXviYi5ZkXhMyqSrsj8C) | MIT |
+| HGNC complete set | `hgnc/hgnc_complete_set.txt` | `https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt` | HGNC |
 
 The H20 cannot reach Google Drive, so the two MiT4SL files were extracted on the Mac by HTTP
 range requests from `data.zip` and copied with `scp`. They are the only files that did not
@@ -158,7 +157,7 @@ On the H20 under `data/sl_screens/benchmark/`:
 | `pairs.parquet` | One row per (screen, line, pair): `screen`, `screen_line`, `model_id`, `gene_a`, `gene_b` (GeneEffect symbol where the gene has one, else current HGNC; `gene_a < gene_b`), `screen_gene_a`, `screen_gene_b` (as published, `\|`-joined when merged), `both_in_geneeffect`, `gemini`, `lfc`, `gi`, `fdr`, `n_constructs`, `label` (1, 0 or missing), `unlabelled_reason`, `split`, `stratum`, `line_reason` |
 | `mit4sl_a549.parquet` | MiT4SL's A549 pairs and labels |
 | `renamed_symbols.csv` | Published symbols named differently in the benchmark |
-| `manifest.json` | Rule constants and GEMINI cuts, the Kebabci reproduction counts, per-screen counts by side, line sides and the SHA-256 of every input |
+| `manifest.json` | Rule constants and GEMINI cuts, the Kebabci reproduction counts, per-screen counts by side and line sides |
 
 ## Rebuild
 

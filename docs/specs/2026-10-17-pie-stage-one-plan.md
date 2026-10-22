@@ -8,24 +8,9 @@ on `feat/stage-one` (protocol §16), Task 3 run and reported 2026-10-22
 
 ## Context
 
-The PIE stage-one design (`docs/specs/2026-10-16-pie-geneeffect-ladder-design.md`) was revised and approved on
-2026-10-17. §3.5, Task 8 (state telemetry) and Task 9 (cell states) were added after a cell-states literature survey and a
-Codex review. Task 2 is built on the H20, checked 2026-10-17 17:56 UTC:
-- **Done:** the frozen-PIE pass assembled (17,607 genes × 1,036 lines); gene sources, context text, cells, mean channel
-  and summaries.
-- **Still running:** the last Tx1 shard (1/16).
-- **Branch:** `feat/ladder-inputs` is unmerged; the host is at `c219707`, the laptop 2 commits ahead, and the spec
-  revision is uncommitted.
-
-The user chose to build Task 3 (architecture stage) and Task 8 (state telemetry) in parallel after closing Task 2.
-
-Rules from CLAUDE.md:
-- strict configs; no gates in code (people read reports and decide);
-- one seed; validation selects, test is scored once;
-- Conventional Commits; merge to `main` once a branch's H20 path has run;
-- GPU work through `hpc/run.sh`, ending local work with the exact launch command.
-
-The plan is executed wave by wave.
+At approval (checked 2026-10-17 17:56 UTC) Task 2's frozen-PIE pass was assembled (17,607 genes × 1,036 lines) with
+the gene sources, context text, cells, mean channel and summaries; only the last Tx1 shard (1/16) was running, and
+`feat/ladder-inputs` was unmerged (host at `c219707`, laptop 2 commits ahead). The project rules are CLAUDE.md's.
 
 ## Waves
 
@@ -99,11 +84,10 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
 3. **Guards** in `src/experiments/stage_one/pie_precompute.py`, against silent reuse:
    - `reference_pass` (PP:807) stores `lines` and refuses a `reference.npz` whose row count or lines differ;
    - `write_dataset` (PP:244) refuses an existing dataset whose `context_to_id` or genes differ.
-   - Tests go in `tests/test_pie_precompute.py`.
+   - Tests go in `tests/experiments/stage_one/test_pie_precompute.py`.
 4. **Records.** Write `results/ladder_inputs/README.md` (frame counts, coverage per source, line and gene, the pilot,
    seconds per gene from `pie/run.json`) and update CLAUDE.md's "Current state".
-5. **Merge.** Run the suite to a file and `.venv/bin/ruff check .`; push; pull on the H20; merge into `main`; delete the
-   branch.
+5. **Merge** as CLAUDE.md requires.
 
 ## Wave 1A: shared stage-one stack and Task 3 (`feat/stage-one`)
 
@@ -152,8 +136,8 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
 - `src/experiments/config.py`: `validate_stage_one_config` / `load_stage_one_config`, following the `_GROUPS` and
   `_require_keys` pattern, with groups data, model, train and eval.
 - `hpc/run.sh`:
-  - `stage-one CONFIG --run-id ID [--fold K]` (`.venv-pie`);
-  - `stage-one-queue --gpus … [--folds main,0..4] CONFIG...`, one process per GPU, skipping runs whose `row.json`
+  - `stage-one CONFIG [--run-id ID] [--fold K]` (`.venv-pie`);
+  - `stage-one-queue --gpus … [--folds main,0,1,2,3,4] CONFIG...`, one process per GPU, skipping runs whose `row.json`
     exists;
   - `stage-one-report`;
   - `stage-one-prior` (project env).
@@ -177,10 +161,11 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
 - Config: unknown or missing keys raise.
 - End to end on two synthetic lines: train, select, validation, then test.
 
-Fixtures reuse `tests/test_ladder_inputs.py:build_world` (:41) and `tests/test_pie_precompute.py:tiny_pie` (:135).
+Fixtures reuse `tests/fixtures/ladder.py:build_world` and `tests/experiments/stage_one/test_pie_precompute.py:tiny_pie`
+(:135).
 
 **Docs:** protocol §16 "Stage-one model"; `hpc/README.md` recipes; afterwards
-`results/stage_one_architecture_seed0/README.md`.
+`results/stage_one_architecture/README.md`.
 
 **Compute:** about 19 configs × (main + 5 folds). An FiLM epoch runs in seconds to minutes once resident; the direct
 trunk takes about 1 min per epoch. Under a day on 4 × H20 (an estimate; the first epoch logs replace it).
@@ -228,7 +213,7 @@ hpc/run.sh stage-one-report configs/stage_one/architecture/report_3a.yaml
   pseudo-context design above, outputs per line that resume, and `assemble_states`. Task 8 runs it on
   `pilot_genes(tables, 200, 0)` (PP:229).
 - `config.py`: `validate_states_config`. `hpc/run.sh`: `cell-states CONFIG --steps …` (with `STATES_PYTHON` for the
-  `.venv-states` steps) and `pie-precompute --steps states|assemble_states --set NAME`.
+  `.venv-states` steps) and `pie-precompute --steps states|assemble_states --set NAME[,NAME]|ALL`.
 - `hpc/states/setup.sh`, plus the chemistry and Kinker tables.
 
 **Tests:**
@@ -288,10 +273,8 @@ Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each ta
 
 ## Verification
 
-- **Each wave, locally:**
-  - `uv run python -m pytest tests -q > pytest.txt 2>&1`, against a baseline taken before the wave;
-  - `.venv/bin/ruff check .` and `ruff format` on touched files;
-  - the synthetic end-to-end tests above.
+- **Each wave, locally:** the suite against a baseline taken before the wave, and ruff (CLAUDE.md's commands); the
+  synthetic end-to-end tests above.
 - **On the H20:**
   - the `.venv-pie` import check: `python -c "import src.eval.accuracy, src.eval.metrics, src.context_prior.targets"`;
   - one short run per new command before the queue;
@@ -303,4 +286,3 @@ Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each ta
   - the profile row seeing its own or the outer fold;
   - the Δ index order against `lines.parquet` and the panel;
   - the `|whole` noise floor.
-- **Merge** each branch into `main` once its suite and lint pass and its H20 path has run.
