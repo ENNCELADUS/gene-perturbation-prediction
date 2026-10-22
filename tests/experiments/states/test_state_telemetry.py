@@ -1,7 +1,4 @@
-"""State telemetry end to end on the synthetic ladder world: fit samples, the
-mixtures, projection, state inputs that reproduce PIE's input, the frozen PIE's
-gap and the report. The ``.venv-states`` fits (programs, scVI) are replaced by
-stand-in files of the same format."""
+"""State telemetry end to end on the synthetic ladder world, ``.venv-states`` faked."""
 
 from __future__ import annotations
 
@@ -31,8 +28,8 @@ PROGRAM_KINDS = ("recurrent", "recurrent", "cycle", "background")
 
 
 def _stand_in_state_programs(t: st_telemetry.Telemetry) -> None:
-    """Files of state_programs' format: a reference of two recurrent programs,
-    a cycle phase and the background; usages and latents of every cell."""
+    """Files of ``programs``' format: a reference of two recurrent programs, a
+    cycle phase and the background; usages and latents of every cell."""
     plan = json.loads(t.layout.plan.read_text())
     assert set(plan["encode"]) == set(t.projected)
     assert set(plan["second"]) == set(SECOND)

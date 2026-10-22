@@ -1,8 +1,7 @@
-"""Build the cell-line-conditioned SL benchmark from the integrated raw table.
-
-The integrated CSV is the only pair-label input. The tracked split contract
-supplies context identities and registered-data evidence, never extra labels.
-"""
+"""Historical builder of the context_screen_v2 SL pair-context benchmark
+(``docs/data/sl-context-screen.md``) from the integrated raw table, its only
+pair-label input; the tracked split contract supplies context identities and
+registration evidence, never labels."""
 
 from __future__ import annotations
 
@@ -262,12 +261,9 @@ def _selection_masks(frame: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
 
 
 def audit_positive_losses(frame: pd.DataFrame) -> pd.DataFrame:
-    """Count, per context and per condition, positive-labelled rows the filter drops.
-
-    Each condition is evaluated independently rather than cumulatively, so a
-    context that loses all of its positives can be traced to the single rule
-    responsible instead of to whichever rule happens to run first.
-    """
+    """Count, per context and per condition, positive-labelled rows the filter
+    drops; each condition is evaluated on its own, not cumulatively, so a lost
+    positive is traced to the rule responsible, not to whichever runs first."""
     labelled = frame.loc[frame["label"].eq("positive")]
     if labelled.empty:
         return pd.DataFrame(columns=["context", "condition", "positives_dropped"])
@@ -520,12 +516,9 @@ def finalise_benchmark(
 
 
 def context_statistics(benchmark: pd.DataFrame) -> pd.DataFrame:
-    """Per-context properties a benchmark user must see before trusting a context.
-
-    Positive-anchor concentration is the load-bearing column: a context whose
-    positives all share one gene has a single-gene indicator as its label
-    function, which no row count reveals.
-    """
+    """Per-context properties to see before trusting a context. Positive-anchor
+    concentration is the load-bearing column: a context whose positives all share
+    one gene has a single-gene indicator as its label function."""
     multi_context = _multi_context_rows(benchmark)
     rows: list[dict[str, Any]] = []
     for context, frame in benchmark.groupby("context", sort=True):
@@ -788,7 +781,6 @@ def screen_manifest(
 
 
 def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, Any]:
-    """Build and write the benchmark artifacts."""
     if not INPUT_PATH.is_file():
         raise FileNotFoundError(INPUT_PATH)
     if chunksize < 1:

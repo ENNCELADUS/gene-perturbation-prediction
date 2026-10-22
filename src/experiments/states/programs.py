@@ -1,48 +1,6 @@
-"""Program and scVI fits of the cell-state vocabularies (PIE stage-one design
-§3.5, Task 8), run in ``.venv-states`` (``hpc/states/setup.sh``: cNMF, starCAT,
-scvi-tools).
-
-``python -m src.experiments.states.programs --plan <ladder>/states/fit/plan.json``
-(called by ``src.experiments.states.state_telemetry``'s ``fit`` step through
-``STATES_PYTHON``). It exchanges files only: it reads the plan, the fit samples
-and the raw h5ads, and writes under the plan's root, per fitting seed, skipping
-what exists:
-
-- ``programs/seed<s>/``. Consensus NMF (cNMF) per training line on its sampled
-  cells (each distinct cell once) over the panel genes, at every K of
-  ``programs.ks``, factorising the line's own overdispersed genes; a cell with
-  no count in them is left out of that line's factorisation. Per line, a
-  program is **robust** when its top genes share ``robust_overlap`` with a
-  program at another K, and the robust programs are kept greedily (most
-  matches first) unless they share ``redundant_overlap`` with a kept one. A
-  kept program sharing ``cycle_overlap`` top genes with Tirosh's S and G2/M
-  genes is a **cycle** program (S or G2/M by the larger overlap) and is set
-  aside; the others are clustered across lines (average linkage on the share of
-  top genes, cut at ``cluster_overlap``) and a cluster with programs from
-  ``min_lines`` lines is a **recurrent** program. The **reference**
-  (``reference.npz``, and ``reference.tsv`` in starCAT's format, programs x
-  genes): every recurrent program, the two cycle phases and a **background**
-  program, each the mean over its lines of the line's mean member spectrum (cNMF's
-  TPM spectra, renormalised to 10^6), on the pooled sample's overdispersed genes
-  and the programs' top genes, divided by each gene's TPM SD over the pooled
-  sample (starCAT's variance normalisation, with the SD fixed by the fit). The
-  background program is the pooled sample's mean TPM profile. **Usages**
-  (``usages/<ModelID>.npy``, ``usages_second/``): starCAT's non-negative least
-  squares of each cell's TPM over the reference genes, divided by the same SD,
-  on the fixed spectra, solved exactly cell by cell, so a cell's usages do not
-  depend on the cells projected with it (starCAT itself rescales genes by the
-  query's own SD). ``manifest.json`` records these rules, the counts, each
-  recurrent program's member lines and leading genes, and starCAT's own
-  ``fit_transform`` on one training line beside ours.
-- ``scvi/seed<s>/``. scVI on the pooled sample (each line's distinct sampled
-  cells) over STATE's HVGs: each cell's chemistry (resolved by deposit, line and
-  arm) as the categorical nuisance (``batch_key``), the whole-library UMI as the
-  size factor, the S and G2/M
-  scores as continuous covariates; the encoder reads neither (scVI's default),
-  so a cell's latent mean needs no category the fit saw. Latent means of every
-  cell of the plan's lines and second deposits (``latent/``,
-  ``latent_second/``) and ``manifest.json``.
-"""
+"""Program (cNMF, starCAT-style reference and usages) and scVI fits of the cell-state
+vocabularies (protocol §17), run in ``.venv-states`` from the plan the ``fit`` step
+writes; it exchanges files only."""
 
 from __future__ import annotations
 
@@ -89,7 +47,7 @@ def read_counts(
     path: str | Path, model_id: str, plan: Mapping[str, Any], genes: Sequence[str]
 ) -> tuple[sparse.csr_matrix, np.ndarray, np.ndarray]:
     """A line's raw UMI on ``genes`` (upper-case symbols, duplicates summed), its
-    whole-library sizes and its cell ids, read as Task 2 reads them."""
+    whole-library sizes and its cell ids."""
     from src.data.basal import align_columns, symbol_column
     from src.data.ladder_cells import library_sizes, upper_symbols
     from src.data.tx1_cache import read_basal_source
@@ -114,19 +72,14 @@ def _tpm(counts: sparse.csr_matrix) -> sparse.csr_matrix:
     return sparse.csr_matrix(sparse.diags(scale) @ counts)
 
 
-# --- consensus NMF per line -----------------------------------------------------------
-
-
 def program_spectra(
     spectra_tpm: pd.DataFrame, top: pd.DataFrame, panel: Sequence[str]
 ) -> pd.DataFrame:
-    """cNMF's TPM spectra as programs x panel genes, rows in ``top``'s program
-    order. cNMF 1.7.1's ``load_results`` returns them genes x programs (it reads
-    its programs x genes file transposed, against its docstring); rows are taken
-    by program label, so they align with ``top``. Fails closed on an empty
-    spectrum. (A top-gene ranking check is not made: cNMF ranks top genes by
-    its z-scored gene scores, and a program split off at a larger K can rank
-    genes there that sit low in its TPM spectrum.)"""
+    """cNMF's TPM spectra as programs x panel genes, rows taken by label in
+    ``top``'s program order; fails closed on an empty spectrum. cNMF 1.7.1's
+    ``load_results`` returns them genes x programs, against its docstring. No
+    top-gene ranking check: cNMF ranks top genes by z-scored gene scores, which
+    can rank genes that sit low in the TPM spectrum."""
     programs = list(top.columns)
     if set(spectra_tpm.columns) != set(programs):
         raise ValueError("cNMF's spectra do not list the programs as columns")
@@ -332,7 +285,7 @@ def pooled_tpm(plan: Mapping[str, Any], sample: pd.DataFrame) -> sparse.csr_matr
 
 
 def build_reference(
-    plan: Mapping[str, Any], seed: int, folder: Path, sample: pd.DataFrame
+    plan: Mapping[str, Any], folder: Path, sample: pd.DataFrame
 ) -> dict[str, Any]:
     """The program vocabulary's reference spectra and gene scale."""
     from cnmf.cnmf import get_highvar_genes_sparse
@@ -418,7 +371,7 @@ def nnls_usages(tpm: sparse.csr_matrix, spectra: np.ndarray) -> np.ndarray:
     from scipy.optimize import nnls
 
     design = np.asarray(spectra, dtype=np.float64).T
-    dense = tpm.toarray() if sparse.issparse(tpm) else np.asarray(tpm)
+    dense = tpm.toarray()
     return np.vstack([nnls(design, row)[0] for row in dense]).astype(np.float32)
 
 
@@ -491,7 +444,7 @@ def programs_seed(plan: Mapping[str, Any], seed: int) -> None:
     ]
     in_processes(calls, f"cNMF seed {seed}")
     if not (folder / "reference.npz").is_file():
-        summary = build_reference(plan, seed, folder, sample)
+        summary = build_reference(plan, folder, sample)
         write_json(folder / "reference.json", summary, keep_nan=True)
     reference = dict(np.load(folder / "reference.npz", allow_pickle=False))
     calls = [
@@ -530,9 +483,6 @@ def programs_seed(plan: Mapping[str, Any], seed: int) -> None:
             },
             keep_nan=True,
         )
-
-
-# --- scVI ---------------------------------------------------------------------------
 
 
 def _scvi_adata(
@@ -671,9 +621,6 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
             },
             keep_nan=True,
         )
-
-
-# --- entry point ------------------------------------------------------------------
 
 
 def in_processes(calls: Sequence[Any], label: str) -> None:

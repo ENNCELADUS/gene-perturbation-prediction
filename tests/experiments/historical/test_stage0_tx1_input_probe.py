@@ -1,18 +1,4 @@
-"""Tests for the Tx1 input probe (historical Exp13 protocol §6).
-
-The GPU forward pass is not testable here, so these cover the parts that
-decide whether the probe's answer means anything:
-
-1. the raw-count guard, because the probe's claim is vacuous if its
-   reference arm is already normalized (Replogle ships ``_raw_`` and
-   ``_normalized_`` h5ads one word apart);
-2. the CPM transform's structural invariants -- zeros preserved, within-cell
-   order preserved, per-cell sums hit the target -- since those are exactly
-   the properties per-cell quantile binning is blind to;
-3. the arm comparison, driven by a **mock encoder that reimplements the
-   collator's binning rule**, so the invariance claim is exercised end to
-   end on the real algorithm without a checkpoint.
-"""
+"""The Tx1 input probe's raw-count guard, CPM transform and arms, on a binning mock."""
 
 from __future__ import annotations
 
@@ -32,7 +18,6 @@ from src.experiments.historical.stage0_tx1_input_probe import (
 
 
 def _adata(matrix: sparse.csr_matrix):
-    """Wrap a count matrix in the minimal AnnData the probe expects."""
     import anndata as ad
     import pandas as pd
 
@@ -57,20 +42,15 @@ def _counts(n_cells: int = 6, n_genes: int = 12, seed: int = 0) -> sparse.csr_ma
 
 
 class _BinningEncoder:
-    """Mock encoder applying the collator's per-cell quantile binning.
-
-    Mirrors ``tahoe_x1.data.collator.binning``: bucketize each cell against
-    quantiles of its own nonzero values. Any embedding built from those bins
-    is what the real model sees, so a transform this mock is blind to is one
-    the real encoder is blind to as well.
-    """
+    """Mock encoder applying ``tahoe_x1.data.collator.binning``: each cell
+    bucketized against quantiles of its own nonzero values."""
 
     def __init__(self, n_bins: int = 51, subsample_to: int | None = None) -> None:
         self.n_bins = n_bins
         self.subsample_to = subsample_to
         self.calls = 0
 
-    def __call__(self, adata) -> np.ndarray:  # noqa: ANN001 - test double
+    def __call__(self, adata) -> np.ndarray:
         self.calls += 1
         matrix = sparse.csr_matrix(adata.X).toarray()
         grades = torch.linspace(0, 1, self.n_bins - 1, dtype=torch.float64)
@@ -92,9 +72,6 @@ class _BinningEncoder:
         return np.asarray(rows, dtype=np.float32)
 
 
-# --- raw-count guard ---------------------------------------------------------
-
-
 def test_assert_raw_counts_accepts_integer_counts() -> None:
     audit = assert_raw_counts(_counts())
     assert audit["noninteger_fraction"] == 0.0
@@ -111,9 +88,6 @@ def test_assert_raw_counts_rejects_negative_values() -> None:
     matrix[0, 0] = -1.0
     with pytest.raises(ValueError, match="negative"):
         assert_raw_counts(sparse.csr_matrix(matrix))
-
-
-# --- the CPM transform -------------------------------------------------------
 
 
 def test_to_cpm_hits_the_target_library_size() -> None:
@@ -139,9 +113,6 @@ def test_to_cpm_rejects_an_empty_cell() -> None:
         to_cpm(sparse.csr_matrix(matrix))
 
 
-# --- arm comparison ----------------------------------------------------------
-
-
 def test_compare_reports_identity_for_the_same_block() -> None:
     block = np.arange(12, dtype=np.float32).reshape(3, 4)
     result = compare(block, block)
@@ -160,13 +131,8 @@ def test_binning_encoder_is_blind_to_cpm() -> None:
 
 
 def test_probe_separates_subsampling_from_cpm() -> None:
-    """Unseeded gene subsampling must show up as its own arm, not as CPM.
-
-    With the RNG pinned per arm, the CPM arm stays exact even though every
-    cell is wide enough to be subsampled; only the deliberately unseeded
-    repeat moves. That separation is the whole point of the probe -- read
-    together, the two effects are confounded.
-    """
+    """Unseeded gene subsampling shows up as its own arm, not as CPM: with the
+    RNG pinned per arm only the unseeded repeat moves, every cell being wide."""
     adata = _adata(_counts(n_cells=8, n_genes=40, seed=3))
     encoder = _BinningEncoder(subsample_to=5)
     report = run_probe(adata, encoder, seed=11, max_length=4)

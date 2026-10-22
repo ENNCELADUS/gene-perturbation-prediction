@@ -1,9 +1,4 @@
-"""The ``.venv-states`` fits (``src.experiments.states.programs``) on synthetic
-lines sharing two programs and a cycle program: recurrent programs found across
-lines, cycle programs set aside, usages and scVI latents for every cell.
-
-Needs cNMF, starCAT and scvi-tools (``.venv-states``); skipped without them.
-"""
+"""The ``.venv-states`` fits on synthetic lines; skipped without cNMF, starCAT, scVI."""
 
 from __future__ import annotations
 
@@ -142,7 +137,6 @@ def test_programs_and_scvi_on_synthetic_lines(tmp_path):
         assert means[best] > 2 * rest
         planted.append(best)
     assert set(planted) == {"a", "b"}
-    # Per-line cNMF spectra are programs x genes and non-zero.
     line = dict(np.load(folder / "cnmf" / "ACH-L1.npz"))
     assert line["tpm_k3"].shape == (3, len(GENES)) and (line["tpm_k3"].sum(1) > 0).all()
     manifest = json.loads((folder / "manifest.json").read_text())

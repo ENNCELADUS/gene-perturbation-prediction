@@ -1,4 +1,4 @@
-"""The cell-state telemetry's config (protocol §17). Every key explicit, unknown keys
+"""The cell-state telemetry's config (protocol §17): every key explicit, unknown keys
 rejected."""
 
 from collections.abc import Mapping
@@ -33,10 +33,6 @@ def _positive_integers(config: Mapping[str, Any], group: str, keys: str) -> None
 
 
 def validate_states_config(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Keys of the state-telemetry config (PIE stage-one design §3.5, Task 8): the
-    ladder config whose inputs it reads, the vocabulary fits, the projection
-    roles, the state inputs and their controls, the reference tables, the frozen
-    PIE's state pass and the report."""
     require_keys(config, {*_STATES_GROUPS, *_STATES_TOP_LEVEL.split()}, "config")
     for name, keys in _STATES_GROUPS.items():
         require_keys(config[name], set(keys.split()), name)
@@ -92,5 +88,4 @@ def validate_states_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def load_states_config(path: Path) -> dict[str, Any]:
-    """Load and validate a state-telemetry YAML config."""
     return validate_states_config(read_yaml(path))

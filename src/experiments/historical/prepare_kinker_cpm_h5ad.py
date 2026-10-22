@@ -1,10 +1,6 @@
-#!/usr/bin/env python3
-"""Build explicitly non-raw Kinker CPM h5ads for sensitivity analysis.
-
-The public Kinker/scCCLE matrix is processed CPM, not UMI counts.  This
-script preserves that distinction in every artifact and deliberately marks
-the standard Tx1 raw-count contract as blocked.
-"""
+"""Historical builder of per-line Kinker/scCCLE processed-CPM h5ads for a CPM
+sensitivity analysis, superseded by raw-UMI preparation; every artifact marks the
+matrix as non-raw and the standard Tx1 raw-count contract as blocked."""
 
 from __future__ import annotations
 
@@ -133,8 +129,6 @@ def _map_genes(
     mapped.insert(0, "gene_symbol", source_symbols[keep].to_numpy())
     mapped = mapped.rename(columns={"ensembl_id": "sensitivity_ensembl_id"})
     mapped.index = mapped["gene_symbol"].astype(str)
-    if mapped["sensitivity_ensembl_id"].duplicated().any():
-        raise ValueError("gene mapping produced duplicate Ensembl IDs")
     audit = {
         "source_genes": int(len(source_symbols)),
         "ambiguous_metadata_symbols": int(len(ambiguous_symbols)),
@@ -294,7 +288,7 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             raise ValueError("HVG checkpoint gene order contains duplicates")
         mapped_gene_symbols = set(var["gene_symbol"].astype(str))
         hvg_missing = [gene for gene in hvg_genes if gene not in mapped_gene_symbols]
-        hvg_fill_rate = len(hvg_missing) / len(hvg_genes) if len(hvg_genes) else 0.0
+        hvg_fill_rate = len(hvg_missing) / len(hvg_genes)
         if hvg_fill_rate > args.max_hvg_fill_rate:
             raise ValueError(
                 f"HVG fill rate {hvg_fill_rate:.3f} exceeds "

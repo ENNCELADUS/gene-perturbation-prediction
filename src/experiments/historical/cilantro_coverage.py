@@ -1,25 +1,10 @@
-"""Coverage of the context screen by Cilantro-SL's deletion operator, before GPU work.
+"""Historical pre-GPU audit of the context screen's coverage by Cilantro-SL.
 
-Step 0 of the port (``docs/specs/2026-10-08-cilantro-sl-reproduction-design.md`` §5.2).
-Geneformer can delete a gene from an input only when the gene is among that input's top
-2048 tokens, ranked by expression over the gene's corpus median (gf-12L-30M-i2048 with
-the gc30M dictionaries); a per-input total cancels in the ranking. Without running the
-model, for every line of the 226-line membership this reports:
-
-- pseudo-bulk in the paper's input form (log1p CPM of the line's summed UMI) over the
-  paper's vocabulary recipe: every gene of the context screen plus 500 HVGs fitted on
-  the stage-one lines' pseudo-bulk;
-- per-cell bags over the native gc30M vocabulary: 128 cells (seed 0, every cell when
-  fewer); a gene is covered in a line when it is among the top 2048 tokens of at least
-  10 bag cells.
-
-Per SL context it counts the rows, positives and negatives whose two genes are both
-covered and both have a Gene2vec embedding; per line, the covered genes and, for the
-stage-one lines, the covered genes with a 26Q1 GeneEffect label. It reports; the reader
-decides.
-
-``python -m src.experiments.historical.cilantro_coverage --out OUT``
-"""
+Per line and SL context, the rows whose two genes Geneformer's deletion operator can
+reach (both among the input's top 2048 tokens, with a Gene2vec embedding), in
+pseudo-bulk and in per-cell bags, as
+``docs/specs/2026-10-08-cilantro-sl-reproduction-design.md`` §5.2 sets out; it reports,
+the reader decides."""
 
 from __future__ import annotations
 
@@ -85,7 +70,6 @@ def unversioned(gene_id: str) -> str:
 
 
 def covered_rows(pairs: pd.DataFrame, covered: set[str]) -> pd.Series:
-    """Rows whose two genes (columns ``ensembl_a``, ``ensembl_b``) are both covered."""
     return pairs["ensembl_a"].isin(covered) & pairs["ensembl_b"].isin(covered)
 
 

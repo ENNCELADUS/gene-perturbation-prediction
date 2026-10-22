@@ -1,41 +1,6 @@
-#!/usr/bin/env python3
-"""Stage 0 probe: does Tx1 read CPM input the same way it reads raw counts?
-
-``docs/specs/2026-08-17-exp13-geneeffect-residual-protocol.md`` §6 (removed; ``git show
-1694f5c:<path>``) registers one open
-question: 152 of the 179 new-atlas lines are Kinker ``processed_cpm``, and
-$x_c = E_{Tx1}(r_c)$ is only trustworthy if the encoder treats a
-CPM-normalized row the way it treats the raw counts underneath it. §6 rules
-out "swap only $z_c$" as a fallback, so an untrustworthy embedding voids the
-whole ST pass for those lines.
-
-The static answer is that it does, because the released checkpoint's
-``collator_config.yml`` sets ``do_binning: true``: :func:`tahoe_x1.data.
-collator.binning` bucketizes each cell against quantiles of *its own*
-nonzero values, and ``bucketize(k*x, k*q) == bucketize(x, q)`` for any
-``k > 0``. Kinker's matrix is linear CPM (per-cell library sums ~1e6), i.e.
-exactly such a ``k`` per cell. This probe measures that claim on real cells
-through the real encoder instead of asserting it.
-
-It also isolates a second effect found while reading the same collator:
-``max_length`` is 2048 with ``sampling: true``, and ``_sample`` draws its
-gene subset with an **unseeded** ``torch.randperm``. Every Kinker cell is
-wider than that (detected-gene median 4637), so repeat encodes of one cell
-disagree for reasons that have nothing to do with CPM. The two effects are
-confounded unless the RNG is pinned, so each arm seeds immediately before
-its forward pass; ``repeat_unseeded`` then measures the sampling effect on
-its own.
-
-Arms (all on the same cells, same order):
-
-``raw``               reference encode of the raw-count matrix
-``cpm``               encode of ``raw * 1e6 / library_size``, same seed
-``repeat_seeded``     ``raw`` again, same seed -- isolates seeding
-``repeat_unseeded``   ``raw`` again, RNG left running -- gene subsampling
-
-Cells are reported split by whether they exceed ``--max-length`` detected
-genes, because only the wide group can trigger ``_sample`` at all.
-"""
+"""Historical probe of whether Tx1-3B encodes a CPM-rescaled cell as it encodes the
+raw counts underneath it, with the collator's unseeded gene subsampling (``_sample``,
+``torch.randperm``) isolated by seeding each arm just before its forward pass."""
 
 from __future__ import annotations
 
@@ -52,17 +17,12 @@ from scipy import sparse
 
 _LOGGER = logging.getLogger("stage0_tx1_input_probe")
 
-#: Target library size for the CPM arm, matching Kinker's published matrix
-#: (``GSE157220_CPM_data.txt.gz``, per-cell sums ~1e6).
+#: Kinker's published CPM matrix sums to ~1e6 per cell.
 CPM_TARGET_SUM: float = 1e6
 
 
 def _sha256_order(barcodes: np.ndarray) -> np.ndarray:
-    """Deterministic cell order: ascending ``sha256(barcode)``.
-
-    Mirrors the historical Exp13 protocol §5's cell-subsample rule so the probe's
-    cells are reproducible across runs and machines without carrying an index file.
-    """
+    """Cells in ascending ``sha256(barcode)``: reproducible without an index file."""
     digests = [
         hashlib.sha256(str(barcode).encode("utf-8")).hexdigest() for barcode in barcodes
     ]
@@ -70,19 +30,9 @@ def _sha256_order(barcodes: np.ndarray) -> np.ndarray:
 
 
 def assert_raw_counts(matrix: sparse.spmatrix | np.ndarray) -> dict[str, float]:
-    """Fail closed unless ``matrix`` really is raw counts.
-
-    The probe's whole claim is "CPM encodes like the counts underneath it",
-    which is vacuous if the reference arm is already normalized. Replogle
-    ships ``_raw_`` and ``_normalized_`` h5ads whose names differ by one
-    word (``docs/data/replogle-k562-gwps.md``), so this is a live confusion.
-
-    Returns:
-        Audit numbers worth recording next to the result.
-
-    Raises:
-        ValueError: values are negative, non-finite, or not integral.
-    """
+    """Audit numbers of ``matrix``; fails closed unless it is raw counts (finite,
+    non-negative, integral), since the probe's claim is vacuous on a reference arm
+    that is already normalised."""
     data = matrix.data if sparse.issparse(matrix) else np.asarray(matrix).ravel()
     data = np.asarray(data, dtype=np.float64)
     if data.size == 0:
@@ -105,13 +55,7 @@ def assert_raw_counts(matrix: sparse.spmatrix | np.ndarray) -> dict[str, float]:
 
 
 def to_cpm(matrix: sparse.spmatrix) -> sparse.csr_matrix:
-    """Rescale each cell to ``CPM_TARGET_SUM``, preserving the zero pattern.
-
-    This is the transform whose invariance is under test: a strictly
-    positive per-cell scalar. It cannot move a zero, reorder a cell's genes,
-    or break a tie, which is exactly why per-cell quantile binning should
-    not see it.
-    """
+    """Rescale each cell to ``CPM_TARGET_SUM``, preserving the zero pattern."""
     csr = sparse.csr_matrix(matrix, dtype=np.float64)
     sums = np.asarray(csr.sum(axis=1)).ravel()
     if np.any(sums <= 0):
@@ -129,7 +73,6 @@ def detected_genes(matrix: sparse.spmatrix) -> np.ndarray:
 
 
 def _cosine_rows(left: np.ndarray, right: np.ndarray) -> np.ndarray:
-    """Row-wise cosine similarity between two equal-shaped embedding blocks."""
     left_norm = np.linalg.norm(left, axis=1)
     right_norm = np.linalg.norm(right, axis=1)
     denominator = np.maximum(left_norm * right_norm, 1e-12)
@@ -137,13 +80,8 @@ def _cosine_rows(left: np.ndarray, right: np.ndarray) -> np.ndarray:
 
 
 def compare(reference: np.ndarray, other: np.ndarray) -> dict[str, float]:
-    """Summarize how far ``other`` sits from ``reference``.
-
-    Reports the per-cell agreement and the agreement of the pooled mean,
-    because the pooled mean is what the context embedding ``z_c`` consumes
-    (``docs/03-geneeffect-protocol.md`` §4) -- a per-cell wobble that averages
-    out matters far less than one that does not.
-    """
+    """Per-cell agreement of ``other`` with ``reference``, and of their pooled
+    means, the pooled mean being what the context embedding consumes."""
     cosines = _cosine_rows(reference, other)
     reference_mean = reference.mean(axis=0, keepdims=True)
     other_mean = other.mean(axis=0, keepdims=True)
@@ -164,19 +102,9 @@ def run_probe(
     seed: int,
     max_length: int,
 ) -> dict[str, object]:
-    """Encode the four arms and compare them.
-
-    Args:
-        adata: Raw-count AnnData, already restricted to encodable genes.
-        encode: Callable taking an AnnData and returning ``[cells, width]``.
-        seed: Global torch seed set immediately before the seeded arms.
-        max_length: The collator's context window, used only to split the
-            report into cells that can and cannot trigger ``_sample``.
-
-    Returns:
-        A JSON-ready record: per-arm comparisons, overall and split by
-        whether the cell exceeds ``max_length`` detected genes.
-    """
+    """The ``cpm``, ``repeat_seeded`` and ``repeat_unseeded`` arms against the
+    ``raw`` encode of the same cells, overall and split by whether a cell exceeds
+    ``max_length`` detected genes (only those can trigger ``_sample``)."""
     counts = detected_genes(adata.X)
     wide = counts > max_length
 
@@ -225,13 +153,8 @@ def load_probe_adata(
     vocab_genes: set[str] | None,
     var_ensembl_col: str | None,
 ) -> ad.AnnData:
-    """Load a deterministic cell subset restricted to encodable genes.
-
-    Genes are filtered to ``vocab_genes`` because the encoder resolves every
-    ``var["ensembl_id"]`` through the Tx1 vocabulary and raises on a miss;
-    filtering here keeps the probe's failure modes about the question under
-    test rather than about vocabulary coverage.
-    """
+    """A deterministic cell subset on the genes in ``vocab_genes``: the encoder
+    raises on a gene outside the Tx1 vocabulary."""
     adata = ad.read_h5ad(path)
     if var_ensembl_col and var_ensembl_col in adata.var.columns:
         adata.var.index = adata.var[var_ensembl_col].astype(str)
@@ -250,12 +173,8 @@ def load_probe_adata(
 
 
 def build_encoder(model_dir: Path, batch_size: int, max_length: int):
-    """Build the real Tx1-3B encode callable.
-
-    Deliberately not reusing the Tx1 cache encoder in ``src.data.tx1_cache``:
-    this probe must be able to set the global torch seed *between* forward
-    passes, which only works if the loader is constructed per call.
-    """
+    """The Tx1-3B encode callable, its loader built per call so the global torch
+    seed can be set between forward passes (``src.data.tx1_cache`` cannot)."""
     from composer import Trainer
     from tahoe_x1.utils.util import loader_from_adata
 
@@ -294,7 +213,6 @@ def build_encoder(model_dir: Path, batch_size: int, max_length: int):
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adata", type=Path, required=True)
     parser.add_argument("--model-dir", type=Path, required=True)
@@ -309,7 +227,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the probe against the real Tx1-3B encoder and write its report."""
     args = parse_args(argv)
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(message)s")
 
@@ -337,7 +254,6 @@ def main(argv: list[str] | None = None) -> int:
     }
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    _LOGGER.info("wrote %s", args.out_json)
     return 0
 
 
