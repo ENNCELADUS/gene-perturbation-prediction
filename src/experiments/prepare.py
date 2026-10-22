@@ -1,22 +1,8 @@
-"""Prepare fixed joint-training inputs once, in STATE's log expression space.
+"""Prepare fixed joint-training inputs once, in STATE's log expression space
+(``log1p(x * T / L_cell)``, Tx1 on raw UMI); the only reader of raw data.
 
-Tx1 reads raw UMI. Every other expression quantity is ``log1p(x * T / L_cell)``
-then STATE's HVG slice, with ``L_cell`` the cell's UMI total over every gene
-of its source matrix and ``T`` the median ``L_cell`` of the non-targeting
-cells in the Nadig 2025 Jurkat and HepG2 sources (data STATE's Replogle
-checkpoint was trained on).
-
-The lines are the split's (``paths.split``: the 226 and the built single-cell
-extras); each line's raw-UMI cells are ``<paths.basal_raw_umi>/<ModelID>.h5ad``.
-Once ``prepared_inputs.json`` exists, a run prepares only the lines without
-``lines/<ModelID>.npz``, in the recorded space (``T``, panel, HVG order); every
-other file stays as written.
-
-The two ``T`` sources and every response anchor are read at once, one process
-each; each anchor process writes its reduced cells to a temporary part file
-that this process turns into log-space bags once ``T`` is known. The basal
-lines then run on a process pool. Every result is what one process computing
-them in turn would write.
+An existing root grows by the split's lines it lacks, in the recorded space;
+every other file stays as written.
 """
 
 from __future__ import annotations
@@ -109,7 +95,6 @@ def _prepare_basal_line(
     target_sum: float,
     cells_per_context: int,
 ) -> None:
-    """Write ``lines/<ModelID>.npz`` of one basal line."""
     from src.data.basal import symbol_column
     from src.data.prepared import prepare_line, write_prepared_line
     from src.data.tx1_cache import load_line_cache, read_basal_source

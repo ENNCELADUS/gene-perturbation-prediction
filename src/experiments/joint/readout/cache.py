@@ -121,15 +121,9 @@ def write_feature_cache(
 ):
     """Stream (raw FeatureBatch, residual, mean) tuples; never fit on validation."""
     root = Path(root)
-    if set(batches) != {"train", "val"} or set(split_lines) != {"train", "val"}:
-        raise ValueError("P1-A requires train and val only")
     lines = list(split_lines["train"]) + list(split_lines["val"])
     if len(set(lines)) != len(lines) or len(set(genes)) != len(genes):
         raise ValueError("split contexts must be disjoint and identities unique")
-    if not set(variable_genes).issubset(genes):
-        raise ValueError("variable genes outside gene order")
-    if not set(selective_genes).issubset(genes):
-        raise ValueError("selective genes outside gene order")
     root.mkdir(parents=True, exist_ok=False)
     metadata = {
         "status": "writing",

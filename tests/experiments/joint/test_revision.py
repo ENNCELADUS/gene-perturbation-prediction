@@ -1,9 +1,4 @@
-"""The revision route: summary and revision.json from synthetic run directories,
-argument handling, step skipping and config binding. No GPU, no real data.
-
-``paired_line_bootstrap`` belongs to ``src.eval.metrics`` (added with the revision's
-metric changes); the tests stub it so they do not depend on its numerics.
-"""
+"""The revision route on synthetic run directories, with the bootstrap stubbed."""
 
 from __future__ import annotations
 

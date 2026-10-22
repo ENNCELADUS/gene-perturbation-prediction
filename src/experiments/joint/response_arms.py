@@ -62,14 +62,9 @@ class OneHotPerturbations(nn.Module):
 
 
 class _ObservedCells:
-    """Every response condition's observed cells, read from the cache once.
-
-    The cells stay on the comparison device when they take at most
-    ``RESIDENT_SHARE`` of its free memory; otherwise they stay in host memory
-    and each batch's cells move to the device in one pinned transfer. Each
-    condition's observed mean and within-observed energy-distance term
-    ``E|y-y'|`` do not depend on any prediction and are computed once.
-    """
+    """Every response condition's observed cells, read from the cache once, on the
+    device or (beyond ``RESIDENT_SHARE``) in pinned host memory, with each
+    condition's prediction-independent mean and energy-distance term ``E|y-y'|``."""
 
     def __init__(self, cache: Any, device: torch.device, batch_size: int) -> None:
         count = len(cache.keys)

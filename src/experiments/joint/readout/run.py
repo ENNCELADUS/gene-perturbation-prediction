@@ -1,6 +1,6 @@
-"""The readout-head run (``all``'s last step, and ``python -m
-src.experiments.joint.readout``): extract a frozen joint backbone's features once, fit
-the head with the explicit gene-specific context slope, score validation."""
+"""The readout-head run (``all``'s last step): extract a frozen joint backbone's
+features once, fit the head with the explicit gene-specific context slope, score
+validation."""
 
 import argparse
 import json
@@ -102,12 +102,8 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
 
 
 def run_readout(checkpoint, out_dir, *, device, inputs=None):
-    """Train the explicit gene-specific context-slope readout on a frozen backbone.
-
-    Extracts train/val features into ``out_dir/features``, fits the readout (head
-    seed 0), scores validation and writes ``out_dir/metrics.json``. Returns that
-    file's contents at once when it already exists.
-    """
+    """Write ``out_dir/metrics.json`` (validation, head seed 0) and return it; at once
+    when it already exists. Features are cached in ``out_dir/features``."""
     from src.experiments.joint.readout.cache import ReadoutCache
     from src.experiments.joint.readout.heads import fit_readout
 

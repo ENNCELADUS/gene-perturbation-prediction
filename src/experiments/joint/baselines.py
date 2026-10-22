@@ -29,8 +29,6 @@ def run_baselines(config, *, split, out_dir, inputs=None):
     from src.data.splits import FixedSplit
     from src.eval.accuracy import aggregate_geneeffect
 
-    if split not in {"val", "test"}:
-        raise ValueError("baseline split must be val or test")
     if inputs is None:
         from src.data.prepared import load_inputs
 

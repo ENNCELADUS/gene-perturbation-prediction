@@ -1,18 +1,7 @@
 """One automatic run: preparation through validation evaluation, then summary.md.
 
-``python -m src.experiments.joint.all CONFIG [--run-id ID] [--gpus 0,1,2,3]`` writes
-``<output_root>/<run id>/{comparison/, train/, evaluation/val/, baselines/val/,
-readout/, logs/, summary.md}``. Every step is skipped when its output exists, so
-rerunning with the same run id resumes. The test split is never evaluated here.
-
-Steps, in order: preparation; the untrained response-comparison arms (one
-subprocess on the first chosen GPU); joint training (``accelerate launch`` on
-every chosen GPU); the trained response-comparison jobs (one subprocess per
-chosen GPU at a time, the next starting as soon as a GPU frees) and their
-summary; validation evaluation, baselines and the readout head (on the first
-chosen GPU); summary.md. The chosen GPUs are every visible one unless ``--gpus``
-names some. Without CUDA every step runs in this process on the CPU. SIGINT or
-SIGTERM terminates the running subprocesses before the run exits.
+Every step is skipped when its output exists, so rerunning with the same run id
+resumes; the test split is never evaluated here.
 """
 
 from __future__ import annotations
@@ -72,11 +61,6 @@ def _name(model_id: str) -> str:
     )
 
 
-# ----------------------------------------------------------------------------
-# GPU subprocesses: one pool of GPU slots per step
-# ----------------------------------------------------------------------------
-
-
 def comparison_argv(config_path: Path, run: Path, *mode: str) -> tuple[str, ...]:
     return (
         sys.executable,
@@ -92,11 +76,6 @@ def comparison_argv(config_path: Path, run: Path, *mode: str) -> tuple[str, ...]
     )
 
 
-# ----------------------------------------------------------------------------
-# Response-model comparison and joint training
-# ----------------------------------------------------------------------------
-
-
 def comparison_and_training(
     config_path: Path,
     config: dict,
@@ -104,12 +83,8 @@ def comparison_and_training(
     gpus: tuple[str, ...],
     start: Callable = start_process,
 ) -> None:
-    """Untrained comparison arms, joint training, trained comparison jobs, summary.
-
-    With GPUs every step is a subprocess: the untrained arms on the first GPU,
-    training on all of them, then one trained comparison job per GPU at a time.
-    Without GPUs every step runs in this process on the CPU, in the same order.
-    """
+    """Untrained comparison arms, joint training, trained comparison jobs, summary:
+    subprocesses on ``gpus``, or in this process on the CPU without any."""
     from src.experiments.joint import response_comparison
     from src.experiments.joint.train import run_training
 
@@ -151,11 +126,6 @@ def comparison_and_training(
         response_comparison.summarise(config, comparison)
 
 
-# ----------------------------------------------------------------------------
-# Validation evaluation
-# ----------------------------------------------------------------------------
-
-
 def _validation(config: dict, run: Path, device: str) -> None:
     from src.experiments.joint.baselines import run_baselines
     from src.experiments.joint.evaluate import evaluate_checkpoint, export_evaluation
@@ -173,11 +143,6 @@ def _validation(config: dict, run: Path, device: str) -> None:
     if not (run / "readout" / "metrics.json").is_file():
         print("readout head with the explicit gene-specific context slope", flush=True)
         run_readout(best, run / "readout", device=device)
-
-
-# ----------------------------------------------------------------------------
-# summary.md
-# ----------------------------------------------------------------------------
 
 
 def target_sum_line(manifest: dict) -> str:
@@ -350,19 +315,14 @@ def write_summary(config: dict, run: Path, run_id: str) -> Path:
     return path
 
 
-# ----------------------------------------------------------------------------
-# The run
-# ----------------------------------------------------------------------------
-
-
 def run_all(
     config_path: Path, *, run_id: str | None, gpus: Sequence[str] | None = None
 ) -> Path:
     """Run (or resume) every step into ``<output_root>/<run id>``; return that dir.
 
-    ``gpus`` names the GPUs to use (ids as ``CUDA_VISIBLE_DEVICES`` lists them);
-    by default every visible GPU. It is not bound to the run: a resumed run may
-    use other GPUs, except that unfinished training needs as many as it started on.
+    ``gpus`` (default: every visible GPU) is not bound to the run: a resumed run
+    may use other GPUs, except that unfinished training needs as many as it
+    started on.
     """
     from src.experiments.prepare import prepare_inputs
 

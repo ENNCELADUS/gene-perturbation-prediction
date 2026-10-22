@@ -1,22 +1,7 @@
 """One revision run: training, validation and test with baselines, then summary.md.
 
-``hpc/run.sh revision CONFIG [--run-id ID] [--gpus 0,1,2,3]`` writes
-``<output_root>/<run id>/{train/, evaluation/{val,test}/, baselines/{val,test}/,
-logs/, revision.json, summary.md}``. Every step is skipped when its output exists, so
-rerunning with the same run id resumes. There is no response comparison and no
-readout. One config is one experiment at one seed: ``train/best.pt`` is chosen on
-validation alone and then scored once on test.
-
-Steps, in order: preparation (returns at once on an existing prepared root); joint
-training (``accelerate launch`` on every chosen GPU, in this process on a CPU-only
-machine); for validation, then test, the evaluation of ``train/best.pt`` and the
-baselines (on the first chosen GPU); revision.json and summary.md, which hold per
-split the table of the joint model against every baseline, the paired line
-bootstrap of selective-gene Spearman against the Tx1 context-PCA ridge and, with a
-prior, against the prior alone and the prior plus the Tx1 ridge, and a per-lineage
-table; and the training record at the best epoch. The chosen GPUs are every
-visible one unless ``--gpus`` names some. SIGINT or SIGTERM terminates the running
-subprocesses before the run exits.
+Every step is skipped when its output exists, so rerunning with the same run id
+resumes; ``train/best.pt`` is chosen on validation alone and then scored once on test.
 """
 
 from __future__ import annotations
@@ -78,11 +63,6 @@ def _finite(value: Any) -> float | None:
     return float(value)
 
 
-# ----------------------------------------------------------------------------
-# Training and evaluation
-# ----------------------------------------------------------------------------
-
-
 def train_joint(
     config_path: Path,
     config: dict,
@@ -120,11 +100,6 @@ def evaluate(config: dict, run: Path, split: str) -> None:
     if not (baselines / "metrics.json").is_file():
         print(f"{title} baselines", flush=True)
         run_baselines(config, split=split, out_dir=baselines)
-
-
-# ----------------------------------------------------------------------------
-# revision.json and summary.md
-# ----------------------------------------------------------------------------
 
 
 def _row(metrics: dict, split: str) -> dict[str, float | None]:
@@ -341,19 +316,14 @@ def write_outputs(config_path: Path, run: Path, run_id: str, split_table: Path) 
     return path
 
 
-# ----------------------------------------------------------------------------
-# The run
-# ----------------------------------------------------------------------------
-
-
 def run_revision(
     config_path: Path, *, run_id: str | None, gpus: Sequence[str] | None = None
 ) -> Path:
     """Run (or resume) every step into ``<output_root>/<run id>``; return that dir.
 
-    ``gpus`` names the GPUs to use (ids as ``CUDA_VISIBLE_DEVICES`` lists them);
-    by default every visible GPU. It is not bound to the run: a resumed run may
-    use other GPUs, except that unfinished training needs as many as it started on.
+    ``gpus`` (default: every visible GPU) is not bound to the run: a resumed run
+    may use other GPUs, except that unfinished training needs as many as it
+    started on.
     """
     from src.experiments.prepare import prepare_inputs
 
@@ -390,7 +360,6 @@ def run_revision(
         train_joint(config_path, config, run, chosen)
         for split in SPLITS:
             evaluate(config, run, split)
-        # The split table (model_id, lineage) sits next to the split file.
         split_table = Path(config["paths"]["split"]).with_suffix(".csv")
         if not split_table.is_file():
             raise FileNotFoundError(

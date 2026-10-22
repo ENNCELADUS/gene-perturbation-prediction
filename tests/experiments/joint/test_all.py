@@ -1,11 +1,4 @@
-"""The ``all`` run end to end on CPU, from a synthetic raw world to summary.md.
-
-The raw world is ``prepare_world.build_world`` widened to STATE's 2000 HVGs (the
-joint model's width) and ten labeled training lines (the readout needs at least
-nine), so the real ``prepare_inputs`` runs. STATE is a tiny released-shaped
-checkpoint with a three-entry one-hot vocabulary covering one of the two
-response genes.
-"""
+"""The ``all`` run end to end on CPU, from a synthetic raw world to summary.md."""
 
 from __future__ import annotations
 
