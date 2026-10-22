@@ -19,14 +19,17 @@ from src.data.io import write_npy, write_npz
 import pandas as pd
 import pytest
 
+from src.experiments.stage_one import pie as ppie
+from src.experiments.stage_one import pie_decode as pdecode
 from src.experiments.stage_one import pie_precompute as pp
+from src.experiments.stage_one import pie_states as pstates
 
 PIE_TESTS = Path(__file__).resolve().parents[1] / "third_party" / "pie" / "tests"
 LINES = ("L1", "L2", "L3")  # L3 has no Cellosaurus text
 PANEL = ("GA", "GB", "GC", "GD", "GE")
 
 
-def _tables(n_lines=len(LINES), panel=PANEL, roles=None) -> pp.Tables:
+def _tables(n_lines=len(LINES), panel=PANEL, roles=None) -> ppie.Tables:
     lines = [f"L{i + 1}" for i in range(n_lines)]
     roles = roles or ["train_cells", "train_bulk", "test"][:n_lines]
     genes = pd.DataFrame(
@@ -38,7 +41,7 @@ def _tables(n_lines=len(LINES), panel=PANEL, roles=None) -> pp.Tables:
         index=pd.Index(list(panel), name="gene"),
     )
     rng = np.random.default_rng(0)
-    return pp.Tables(
+    return ppie.Tables(
         lines=pd.DataFrame({"role": roles}, index=pd.Index(lines, name="model_id")),
         genes=genes,
         pie_input=pd.DataFrame(
@@ -73,17 +76,17 @@ def test_variance_split():
 
 def test_pilot_genes_and_shards():
     tables = _tables(panel=tuple(f"G{i}" for i in range(30)))
-    chosen = pp.pilot_genes(tables, 10, 0)
-    assert len(set(chosen)) == 10 and chosen == pp.pilot_genes(tables, 10, 0)
+    chosen = ppie.pilot_genes(tables, 10, 0)
+    assert len(set(chosen)) == 10 and chosen == ppie.pilot_genes(tables, 10, 0)
     assert chosen == [g for g in tables.panel if g in set(chosen)]
-    parts = [pp.shard_genes(chosen, (i, 3)) for i in range(3)]
+    parts = [ppie.shard_genes(chosen, (i, 3)) for i in range(3)]
     assert sorted(sum(parts, [])) == sorted(chosen)
 
 
 def test_assemble_centres_each_gene_on_the_frame(tmp_path):
     tables = _tables()
     config = {"ladder_root": str(tmp_path), "paths": {}, "pie": {}}
-    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", config)
+    out = ppie.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", config)
     rng = np.random.default_rng(2)
     p = len(PANEL)
     basis = {"mean": rng.normal(size=p), "components": rng.normal(size=(2, p))}
@@ -153,8 +156,8 @@ def tiny_pie(tmp_path, monkeypatch):
     stats = PieDataModule(train, tmp_path / "run").setup_stats(rank=0)
 
     tables = _tables()
-    out = pp.Layout(tmp_path / "ladder", tmp_path / "ckpt", tmp_path / "text", {})
-    pp.write_dataset(out, tables)
+    out = ppie.Layout(tmp_path / "ladder", tmp_path / "ckpt", tmp_path / "text", {})
+    ppie.write_dataset(out, tables)
     context = fixtures._dense_source(
         tmp_path / "context_text",
         name="context_text",
@@ -183,7 +186,7 @@ def tiny_pie(tmp_path, monkeypatch):
         for parameter in model.parameters():
             if not parameter.any():
                 parameter.normal_(0.0, 0.2)
-    pie = pp.Pie(
+    pie = ppie.Pie(
         model=model,
         module=module,
         dataset=dataset,
@@ -203,7 +206,7 @@ def _theirs(pie, lines, perturbation):
     dataset = pie.module.make_dataset(
         [RowRef(0, -1, m, perturbation) for m in lines], "none"
     )
-    return pp.mask_depmap(
+    return ppie.mask_depmap(
         collate([dataset[i] for i in range(len(lines))], pie.module.source_dims)
     )
 
@@ -218,12 +221,12 @@ def test_our_batches_match_pies_data_path(tiny_pie, perturbation):
     theirs = _batch_to(
         _theirs(pie, list(LINES), perturbation), pie.device, torch.float32
     )
-    ours = pp.build_batch(
+    ours = ppie.build_batch(
         pie,
         list(LINES),
         perturbation,
         tables.pie_input.to_numpy(dtype=np.float32),
-        pp.gene_evidence(pie, perturbation),
+        ppie.gene_evidence(pie, perturbation),
     )
     assert set(ours.source_tokens) == set(theirs.source_tokens)
     for key, value in theirs.groups[0].evidence.items():
@@ -236,7 +239,7 @@ def test_our_batches_match_pies_data_path(tiny_pie, perturbation):
         reference = pie.model(theirs)[0]
         hook.remove()
         own = tables.panel.index("GE")  # in the second of two gene chunks
-        result = pp.forward(pie, ours, own, heads=True, logits=True)
+        result = pdecode.forward(pie, ours, own, heads=True, logits=True)
     decoded = torch.cat(features, dim=1)
     assert np.allclose(result.dp_logits, reference.dp_logits.numpy(), atol=1e-5)
     expected = torch.softmax(reference.dp_logits / pie.temperature, -1) @ pie.centres
@@ -252,15 +255,15 @@ def test_mixed_precision_pass_returns_float32(tiny_pie):
     mixed = dataclasses.replace(
         pie, config=SimpleNamespace(trainer=SimpleNamespace(precision="bf16-mixed"))
     )
-    batch = pp.build_batch(
+    batch = ppie.build_batch(
         mixed,
         list(LINES),
         "GA",
         tables.pie_input.to_numpy(dtype=np.float32),
-        pp.gene_evidence(mixed, "GA"),
+        ppie.gene_evidence(mixed, "GA"),
     )
-    result = pp.forward(mixed, batch, 1, heads=True)
-    exact = pp.forward(pie, batch, 1, heads=True)
+    result = pdecode.forward(mixed, batch, 1, heads=True)
+    exact = pdecode.forward(pie, batch, 1, heads=True)
     for name in ("latent", "features", "own", "change"):
         value = getattr(result, name)
         assert value.dtype == np.float32, name
@@ -273,10 +276,10 @@ def test_cached_decode_equals_a_fresh_one(tiny_pie):
     ctrl = tables.pie_input.to_numpy(dtype=np.float32)
 
     def run(gene):
-        batch = pp.build_batch(
-            pie, list(LINES), gene, ctrl, pp.gene_evidence(pie, gene)
+        batch = ppie.build_batch(
+            pie, list(LINES), gene, ctrl, ppie.gene_evidence(pie, gene)
         )
-        return pp.forward(pie, batch, 3, heads=True)
+        return pdecode.forward(pie, batch, 3, heads=True)
 
     first = run("GA")
     assert any(key[0] == "control" for key in pie.cache)
@@ -294,31 +297,31 @@ def test_agreement_reports_float32_and_bf16(tiny_pie):
     import dataclasses
 
     pie, tables = tiny_pie
-    exact = pp.agreement(pie, tables, ["GA", "GC"])
+    exact = pdecode.agreement(pie, tables, ["GA", "GC"])
     assert set(exact) == {"float32"} and exact["float32"] < 1e-5
     mixed = dataclasses.replace(
         pie,
         config=SimpleNamespace(trainer=SimpleNamespace(precision="bf16-mixed")),
         cache={},
     )
-    both = pp.agreement(mixed, tables, ["GA", "GC"])
+    both = pdecode.agreement(mixed, tables, ["GA", "GC"])
     assert both["float32"] < 1e-5
     assert 0 < both["pie_bf16"] and 0 < both["ours_bf16"]
-    assert both["ours_bf16"] <= pp.BF16_ERROR_RATIO * both["pie_bf16"] + 1e-3
+    assert both["ours_bf16"] <= pdecode.BF16_ERROR_RATIO * both["pie_bf16"] + 1e-3
 
 
 def test_reference_pass_reads_context_alone(tiny_pie):
     from pie.data.dataset import NO_SOURCE
 
     pie, tables = tiny_pie
-    blank = pp.gene_evidence(pie, pp.NO_PERTURBATION)
+    blank = ppie.gene_evidence(pie, ppie.NO_PERTURBATION)
     assert all(not value.any() for value in blank.values())
-    batch = pp.build_batch(
+    batch = ppie.build_batch(
         pie, list(LINES), None, tables.pie_input.to_numpy(dtype=np.float32), blank
     )
     assert set(batch.source_tokens) == {"context_text", NO_SOURCE}
     assert batch.source_masks[NO_SOURCE][:, 0].tolist() == [False, False, True]
-    result = pp.forward(pie, batch, None, heads=False)
+    result = pdecode.forward(pie, batch, None, heads=False)
     assert result.features.shape == (3, pie.model.cfg.d_model)
 
 
@@ -330,14 +333,14 @@ def test_mask_removes_depmap_and_carries_emptied_rows():
     helpers = _load("pie_test_model_helpers", PIE_TESTS / "model" / "helpers.py")
     batch = helpers.tiny_batch(sources=("esm2",))
     b = batch.source_masks["esm2"].shape[0]
-    batch.source_tokens[pp.DEPMAP_SOURCE] = torch.ones(b, 1, 3)
-    batch.source_masks[pp.DEPMAP_SOURCE] = torch.ones(b, 1, dtype=torch.bool)
+    batch.source_tokens[ppie.DEPMAP_SOURCE] = torch.ones(b, 1, 3)
+    batch.source_masks[ppie.DEPMAP_SOURCE] = torch.ones(b, 1, dtype=torch.bool)
     batch.source_masks["esm2"][1] = False  # row 1 had DepMap alone
-    masked = pp.mask_depmap(batch)
-    assert pp.DEPMAP_SOURCE not in masked.source_tokens
+    masked = ppie.mask_depmap(batch)
+    assert ppie.DEPMAP_SOURCE not in masked.source_tokens
     assert masked.source_masks[NO_SOURCE][:, 0].tolist() == [False, True, False]
     batch.source_masks["esm2"][1] = True
-    assert NO_SOURCE not in pp.mask_depmap(batch).source_tokens
+    assert NO_SOURCE not in ppie.mask_depmap(batch).source_tokens
 
 
 def test_dataset_opens_as_pie_preprocessed(tmp_path):
@@ -345,29 +348,29 @@ def test_dataset_opens_as_pie_preprocessed(tmp_path):
     from pie.data.preprocessed import PreprocessedDir
 
     tables = _tables()
-    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {})
-    opened = PreprocessedDir.open(pp.write_dataset(out, tables))
-    assert opened.dataset == pp.DATASET and opened.controls_only
+    out = ppie.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {})
+    opened = PreprocessedDir.open(ppie.write_dataset(out, tables))
+    assert opened.dataset == ppie.DATASET and opened.controls_only
     assert opened.contexts == list(LINES) and opened.genes == list(PANEL)
     assert np.allclose(opened.ctrl_means, tables.pie_input.to_numpy())
 
 
 def test_dataset_refuses_other_lines_or_control_means(tmp_path):
     pytest.importorskip("pie")
-    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {})
+    out = ppie.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {})
     tables = _tables()
-    pp.write_dataset(out, tables)
-    assert pp.write_dataset(out, tables) == out.dataset
+    ppie.write_dataset(out, tables)
+    assert ppie.write_dataset(out, tables) == out.dataset
     with pytest.raises(ValueError, match="other lines or genes"):
-        pp.write_dataset(out, _tables(n_lines=2))
+        ppie.write_dataset(out, _tables(n_lines=2))
     moved = _tables()
     moved.pie_input.iloc[0, 0] += 1.0
     with pytest.raises(ValueError, match="other control means"):
-        pp.write_dataset(out, moved)
+        ppie.write_dataset(out, moved)
 
 
 def test_reference_pass_refuses_other_lines(tmp_path):
-    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {})
+    out = ppie.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {})
     tables = _tables()
     path = out.pie / "reference.npz"
     latent = np.zeros((3, 4), dtype=np.float32)
@@ -375,16 +378,16 @@ def test_reference_pass_refuses_other_lines(tmp_path):
         path, lines=np.asarray(["L1", "L2", "L9"]), latent=latent, features=latent
     )
     with pytest.raises(ValueError, match="other lines"):
-        pp.reference_pass(out, None, tables)
+        pdecode.reference_pass(out, None, tables)
     write_npz(path, lines=np.asarray(list(LINES)), latent=latent, features=latent)
-    assert set(pp.reference_pass(out, None, tables)) == {"latent", "features"}
+    assert set(pdecode.reference_pass(out, None, tables)) == {"latent", "features"}
     write_npz(
         path, latent=latent, features=latent
     )  # written before lines were recorded
-    assert pp.reference_pass(out, None, tables)["latent"].shape == (3, 4)
+    assert pdecode.reference_pass(out, None, tables)["latent"].shape == (3, 4)
     write_npz(path, latent=latent[:2], features=latent[:2])
     with pytest.raises(ValueError, match="other lines"):
-        pp.reference_pass(out, None, tables)
+        pdecode.reference_pass(out, None, tables)
 
 
 # --- state pseudo-contexts (design §3.5, Task 8) --------------------------------------
@@ -393,7 +396,7 @@ STATE_GENES = [("GA", 0), ("GE", 4)]  # GE is in the second of two gene chunks
 
 
 def _evidence(pie, keys=("GA", "GE")):
-    return {k: pp.gene_evidence(pie, k) for k in [pp.NO_PERTURBATION, *keys]}
+    return {k: ppie.gene_evidence(pie, k) for k in [ppie.NO_PERTURBATION, *keys]}
 
 
 def test_whole_context_equals_the_main_pass(tiny_pie):
@@ -401,20 +404,20 @@ def test_whole_context_equals_the_main_pass(tiny_pie):
     ctrl = tables.pie_input.to_numpy(dtype=np.float32)
     evidence = _evidence(pie)
     names = [f"{m}|set|whole" for m in LINES]
-    arrays = pp.state_batch(
+    arrays = pstates.state_batch(
         pie, names, list(LINES), ctrl, STATE_GENES, evidence, None, 4
     )
     assert "dE" not in arrays and arrays["dH"].shape[:2] == (3, 2)
-    reference = pp.forward(
+    reference = pdecode.forward(
         pie,
-        pp.build_batch(pie, list(LINES), None, ctrl, evidence[pp.NO_PERTURBATION]),
+        ppie.build_batch(pie, list(LINES), None, ctrl, evidence[ppie.NO_PERTURBATION]),
         None,
         heads=False,
     )
     for g, (key, own) in enumerate(STATE_GENES):
-        main = pp.forward(
+        main = pdecode.forward(
             pie,
-            pp.build_batch(pie, list(LINES), key, ctrl, evidence[key]),
+            ppie.build_batch(pie, list(LINES), key, ctrl, evidence[key]),
             own,
             heads=True,
         )
@@ -432,12 +435,14 @@ def test_two_states_of_one_line_differ_and_each_batch_empties_the_cache(tiny_pie
     ctrl = np.vstack([line, 0.5 * line])
     names, owners = ["L1|set|0", "L1|set|1"], ["L1", "L1"]
     evidence = _evidence(pie)
-    arrays = pp.state_batch(pie, names, owners, ctrl, STATE_GENES, evidence, None, 2)
+    arrays = pstates.state_batch(
+        pie, names, owners, ctrl, STATE_GENES, evidence, None, 2
+    )
     assert not np.allclose(arrays["dH"][0], arrays["dH"][1])
     assert not np.allclose(arrays["own_dp"][0], arrays["own_dp"][1])
     assert not any(key[0] in ("context", "control") for key in pie.cache)
     # A context name read again with another input is decoded afresh.
-    again = pp.state_batch(
+    again = pstates.state_batch(
         pie, names[:1], owners[:1], ctrl[1:], STATE_GENES, evidence, None, 1
     )
     assert np.allclose(again["dH"][0], arrays["dH"][1], atol=1e-5)
@@ -448,8 +453,12 @@ def test_padding_changes_nothing(tiny_pie):
     ctrl = tables.pie_input.to_numpy(dtype=np.float32)[:2]
     names, owners = ["L1|set|0", "L2|set|0"], ["L1", "L2"]
     evidence = _evidence(pie)
-    exact = pp.state_batch(pie, names, owners, ctrl, STATE_GENES, evidence, None, 2)
-    padded = pp.state_batch(pie, names, owners, ctrl, STATE_GENES, evidence, None, 5)
+    exact = pstates.state_batch(
+        pie, names, owners, ctrl, STATE_GENES, evidence, None, 2
+    )
+    padded = pstates.state_batch(
+        pie, names, owners, ctrl, STATE_GENES, evidence, None, 5
+    )
     for name, value in exact.items():
         assert padded[name].shape == value.shape
         assert np.allclose(padded[name], value, atol=1e-6), name
@@ -460,16 +469,20 @@ def test_hoisted_owner_encoder_equals_the_unhoisted_one(tiny_pie):
     full = tables.pie_input.to_numpy(dtype=np.float32)
     ctrl = np.vstack([full[0], 0.3 * full[0], full[2]])
     names, owners = ["L1|set|0", "L1|set|1", "L3|set|0"], ["L1", "L1", "L3"]
-    evidence = pp.gene_evidence(pie, "GA")
-    batch = pp.build_batch(pie, names, "GA", ctrl, evidence, owners=owners)
-    plain = pp.forward_tensors(pie, batch, 1, heads=True)
-    hoisted = pp.forward_tensors(
-        pie, batch, 1, heads=True, memory=pp.owner_memory(pie, owners, "GA", evidence)
+    evidence = ppie.gene_evidence(pie, "GA")
+    batch = ppie.build_batch(pie, names, "GA", ctrl, evidence, owners=owners)
+    plain = pdecode.forward_tensors(pie, batch, 1, heads=True)
+    hoisted = pdecode.forward_tensors(
+        pie,
+        batch,
+        1,
+        heads=True,
+        memory=pstates.owner_memory(pie, owners, "GA", evidence),
     )
     for name in ("latent", "features", "own", "change"):
         assert np.allclose(hoisted[name].numpy(), plain[name].numpy(), atol=1e-5), name
     # The owner's text, not the context's name, reaches the encoder.
-    other = pp.owner_memory(pie, ["L2", "L2", "L3"], "GA", evidence)
+    other = pstates.owner_memory(pie, ["L2", "L2", "L3"], "GA", evidence)
     assert not np.allclose(
         other.float().mean(dim=1)[0].numpy(), hoisted["latent"][0].numpy()
     )
@@ -495,16 +508,16 @@ def _state_tables_on_disk(root, tables, name):
         folder / "inputs.parquet"
     )
     masses.to_parquet(folder / "masses.parquet")
-    return pp.read_state_tables(root / "states", name, tables)
+    return pstates.read_state_tables(root / "states", name, tables)
 
 
 def test_assembly_refuses_a_line_pass_from_other_state_inputs(tmp_path):
     tables = _tables()
-    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {"seed": 0})
+    out = ppie.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {"seed": 0})
     states = _state_tables_on_disk(tmp_path, tables, "set")
     config = {"pie": {"genes": 2, "contexts_per_batch": 2}}
-    genes = pp.state_genes(tables, config, 0)
-    layout = pp.state_layout(out)
+    genes = pstates.state_genes(tables, config, 0)
+    layout = pstates.state_layout(out)
     for model_id, fingerprint in (("L1", "stale"), ("L3", states.fingerprints["L3"])):
         k = states.owners.count(model_id)
         write_npz(
@@ -517,18 +530,18 @@ def test_assembly_refuses_a_line_pass_from_other_state_inputs(tmp_path):
     out.pie.mkdir(parents=True)
     np.savez(out.pie / "frame_means.npz", own_x=np.zeros((len(PANEL), 1)))
     with pytest.raises(ValueError, match="L1: the pass was computed from other"):
-        pp.assemble_states(out, tables, config, "set")
+        pstates.assemble_states(out, tables, config, "set")
 
 
 def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
     import torch
 
     pie, tables = tiny_pie
-    out = pp.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {"seed": 0})
+    out = ppie.Layout(tmp_path, tmp_path / "ckpt", tmp_path / "text", {"seed": 0})
     states = _state_tables_on_disk(tmp_path, tables, "set")
     assert states.lines() == ["L1", "L3"]
     config = {"pie": {"genes": 2, "contexts_per_batch": 2}}
-    genes = pp.state_genes(tables, config, 0)
+    genes = pstates.state_genes(tables, config, 0)
     rng = np.random.default_rng(3)
     basis = {
         "mean": torch.zeros(len(PANEL)),
@@ -536,13 +549,15 @@ def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
             rng.normal(size=(2, len(PANEL))).astype(np.float32)
         ),
     }
-    layout = pp.state_layout(out)
+    layout = pstates.state_layout(out)
     assert layout.root == tmp_path / "states" / "pie"  # moves with states/
-    first = pp.states_pass(pie, tables, states, genes, basis, ["L1"], layout, 2, {})
+    first = pstates.states_pass(
+        pie, tables, states, genes, basis, ["L1"], layout, 2, {}
+    )
     assert first["contexts"] == 3
     assert layout.line("set", "L1").is_file()
     assert not layout.line("set", "L3").is_file()
-    again = pp.states_pass(
+    again = pstates.states_pass(
         pie, tables, states, genes, basis, ["L1", "L3"], layout, 2, {}
     )
     assert again["contexts"] == 2
@@ -557,11 +572,11 @@ def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
     original = inputs.copy()
     inputs.iloc[0, 0] += 0.25
     inputs.to_parquet(folder / "inputs.parquet")
-    moved = pp.read_state_tables(tmp_path / "states", "set", tables)
+    moved = pstates.read_state_tables(tmp_path / "states", "set", tables)
     assert moved.fingerprints["L1"] != states.fingerprints["L1"]
     assert moved.fingerprints["L3"] == states.fingerprints["L3"]
     with pytest.raises(ValueError, match="other state inputs"):
-        pp.states_pass(pie, tables, moved, genes, basis, ["L1"], layout, 2, {})
+        pstates.states_pass(pie, tables, moved, genes, basis, ["L1"], layout, 2, {})
     original.to_parquet(folder / "inputs.parquet")
     d = pie.model.cfg.d_model
     out.pie.mkdir(parents=True, exist_ok=True)
@@ -573,7 +588,7 @@ def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
         "own_x": rng.normal(size=(len(PANEL), 1)),
     }
     np.savez(out.pie / "frame_means.npz", **means)
-    assert pp.assemble_states(out, tables, config, "set") == {
+    assert pstates.assemble_states(out, tables, config, "set") == {
         "contexts": 5,
         "genes": 2,
     }
@@ -585,15 +600,17 @@ def test_states_pass_resumes_per_line_and_assembles_centred(tiny_pie, tmp_path):
     index = json.loads(layout.index("set").read_text())
     assert index["fingerprints"] == states.fingerprints
     # An assembled set is skipped by the pass and by assembly, not recomputed.
-    assert pp.states_pass(pie, tables, states, genes, basis, ["L1"], layout, 2, {}) == {
+    assert pstates.states_pass(
+        pie, tables, states, genes, basis, ["L1"], layout, 2, {}
+    ) == {
         "contexts": 0,
         "assembled": True,
     }
-    assert pp.assemble_states(out, tables, config, "set")["skipped"]
+    assert pstates.assemble_states(out, tables, config, "set")["skipped"]
     # Changed state inputs refuse the assembly at pass and assembly alike.
     inputs.to_parquet(folder / "inputs.parquet")  # the moved inputs
-    moved = pp.read_state_tables(tmp_path / "states", "set", tables)
+    moved = pstates.read_state_tables(tmp_path / "states", "set", tables)
     with pytest.raises(ValueError, match="assembled from other state inputs"):
-        pp.states_pass(pie, tables, moved, genes, basis, ["L1"], layout, 2, {})
+        pstates.states_pass(pie, tables, moved, genes, basis, ["L1"], layout, 2, {})
     with pytest.raises(ValueError, match="assembled from other state inputs"):
-        pp.assemble_states(out, tables, config, "set")
+        pstates.assemble_states(out, tables, config, "set")
