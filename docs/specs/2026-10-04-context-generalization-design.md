@@ -59,7 +59,7 @@ training side, in that line's cross-fitting fold. The training side then holds 1
 bulk RNA), 1,907 with mutation calls and 2,077 with a lineage.
 
 The 919 extras become a tracked membership file next to the split,
-`configs/benchmarks/extra_bulk_lines_26Q1.json`, written by a builder under `src/data/prepare/` from the pinned
+`configs/benchmarks/extra_bulk_lines_26Q1.json`, written by a builder under `src/data/builders/` from the pinned
 26Q1 files, with each exclusion and its reason. It is a pinned list like the split, not a rule computed from
 labels. One run of the prior drops the haematopoietic extras.
 
@@ -107,7 +107,7 @@ encoders (expression components, fixed gene sets) are fitted once.
 ### 3.4 Gene-pair knowledge
 
 Pinned with provenance under `configs/context_prior/reference/`, built on the Mac by
-`src/data/prepare/build_context_reference.py` and committed, because the H20 host has no internet: Ensembl human
+`src/data/builders/build_context_reference.py` and committed, because the H20 host has no internet: Ensembl human
 paralogs with % identity (the lower of the two directions), keeping each gene's 10 closest at 20% identity or
 more, and CORUM's current human release of complexes. Data-selected partners (§4) are computed from
 training-side lines only, inside each fold.
@@ -252,7 +252,7 @@ setting a person chooses to build the correction on. The correction's config nam
 checkpoint records it; evaluation refuses a checkpoint whose recorded prior run differs from the one supplied (a
 fail-closed guard against a silently wrong artifact, not a quality gate). Code lives in the package
 `src/context_prior/` (bulk and label loading, bridge, views, gene-pair features, block ridge, cross-fitting),
-which imports neither `training`, `eval` nor `experiments`; the runner is `src/experiments/context_prior.py`.
+which imports neither `training`, `eval` nor `experiments`; the runner is `src/experiments/prior/context_prior.py`.
 
 ### 7.3 Correction training
 

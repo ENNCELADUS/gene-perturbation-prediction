@@ -314,7 +314,7 @@ reports rows, positives and negatives with both genes covered:
 The report is read before the deletion pass. Expected outcome: per-cell bags become the main arm, and
 pseudo-bulk stays as the paper-faithful arm, scored on its own covered rows.
 
-First measurement, 2026-10-09 (`src/experiments/cilantro_coverage.py`, H20
+First measurement, 2026-10-09 (`src/experiments/historical/cilantro_coverage.py`, H20
 `outputs/cilantro_coverage/coverage_v1/`). The registry's raw sources hold a median of 212 cells per
 line, so a bag is often every registered cell. Rows with both genes covered and both in Gene2vec,
 positives covered over all positives, pseudo-bulk then per-cell:
