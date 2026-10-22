@@ -2,8 +2,7 @@
 
 **Status:** built on the H20 (container 30838) on 2026-10-16 and 2026-10-17 under
 `data/geneeffect_joint/v2/ladder/` (Tx1 cells under `data/tx1_basal_embeddings/v2_all/`), by Task 2 of the
-[PIE stage-one design](../specs/2026-10-16-pie-geneeffect-ladder-design.md) (plan
-[2026-10-16](../specs/2026-10-16-pie-ladder-inputs-plan.md)); the definitions are in
+[PIE stage-one design](../specs/2026-10-16-pie-geneeffect-ladder-design.md); the definitions are in
 [protocol §15](../03-geneeffect-protocol.md#15-stage-one-inputs) and the build record in
 [`results/ladder_inputs/`](../../results/ladder_inputs/README.md). The stage-one model (protocol §16) reads them
 through `src/data/ladder_reader.py`, which refuses a `pie/index.json` whose lines or genes are not `lines.parquet`'s

@@ -1,8 +1,7 @@
 # Single-cell correction, wave one, seed 0
 
 Runs of 2026-10-07 and 2026-10-08 on the H20 container on port 30838 (worktree `/2023533015/VCC_Project_correction`,
-branch `feat/single-cell-correction`), following the
-[wave-one plan](../../docs/specs/2026-10-07-single-cell-correction-plan.md) and
+branch `feat/single-cell-correction`), following
 [protocol §12](../../docs/03-geneeffect-protocol.md#12-single-cell-correction). The correction stacks the nested head of
 protocol §4 on the default linear context prior: prediction = the prior's offset + the head, and the head starts at zero,
 so the stack starts at the prior and validation before the first update (epoch −1) is a `best.pt` candidate. Records:

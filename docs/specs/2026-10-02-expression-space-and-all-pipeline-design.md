@@ -158,7 +158,7 @@ zero-initialised MLP arms returning exactly no-change; zero-key checkpoint loads
   and result tables move to the protocol.
 - Protocol: new §3.4 expression space; §4–§5 for the new wiring, rates and single validation split;
   §9 replaced by the comparison and the `all` run; §8 stays as the diagnostics record.
-- `figures/geneeffect_architecture.svg`: STATE's basal input becomes log HVG expression; Tx1 goes to
+- `docs/figures/geneeffect_architecture.svg`: STATE's basal input becomes log HVG expression; Tx1 goes to
   the head.
 - `AGENTS.md`, `CLAUDE.md`, `hpc/README.md`: new commands, deleted diagnostics, updated
   silent-failure list.

@@ -344,9 +344,8 @@ the extra-lines decision.
 ## 12. Amendments (2026-10-07)
 
 Agreed in the design interview after the default-prior follow-ups
-([results](../../results/default_prior_followups_seed0/README.md)); the plans are
-[wave one](2026-10-07-single-cell-correction-plan.md) and
-[the second wave](2026-10-07-single-cell-correction-second-wave-plan.md).
+([results](../../results/default_prior_followups_seed0/README.md)); wave one ran
+([record](../../results/correction_wave_one_seed0/README.md)) and the second wave was never built.
 
 - **Prior.** The correction stacks on the affine bridge with expression components (penalty 1) and data-selected
   genes (gene penalty 10), 0.2290 validation / 0.2338 test; own expression and partners added +0.0010 on

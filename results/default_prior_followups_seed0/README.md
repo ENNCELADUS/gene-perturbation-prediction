@@ -66,7 +66,7 @@ summary.
 The single-cell correction stacks on **the affine bridge with expression components at penalty 1 and data-selected
 genes at gene penalty 10** (`selected`; 0.2290 validation, 0.2338 test), which becomes the default prior. It is within
 the bootstrap interval of the all-block reference on validation, and it leaves partner information to the correction's
-single-cell partner features. Recorded in the [single-cell correction plan](../../docs/specs/2026-10-07-single-cell-correction-plan.md).
+single-cell partner features.
 
 ## Caveats
 

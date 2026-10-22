@@ -6,7 +6,7 @@ released checkpoints reproduce to rounding); Task 2 done 2026-10-17
 ([record](../../results/ladder_inputs/README.md)); Task 3's shared stack built 2026-10-17 (plan Wave 1A, §3.3 "As
 built"; protocol §16), not yet run. Revised 2026-10-16 after Task 1: PIE's DepMap
 source is masked in every pass (§3.2) and Task 4's GeneEffect profile is masked by fold, not by line. Revised
-2026-10-16 in the Task 2 grill ([plan](2026-10-16-pie-ladder-inputs-plan.md)): the frame is 981 lines (§4.1), a line
+2026-10-16 in the Task 2 grill: the frame is 981 lines (§4.1), a line
 with cells always reads its cells (pseudo-bulk from per-cell CP10K, §4.3), and every arm reads the Cellosaurus text
 as PIE does (no text-off rows). Revised 2026-10-17 (a brainstorm after a literature survey of learned cell states, kept
 in the local notes as "Learned cell states for GeneEffect", and a Codex review of the draft): cell states read through

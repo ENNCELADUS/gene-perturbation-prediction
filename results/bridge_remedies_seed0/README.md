@@ -2,7 +2,7 @@
 
 Run `bridge_remedies_20261004`, 2026-10-04, on the H20 container on port 30838 (worktree
 `/2023533015/VCC_Project_bridge_remedies`, branch `feat/bridge-remedies`), CPU only, config
-`configs/context_prior/bridge_remedies.yaml`. Plan: [bridge remedies](../../docs/specs/2026-10-04-bridge-remedies-plan.md);
+`configs/context_prior/bridge_remedies.yaml`;
 protocol §10 of the [GeneEffect protocol](../../docs/03-geneeffect-protocol.md). The runner scores every remedy setting,
 block set and penalty on validation and test and decides nothing. Its only automatic choice is the components penalty
 under gene-level blocks, taken as the best validation point estimate for components alone. Every choice below is read
