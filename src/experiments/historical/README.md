@@ -9,6 +9,7 @@ lives here. These commands remain tracked for reproducibility.
 | `audit_tx1_basal_batch.py` | Historical Tahoe-DMSO versus CCLE bulk confounding audit |
 | `prepare_kinker_cpm_h5ad.py` | Historical non-raw CPM sensitivity artifacts, superseded by raw-UMI preparation |
 | `stage0_tx1_input_probe.py` | Completed raw-versus-CPM and collator-seeding diagnostic |
+| `cilantro_coverage.py` | Historical pre-GPU audit of the context screen's coverage by Cilantro-SL |
 
 Run from the repository root with module execution, for example:
 
