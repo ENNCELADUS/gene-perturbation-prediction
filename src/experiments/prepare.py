@@ -34,6 +34,7 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
 from typing import Any, Final
+
 from src.data.io import write_json
 
 _LOGGER = logging.getLogger(__name__)
@@ -285,13 +286,13 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
 
     import numpy as np
 
-    from src.data.expression import median_library_size
-    from src.data.labels import load_geneeffect_long
     from src.data.build.build_exp13_esm2_universe import (
         build_coverage_universe,
         restrict_coverage_universe_to_copy_prior,
         write_embedding_union,
     )
+    from src.data.expression import median_library_size
+    from src.data.labels import load_geneeffect_long
     from src.data.prepared import EXPRESSION_TRANSFORM
     from src.data.response import (
         control_library_sizes,
@@ -299,8 +300,8 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         part_conditions,
         response_bags,
         write_response_part,
+        write_response_targets,
     )
-    from src.data.response import write_response_targets
     from src.data.splits import assert_fit_eligible, load_geneeffect_split
     from src.data.tx1_cache import load_hvg_gene_order
 

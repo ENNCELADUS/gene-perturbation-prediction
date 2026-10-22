@@ -10,23 +10,20 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Final
+
 import numpy as np
 import pandas as pd
+
 from src.data import cell_states as cs
 from src.experiments.run_dir import absolute
 
-
 MANIFEST: Final[str] = "manifest.json"
-
 #: Largest difference allowed between the mass-weighted state inputs and the
 #: line's PIE input (float32 storage of the latter).
 IDENTITY_TOLERANCE: Final[float] = 1e-4
-
 #: Groups of the reference-program table, in report order.
 REFERENCE_GROUPS: Final[tuple[str, ...]] = ("kinker", "gavish", "hallmarks", "tirosh")
-
 QC_NAMES: Final[tuple[str, ...]] = ("log_umi", "genes_detected", "mito_fraction")
-
 DELTAS: Final[tuple[str, ...]] = ("dH", "dE", "own_h", "own_dp")
 
 

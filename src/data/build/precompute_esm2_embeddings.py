@@ -15,9 +15,9 @@ import os
 import time
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import NamedTuple
-import uuid
 
 import numpy as np
 import pandas as pd
@@ -27,6 +27,8 @@ from transformers import EsmModel, EsmTokenizer
 from src.data.embeddings import Esm2EmbeddingTable, require_complete_esm_coverage
 from src.data.esm2_provenance import (
     SCHEMA_VERSION as PROVENANCE_SCHEMA_VERSION,
+)
+from src.data.esm2_provenance import (
     build_embedding_artifact_record,
 )
 from src.data.io import write_text

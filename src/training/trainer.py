@@ -10,14 +10,14 @@ scores a fixed subset of supervised training lines of the validation split's siz
 so the two curves are comparable.
 """
 
-from collections.abc import Mapping
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from accelerate.utils import DistributedDataParallelKwargs
 import numpy as np
 import torch
+from accelerate.utils import DistributedDataParallelKwargs
 
 from src.data.datasets import DependencyDataset
 from src.data.prepared import PreparedInputs

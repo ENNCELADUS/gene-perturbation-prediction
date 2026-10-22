@@ -24,9 +24,8 @@ from typing import Any
 import pandas as pd
 
 from src.context_prior.bridge import bridge_diagnostics
-from src.eval.accuracy import gain
 from src.data.io import read_json, write_json, write_text
-from src.experiments.prior.config import load_prior_config
+from src.eval.accuracy import gain
 from src.experiments.prior.base import (
     SCORED,
     Fitter,
@@ -36,6 +35,7 @@ from src.experiments.prior.base import (
     reference_predictions,
     stages,
 )
+from src.experiments.prior.config import load_prior_config
 from src.experiments.run_dir import bind, locked, number
 
 

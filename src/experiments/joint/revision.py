@@ -22,14 +22,17 @@ subprocesses before the run exits.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
 import json
 import logging
 import math
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from src.data.io import read_json
+from src.eval.accuracy import BOOTSTRAP_REPEATS, BOOTSTRAP_SEED
+from src.experiments.joint.config import load_config
 from src.experiments.joint.pipeline import (
     BASELINE_NAMES,
     PRIOR_CONTROLS,
@@ -42,10 +45,7 @@ from src.experiments.joint.pipeline import (
     training_argv,
     visible_gpus,
 )
-from src.data.io import read_json
-from src.eval.accuracy import BOOTSTRAP_REPEATS, BOOTSTRAP_SEED
 from src.experiments.run_dir import git_revision, number
-from src.experiments.joint.config import load_config
 
 JOINT_NAME = "Joint model"
 TX1_RIDGE = "context_pca_ridge[tx1]"

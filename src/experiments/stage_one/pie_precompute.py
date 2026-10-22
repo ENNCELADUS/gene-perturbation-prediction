@@ -68,14 +68,14 @@ from typing import Any, Final
 
 import numpy as np
 import pandas as pd
+
 from src.data.io import write_json, write_npz
 from src.experiments.run_dir import REPO_ROOT, absolute, record_step, shard
-from src.experiments.stage_one.pie_reproduction import CKPT
 from src.experiments.stage_one.pie import (
     EXPERIMENT,
-    Layout,
     ROW_SETS,
     SHARD_ARRAYS,
+    Layout,
     Tables,
     depmap_masked_prediction,
     exclusive,
@@ -87,6 +87,7 @@ from src.experiments.stage_one.pie import (
     write_dataset,
 )
 from src.experiments.stage_one.pie_decode import run_genes
+from src.experiments.stage_one.pie_reproduction import CKPT
 from src.experiments.stage_one.pie_states import run_state_steps
 
 log = logging.getLogger(__name__)

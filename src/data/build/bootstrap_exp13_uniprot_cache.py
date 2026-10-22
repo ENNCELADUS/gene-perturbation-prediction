@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pandas as pd
+
 from src.data.io import write_json
 
 SCHEMA_VERSION = "uniprot-sequence-cache-v2"

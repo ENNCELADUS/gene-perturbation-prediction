@@ -22,8 +22,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata
 
-from src.context_prior.bridge import fit_bridge
-from src.context_prior.bridge import BridgeBase, BridgeInputs
+from src.context_prior.bridge import BridgeBase, BridgeInputs, fit_bridge
 from src.context_prior.remedies import affine
 
 ENCODINGS = ("rank_value", "expression")

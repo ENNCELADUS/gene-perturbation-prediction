@@ -4,39 +4,34 @@ scores, training, and the per-fold result files."""
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-import math
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import torch
 from torch import nn
+
 from src.data.embeddings import Esm2EmbeddingTable
+from src.data.io import write_json
 from src.model.perturbation import Esm2PerturbationAdapter
 from src.model.response import predict_bags
 from src.model.response_mlp import ResponseMLP
 from src.model.state import StateResponse
-from src.data.io import write_json
-
 
 UNTRAINED_ARMS = ("no_change", "global_mean_effect", "released_state")
-
 TRAINED_ARMS = ("state_joint", "mlp_hvg", "mlp_tx1")
-
 ARMS = (*UNTRAINED_ARMS, *TRAINED_ARMS)
-
 VERDICTS = (
     ("state_joint_vs_mlp_hvg", "state_joint", "mlp_hvg"),
     ("mlp_tx1_vs_mlp_hvg", "mlp_tx1", "mlp_hvg"),
 )
-
 SEED = 0
-
 # Observed cells stay on a CUDA device when they take at most this share of its
 # free memory; the rest is left for the model, activations and optimizer state.
 RESIDENT_SHARE = 0.6
-
 # Conditions read from the response cache per host-to-device copy while loading.
 LOAD_CONDITIONS = 512
 

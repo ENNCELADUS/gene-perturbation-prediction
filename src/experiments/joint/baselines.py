@@ -24,9 +24,10 @@ def run_baselines(config, *, split, out_dir, inputs=None):
     (``paths.prior``) the prior alone and the prior plus the Tx1 ridge join the
     ladder. ``inputs`` replaces ``load_inputs`` (synthetic tests)."""
     import numpy as np
+
     from src.baselines.residual import run_r1_ladder
-    from src.eval.accuracy import aggregate_geneeffect
     from src.data.splits import FixedSplit
+    from src.eval.accuracy import aggregate_geneeffect
 
     if split not in {"val", "test"}:
         raise ValueError("baseline split must be val or test")

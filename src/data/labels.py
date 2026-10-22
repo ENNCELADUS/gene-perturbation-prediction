@@ -6,6 +6,7 @@ training lines, and every row (held out or not) is centred on that fit."""
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import Counter
 from collections.abc import Sequence
@@ -13,12 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-import logging
 import numpy as np
 import pandas as pd
 
 from src.data.splits import FixedSplit
-
 
 DEPENDENCY_THRESHOLD: Final = -0.5
 

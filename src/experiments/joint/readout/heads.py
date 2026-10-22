@@ -1,25 +1,26 @@
 """The readout head on the frozen joint backbone's cached features: the head
 itself, its fit with ordinary early stopping, and its evaluation and export."""
 
+import json
 from copy import deepcopy
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 import torch
 from torch import nn
+from torch.nn import functional as F
+
 from src.data.batches import FeatureBatch
+from src.eval.accuracy import EvalResult, aggregate_geneeffect
 from src.model.head import (
     GeneEffectBlockConfig,
     GeneEffectFeatureDims,
     GeneEffectMLP,
 )
-from dataclasses import asdict, dataclass
-import json
-from pathlib import Path
-from torch.nn import functional as F
 from src.model.normalization import BlockStandardizer
 from src.training.checkpoint import TrainState, record_validation
-import pandas as pd
-import numpy as np
-from src.eval.accuracy import EvalResult, aggregate_geneeffect
-
 
 ARMS = ("A0", "A1", "A2", "A3")
 

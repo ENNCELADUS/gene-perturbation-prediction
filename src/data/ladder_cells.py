@@ -35,8 +35,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import sparse
 
-from src.data.expression import library_sizes
 from src.data.basal import align_columns
+from src.data.expression import library_sizes
 
 #: PIE's per-cell target sum (CP10K).
 PIE_TARGET_SUM = 1e4

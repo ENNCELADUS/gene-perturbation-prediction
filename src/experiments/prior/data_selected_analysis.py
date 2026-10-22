@@ -32,11 +32,9 @@ import pandas as pd
 from src.context_prior.gene_features import partner_index
 from src.context_prior.prior import PriorSpec, fit_prior, total
 from src.context_prior.ridge import SelectedFit
-from src.eval.accuracy import aggregate_geneeffect
+from src.data.io import jsonable as jsonable
 from src.data.io import write_json, write_text
-from src.experiments.run_dir import bind, number
-from src.experiments.prior.config import load_prior_config
-from src.eval.accuracy import gain, long_frame, score
+from src.eval.accuracy import aggregate_geneeffect, gain, long_frame, score
 from src.experiments.prior.base import (
     SCORED,
     RunBase,
@@ -45,7 +43,8 @@ from src.experiments.prior.base import (
     prior_inputs,
     stages,
 )
-from src.data.io import jsonable as jsonable
+from src.experiments.prior.config import load_prior_config
+from src.experiments.run_dir import bind, number
 
 #: Feature counts the ablation keeps or strips.
 TOP = (10, 50, 200, 1000)

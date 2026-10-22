@@ -7,6 +7,7 @@ from pathlib import Path
 
 def evaluate_model(model, inputs, *, split):
     import pandas as pd
+
     from src.eval.accuracy import EvalResult, aggregate_geneeffect
 
     if split not in {"train", "val", "test"}:
@@ -78,10 +79,11 @@ def _export(model, inputs, run_dir, split):
 def fit_baseline(config_path: Path, out_dir: Path) -> Path:
     import joblib
     import sklearn
+
     from src.baselines.tx1_gmm import Tx1GMMRidge
+    from src.data.io import write_json as write_json
     from src.data.prepared import load_inputs
     from src.experiments.joint.config import load_config
-    from src.data.io import write_json as write_json
     from src.experiments.run_dir import git_revision, set_status
 
     config = load_config(config_path)
@@ -138,6 +140,7 @@ def fit_baseline(config_path: Path, out_dir: Path) -> Path:
 def evaluate_checkpoint(path: Path, *, split):
     import joblib
     import sklearn
+
     from src.data.prepared import load_inputs
 
     if split not in {"train", "val", "test"}:

@@ -12,22 +12,24 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Final
+
 import numpy as np
 import pandas as pd
+
 from src.data.io import write_json, write_npz
 from src.experiments.run_dir import absolute, record_step
 from src.experiments.stage_one.pie import (
-    Layout,
     NO_PERTURBATION,
+    Layout,
     Pie,
     Tables,
     autocast,
     build_batch,
     exclusive,
     gene_evidence,
+    is_mixed,
     layout,
     load_pie,
-    is_mixed,
     pie_environment,
     pilot_genes,
     read_tables,
@@ -45,7 +47,6 @@ log = logging.getLogger(__name__)
 
 #: Arrays a state pass stores per (gene, context); the wide ones in float16.
 STATE_ARRAYS: Final[tuple[str, ...]] = ("dH", "dE", "own_h", "own_dp", "own_x")
-
 _WIDE_STATE_ARRAYS: Final[frozenset[str]] = frozenset({"dH", "dE", "own_h"})
 
 

@@ -7,13 +7,15 @@ import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pandas as pd
 import torch
+
 from src.data import ladder_reader as reader
 from src.data.io import read_json, write_json
-from src.experiments.stage_one.setup import Setup
 from src.experiments.stage_one.run import predictions_frame
+from src.experiments.stage_one.setup import Setup
 
 log = logging.getLogger(__name__)
 

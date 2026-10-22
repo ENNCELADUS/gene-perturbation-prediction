@@ -52,6 +52,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+
 from src.data.io import replace_with, write_json, write_npz
 
 log = logging.getLogger(__name__)

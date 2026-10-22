@@ -1,11 +1,14 @@
 """model / tx1."""
 
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
+
 import anndata as ad
 import numpy as np
 import torch
+
 from src.data.tx1_cache import EncoderFn
 
 

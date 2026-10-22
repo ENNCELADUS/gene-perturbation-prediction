@@ -51,12 +51,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final
 
-
 from src.experiments.run_dir import absolute, open_manifest, record_step
-from src.experiments.states.telemetry import MANIFEST, Telemetry, settings
-from src.experiments.states.vocabularies import step_fit, step_project
 from src.experiments.states.inputs import step_inputs
 from src.experiments.states.report import step_report
+from src.experiments.states.telemetry import MANIFEST, Telemetry, settings
+from src.experiments.states.vocabularies import step_fit, step_project
 
 _LOGGER = logging.getLogger(__name__)
 

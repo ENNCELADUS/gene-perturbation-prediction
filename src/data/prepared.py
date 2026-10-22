@@ -31,6 +31,7 @@ from src.data.context_pca import ContextPCA, fit_context_pca, pooled_context
 from src.data.embeddings import load_esm2_embeddings
 from src.data.expression import library_sizes, log_normalize
 from src.data.labels import (
+    fit_gene_means,
     fit_residual_scale,
     fit_selective_genes,
     fit_variable_gene_membership,
@@ -43,7 +44,6 @@ from src.data.prior_offsets import (
     read_prior_offsets,
 )
 from src.data.q_sc import QScFeatures, compute_q_sc
-from src.data.labels import fit_gene_means
 from src.data.response import ResponseTargetsCache, open_response_targets
 from src.data.splits import (
     FixedSplit,

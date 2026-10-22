@@ -7,7 +7,6 @@ from typing import Any
 
 from src.experiments.config import read_yaml, require_keys
 
-
 _STATES_GROUPS = {
     "fit": "cells_per_line seeds cycle_states mixture_counts mixture_inits components",
     "programs": (

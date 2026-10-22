@@ -23,10 +23,9 @@ import pandas as pd
 from src.context_prior.bridge import oof_bridged
 from src.context_prior.folds import training_side_folds
 from src.context_prior.prior import PriorSpec, crossfit, fit_prior, total
-from src.experiments.prior.config import load_prior_config
-from src.eval.accuracy import score
+from src.data.io import jsonable as jsonable
 from src.data.io import write_json
-from src.experiments.run_dir import bind
+from src.eval.accuracy import score
 from src.experiments.prior.base import (
     SCORED,
     RunBase,
@@ -35,7 +34,8 @@ from src.experiments.prior.base import (
     prior_inputs,
     stages,
 )
-from src.data.io import jsonable as jsonable
+from src.experiments.prior.config import load_prior_config
+from src.experiments.run_dir import bind
 
 EXPORT_DIR = "export"
 SPLITS = ("train", *SCORED)

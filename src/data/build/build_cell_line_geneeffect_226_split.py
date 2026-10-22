@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import Bounds, LinearConstraint, milp
 
-
 SPLITS = ("train", "val", "test")
 
 REQUIRED_COLUMNS = (

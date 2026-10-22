@@ -9,16 +9,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 import anndata as ad
 import h5py
 import numpy as np
 import pandas as pd
 from scipy import sparse
 from scipy.io import mmread
+
 from src.data.build.prepare_cell_line_atlas_raw_umi import (
     assert_raw_integer,
 )
-
 
 #: Keys each reader and each identity kind takes (all required).
 READERS = {

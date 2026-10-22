@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 
-
 SCHEMA_VERSION = "esm2-embedding-provenance-v1"
 
 

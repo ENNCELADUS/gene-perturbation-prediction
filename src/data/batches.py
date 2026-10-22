@@ -180,5 +180,3 @@ class DependencyBatch:
             selective=self.selective.to(device),
             prior=self.prior.to(device),
         )
-
-
