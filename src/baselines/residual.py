@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
+
 from src.data.labels import ResidualTargets, fit_gene_means
 from src.data.splits import FixedSplit, assert_fit_eligible
 
@@ -351,5 +353,3 @@ def run_r1_ladder(
         .sort_values(["slice", "method", "model_id", "gene_symbol"], kind="stable")
         .reset_index(drop=True)
     )
-
-

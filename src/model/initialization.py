@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,12 +14,12 @@ from torch import nn
 
 from src.data.embeddings import Esm2EmbeddingTable
 from src.model.features import FixedSparseProjection
-from src.model.joint import GeneEffectE2EModel
 from src.model.head import (
     GeneEffectBlockConfig,
     GeneEffectFeatureDims,
     GeneEffectNestedHead,
 )
+from src.model.joint import GeneEffectE2EModel
 from src.model.normalization import BlockStandardizer
 from src.model.perturbation import Esm2PerturbationAdapter
 from src.model.state import (

@@ -8,10 +8,11 @@ import json
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from src.context_prior.bridge import bridge_quality
-from src.context_prior.bridge import oof_bridged
+
+from src.context_prior.bridge import bridge_quality, oof_bridged
 from src.context_prior.folds import training_side_folds
 from src.context_prior.noise import (
     cluster_proportions,
@@ -32,13 +33,13 @@ from src.context_prior.ridge import shared_ridge
 from src.eval.accuracy import BOOTSTRAP_SEED, gain, long_frame, score
 from src.experiments.prior.base import (
     SCORED,
-    build,
     Fitter,
+    build,
     stages,
 )
 from src.experiments.prior.diagnosis import (
-    Diagnosis,
     LISTED_FLOOR,
+    Diagnosis,
     reference_fit,
     reproduces,
     scores_and_gain,

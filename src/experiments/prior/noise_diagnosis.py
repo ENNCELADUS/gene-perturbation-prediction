@@ -34,11 +34,10 @@ import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-
 from src.data.io import write_json, write_text
-from src.experiments.run_dir import bind
 from src.experiments.prior.config import load_noise_config
 from src.experiments.prior.diagnosis import OUT_DIR, SECTIONS, Diagnosis, load_diagnosis
+from src.experiments.prior.noise_report import results_markdown
 from src.experiments.prior.noise_sections import (
     cell_sampling,
     cell_states,
@@ -46,8 +45,7 @@ from src.experiments.prior.noise_sections import (
     deposit_swap,
     learning_curve,
 )
-from src.experiments.prior.noise_report import results_markdown
-
+from src.experiments.run_dir import bind
 
 # ----------------------------------------------------------------------------
 # The prior run

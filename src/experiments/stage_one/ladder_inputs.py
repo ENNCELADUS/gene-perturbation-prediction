@@ -48,6 +48,7 @@ from typing import Any, Final
 
 import numpy as np
 import pandas as pd
+
 from src.data.io import write_json, write_parquet
 from src.experiments import run_dir
 from src.experiments.run_dir import record_step, shard
@@ -460,8 +461,7 @@ def read_cells(root: Path, model_id: str) -> dict[str, np.ndarray]:
 def build_mean(setup: Setup, frame: Frame) -> dict[str, Any]:
     """``mean/``: the mean channel, the quantile-normalised pseudo-bulk of every
     split line, the paired lines' bulk, and PIE's input with its listed mask."""
-    from src.context_prior.bridge import bridge_quality, fit_bridge
-    from src.context_prior.bridge import oof_bridged
+    from src.context_prior.bridge import bridge_quality, fit_bridge, oof_bridged
     from src.context_prior.space import (
         fill_unmeasured,
         measured_genes,

@@ -10,17 +10,16 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
+
 import numpy as np
 import pandas as pd
-from src.experiments.stage_one.pie_reproduction import CHECKPOINT_FILES
-from src.experiments.run_dir import absolute
 
+from src.experiments.run_dir import absolute
+from src.experiments.stage_one.pie_reproduction import CHECKPOINT_FILES
 
 DEPMAP_SOURCE: Final[str] = "depmap_gene_effect"
-
 #: Our lines' controls-only dataset, as PIE names a preprocessed dir.
 DATASET: Final[str] = "geneeffect_ladder"
-
 EXPERIMENT: Final[str] = "replogle_xdataset"
 
 

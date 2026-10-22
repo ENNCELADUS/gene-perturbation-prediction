@@ -95,5 +95,3 @@ def dependency_loader(
         collate_fn=dataset.collate,
         generator=torch.Generator().manual_seed(epoch * world + rank),
     )
-
-

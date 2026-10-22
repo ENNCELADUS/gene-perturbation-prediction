@@ -50,8 +50,8 @@ from src.context_prior.targets import Definitions
 from src.data import ladder_reader as reader
 from src.data.io import read_json, write_json
 from src.experiments.run_dir import assert_bound, bind, locked
-from src.experiments.stage_one.setup import Setup, load_setup
 from src.experiments.stage_one.resident import Resident
+from src.experiments.stage_one.setup import Setup, load_setup
 
 log = logging.getLogger(__name__)
 

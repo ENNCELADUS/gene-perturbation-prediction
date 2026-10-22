@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from src.data.prepared import PreparedInputs
     from src.model.joint import GeneEffectE2EModel
 from collections.abc import Iterable, Mapping
+
 import numpy as np
 import torch
 

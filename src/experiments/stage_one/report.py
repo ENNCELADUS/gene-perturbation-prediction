@@ -7,12 +7,15 @@ import logging
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pandas as pd
+
 from src.data import ladder_reader as reader
 from src.data.io import read_json, write_json, write_text
 from src.experiments.run_dir import assert_bound, interval, number
-from src.experiments.stage_one.setup import Setup, load_setup
+from src.experiments.stage_one.resident import finished_prior, same_ladder
+from src.experiments.stage_one.ridge import cached_ridge
 from src.experiments.stage_one.run import (
     REPORTED,
     ROW,
@@ -20,8 +23,7 @@ from src.experiments.stage_one.run import (
     run_directory,
     wide_scores,
 )
-from src.experiments.stage_one.resident import finished_prior, same_ladder
-from src.experiments.stage_one.ridge import cached_ridge
+from src.experiments.stage_one.setup import Setup, load_setup
 
 log = logging.getLogger(__name__)
 

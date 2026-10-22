@@ -7,22 +7,24 @@ import logging
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Final
+
 import numpy as np
+
 from src.data.io import write_npy, write_npz
 from src.experiments.stage_one.pie import (
-    cached,
-    Layout,
     NO_PERTURBATION,
+    Layout,
     PassOutput,
     Pie,
     Tables,
     autocast,
     build_batch,
+    cached,
     exclusive,
     gene_evidence,
+    is_mixed,
     load_pie,
     mask_depmap,
-    is_mixed,
     pie_environment,
 )
 
@@ -31,9 +33,7 @@ log = logging.getLogger(__name__)
 
 #: Our batches against PIE's own dataset and collate, on the same pairs.
 AGREEMENT_PAIRS: Final[int] = 4
-
 AGREEMENT_TOLERANCE: Final[float] = 1e-3
-
 #: Our (compiled) bf16 decode may be at most this many times as far from PIE's
 #: float32 logits as PIE's own bf16 forward is, plus the tolerance.
 BF16_ERROR_RATIO: Final[float] = 2.0

@@ -9,13 +9,14 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from src.data.basal import align_columns
-from src.data.depmap import read_depmap_matrix
-from src.data.build.single_cell_readers import Library, read_library, require
 
+from src.data.basal import align_columns
+from src.data.build.single_cell_readers import Library, read_library, require
+from src.data.depmap import read_depmap_matrix
 
 IDENTITIES = {
     "line": ("identifier",),

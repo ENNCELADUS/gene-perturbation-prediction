@@ -7,23 +7,23 @@ Correlations of a constant prediction are undefined (NaN, counted), never zero.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-import math
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 import torch
-from torch import nn
 from sklearn.metrics import average_precision_score
+from torch import nn
 from torch.nn import functional as F
 
 from src.data.datasets import DependencyDataset
 from src.data.labels import DEPENDENCY_THRESHOLD
 from src.data.prepared import PreparedInputs
-from src.eval.metrics import unit_pearson, unit_spearman, paired_line_bootstrap
+from src.eval.metrics import paired_line_bootstrap, unit_pearson, unit_spearman
 
 if TYPE_CHECKING:
     from src.context_prior.targets import Definitions

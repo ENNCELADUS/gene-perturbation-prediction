@@ -9,8 +9,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pandas as pd
+
 from src.context_prior.bridge import Bridge, fit_bridge
 from src.context_prior.prior import (
     FittedPrior,
@@ -20,8 +22,8 @@ from src.context_prior.prior import (
     total,
 )
 from src.data.prior_offsets import checked_prior, read_prior_offsets
-from src.experiments.joint.config import load_config
 from src.eval.accuracy import gain, score
+from src.experiments.joint.config import load_config
 from src.experiments.prior.base import (
     RunBase,
     build,
@@ -29,7 +31,6 @@ from src.experiments.prior.base import (
     prior_inputs,
     stages,
 )
-
 
 #: A reproduced export row may differ from the written one by float rounding only.
 OUT_DIR = "noise"
@@ -43,7 +44,6 @@ SECTIONS = (
     "cell_states",
 )
 REPRODUCTION_TOLERANCE = 1e-6
-
 #: Lines whose source lists less of the scoring set than this are named in
 #: ``cell_states`` (their unlisted genes score as unexpressed).
 LISTED_FLOOR = 0.9

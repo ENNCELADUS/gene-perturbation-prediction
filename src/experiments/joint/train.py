@@ -4,17 +4,16 @@ as one process or under ``accelerate launch``."""
 from __future__ import annotations
 
 import argparse
+import json
+import random
 from collections.abc import Mapping
 from dataclasses import asdict
-import json
 from pathlib import Path
-import random
 from typing import TYPE_CHECKING, Any
 
-from src.experiments.joint.config import load_config, mixed_precision, validate_config
 from src.data.io import write_json
+from src.experiments.joint.config import load_config, mixed_precision, validate_config
 from src.experiments.run_dir import git_revision
-
 
 if TYPE_CHECKING:
     from src.data.prepared import PreparedInputs
@@ -35,8 +34,8 @@ def run_training(
     """
     import numpy as np
     import torch
-    from accelerate import Accelerator
     import yaml
+    from accelerate import Accelerator
 
     from src.model.initialization import build_joint_model, restore_joint_model
     from src.training.checkpoint import load_checkpoint

@@ -4,8 +4,10 @@ space, their permuted memberships, and the per-set tables the frozen PIE reads."
 from __future__ import annotations
 
 from typing import Any
+
 import numpy as np
 import pandas as pd
+
 from src.data import cell_states as cs
 from src.data.io import write_npz, write_parquet
 from src.experiments.states.telemetry import IDENTITY_TOLERANCE, Telemetry, npz_keys

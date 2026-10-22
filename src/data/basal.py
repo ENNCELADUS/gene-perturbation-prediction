@@ -22,7 +22,6 @@ import pyarrow.parquet as pq
 from scipy import sparse
 from scipy.sparse import csr_matrix
 
-
 _LOGGER = logging.getLogger(__name__)
 
 _ENSEMBL_ID_PATTERN = re.compile(r"^ENSG\d+(\.\d+)?$")

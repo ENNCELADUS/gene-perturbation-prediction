@@ -62,6 +62,7 @@ from typing import Any, Final
 import numpy as np
 import pandas as pd
 from scipy import sparse
+
 from src.data.io import write_json, write_npy, write_npz
 
 _LOGGER = logging.getLogger(__name__)

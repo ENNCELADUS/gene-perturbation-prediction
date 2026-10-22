@@ -23,7 +23,6 @@ from scipy.io import mmread
 from src.data.basal import assert_tx1_input_contract
 from src.data.tx1_cache import load_hvg_gene_order
 
-
 ENSEMBL_RE = re.compile(r"^ENSG\d+$")
 MANIFEST_COLUMNS = (
     "source",

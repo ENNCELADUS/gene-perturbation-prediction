@@ -166,5 +166,3 @@ class DependencyDataset(Dataset[int]):
             selective=self.selective[rows],
             prior=self.prior[rows],
         )
-
-

@@ -3,14 +3,13 @@ src.experiments.joint.readout``): extract a frozen joint backbone's features onc
 the head with the explicit gene-specific context slope, score validation."""
 
 import argparse
-from contextlib import nullcontext
 import json
 import os
-from pathlib import Path
 import shutil
+from contextlib import nullcontext
+from pathlib import Path
 
 import torch
-
 
 READOUT_ARM = "A2"  # the explicit gene-specific context-slope head
 
@@ -43,10 +42,10 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
     """Write train/val features of a joint checkpoint; ``inputs`` replaces
     ``load_inputs`` (synthetic tests)."""
     from src.data.datasets import DependencyDataset
-    from src.experiments.joint.readout.cache import write_feature_cache
     from src.experiments.joint.config import mixed_precision
-    from src.model.initialization import restore_joint_model
+    from src.experiments.joint.readout.cache import write_feature_cache
     from src.experiments.run_dir import git_revision
+    from src.model.initialization import restore_joint_model
     from src.training.checkpoint import load_checkpoint
 
     checkpoint = Path(checkpoint)
@@ -224,12 +223,12 @@ def main(argv=None):
         )
     else:
         from src.experiments.joint.readout.cache import ReadoutCache
-        from src.experiments.joint.readout.heads import export_checkpoint
-        from src.experiments.joint.readout.heads import fit_readout
+        from src.experiments.joint.readout.heads import export_checkpoint, fit_readout
 
         cache = ReadoutCache(args.cache)
         if args.command == "compare":
             import pandas as pd
+
             from src.experiments.joint.readout.compare import compare_runs
 
             mapping = pd.read_csv(args.context_map).set_index("model_id")

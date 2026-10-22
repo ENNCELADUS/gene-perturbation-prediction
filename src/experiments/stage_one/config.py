@@ -8,7 +8,6 @@ from typing import Any
 
 from src.experiments.config import read_yaml, require_keys
 
-
 _LADDER_GROUPS = {
     "paths": "gene_text pie_checkpoint context_text tx1_cache",
     "frame": "folds",

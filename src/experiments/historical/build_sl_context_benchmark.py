@@ -16,7 +16,6 @@ from typing import Any
 
 import pandas as pd
 
-
 LOGGER = logging.getLogger(__name__)
 INPUT_PATH = Path("data/SL_Benchmark_Formal/sl_integrated_pairs.csv")
 DEFAULT_OUTPUT_DIR = Path("data/SL_Benchmark_Formal/derived/context_screen_v2")

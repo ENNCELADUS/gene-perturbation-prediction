@@ -3,18 +3,19 @@ processes run on, the training launch under ``accelerate``, the resume check, an
 names of the baselines and prior controls their summaries report."""
 
 from __future__ import annotations
-from collections.abc import Callable, Sequence
+
 import contextlib
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+
 from src.data.io import read_json
 from src.experiments.joint.config import PRECISION
-
 
 BASELINE_NAMES = {
     "gene_mean": "Gene mean",

@@ -32,18 +32,18 @@ from src.context_prior.single_cell import (
     read_statistics,
     stack_predictions,
 )
+from src.data.io import write_json, write_text
 from src.data.prepared import read_manifest
 from src.data.prior_offsets import checked_prior, read_prior_offsets
-from src.data.io import write_json, write_text
-from src.experiments.run_dir import bind, number
-from src.experiments.joint.config import load_config
-from src.experiments.prior.config import load_stack_config
 from src.eval.accuracy import gain, score
+from src.experiments.joint.config import load_config
 from src.experiments.prior.base import (
     SCORED,
     RunBase,
     load_base,
 )
+from src.experiments.prior.config import load_stack_config
+from src.experiments.run_dir import bind, number
 
 OUT_DIR = "single_cell_stack"
 CONTROL_ARM = "mean"

@@ -45,9 +45,9 @@ from scipy import sparse
 from src.data.basal import align_columns
 from src.data.ladder_cells import (
     PIE_TARGET_SUM,
-    scale_to_total,
     library_sizes,
     line_rng,
+    scale_to_total,
     upper_symbols,
 )
 

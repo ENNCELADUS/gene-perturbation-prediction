@@ -8,8 +8,8 @@ import hashlib
 import heapq
 import json
 import os
-from pathlib import Path
 import uuid
+from pathlib import Path
 
 import anndata as ad
 import h5py
@@ -17,16 +17,14 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
-
 from src.data.basal import (
     assemble_tahoe_matrix,
     assemble_token_matrix,
+    assert_tx1_input_contract,
     filter_xatlas_shard,
     materialize_rows,
     row_to_xatlas_cell,
-    assert_tx1_input_contract,
 )
-
 
 TAHOE_SOURCE = "Tahoe-100M DMSO"
 SPECIAL_MODEL_IDS = {

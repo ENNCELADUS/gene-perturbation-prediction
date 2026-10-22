@@ -5,8 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from src.context_prior.bridge import fit_bridge
-from src.context_prior.bridge import BridgeBase, BridgeInputs, oof_bridged
+from src.context_prior.bridge import BridgeBase, BridgeInputs, fit_bridge, oof_bridged
 
 
 def build(base: BridgeBase, setting: Mapping[str, Any]) -> BridgeInputs:

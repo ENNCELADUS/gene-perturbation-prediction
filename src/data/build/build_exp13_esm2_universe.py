@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-import json
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from src.data.splits import FixedSplit
+
 from src.data.io import write_text
+from src.data.splits import FixedSplit
 
 COVERAGE_THRESHOLDS = {"train": 5, "val": 3, "test": 3}
 

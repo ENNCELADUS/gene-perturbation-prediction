@@ -50,9 +50,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import numpy as np
-import requests
-
 import pie
+import requests
 from pie.sources.common import provenance_path
 from pie.sources.contract import (
     FORMAT_VERSION,

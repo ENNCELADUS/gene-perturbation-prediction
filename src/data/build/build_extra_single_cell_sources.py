@@ -39,16 +39,16 @@ import pandas as pd
 from scipy import sparse
 
 from src.data.basal import assert_tx1_input_contract
-from src.data.depmap import read_model_ids, read_models
 from src.data.build.build_extra_single_cell_lines import Admission, admit, read_map
+from src.data.build.demultiplex import identify, knee
 from src.data.build.prepare_cell_line_atlas_raw_umi import (
     load_gene_mapping,
     map_and_collapse_genes,
     probe_tx1_loader,
 )
-from src.data.splits import FixedSplit, load_geneeffect_split
 from src.data.build.single_cell_readers import Library, read_library, require
-from src.data.build.demultiplex import identify, knee
+from src.data.depmap import read_model_ids, read_models
+from src.data.splits import FixedSplit, load_geneeffect_split
 
 
 @dataclass

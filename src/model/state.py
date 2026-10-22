@@ -7,10 +7,10 @@ reach STATE; they feed only the GeneEffect head's pooled context.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from copy import deepcopy
-import os
 from pathlib import Path
 from typing import Any
 

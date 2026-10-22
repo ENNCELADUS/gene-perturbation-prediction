@@ -18,15 +18,14 @@ SIGTERM terminates the running subprocesses before the run exits.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
 import json
 import logging
-from pathlib import Path
 import sys
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
+from pathlib import Path
 
 from src.data.io import read_json
-from src.experiments.run_dir import number
 from src.experiments.joint.config import load_config
 from src.experiments.joint.pipeline import (
     BASELINE_NAMES,
@@ -40,6 +39,7 @@ from src.experiments.joint.pipeline import (
     training_argv,
     visible_gpus,
 )
+from src.experiments.run_dir import number
 
 LINE_NAMES = {
     "ACH-000551": "K562",
