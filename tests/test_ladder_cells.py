@@ -130,7 +130,10 @@ def test_line_rng_depends_on_line_and_purpose():
 
 @pytest.mark.parametrize("n_cells", [50, 300])
 def test_doublet_scores(n_cells):
-    from src.experiments.ladder_inputs import SCRUBLET_MIN_CELLS, doublet_scores
+    from src.experiments.stage_one.ladder_inputs import (
+        SCRUBLET_MIN_CELLS,
+        doublet_scores,
+    )
 
     rng = np.random.default_rng(9)
     counts = rng.poisson(rng.gamma(0.5, 4.0, size=200), size=(n_cells, 200))

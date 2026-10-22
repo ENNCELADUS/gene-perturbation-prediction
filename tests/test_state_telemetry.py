@@ -18,9 +18,9 @@ import yaml
 
 from src.data import cell_states as cs
 from src.data.tx1_cache import EMBEDDING_WIDTH, write_line_cache
-from src.experiments import ladder_inputs as ladder
-from src.experiments import state_telemetry as st
-from src.experiments.config import validate_states_config
+from src.experiments.stage_one import ladder_inputs as ladder
+from src.experiments.states import state_telemetry as st
+from src.experiments.states.config import validate_states_config
 from tests.test_ladder_inputs import TEST, TRAIN, VAL, build_world
 
 SECOND = ("ACH-T0", "ACH-T1", "ACH-T2", "ACH-V0")

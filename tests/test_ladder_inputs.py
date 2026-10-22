@@ -16,8 +16,8 @@ from scipy.sparse import csr_matrix
 
 from src.context_prior.bridge import fit_bridge
 from src.data.splits import SPLIT_SCHEMA_VERSION
-from src.experiments import ladder_inputs as ladder
-from src.experiments.config import validate_ladder_config
+from src.experiments.stage_one import ladder_inputs as ladder
+from src.experiments.stage_one.config import validate_ladder_config
 
 TRAIN = tuple(f"ACH-T{i}" for i in range(10))  # T8 has no bulk; T9 is lymphoid
 UNLABELLED = ("ACH-U0",)

@@ -15,7 +15,7 @@ from scipy import sparse
 from src.data import cell_states as cs
 from src.data.ladder_cells import gene_summaries
 from src.data.splits import FixedSplit
-from src.experiments.config import load_states_config, validate_states_config
+from src.experiments.states.config import load_states_config, validate_states_config
 
 PANEL = [f"G{i}" for i in range(12)]
 SOURCE = [*(f"g{i}" for i in range(10)), "OTHER", "G0"]  # G0 listed twice, G10-11 not

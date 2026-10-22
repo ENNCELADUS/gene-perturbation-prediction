@@ -1,6 +1,6 @@
 """State telemetry (PIE stage-one design §3.5, Task 8; protocol §17), project env.
 
-``python -m src.experiments.state_telemetry CONFIG --steps fit,project,inputs``
+``python -m src.experiments.states.state_telemetry CONFIG --steps fit,project,inputs``
 then ``--steps report`` (``hpc/run.sh cell-states``). The ladder config the states
 config names gives the ladder root, whose ``states/`` this writes. Steps, each
 skipping what exists, so rerunning resumes:
@@ -166,8 +166,8 @@ class Telemetry:
 
     @cached_property
     def setup(self) -> Any:
-        from src.experiments.config import load_ladder_config
-        from src.experiments.ladder_inputs import load_setup
+        from src.experiments.stage_one.config import load_ladder_config
+        from src.experiments.stage_one.ladder_inputs import load_setup
 
         return load_setup(load_ladder_config(absolute(self.config["ladder_config"])))
 
@@ -189,7 +189,7 @@ class Telemetry:
 
     @cached_property
     def lines(self) -> pd.DataFrame:
-        from src.experiments.ladder_inputs import read_lines
+        from src.experiments.stage_one.ladder_inputs import read_lines
 
         return read_lines(self.ladder_root)
 
@@ -275,7 +275,7 @@ class Telemetry:
 
     @cached_property
     def recorded(self) -> Mapping[str, Any]:
-        from src.experiments.ladder_inputs import settings
+        from src.experiments.stage_one.ladder_inputs import settings
 
         return settings(self.setup)
 
@@ -1469,7 +1469,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     unknown = [s for s in steps if s not in STEPS]
     if unknown:
         parser.error(f"unknown steps {unknown}; choose from {STEPS}")
-    from src.experiments.config import load_states_config
+    from src.experiments.states.config import load_states_config
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from src.experiments.cilantro_coverage import (
+from src.experiments.historical.cilantro_coverage import (
     bag_indices,
     context_rows,
     covered_rows,

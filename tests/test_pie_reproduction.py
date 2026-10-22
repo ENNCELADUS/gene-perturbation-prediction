@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.experiments import pie_reproduction as reproduction
+from src.experiments.stage_one import pie_reproduction as reproduction
 
 METRICS = ["binary_auprc", "spearman_lfc"]
 

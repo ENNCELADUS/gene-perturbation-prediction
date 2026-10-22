@@ -19,7 +19,7 @@ from src.data.io import write_npy, write_npz
 import pandas as pd
 import pytest
 
-from src.experiments import pie_precompute as pp
+from src.experiments.stage_one import pie_precompute as pp
 
 PIE_TESTS = Path(__file__).resolve().parents[1] / "third_party" / "pie" / "tests"
 LINES = ("L1", "L2", "L3")  # L3 has no Cellosaurus text

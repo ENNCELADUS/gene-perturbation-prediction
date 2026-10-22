@@ -19,9 +19,9 @@ import torch
 import yaml
 
 from src.data import ladder_reader as reader
-from src.experiments import ladder_inputs as ladder
-from src.experiments import stage_one
-from src.experiments.config import load_stage_one_config
+from src.experiments.stage_one import ladder_inputs as ladder
+from src.experiments.stage_one import run as stage_one
+from src.experiments.stage_one.config import load_stage_one_config
 from tests.test_ladder_inputs import BULK_LABELLED, TEST, TRAIN, VAL, build_world
 
 WIDTHS = {"dH": 6, "dL": 6, "own_h": 6, "own_dp": 1, "own_x": 1}
@@ -372,7 +372,7 @@ def test_a_fold_run_trains_without_its_fold(world):
 
 
 def test_prior_reference_components_reader_and_report(world):
-    from src.experiments.stage_one_prior import run as prior_run
+    from src.experiments.stage_one.prior_reference import run as prior_run
 
     root = world[0]
     config = yaml.safe_load((CONFIGS / "prior_reference.yaml").read_text())
@@ -640,7 +640,7 @@ def test_the_full_stream_raises_the_open_file_limit_its_maps_need(monkeypatch):
 def test_film_reads_the_priors_prediction_as_a_pair_feature(world):
     """The prior-input rows read the prior reference's prediction minus the base,
     frame lines out of fold; the permuted control keeps each line's own prior."""
-    from src.experiments.stage_one_prior import run as prior_run
+    from src.experiments.stage_one.prior_reference import run as prior_run
 
     root = world[0]
     config = yaml.safe_load((CONFIGS / "prior_reference.yaml").read_text())

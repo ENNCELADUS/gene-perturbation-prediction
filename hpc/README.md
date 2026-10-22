@@ -161,7 +161,7 @@ path resumes on the fast path unchanged: the gene files are the same, and `pertu
 removes any gene whose files are incomplete.
 
 The port's coverage report (step 0, CPU only) runs in the project environment:
-`.venv-tx1/bin/python -m src.experiments.cilantro_coverage --out outputs/cilantro_coverage/<id>`.
+`.venv-tx1/bin/python -m src.experiments.historical.cilantro_coverage --out outputs/cilantro_coverage/<id>`.
 
 ## The PIE harness
 

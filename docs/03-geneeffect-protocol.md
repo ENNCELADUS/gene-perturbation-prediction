@@ -995,9 +995,9 @@ Task 2 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-desi
 [2026-10-16](specs/2026-10-16-pie-ladder-inputs-plan.md)) writes the fixed inputs every stage-one arm reads under
 `data/geneeffect_joint/v2/ladder/` (`configs/stage_one/ladder_inputs.yaml`, which names the default prior's config for
 the split, labels, bulk RNA and dropped lineages and the noise diagnosis's for programs and clusters).
-`hpc/run.sh ladder-inputs CONFIG --steps lines,cells,mean,summaries` (`src/experiments/ladder_inputs.py`, project
+`hpc/run.sh ladder-inputs CONFIG --steps lines,cells,mean,summaries` (`src/experiments/stage_one/ladder_inputs.py`, project
 environment) and `--steps tx1 --shard I/N` (one GPU per shard); `hpc/run.sh pie-precompute CONFIG --steps …`
-(`src/experiments/pie_precompute.py`, `.venv-pie`); `hpc/run.sh gene-sources STEP …`. Every step skips what exists;
+(`src/experiments/stage_one/pie_precompute.py`, `.venv-pie`); `hpc/run.sh gene-sources STEP …`. Every step skips what exists;
 `manifest.json` records the settings (a root written under others is refused) and each step's counts. Nothing is chosen
 in code.
 
@@ -1063,7 +1063,7 @@ in code.
 Task 3 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) (plan
 [2026-10-17](specs/2026-10-17-pie-stage-one-plan.md), Wave 1A) trains the architecture arms on the §15 inputs, one
 config per run (`configs/stage_one/architecture/`, `kind: train`), with `hpc/run.sh stage-one CONFIG [--fold K]`
-(`src/experiments/stage_one.py`, `.venv-pie`; the queue `stage-one-queue` runs every config and fold, one per GPU) and
+(`src/experiments/stage_one/run.py`, `.venv-pie`; the queue `stage-one-queue` runs every config and fold, one per GPU) and
 reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config). Nothing is chosen in code.
 
 - **Target and base.** `z = (GeneEffect − m_g) / σ_g` on the 981 frame lines, `m_g` their mean, `σ_g` the §6 residual SD;
@@ -1134,7 +1134,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   gene, the delta, its slots and the before-state read from a seeded permutation of all lines); the shared components
   reader, lineage only (one-hot over the training lines' lineages), Cellosaurus text only and own expression only, each
   through the FiLM head; untrained in the report: the base, the default prior refitted on the frame
-  (`hpc/run.sh stage-one-prior`, `src/experiments/stage_one_prior.py`, project environment: its reference row on the
+  (`hpc/run.sh stage-one-prior`, `src/experiments/stage_one/prior_reference.py`, project environment: its reference row on the
   981 lines' mean channel with components fitted on the frame rows; validation and test from the whole frame, out of
   fold from the frame folds with the components refitted outside each fold, the scores the components reader's fold
   runs read; it writes the 128 component scores, fitted on the frame and outside each fold), and a
@@ -1185,7 +1185,7 @@ vocabularies Task 9 precomputes. No model is trained on GeneEffect and nothing i
 `configs/stage_one/states/telemetry.yaml` names the stage-one inputs config (§15), whose ladder root holds `states/`,
 the frozen PIE's state outputs under `states/pie/` ([data card](data/cell-states.md)). `hpc/run.sh cell-states CONFIG --steps fit,project,inputs`, then
 `hpc/run.sh pie-precompute CONFIG --steps states --set ALL --shard I/N` and `--steps assemble_states --set ALL`, then
-`hpc/run.sh cell-states CONFIG --steps report` (`src/experiments/state_telemetry.py`, `src/data/cell_states.py`;
+`hpc/run.sh cell-states CONFIG --steps report` (`src/experiments/states/state_telemetry.py`, `src/data/cell_states.py`;
 `src/experiments/states/programs.py` in `.venv-states`, built by `hpc/states/setup.sh`). Every step skips what exists;
 `states/manifest.json` records the settings and refuses a root written under others (the projected roles may grow);
 moving `states/` aside moves the frozen PIE's state outputs with it.

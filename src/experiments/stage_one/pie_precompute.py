@@ -1,9 +1,9 @@
 """The frozen PIE's deltas for every line x panel gene (PIE stage-one design §3.2,
 Task 2), run in PIE's environment (``.venv-pie``).
 
-``python -m src.experiments.pie_precompute CONFIG --steps STEPS [--shard I/N]
+``python -m src.experiments.stage_one.pie_precompute CONFIG --steps STEPS [--shard I/N]
 [--device cuda]`` (``hpc/run.sh pie-precompute``) reads the ladder root that
-``src.experiments.ladder_inputs`` wrote (``lines.parquet``, ``genes.parquet``,
+``src.experiments.stage_one.ladder_inputs`` wrote (``lines.parquet``, ``genes.parquet``,
 ``mean/pie_input.parquet``) and the Cellosaurus ``context_text`` source. Steps,
 each skipping what exists:
 
@@ -24,7 +24,7 @@ each skipping what exists:
 
 On a states config (``configs/stage_one/states/``, which names the ladder
 config), ``--steps states|assemble_states --set NAME[,NAME]|ALL`` (design §3.5,
-Task 8; ``src.experiments.state_telemetry`` writes the inputs):
+Task 8; ``src.experiments.states.state_telemetry`` writes the inputs):
 
 - ``states``: the frozen PIE on every (line, state) pseudo-context of the sets
   (``<ModelID>|<set>|<state>``, the line's Cellosaurus text, the state's input
@@ -945,7 +945,11 @@ def rescore(out: Layout, device: str) -> dict[str, Any]:
     from pie.config import EvalConfig
     from pie.evaluate import run_eval
 
-    from src.experiments.pie_reproduction import SPLITS_URI, compare_metrics, read_table
+    from src.experiments.stage_one.pie_reproduction import (
+        SPLITS_URI,
+        compare_metrics,
+        read_table,
+    )
 
     tables = {}
     with pie_environment(out) as experiment:
@@ -1694,7 +1698,7 @@ def run_state_steps(
     shard: tuple[int, int],
     device: str,
 ) -> None:
-    from src.experiments.config import load_ladder_config
+    from src.experiments.stage_one.config import load_ladder_config
 
     config = load_ladder_config(absolute(states_config["ladder_config"]))
     out = layout(config)
@@ -1784,7 +1788,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if set(steps) - set(STATE_STEPS) or args.sets is None:
             parser.error(f"{STATE_STEPS} run alone, with --set, on a states config")
         from src.data.cell_states import state_sets
-        from src.experiments.config import load_states_config
+        from src.experiments.states.config import load_states_config
 
         states_config = load_states_config(absolute(args.config))
         every = state_sets(states_config)
@@ -1795,7 +1799,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.sets is not None:
         parser.error("--set belongs to the states steps")
-    from src.experiments.config import load_ladder_config
+    from src.experiments.stage_one.config import load_ladder_config
 
     run(load_ladder_config(absolute(args.config)), steps, args.shard, args.device)
     return 0
