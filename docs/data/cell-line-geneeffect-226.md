@@ -52,7 +52,7 @@ missing train label, or any missing validation/test label, is a hard runtime err
 - `configs/benchmarks/cell_line_geneeffect_226_split.csv`: row-level cohort, patient,
   source semantics and label availability.
 - `configs/benchmarks/cell_line_geneeffect_226_split_audit.json`: counts and pinned hashes.
-- `src/data/build/build_cell_line_geneeffect_226_split.py`: reproducible builder.
+- `src/data/builders/build_cell_line_geneeffect_226_split.py`: reproducible builder.
 - HPC: `data/sl_dependency_v0/processed/cell_line_geneeffect_226/benchmark_split_v1/`.
 
 The benchmark has 17,931 genes with at least five finite train labels and at least

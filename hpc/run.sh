@@ -119,11 +119,11 @@ case "$command" in
   gene-sources)
     step=$1; shift
     case "$step" in
-      proteins) exec "$repo_root/.venv-pie/bin/python" -m src.data.build.embed_protein_sources --steps proteins "$@" ;;
-      afdb) exec "$esm_python" -m src.data.build.embed_protein_sources --steps afdb "$@" ;;
+      proteins) exec "$repo_root/.venv-pie/bin/python" -m src.data.builders.embed_protein_sources --steps proteins "$@" ;;
+      afdb) exec "$esm_python" -m src.data.builders.embed_protein_sources --steps afdb "$@" ;;
       esm)
         export HF_HOME="$esm_hf_home" HF_HUB_OFFLINE=1
-        exec "$esm_python" -m src.data.build.embed_protein_sources --steps esmc,esm3 "$@" ;;
+        exec "$esm_python" -m src.data.builders.embed_protein_sources --steps esmc,esm3 "$@" ;;
       align) exec "$python_bin" -m src.data.gene_sources "$@" ;;
       *) usage >&2; exit 2 ;;
     esac ;;
