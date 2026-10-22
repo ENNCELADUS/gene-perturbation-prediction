@@ -497,7 +497,7 @@ def build_mean(setup: Setup, frame: Frame) -> dict[str, Any]:
     """``mean/``: the mean channel, the quantile-normalised pseudo-bulk of every
     split line, the paired lines' bulk, and PIE's input with its listed mask."""
     from src.context_prior.bridge import bridge_quality, fit_bridge
-    from src.context_prior.bridging import oof_bridged
+    from src.context_prior.bridge import oof_bridged
     from src.context_prior.space import (
         fill_unmeasured,
         measured_genes,

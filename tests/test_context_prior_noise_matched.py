@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.context_prior.bridging import BridgeBase, BridgeInputs, oof_bridged
+from src.context_prior.bridge import BridgeBase, BridgeInputs, oof_bridged
 from src.context_prior.prior import PriorInputs, PriorSpec, Stage, fit_prior, total
 from src.context_prior.reference import Reference
 from src.context_prior.remedies import affine, noise_matched

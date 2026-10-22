@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.context_prior.bridging import BridgeBase, BridgeInputs
+from src.context_prior.bridge import BridgeBase, BridgeInputs
 from src.context_prior.folds import patient_folds
 from src.context_prior.prior import PriorInputs, PriorSpec, Stage, fit_prior, total
 from src.context_prior.reference import Reference, load_reference
