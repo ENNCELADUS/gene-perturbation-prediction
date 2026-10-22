@@ -335,7 +335,7 @@ def cilantro_rows(diagnosis: Diagnosis, path: Path) -> dict:
     return out
 
 
-def _deposits(diagnosis: Diagnosis) -> pd.Series:
+def deposits(diagnosis: Diagnosis) -> pd.Series:
     """Each split line's deposit: the final split table's ``expression_source``,
     the 226's names mapped to the identity map's source keys (Tahoe-100M is one
     deposit under two names)."""
@@ -353,7 +353,7 @@ def deposit_confound(diagnosis: Diagnosis, out: Path) -> dict:
     selective = list(base.definitions.selective)
     truth = base.truth(train).loc[:, selective]
     error = truth - diagnosis.export.loc[train, selective]
-    deposit = _deposits(diagnosis).loc[train]
+    deposit = deposits(diagnosis).loc[train]
     counts = deposit.value_counts()
     small = set(counts.index[counts < int(settings["min_lines"])])
     grouped = deposit.where(~deposit.isin(small), "other")
@@ -465,7 +465,7 @@ def deposit_swap(diagnosis: Diagnosis, out: Path) -> dict:
     return {
         "lines": len(lines),
         "deposits": {
-            "primary": _deposits(diagnosis).loc[lines].value_counts().to_dict(),
+            "primary": deposits(diagnosis).loc[lines].value_counts().to_dict(),
         },
         "scores": {
             name: scores_and_gain(diagnosis, frame, predicted["primary"], lines)
@@ -489,7 +489,7 @@ def deposit_swap(diagnosis: Diagnosis, out: Path) -> dict:
     }
 
 
-def _program_scores(
+def program_scores(
     diagnosis: Diagnosis, lines: Sequence[str]
 ) -> tuple[dict[str, np.ndarray], dict[str, dict[str, float]]]:
     """Per line, its cells' program scores and the shares of the scoring set and
@@ -506,7 +506,7 @@ def _program_scores(
     return out, {m: listed[m] for m in lines}
 
 
-def _context_cells(diagnosis: Diagnosis, lines: Sequence[str]) -> dict[str, np.ndarray]:
+def context_cells(diagnosis: Diagnosis, lines: Sequence[str]) -> dict[str, np.ndarray]:
     from src.data.prepared import read_manifest, read_prepared_line
 
     genes = tuple(read_manifest(diagnosis.prepared)["common_gene_panel"])
@@ -524,7 +524,7 @@ def cell_states(diagnosis: Diagnosis, out: Path) -> dict:
     train, queries = diagnosis.train, diagnosis.queries
     every = [*train, *queries["val"], *queries["test"]]
     programs = list(settings["programs"])
-    scores, listed = _program_scores(diagnosis, every)
+    scores, listed = program_scores(diagnosis, every)
     fractions, means, thresholds = program_features(
         scores, train, programs, float(settings["threshold_percentile"])
     )
@@ -533,7 +533,7 @@ def cell_states(diagnosis: Diagnosis, out: Path) -> dict:
         "program_means": means,
     }
     clusters = cluster_proportions(
-        _context_cells(diagnosis, every),
+        context_cells(diagnosis, every),
         train,
         components=int(settings["cluster_components"]),
         counts=settings["cluster_counts"],

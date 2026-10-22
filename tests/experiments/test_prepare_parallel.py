@@ -133,15 +133,15 @@ def assert_identical(actual: dict[str, object], expected: dict[str, object]) -> 
 def naive_h5ad_cells(source: dict, hvg: tuple[str, ...], caps: dict, seed: int):
     """``(labels, library sizes, dense HVG counts)`` of a Perturb-seq h5ad."""
     from src.data.response import (
-        _cap_indices_by_group,
-        _group_candidate_indices_by_label,
+        cap_indices_by_group,
+        group_candidate_indices_by_label,
     )
 
     adata = ad.read_h5ad(source["h5ad_path"])
     labels = adata.obs[source["perturbation_col"]].astype(str).to_numpy()
     candidate = np.flatnonzero(labels != source["control_label"])
-    grouped = _group_candidate_indices_by_label(candidate, labels[candidate])
-    selected = _cap_indices_by_group(grouped, caps["response_max_cells_per_gene"], seed)
+    grouped = group_candidate_indices_by_label(candidate, labels[candidate])
+    selected = cap_indices_by_group(grouped, caps["response_max_cells_per_gene"], seed)
     matrix = adata.X[selected]
     counts = np.asarray(
         matrix.toarray() if sparse.issparse(matrix) else matrix, dtype=np.float64

@@ -36,7 +36,7 @@ SPECIAL_MODEL_IDS = {
 }
 
 
-def _stable_rank(seed: int, model_id: str, cell_id: str) -> int:
+def stable_rank(seed: int, model_id: str, cell_id: str) -> int:
     return int.from_bytes(
         hashlib.sha256(f"{seed}\0{model_id}\0{cell_id}".encode()).digest(), "big"
     )
@@ -47,12 +47,12 @@ def _stable_indices(
 ) -> np.ndarray:
     ranked = sorted(
         range(len(cell_ids)),
-        key=lambda index: _stable_rank(seed, model_id, str(cell_ids[index])),
+        key=lambda index: stable_rank(seed, model_id, str(cell_ids[index])),
     )[:max_cells]
     return np.asarray(sorted(ranked), dtype=np.int64)
 
 
-def _update_top_cells(
+def update_top_cells(
     heap: list[tuple[int, str, np.ndarray, np.ndarray]],
     *,
     rank: int,
@@ -128,9 +128,9 @@ def _materialize_tahoe(
             info = by_cellosaurus[cellosaurus_id]
             cell_id = f"{shard.name}:{row_number}:{row['BARCODE_SUB_LIB_ID']}"
             observed[cellosaurus_id] += 1
-            _update_top_cells(
+            update_top_cells(
                 heaps[cellosaurus_id],
-                rank=_stable_rank(seed, str(info.model_id), cell_id),
+                rank=stable_rank(seed, str(info.model_id), cell_id),
                 cell_id=cell_id,
                 genes=row["genes"],
                 expressions=row["expressions"],
@@ -290,7 +290,7 @@ def _build_xatlas_hash(
         for row in frame.itertuples(index=False):
             cell = row_to_xatlas_cell(row)
             cell_id = f"{cell.sample}:{cell.cell_barcode}"
-            rank = _stable_rank(seed, model_id, cell_id)
+            rank = stable_rank(seed, model_id, cell_id)
             entry = (-rank, cell_id, cell)
             if len(selected) < max_cells:
                 heapq.heappush(selected, entry)
@@ -384,7 +384,7 @@ def _build_hap1(
     return result
 
 
-def _map_symbols_to_ensembl(
+def map_symbols_to_ensembl(
     symbols: np.ndarray, metadata: pd.DataFrame
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     mapping = metadata.loc[:, ["ensembl_id", "gene_symbol"]].dropna().copy()
@@ -448,7 +448,7 @@ def _build_22rv1(
         )[:, selected].T.tocsr()
         symbols = _decode(group["properties/rownames"][:])
     metadata = pd.read_parquet(gene_metadata_path)
-    source_indices, ensembl_ids, kept_symbols = _map_symbols_to_ensembl(
+    source_indices, ensembl_ids, kept_symbols = map_symbols_to_ensembl(
         symbols, metadata
     )
     matrix = matrix[:, source_indices]

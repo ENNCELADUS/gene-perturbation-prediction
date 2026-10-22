@@ -76,7 +76,7 @@ USAGE_RULE: Final[str] = (
 )
 
 
-def _workers() -> int:
+def workers() -> int:
     return max(
         1,
         len(os.sched_getaffinity(0))
@@ -489,7 +489,7 @@ def programs_seed(plan: Mapping[str, Any], seed: int) -> None:
         )
         for m in todo
     ]
-    _in_processes(calls, f"cNMF seed {seed}")
+    in_processes(calls, f"cNMF seed {seed}")
     if not (folder / "reference.npz").is_file():
         summary = build_reference(plan, seed, folder, sample)
         write_json(folder / "reference.json", summary, keep_nan=True)
@@ -503,7 +503,7 @@ def programs_seed(plan: Mapping[str, Any], seed: int) -> None:
         for m, p in sources.items()
         if not (folder / sub / f"{m}.npy").is_file()
     ]
-    _in_processes(calls, f"usages seed {seed}")
+    in_processes(calls, f"usages seed {seed}")
     if not (folder / "manifest.json").is_file():
         write_json(
             folder / "manifest.json",
@@ -676,7 +676,7 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
 # --- entry point ------------------------------------------------------------------
 
 
-def _in_processes(calls: Sequence[Any], label: str) -> None:
+def in_processes(calls: Sequence[Any], label: str) -> None:
     """The calls in a pool of spawned workers. Not forked: after the first seed's
     scVI fit the process holds torch's threads and a CUDA context, and workers
     forked from it deadlock on locks those threads held (the H20's seed-1 cNMF hung
@@ -685,7 +685,7 @@ def _in_processes(calls: Sequence[Any], label: str) -> None:
         return
     _LOGGER.info("%s: %d jobs", label, len(calls))
     with ProcessPoolExecutor(
-        max_workers=min(_workers(), len(calls)),
+        max_workers=min(workers(), len(calls)),
         mp_context=multiprocessing.get_context("spawn"),
     ) as pool:
         for done, _ in enumerate(pool.map(_call, calls), start=1):

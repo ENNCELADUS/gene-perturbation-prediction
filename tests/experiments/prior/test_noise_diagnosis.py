@@ -290,7 +290,7 @@ def test_learning_curve_ends_at_the_prior_itself(diagnosis, tmp_path):
         # The synthetic lines carry context the prior reads.
         assert full["r2_over_gene_mean"]["difference"] > 0
         assert full["prior"]["absolute_pearson"] > 0
-    markdown = "\n".join(nd_report._learning_curve_md(section))
+    markdown = "\n".join(nd_report.learning_curve_md(section))
     assert "Within-gene R²" in markdown and "Cilantro R² over gene mean" in markdown
 
 
@@ -313,7 +313,7 @@ def test_cilantro_rows_score_only_the_pairs_stage_one_covers(diagnosis, tmp_path
         "cilantro": result,
     }
     assert "Cilantro R² over gene mean" in "\n".join(
-        nd_report._learning_curve_md(section)
+        nd_report.learning_curve_md(section)
     )
     rows.iloc[[0, 0]].to_csv(path, index=False)
     with pytest.raises(ValueError, match="duplicate"):
@@ -339,7 +339,7 @@ def test_deposit_confound_reports_both_groupings(diagnosis, tmp_path, monkeypatc
         ["big"] * 10 + ["mid"] * 6 + ["tiny"] * 2 + ["mid"] * (len(train) - 18),
         index=train,
     )
-    monkeypatch.setattr(nd_sections, "_deposits", lambda found: deposits)
+    monkeypatch.setattr(nd_sections, "deposits", lambda found: deposits)
     result = nd_sections.deposit_confound(diagnosis, tmp_path)
     assert result["pooled_as_other"] == ["tiny"]
     assert set(result["per_deposit"]) == {"big", "mid", "other"}
@@ -356,7 +356,7 @@ def test_one_deposit_under_two_names_is_one_group(tmp_path):
         }
     ).to_csv(split.with_suffix(".csv"), index=False)
     found = SimpleNamespace(joint={"paths": {"split": str(split)}})
-    deposits = nd_sections._deposits(found)
+    deposits = nd_sections.deposits(found)
     assert deposits.to_dict() == {
         "ACH-1": "tahoe100m",
         "ACH-2": "tahoe100m",
@@ -374,7 +374,7 @@ def test_deposit_swap_reads_each_line_four_ways(diagnosis, tmp_path, monkeypatch
         lambda joint, genes, root: tmp_path / "second" / "manifest.json",
     )
     monkeypatch.setattr(
-        nd_sections, "_deposits", lambda found: pd.Series("d0", index=diagnosis.train)
+        nd_sections, "deposits", lambda found: pd.Series("d0", index=diagnosis.train)
     )
     monkeypatch.setattr(
         nd_base.Diagnosis, "pseudobulk_genes", lambda self: list(self.raw.columns)
@@ -393,7 +393,7 @@ def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypa
     every = [*diagnosis.train, *diagnosis.base.bridge.val, *diagnosis.base.bridge.test]
     monkeypatch.setattr(
         nd_sections,
-        "_program_scores",
+        "program_scores",
         lambda found, lines: (
             {m: rng.normal(size=(40, 3)) for m in lines},
             {
@@ -409,7 +409,7 @@ def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypa
     )
     monkeypatch.setattr(
         nd_sections,
-        "_context_cells",
+        "context_cells",
         lambda found, lines: {
             m: rng.normal(size=(30, 8)).astype(np.float32) for m in lines
         },

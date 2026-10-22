@@ -57,7 +57,7 @@ def evaluate_model(model, inputs, *, split):
     return result, features
 
 
-def _export(model, inputs, run_dir, split):
+def export(model, inputs, run_dir, split):
     from src.experiments.joint.evaluate import export_evaluation
     from src.experiments.run_dir import set_status
 
@@ -133,7 +133,7 @@ def fit_baseline(config_path: Path, out_dir: Path) -> Path:
     finally:
         temporary.unlink(missing_ok=True)
     for split in ("train", "val"):
-        _export(model, inputs, out_dir, split)
+        export(model, inputs, out_dir, split)
     return destination
 
 
@@ -159,7 +159,7 @@ def evaluate_checkpoint(path: Path, *, split):
     )
     if asdict(inputs.split) != bundle["split"]:
         raise ValueError("prepared split differs from saved baseline split")
-    return _export(bundle["model"], inputs, path.parent, split)
+    return export(bundle["model"], inputs, path.parent, split)
 
 
 def main(argv=None):

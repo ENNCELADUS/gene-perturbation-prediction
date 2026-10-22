@@ -13,8 +13,8 @@ from scipy import sparse
 from scipy.sparse import csr_matrix
 
 from src.data.response import (
-    _cap_indices_by_group,
-    _group_candidate_indices_by_label,
+    cap_indices_by_group,
+    group_candidate_indices_by_label,
     perturbseq_control_library_sizes,
     read_perturbseq_response_cells,
 )
@@ -176,8 +176,8 @@ def test_perturbseq_response_reader_caps_each_gene(tmp_path):
         again.hvg_counts.toarray(), cells.hvg_counts.toarray()
     )
     counts = ad.read_h5ad(path).X.toarray()
-    rows = _cap_indices_by_group(
-        _group_candidate_indices_by_label(np.arange(2, 9), np.array(labels[2:])), 3, 4
+    rows = cap_indices_by_group(
+        group_candidate_indices_by_label(np.arange(2, 9), np.array(labels[2:])), 3, 4
     )
     np.testing.assert_array_equal(cells.labels, np.array(labels)[rows])
     np.testing.assert_array_equal(cells.library_sizes, counts[rows].sum(axis=1))

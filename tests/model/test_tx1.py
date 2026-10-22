@@ -4,13 +4,13 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from src.model.tx1 import _TorchBertPadding, validate_load_result
+from src.model.tx1 import TorchBertPadding, validate_load_result
 
 
 def test_torch_padding_fallback_matches_unpadding_contract() -> None:
     hidden = torch.arange(12).reshape(2, 3, 2)
     mask = torch.tensor([[True, True, False], [True, False, False]])
-    values, indices, cumulative, maximum = _TorchBertPadding.unpad_input(hidden, mask)
+    values, indices, cumulative, maximum = TorchBertPadding.unpad_input(hidden, mask)
     assert indices.tolist() == [0, 1, 3]
     assert cumulative.tolist() == [0, 2, 3]
     assert maximum == 2

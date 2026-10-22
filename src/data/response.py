@@ -66,7 +66,7 @@ def _select_indices_deterministic(
     return np.sort(candidate_indices[chosen])
 
 
-def _group_candidate_indices_by_label(
+def group_candidate_indices_by_label(
     candidate_indices: np.ndarray, labels: np.ndarray
 ) -> dict[str, np.ndarray]:
     """Group co-indexed candidate rows by label; each group stays ascending."""
@@ -79,7 +79,7 @@ def _group_candidate_indices_by_label(
     }
 
 
-def _cap_indices_by_group(
+def cap_indices_by_group(
     grouped_indices: Mapping[str, np.ndarray], max_per_group: int, seed: int
 ) -> np.ndarray:
     """Cap each group in sorted-key order, one shared sub-seed stream."""
@@ -153,8 +153,8 @@ def read_perturbseq_response_cells(
                 f"No perturbed cells found for {perturbation_col}!={control_label!r} "
                 f"in {h5ad_path}"
             )
-        grouped = _group_candidate_indices_by_label(candidate, labels[candidate])
-        selected = _cap_indices_by_group(grouped, max_cells_per_gene, seed)
+        grouped = group_candidate_indices_by_label(candidate, labels[candidate])
+        selected = cap_indices_by_group(grouped, max_cells_per_gene, seed)
         symbols = backed.var[symbol_col].astype(str)
         order = np.argsort(selected)
         sizes, counts = [], []

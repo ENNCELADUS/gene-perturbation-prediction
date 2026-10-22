@@ -237,7 +237,7 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
     def refuse(*args, **kwargs):
         raise AssertionError("a finished comparison was recomputed")
 
-    monkeypatch.setattr(response_comparison, "_run_untrained", refuse)
+    monkeypatch.setattr(response_comparison, "run_untrained_arms", refuse)
     resumed = []
     fit = trainer.fit
 
@@ -255,7 +255,7 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
 
     # A finished run only rewrites its summary.
     monkeypatch.setattr(trainer, "fit", refuse)
-    monkeypatch.setattr(response_comparison, "_run_trained", refuse)
+    monkeypatch.setattr(response_comparison, "run_trained_arm", refuse)
     monkeypatch.setattr("src.experiments.joint.readout.run.extract_cache", refuse)
     pipeline.run_all(config_path, run_id="resume")
 
@@ -509,7 +509,7 @@ def test_summary_marks_missing_baseline(finished, tmp_path):
     del metrics["nearest_line[hvg]"]
     (copied / "baselines/val/metrics.json").write_text(json.dumps(metrics))
     config = copy.deepcopy(yaml.safe_load((run / "train" / "config.yaml").read_text()))
-    lines = pipeline._validation_section(config, copied)
+    lines = pipeline.validation_section(config, copied)
     assert any(line.startswith("| Nearest line (HVG) | not produced") for line in lines)
 
 

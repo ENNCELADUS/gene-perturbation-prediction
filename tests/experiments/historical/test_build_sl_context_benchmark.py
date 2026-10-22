@@ -19,7 +19,7 @@ from src.experiments.historical.build_sl_context_benchmark import (
 
 
 def test_generated_manifest_does_not_encode_claim_policy() -> None:
-    manifest = benchmark_builder._manifest(
+    manifest = benchmark_builder.screen_manifest(
         min_class_count=10,
         selection_stats={},
         pre_split_stats={},

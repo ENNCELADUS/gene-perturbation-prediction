@@ -353,7 +353,7 @@ class FinalStates:
         return value.detach().float().cpu().numpy()
 
 
-def _embed(
+def embed_protein(
     model: Any,
     hook: FinalStates,
     sequence: str,
@@ -448,7 +448,7 @@ def embed(pin: ModelPin, out: Path, device: str, chunk: int) -> None:
                         if chain.sequence.upper() != sequence.upper():
                             raise ValueError(f"{symbol}: structure sequence changed")
                         coordinates = torch.tensor(chain.atom37_positions)
-                    vectors.append(_embed(model, hook, sequence, coordinates))
+                    vectors.append(embed_protein(model, hook, sequence, coordinates))
                 block = np.stack(vectors).astype(np.float32)
                 if not np.isfinite(block).all():
                     raise ValueError(

@@ -479,7 +479,7 @@ def test_table_and_labels_skip_comment_header_lines(tmp_path):
 
 
 def test_loom_reader_and_gzip_unpack(tmp_path):
-    from src.data.builders.build_extra_single_cell_sources import _unpack
+    from src.data.builders.build_extra_single_cell_sources import unpack
 
     rng = np.random.default_rng(2)
     counts = _counts(rng, 5)
@@ -498,7 +498,7 @@ def test_loom_reader_and_gzip_unpack(tmp_path):
     with open(loom, "rb") as source, gzip.open(tmp_path / "x.loom.gz", "wb") as out:
         out.write(source.read())
     loom.unlink()
-    _unpack(tmp_path / "x.loom.gz", tmp_path)
+    unpack(tmp_path / "x.loom.gz", tmp_path)
     spec = {
         "reader": "anndata",
         "path": "x.loom",

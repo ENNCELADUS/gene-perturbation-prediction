@@ -94,7 +94,7 @@ def _untrained_done(out_dir: Path, anchors: Sequence[str]) -> bool:
     )
 
 
-def _run_untrained(
+def run_untrained_arms(
     world: World,
     config: Mapping[str, Any],
     out_dir: Path,
@@ -177,7 +177,7 @@ def _run_untrained(
         write_fold(out_dir, world, "global_mean_effect", a, score(arm, a))
 
 
-def _run_trained(
+def run_trained_arm(
     world: World,
     inputs: Any,
     config: Mapping[str, Any],
@@ -233,7 +233,7 @@ def run_untrained(
     world = build_world(
         inputs, torch.device(device), int(config["comparison"]["batch_size"])
     )
-    _run_untrained(
+    run_untrained_arms(
         world, config, out_dir, state_factory or _released_state_factory(config)
     )
 
@@ -281,7 +281,7 @@ def run_trained_job(
     world = build_world(
         inputs, torch.device(device), int(config["comparison"]["batch_size"])
     )
-    _run_trained(
+    run_trained_arm(
         world,
         inputs,
         config,
@@ -292,7 +292,7 @@ def run_trained_job(
     )
 
 
-def _bootstrap(
+def bootstrap(
     folds: Mapping[str, Mapping[str, Mapping[str, Any]]],
     anchors: Sequence[str],
     variants: Mapping[str, Sequence[str]],
@@ -410,7 +410,7 @@ def summarise(
         "all_folds": list(anchors),
         "without_hct116": [a for a in anchors if a != HCT116],
     }
-    samples = _bootstrap(folds, anchors, variants, int(comparison["bootstrap"]))
+    samples = bootstrap(folds, anchors, variants, int(comparison["bootstrap"]))
     by_fold = table.set_index(["arm", "fold"])["held_out_ratio"]
     pooled, verdicts = {}, {}
     for variant, members in variants.items():
@@ -474,9 +474,9 @@ def run_comparison(
         world = build_world(
             inputs, torch.device(device), int(config["comparison"]["batch_size"])
         )
-        _run_untrained(world, config, out_dir, state_factory)
+        run_untrained_arms(world, config, out_dir, state_factory)
         for arm, anchor in jobs:
-            _run_trained(world, inputs, config, out_dir, arm, anchor, state_factory)
+            run_trained_arm(world, inputs, config, out_dir, arm, anchor, state_factory)
     return summarise(config, out_dir, inputs=inputs)
 
 
