@@ -526,11 +526,8 @@ def learning_curve(diagnosis: Diagnosis, out: Path) -> dict:
                 ),
             }
         rows.append(row)
-    path = diagnosis.config["learning_curve"]["cilantro_predictions"]
-    return {
-        "rows": rows,
-        "cilantro": None if path is None else cilantro_rows(diagnosis, Path(path)),
-    }
+    path = Path(diagnosis.config["learning_curve"]["cilantro_predictions"])
+    return {"rows": rows, "cilantro": cilantro_rows(diagnosis, path)}
 
 
 def cilantro_rows(diagnosis: Diagnosis, path: Path) -> dict:

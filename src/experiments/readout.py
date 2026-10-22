@@ -3,13 +3,13 @@ backbone."""
 
 import argparse
 from contextlib import nullcontext
-import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
 
 import torch
+
 
 READOUT_ARM = "A2"  # the explicit gene-specific context-slope head
 
@@ -43,7 +43,7 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
     ``load_inputs`` (synthetic tests)."""
     from src.data.datasets import DependencyDataset
     from src.data.readout_cache import write_feature_cache
-    from src.experiments.geneeffect import _revision, restore_model
+    from src.experiments.geneeffect import _revision, mixed_precision, restore_model
     from src.training.checkpoint import load_checkpoint
 
     checkpoint = Path(checkpoint)
@@ -59,14 +59,11 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
         split: DependencyDataset(inputs, split, device=device)
         for split in ("train", "val")
     }
-    with checkpoint.open("rb") as handle:
-        digest = hashlib.file_digest(handle, "sha256").hexdigest()
     provenance = {
         "checkpoint": str(checkpoint.resolve()),
-        "checkpoint_sha256": digest,
         "checkpoint_train_state": saved["train_state"],
         "revision": _revision(),
-        "precision": saved["config"]["precision"],
+        "precision": mixed_precision(),
         "extraction_batch_size": batch_size,
         "config": saved["config"],
     }
@@ -77,7 +74,7 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
                 model,
                 data,
                 batch_size=batch_size,
-                precision=saved["config"]["precision"],
+                precision=mixed_precision(),
             )
             for split, data in datasets.items()
         },

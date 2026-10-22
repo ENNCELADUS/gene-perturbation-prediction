@@ -40,19 +40,6 @@ PARQUET_PREFETCH_THREADS: Final[int] = 8
 _T = TypeVar("_T")
 
 
-def resolve_total_budget_keep_mask(
-    n_cells: int, total_cells: int | None, seed: int
-) -> np.ndarray:
-    """Seeded keep-mask over ``n_cells`` rows; ``None`` keeps every row."""
-    if total_cells is None or total_cells >= n_cells:
-        return np.ones(n_cells, dtype=bool)
-    rng = np.random.default_rng(seed)
-    chosen = rng.choice(n_cells, size=total_cells, replace=False)
-    mask = np.zeros(n_cells, dtype=bool)
-    mask[chosen] = True
-    return mask
-
-
 def prefetched(
     read: Callable[[Path], _T], paths: Iterable[Path], threads: int
 ) -> Iterator[_T]:
@@ -141,27 +128,18 @@ def _drain(
     reservoirs: dict[str, list[_ReducedCell]],
     n_genes: int,
     *,
-    total_cells: int | None,
-    seed: int,
     model_id: str,
 ) -> ResponseCells:
-    """Cells in ``sorted(reservoirs)`` then slot order, ``total_cells`` applied.
+    """Cells in ``sorted(reservoirs)`` then slot order.
 
     Every slot is released as it is consumed.
     """
-    genes_order = sorted(reservoirs)
-    keep = resolve_total_budget_keep_mask(
-        sum(len(reservoirs[gene]) for gene in genes_order), total_cells, seed
-    )
     labels: list[str] = []
     kept: list[_ReducedCell | None] = []
-    index = 0
-    for gene in genes_order:
+    for gene in sorted(reservoirs):
         for cell in reservoirs.pop(gene):
-            if keep[index]:
-                labels.append(gene)
-                kept.append(cell)
-            index += 1
+            labels.append(gene)
+            kept.append(cell)
     indptr = np.zeros(len(kept) + 1, dtype=np.int64)
     np.cumsum([len(cell.hvg_columns) for cell in kept], out=indptr[1:])
     indices = np.empty(int(indptr[-1]), dtype=np.int64)
@@ -199,8 +177,7 @@ def read_xatlas_response_cells(
     pass_guide_filter_value: int,
     symbol_col: str,
     gene_order: Sequence[str],
-    max_cells_per_gene: int | None = None,
-    total_cells_per_line: int | None = None,
+    max_cells_per_gene: int,
     seed: int = 0,
 ) -> ResponseCells:
     """Perturbed, guide-QC-passing X-Atlas-Orion cells, capped per gene.
@@ -235,7 +212,7 @@ def read_xatlas_response_cells(
         for index, gene in enumerate(labels):
             bucket = reservoirs.setdefault(gene, [])
             seen[gene] = seen.get(gene, 0) + 1
-            if max_cells_per_gene is None or len(bucket) < max_cells_per_gene:
+            if len(bucket) < max_cells_per_gene:
                 bucket.append(None)
                 accepted[gene, len(bucket) - 1] = index
                 continue
@@ -262,18 +239,11 @@ def read_xatlas_response_cells(
             f"No perturbed cells found matching gene_target!={control_label!r} "
             f"under {shard_dir} ({shard_glob!r})"
         )
-    return _drain(
-        reservoirs,
-        len(gene_order),
-        total_cells=total_cells_per_line,
-        seed=seed,
-        model_id=model_id,
-    )
+    return _drain(reservoirs, len(gene_order), model_id=model_id)
 
 
 __all__ = [
     "PARQUET_PREFETCH_THREADS",
     "prefetched",
     "read_xatlas_response_cells",
-    "resolve_total_budget_keep_mask",
 ]

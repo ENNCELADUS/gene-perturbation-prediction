@@ -1,14 +1,13 @@
-"""Joint training loop: one GeneEffect objective every update, optional response replay.
+"""Joint training loop: one GeneEffect objective every update.
 
-The objective is ``train.objective`` (``src.model.losses``); response replay runs
-every ``response_interval`` updates only when ``response_weight`` is positive. The
-learning rate warms up linearly over ``warmup_epochs`` and decays by cosine to zero
-at ``max_epochs``, stepped per update. Validation runs once per epoch on the
-validation lines' GeneEffect rows only and, when a prior is set, once before the
-first update (epoch -1), so the prior alone can be ``best.pt``. ``best.pt`` and
-early stopping follow ``val_selective_spearman`` (higher wins). The
-``train_eval_`` diagnostic scores a fixed subset of supervised training lines of
-the validation split's size, so the two curves are comparable.
+The objective is ``train.objective`` (``src.model.losses``). The learning rate warms
+up linearly over ``warmup_epochs`` and decays by cosine to zero at ``max_epochs``,
+stepped per update. Validation runs once per epoch on the validation lines'
+GeneEffect rows only and, when a prior is set, once before the first update
+(epoch -1), so the prior alone can be ``best.pt``. ``best.pt`` and early stopping
+follow ``val_selective_spearman`` (higher wins). The ``train_eval_`` diagnostic
+scores a fixed subset of supervised training lines of the validation split's size,
+so the two curves are comparable.
 """
 
 from collections.abc import Mapping
@@ -20,20 +19,18 @@ from accelerate.utils import DistributedDataParallelKwargs
 import numpy as np
 import torch
 
-from src.data.batches import ResponseForwardBatch
 from src.data.datasets import DependencyDataset
 from src.data.prepared import PreparedInputs
 from src.eval.geneeffect import evaluate_model
 from src.model.losses import geneeffect_loss
 from src.model.normalization import fit_startup_standardizer
-from src.model.response import response_loss
 from src.training.checkpoint import (
     TrainState,
     record_validation,
     restore_rng_state,
     save_checkpoint,
 )
-from src.training.sampling import dependency_loader, response_stream
+from src.training.sampling import dependency_loader
 
 # Re-exported: the schedule lives where .venv-pie (no accelerate) can import it.
 from src.training.schedule import make_scheduler
@@ -96,21 +93,13 @@ def make_optimizer(model, config: Mapping[str, Any]) -> torch.optim.AdamW:
     )
 
 
-def train_update(
-    model, optimizer, scheduler, dependency_batch, response_batch, config, accelerator
-):
+def train_update(model, optimizer, scheduler, dependency_batch, config, accelerator):
     """One forward through the wrapped model, one optimizer and scheduler step."""
     dependency_batch = dependency_batch.to(accelerator.device)
-    response = None
-    if response_batch is not None:
-        response_batch = response_batch.to(accelerator.device)
-        response = ResponseForwardBatch(
-            response_batch.control_hvg, response_batch.genes
-        )
     with accelerator.autocast():
-        output = model(dependency_batch.conditions, response=response)
+        delta_hat = model(dependency_batch.conditions)
     # The stack: the prior's offset plus the head's output, in residual units.
-    prediction = output.delta_hat + dependency_batch.prior
+    prediction = delta_hat + dependency_batch.prior
     dependency_loss = geneeffect_loss(
         prediction,
         dependency_batch.residual,
@@ -120,39 +109,17 @@ def train_update(
         selective=dependency_batch.selective,
         gene_mean=dependency_batch.gene_mean,
     )
-    total = dependency_loss
-    replay_loss = torch.zeros_like(dependency_loss)
-    if response is not None:
-        # Batches hold equal condition counts per anchor, so the plain mean is
-        # balanced across anchors.
-        replay_loss = torch.stack(
-            [
-                response_loss(predicted, observed, control)
-                for predicted, observed, control in zip(
-                    output.response_predicted,
-                    response_batch.observed_hvg,
-                    response_batch.control_hvg,
-                    strict=True,
-                )
-            ]
-        ).mean()
-        total = total + config["train"]["response_weight"] * replay_loss
-    if not torch.isfinite(total):
+    if not torch.isfinite(dependency_loss):
         raise ValueError("non-finite joint loss")
-    accelerator.backward(total)
+    accelerator.backward(dependency_loss)
     norm = accelerator.clip_grad_norm_(model.parameters(), 1.0)
     if not torch.isfinite(norm):
         raise ValueError("non-finite gradient norm")
     optimizer.step()
     scheduler.step()
     optimizer.zero_grad(set_to_none=True)
-    values = torch.stack([dependency_loss, total, replay_loss]).detach()
-    values = accelerator.reduce(values, reduction="mean").cpu().tolist()
-    return {
-        "train_geneeffect_loss": values[0],
-        "train_total_loss": values[1],
-        "train_response_loss": values[2] if response is not None else None,
-    }
+    loss = accelerator.reduce(dependency_loss.detach(), reduction="mean")
+    return {"train_geneeffect_loss": float(loss)}
 
 
 def _log(run_dir: Path, record: Mapping[str, Any], accelerator) -> None:
@@ -269,20 +236,9 @@ def fit(
         if not trains_state(network, config):
             network.backbone.state.eval()  # a frozen STATE runs without dropout
         loader = dependency_loader(dependency, config, epoch, accelerator)
-        responses = response_stream(inputs, config, epoch, accelerator)
         for batch in loader:
-            replay = (
-                responses is not None
-                and state.global_step % train["response_interval"] == 0
-            )
             metrics = train_update(
-                model,
-                optimizer,
-                scheduler,
-                batch,
-                next(responses) if replay else None,
-                config,
-                accelerator,
+                model, optimizer, scheduler, batch, config, accelerator
             )
             state.global_step += 1
             _log(

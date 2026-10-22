@@ -22,7 +22,7 @@ pytest.importorskip("state.tx.models.state_transition")
 
 from src.data.batches import DependencyBatch  # noqa: E402
 from src.data.context_pca import fit_context_pca, pooled_context  # noqa: E402
-from src.data.datasets import DependencyDataset, ResponseDataset  # noqa: E402
+from src.data.datasets import DependencyDataset  # noqa: E402
 from src.data.prepared import PreparedInputs, PreparedLine  # noqa: E402
 from src.data.q_sc import QScFeatures  # noqa: E402
 from src.data.splits import FixedSplit  # noqa: E402
@@ -37,7 +37,7 @@ from src.model.normalization import fit_startup_standardizer  # noqa: E402
 from src.model.state import build_state, load_released_state, released_hparams  # noqa: E402
 from src.training import trainer  # noqa: E402
 from src.training.checkpoint import load_checkpoint  # noqa: E402
-from src.training.sampling import balanced_responses, dependency_loader  # noqa: E402
+from src.training.sampling import dependency_loader  # noqa: E402
 
 CONFIG = Path("configs/geneeffect_joint.yaml")
 RELEASED = Path(
@@ -160,7 +160,6 @@ def make_config(
 ) -> dict:
     """The production config at toy sizes; ``state=False`` drops both STATE blocks."""
     config = load_config(CONFIG)
-    config["precision"] = "no"
     config["output_root"] = str(root / "runs")
     config["paths"]["state_checkpoint"] = str(
         write_released_state(root / "released.ckpt", dropout=dropout)
@@ -176,7 +175,6 @@ def make_config(
         max_epochs=2,
         patience=5,
         dependency_batch_size=4,
-        response_batch_size=8,
         genes_per_block=2,
         **train,
     )
@@ -275,28 +273,6 @@ def test_released_load_raises_on_any_incomplete_key(tmp_path, cpu):
     torch.save(checkpoint, path)
     with pytest.raises(ValueError, match="does not load completely"):
         load_released_state(path, cell_set_len=SENTENCE)
-
-
-def test_response_batches_cover_all_conditions():
-    inputs = make_inputs()
-    dataset = ResponseDataset(inputs)
-    stream = balanced_responses(dataset, batch_size=8, epoch=0, rank=0)
-    seen = []
-    for _ in range(3):  # 3 batches x 2 per anchor = every anchor's 3 genes twice
-        batch = next(stream)
-        assert sorted(batch.model_ids) == sorted(ANCHORS * 2)
-        seen.extend(zip(batch.model_ids, batch.genes, strict=True))
-    assert set(seen) == set(inputs.response_targets.keys)
-    assert len(set(inputs.response_targets.keys)) == len(ANCHORS) * len(RESPONSE_GENES)
-    index = dataset.keys.index(("ACH-A1", "G2"))
-    collated = dataset.collate([index])
-    torch.testing.assert_close(
-        collated.observed_hvg[0],
-        torch.from_numpy(inputs.response_targets.target_bag(index)),
-    )
-    torch.testing.assert_close(
-        collated.control_hvg[0], torch.from_numpy(inputs.lines["ACH-A1"].basal_hvg)
-    )
 
 
 def test_training_batches_shard_disjointly_across_ranks():
@@ -488,8 +464,7 @@ def test_cpu_single_process_training_writes_best_last_and_done(
     epochs = [r for r in records if "val_geneeffect_loss" in r]
     updates = [r for r in records if "train_geneeffect_loss" in r]
     assert len(epochs) == 2 and not any("val_response" in k for k in epochs[0])
-    # response_weight 0: no replay update.
-    assert updates and all(r["train_response_loss"] is None for r in updates)
+    assert updates
     # A finished run directory is not retrained.
     assert geneeffect.run_training(config, run_dir) == run_dir / "best.pt"
     assert calls == [True]
@@ -512,7 +487,7 @@ def test_cpu_single_process_training_writes_best_last_and_done(
     [
         ({"objective": "standardized_mse"}, True),
         ({"objective": "pearson_blocks"}, True),
-        ({"state_mode": "trainable", "response_weight": 1.0}, True),
+        ({"state_mode": "trainable"}, True),
         ({"objective": "pearson_blocks"}, False),
     ],
 )
@@ -536,27 +511,18 @@ def test_training_variants_train_only_their_modules(tmp_path, cpu, settings, sta
     epochs = [r for r in records if "val_selective_spearman" in r]
     assert len(epochs) == 2
     assert all(np.isfinite(r["val_selective_spearman"]) for r in epochs)
-    replays = [
-        r["train_response_loss"] is not None
-        for r in records
-        if "train_geneeffect_loss" in r
-    ]
-    if config["train"]["response_weight"] > 0:
-        assert replays[:5] == [True, False, False, False, True]
-    else:
-        assert replays and not any(replays)
 
 
 @pytest.mark.parametrize(
     "settings",
     [
-        {"state_mode": "trainable", "response_weight": 1.0},
+        {"state_mode": "trainable"},
         {"objective": "pearson_blocks"},
     ],
 )
 def test_resume_continues_from_last(tmp_path, cpu, monkeypatch, settings):
-    # STATE dropout under trainable STATE checks the restored RNG; the response
-    # stream and the gene blocks check the per-epoch seeding.
+    # STATE dropout under trainable STATE checks the restored RNG; the gene blocks
+    # check the per-epoch seeding.
     config = make_config(tmp_path, dropout=0.1, **settings)
     reference = geneeffect.run_training(
         config, tmp_path / "whole", inputs=make_inputs()
@@ -655,8 +621,8 @@ def test_config_rejects_unknown_key():
     with pytest.raises(ValueError, match="unknown=\\['selection_metric'\\]"):
         validate_config(unknown)
     missing = copy.deepcopy(config)
-    del missing["model"]["head_blocks"]["use_z_c"]
-    with pytest.raises(ValueError, match="missing=\\['use_z_c'\\]"):
+    del missing["model"]["head_blocks"]["use_s"]
+    with pytest.raises(ValueError, match="missing=\\['use_s'\\]"):
         validate_config(missing)
     top = copy.deepcopy(config)
     top["selection"] = {"metric": "val_geneeffect_loss"}

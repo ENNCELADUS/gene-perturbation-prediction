@@ -27,9 +27,6 @@ def test_formal_feature_dimension_defaults() -> None:
 N_GENES = 4
 RANK = 3
 NO_STATE = GeneEffectBlockConfig(use_delta_proj=False, use_s=False)
-CONTEXT_ONLY = GeneEffectBlockConfig(
-    use_delta_proj=False, use_s=False, use_q_sc=False, use_e_g=False
-)
 
 
 def _full_dims() -> GeneEffectFeatureDims:
@@ -150,22 +147,6 @@ def test_correction_never_receives_the_context() -> None:
     assert not torch.allclose(first, second)  # z_c still reaches C
 
 
-def test_context_only_head_has_no_correction() -> None:
-    torch.manual_seed(0)
-    dims = _full_dims()
-    head = _live(_head(dims, CONTEXT_ONLY))
-    assert head.correction is None and len(head.encoders) == 0
-    assert head.gene_projection is None
-    inputs = {"gene_index": torch.arange(3) % N_GENES, "z_c": torch.randn(3, 4)}
-    z = inputs["z_c"]
-    expected = (
-        head.gene_embedding(inputs["gene_index"])
-        * (head.context_linear(z) + head.context_residual(z))
-    ).sum(-1) / math.sqrt(RANK)
-    with torch.no_grad():
-        torch.testing.assert_close(head(**inputs), expected)
-
-
 def test_prediction_depends_on_gene_index() -> None:
     torch.manual_seed(0)
     dims = _full_dims()
@@ -174,12 +155,6 @@ def test_prediction_depends_on_gene_index() -> None:
     other = dict(inputs, gene_index=(inputs["gene_index"] + 1) % N_GENES)
     with torch.no_grad():
         assert not torch.allclose(head(**inputs), head(**other))
-    # Without ESM2 the free embedding alone still separates genes.
-    no_esm2 = _live(_head(dims, GeneEffectBlockConfig(use_e_g=False)))
-    assert no_esm2.gene_projection is None
-    del inputs["e_g"], other["e_g"]
-    with torch.no_grad():
-        assert not torch.allclose(no_esm2(**inputs), no_esm2(**other))
 
 
 def test_gene_index_must_be_integer_per_row() -> None:
@@ -193,36 +168,12 @@ def test_gene_index_must_be_integer_per_row() -> None:
 
 
 def test_nested_head_rejects_invalid_settings() -> None:
-    with pytest.raises(ValueError, match="use_z_c"):
-        _head(_full_dims(), GeneEffectBlockConfig(use_z_c=False))
     with pytest.raises(ValueError, match="factor_rank"):
         GeneEffectNestedHead(
             _full_dims(), GeneEffectBlockConfig(), n_genes=4, factor_rank=0, dropout=0
         )
     with pytest.raises(ValueError, match="dropout"):
         _head(_full_dims(), dropout=1.0)
-
-
-def test_disabling_a_block_changes_param_count_and_forward_result() -> None:
-    torch.manual_seed(0)
-    dims = _full_dims()
-    full_head = _live(_head(dims))
-    torch.manual_seed(0)
-    no_esm2_head = _live(_head(dims, GeneEffectBlockConfig(use_e_g=False)))
-    full_params = sum(p.numel() for p in full_head.parameters())
-    reduced_params = sum(p.numel() for p in no_esm2_head.parameters())
-    assert reduced_params < full_params
-    assert list(no_esm2_head.encoders) == ["delta_proj", "s", "q_sc"]
-
-    torch.manual_seed(1)
-    inputs = _full_inputs(5, dims)
-    reduced_inputs = dict(inputs)
-    del reduced_inputs["e_g"]
-    with torch.no_grad():
-        full_out = full_head(**inputs)
-        reduced_out = no_esm2_head(**reduced_inputs)
-    assert full_out.shape == reduced_out.shape
-    assert not torch.allclose(full_out, reduced_out)
 
 
 def test_virtual_cell_ablation_disables_delta_proj_and_s_together() -> None:
@@ -247,14 +198,6 @@ def test_head_without_state_rejects_every_state_tensor(name) -> None:
         head(**inputs)
 
 
-def test_forward_rejects_tensor_for_disabled_block() -> None:
-    dims = _full_dims()
-    head = _head(dims, GeneEffectBlockConfig(use_e_g=False))
-    inputs = _full_inputs(3, dims)
-    with pytest.raises(ValueError, match="e_g"):
-        head(**inputs)
-
-
 def test_forward_requires_tensor_for_enabled_block() -> None:
     dims = _full_dims()
     head = _head(dims)
@@ -271,17 +214,6 @@ def test_forward_requires_masks_for_enabled_blocks() -> None:
     del inputs["q_sc_mask"]
     with pytest.raises(ValueError, match="q_sc_mask"):
         head(**inputs)
-
-
-def test_no_block_enabled_config_rejected() -> None:
-    with pytest.raises(ValueError):
-        GeneEffectBlockConfig(
-            use_delta_proj=False,
-            use_s=False,
-            use_q_sc=False,
-            use_e_g=False,
-            use_z_c=False,
-        )
 
 
 def test_masked_missing_q_sc_value_never_leaks_into_output() -> None:
@@ -466,7 +398,6 @@ BLOCK_SETTINGS = {
     "all blocks": GeneEffectBlockConfig(),
     "no STATE": NO_STATE,
     "delta_proj without s": GeneEffectBlockConfig(use_s=False),
-    "context only": CONTEXT_ONLY,
 }
 
 
@@ -477,19 +408,17 @@ def test_startup_standardizer_sees_exactly_the_enabled_blocks(prepared, setting)
     enabled = {
         name
         for name in ("delta_proj", "s", "q_sc", "e_g")
-        if getattr(blocks, f"use_{name}")
+        if name in blocks.enabled
     }
     assert set(model.standardizer.to_state()["blocks"]) == enabled
     assert model.uses_state == (blocks.use_delta_proj or blocks.use_s)
     with torch.no_grad():
-        delta_hat = model(_train_batch(prepared[1]).conditions).delta_hat
+        delta_hat = model(_train_batch(prepared[1]).conditions)
     assert torch.isfinite(delta_hat).all()
 
 
 def test_model_without_state_never_calls_state(prepared, monkeypatch):
     import src.model.geneeffect as geneeffect
-    from src.data.batches import ResponseForwardBatch
-
     calls = []
     real = geneeffect.predict_bags
 
@@ -515,9 +444,7 @@ def test_model_without_state_never_calls_state(prepared, monkeypatch):
     assert features.delta_proj is None and features.s is None
     assert features.hvg_panel_mask is None and features.own_gene_shift_mask is None
     features.validate()
-    assert output.delta_hat.shape == (conditions.batch_size,)
-    with pytest.raises(ValueError, match="STATE"):
-        model(conditions, ResponseForwardBatch(conditions.basal_hvg, conditions.genes))
+    assert output.shape == (conditions.batch_size,)
 
 
 def test_residual_scale_multiplies_the_head_per_gene(prepared):
@@ -533,7 +460,7 @@ def test_residual_scale_multiplies_the_head_per_gene(prepared):
         head = model.forward_features(
             model.condition_features(conditions), conditions.gene_index
         )
-        delta_hat = model(conditions).delta_hat
+        delta_hat = model(conditions)
     row_scale = torch.tensor(
         [scale[gene] for gene in conditions.genes], dtype=torch.float32
     )
@@ -565,7 +492,7 @@ def test_build_save_restore_round_trip(prepared, setting):
     conditions = _train_batch(inputs).conditions
     with torch.no_grad():
         torch.testing.assert_close(
-            restored(conditions).delta_hat, model(conditions).delta_hat
+            restored(conditions), model(conditions)
         )
 
     reordered = dict(

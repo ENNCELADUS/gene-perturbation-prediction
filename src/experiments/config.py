@@ -9,8 +9,7 @@ import yaml
 _GROUPS = {
     "seeds": "train collator projection",
     "train": (
-        "max_epochs patience dependency_batch_size response_batch_size "
-        "response_interval response_weight state_learning_rate "
+        "max_epochs patience dependency_batch_size state_learning_rate "
         "adapter_learning_rate head_learning_rate weight_decay "
         "objective state_mode warmup_epochs genes_per_block"
     ),
@@ -18,8 +17,7 @@ _GROUPS = {
         "epochs hidden learning_rate state_learning_rate batch_size shuffles bootstrap"
     ),
     "features": (
-        "cells_per_context hvg_dim esm2_dim "
-        "variable_gene_min_observations variable_gene_percentile "
+        "cells_per_context variable_gene_min_observations variable_gene_percentile "
         "selective_min_lines selective_max_fraction residual_sd_floor_percentile"
     ),
     "model": (
@@ -27,19 +25,18 @@ _GROUPS = {
         "context_components dropout"
     ),
     "preparation": (
-        "response_max_cells_per_gene response_total_cells_per_line "
-        "response_sampling_seed tx1_batch_size tx1_max_length "
-        "var_ensembl_col hvg_gene_symbol_col"
+        "response_max_cells_per_gene response_sampling_seed tx1_batch_size "
+        "tx1_max_length var_ensembl_col"
     ),
     "paths": (
-        "split gene_effect basal_raw_umi tx1_registration "
-        "cell_line_manifest "
-        "tx1_model_dir tx1_cache esm2_embeddings state_checkpoint state_model_dir "
-        "perturbseq_sources prior"
+        "split gene_effect basal_raw_umi tx1_model_dir tx1_cache esm2_embeddings "
+        "state_checkpoint state_model_dir perturbseq_sources prior"
     ),
 }
-_TOP_LEVEL = "precision output_root prepared_root"
-_HEAD_BLOCKS = "use_delta_proj use_s use_q_sc use_e_g use_z_c"
+_TOP_LEVEL = "output_root prepared_root"
+_HEAD_BLOCKS = "use_delta_proj use_s"
+#: The joint model trains, validates and extracts features in bf16 on CUDA.
+PRECISION = "bf16"
 OBJECTIVES = (
     "huber",
     "standardized_mse",
@@ -197,8 +194,8 @@ def validate_noise_config(config: Mapping[str, Any]) -> dict[str, Any]:
     if not all(0 < f < 1 for f in config["learning_curve"]["fractions"]):
         raise ValueError("learning_curve.fractions must lie in (0, 1)")
     cilantro = config["learning_curve"]["cilantro_predictions"]
-    if cilantro is not None and not (isinstance(cilantro, str) and cilantro):
-        raise ValueError("learning_curve.cilantro_predictions must be a path or null")
+    if not (isinstance(cilantro, str) and cilantro):
+        raise ValueError("learning_curve.cilantro_predictions must be a path")
     states = config["cell_states"]
     if not states["programs"] or len(set(states["programs"])) != len(
         states["programs"]
@@ -513,7 +510,7 @@ _STATES_GROUPS = {
 }
 _STATES_TOP_LEVEL = "seed ladder_config output_root"
 #: Roles a state vocabulary may be projected onto; fits read train_cells only.
-STATE_ROLES = ("train_cells", "val", "test")
+STATE_ROLES = ("train_cells", "val")
 
 
 def _positive_integers(config: Mapping[str, Any], group: str, keys: str) -> None:

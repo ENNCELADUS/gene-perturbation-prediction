@@ -114,7 +114,6 @@ def test_programs_and_scvi_on_synthetic_lines(tmp_path):
             "G2M": [GENES[i] for i in range(75, 90)],
         },
         "var_ensembl_col": "ensembl_id",
-        "hvg_gene_symbol_col": "gene_symbol",
         "encode": paths,
         "second": {"ACH-L1": str(tmp_path / "second.h5ad")},
         "samples": {"0": str(sample)},

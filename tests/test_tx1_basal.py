@@ -62,14 +62,12 @@ def test_align_columns_sums_duplicates_and_zero_fills():
     np.testing.assert_array_equal(sparse_aligned.toarray(), aligned.toarray())
 
 
-def test_symbol_column_auto_needs_exactly_one_candidate():
-    assert (
-        symbol_column(pd.DataFrame(columns=["gene_name", "x"]), "auto") == "gene_name"
-    )
+def test_symbol_column_needs_exactly_one_candidate():
+    assert symbol_column(pd.DataFrame(columns=["gene_name", "x"])) == "gene_name"
     with pytest.raises(ValueError):
-        symbol_column(pd.DataFrame(columns=["gene_name", "gene_symbol"]), "auto")
+        symbol_column(pd.DataFrame(columns=["gene_name", "gene_symbol"]))
     with pytest.raises(ValueError):
-        symbol_column(pd.DataFrame(columns=["x"]), "gene_name")
+        symbol_column(pd.DataFrame(columns=["x"]))
 
 
 def test_tx1_input_contract():
@@ -183,10 +181,6 @@ def test_perturbseq_response_reader_caps_each_gene(tmp_path):
     expected = np.zeros((len(rows), 3))
     expected[:, :2] = counts[rows][:, [2, 0]]
     np.testing.assert_array_equal(cells.hvg_counts.toarray(), expected)
-    total = read_perturbseq_response_cells(
-        path, **{**kwargs, "total_cells_per_line": 4}
-    )
-    assert len(total.labels) == total.hvg_counts.shape[0] == 4
 
 
 def _xatlas_world(tmp_path: Path) -> tuple[Path, Path]:
@@ -227,6 +221,7 @@ def test_xatlas_response_reader_filters_and_caps(tmp_path):
         pass_guide_filter_value=1,
         symbol_col="gene_name",
         gene_order=("A", "C", "Z"),
+        max_cells_per_gene=10,
     )
     cells = read_xatlas_response_cells(shards, meta, **kwargs)
     assert cells.labels.tolist() == ["G1", "G1", "G1", "G2"]
@@ -235,7 +230,9 @@ def test_xatlas_response_reader_filters_and_caps(tmp_path):
     np.testing.assert_array_equal(cells.library_sizes, [2.0, 3.0, 6.0, 5.0])
     # C is in the metadata but no kept cell has a positive count for it.
     np.testing.assert_array_equal(cells.present, [True, False, False])
-    capped = read_xatlas_response_cells(shards, meta, **kwargs, max_cells_per_gene=2)
+    capped = read_xatlas_response_cells(
+        shards, meta, **{**kwargs, "max_cells_per_gene": 2}
+    )
     assert pd.Series(capped.labels).value_counts().to_dict() == {"G1": 2, "G2": 1}
     with pytest.raises(ValueError, match="No parquet shards"):
         read_xatlas_response_cells(shards, meta, **{**kwargs, "shard_glob": "none*"})

@@ -5,12 +5,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from src.data.batches import (
-    E2EForwardOutput,
-    FeatureBatch,
-    OnlineConditionBatch,
-    ResponseForwardBatch,
-)
+from src.data.batches import FeatureBatch, OnlineConditionBatch
 from src.model.features import FixedSparseProjection, compute_condition_feature_batch
 from src.model.head import GeneEffectNestedHead
 from src.model.normalization import STANDARDIZED_BLOCKS, BlockStandardizer
@@ -73,10 +68,10 @@ class GeneEffectE2EModel(nn.Module):
             **{
                 name: self.standardizer.transform(name, getattr(features, name))
                 for name in STANDARDIZED_BLOCKS
-                if getattr(blocks, f"use_{name}")
+                if name in blocks.enabled
             },
             z_c=features.z_c,
-            q_sc_mask=features.q_sc_mask if blocks.use_q_sc else None,
+            q_sc_mask=features.q_sc_mask,
             hvg_panel_mask=features.hvg_panel_mask if blocks.use_s else None,
             own_gene_shift_mask=features.own_gene_shift_mask if blocks.use_s else None,
         )
@@ -113,27 +108,9 @@ class GeneEffectE2EModel(nn.Module):
             model_ids=batch.model_ids,
         )
 
-    def forward(
-        self,
-        batch: OnlineConditionBatch,
-        response: ResponseForwardBatch | None = None,
-    ) -> E2EForwardOutput:
-        """GeneEffect residuals and, on replay updates, response predictions.
-
-        Both go through one module call so DDP synchronises every gradient.
-        """
-        if response is not None and not self.uses_state:
-            raise ValueError("response replay needs a model that uses STATE")
+    def forward(self, batch: OnlineConditionBatch) -> torch.Tensor:
+        """GeneEffect residual predictions, in GeneEffect units."""
         standardized = self.forward_features(
             self.condition_features(batch), batch.gene_index
         )
-        delta_hat = self.residual_scale[batch.gene_index] * standardized
-        response_predicted = None
-        if response is not None:
-            response_predicted = predict_bags(
-                self.backbone,
-                tuple(value.float() for value in response.basal_hvg),
-                response.genes,
-                seed=self.collator_seed,
-            )
-        return E2EForwardOutput(delta_hat, response_predicted)
+        return self.residual_scale[batch.gene_index] * standardized

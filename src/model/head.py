@@ -44,36 +44,23 @@ class GeneEffectFeatureDims:
 
 @dataclass(frozen=True)
 class GeneEffectBlockConfig:
-    """Which of the five feature blocks feed ``h_delta``: one flag per ablation.
-
-    The Phase 7 "virtual-cell ablation" removes ``delta_proj`` and ``s``
-    together (``use_delta_proj=False, use_s=False``) -- dropping
-    ``delta_proj`` alone would leave ST-derived signal (own-gene shift, the
-    ``s`` distribution statistics) in the model. This dataclass does not
-    enforce that pairing; it is a config flag, applied by the caller
-    building each ablation's config, not a code edit to this module.
-    """
+    """Whether STATE's two blocks, ``delta_proj`` and ``s``, feed ``h_delta``;
+    ``q_sc``, ``e_g`` and ``z_c`` always do. A model without STATE turns both off
+    (dropping ``delta_proj`` alone would leave STATE's own-gene shift in ``s``)."""
 
     use_delta_proj: bool = True
     use_s: bool = True
-    use_q_sc: bool = True
-    use_e_g: bool = True
-    use_z_c: bool = True
 
     def __post_init__(self) -> None:
-        for name in ("use_delta_proj", "use_s", "use_q_sc", "use_e_g", "use_z_c"):
+        for name in ("use_delta_proj", "use_s"):
             if type(getattr(self, name)) is not bool:
                 raise ValueError(f"GeneEffectBlockConfig.{name} must be boolean")
-        if not any(
-            (
-                self.use_delta_proj,
-                self.use_s,
-                self.use_q_sc,
-                self.use_e_g,
-                self.use_z_c,
-            )
-        ):
-            raise ValueError("GeneEffectBlockConfig must enable at least one block")
+
+    @property
+    def enabled(self) -> tuple[str, ...]:
+        """The blocks that feed ``h_delta``, in their canonical order."""
+        optional = (("delta_proj", self.use_delta_proj), ("s", self.use_s))
+        return (*(name for name, used in optional if used), "q_sc", "e_g", "z_c")
 
 
 def _mlp(width: int, hidden: int, n_hidden_layers: int, out: int) -> nn.Sequential:
@@ -93,11 +80,10 @@ class GeneEffectMLP(nn.Module):
     """MLP predicting ``delta_hat(g, c)`` from up to five feature blocks.
 
     ``delta_hat_{g,c} = h_delta(Delta_proj, s, q_sc, e_g, z_c)``
-    (``docs/03-geneeffect-protocol.md`` §4). Every block is gated
-    by :class:`GeneEffectBlockConfig`; a disabled block's tensor argument to
+    (``docs/03-geneeffect-protocol.md`` §4). STATE's two blocks are gated by
+    :class:`GeneEffectBlockConfig`; a disabled block's tensor argument to
     :meth:`forward` must be ``None`` and contributes nothing to the input
-    width or the parameter count -- each of the five ablations is therefore
-    a config flag, not a code edit.
+    width or the parameter count.
 
     Coverage is never signalled by a silently zero-filled value channel.
     Three partial-coverage conditions each get an explicit boolean mask
@@ -105,8 +91,7 @@ class GeneEffectMLP(nn.Module):
     missing) values so the two are never confused:
 
     - ``q_sc_mask``: whether ``q_sc`` (mean expr / fraction expressing /
-      expr variance) is available for this ``(g, c)``. Required whenever
-      ``use_q_sc`` is enabled.
+      expr variance) is available for this ``(g, c)``.
     - ``hvg_panel_mask``: whether gene ``g`` is in the 2000-gene HVG panel.
       Required whenever ``use_s`` is enabled (own-gene shift is only
       defined for panel genes).
@@ -170,12 +155,7 @@ class GeneEffectMLP(nn.Module):
             width += dims.delta_proj
         if blocks.use_s:
             width += dims.s + self._S_BLOCK_MASK_BITS
-        if blocks.use_q_sc:
-            width += dims.q_sc + self._Q_SC_BLOCK_MASK_BITS
-        if blocks.use_e_g:
-            width += dims.e_g
-        if blocks.use_z_c:
-            width += dims.z_c
+        width += dims.q_sc + self._Q_SC_BLOCK_MASK_BITS + dims.e_g + dims.z_c
         self.input_width = width
         self.net = _mlp(self.input_width, self.hidden, n_hidden_layers, 1)
 
@@ -261,10 +241,10 @@ def masked_blocks(
             else ``None``.
         s: ``[batch, dims.s]`` if ``blocks.use_s``, else ``None``. The last
             column is the own-gene HVG-index shift.
-        q_sc: ``[batch, dims.q_sc]`` if ``blocks.use_q_sc``, else ``None``.
-        e_g: ``[batch, dims.e_g]`` if ``blocks.use_e_g``, else ``None``.
-        z_c: ``[batch, dims.z_c]`` if ``blocks.use_z_c``, else ``None``.
-        q_sc_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_q_sc``.
+        q_sc: ``[batch, dims.q_sc]``.
+        e_g: ``[batch, dims.e_g]``.
+        z_c: ``[batch, dims.z_c]``.
+        q_sc_mask: ``[batch]`` bool/0-1.
         hvg_panel_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_s``.
         own_gene_shift_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_s``.
 
@@ -286,11 +266,11 @@ def masked_blocks(
         "delta_proj", blocks.use_delta_proj, delta_proj, dims.delta_proj
     )
     s = _check_block("s", blocks.use_s, s, dims.s)
-    q_sc = _check_block("q_sc", blocks.use_q_sc, q_sc, dims.q_sc)
-    e_g = _check_block("e_g", blocks.use_e_g, e_g, dims.e_g)
-    z_c = _check_block("z_c", blocks.use_z_c, z_c, dims.z_c)
+    q_sc = _check_block("q_sc", True, q_sc, dims.q_sc)
+    e_g = _check_block("e_g", True, e_g, dims.e_g)
+    z_c = _check_block("z_c", True, z_c, dims.z_c)
 
-    q_sc_mask = _check_mask("q_sc_mask", blocks.use_q_sc, q_sc_mask, batch)
+    q_sc_mask = _check_mask("q_sc_mask", True, q_sc_mask, batch)
     hvg_panel_mask = _check_mask("hvg_panel_mask", blocks.use_s, hvg_panel_mask, batch)
     own_gene_shift_mask = _check_mask(
         "own_gene_shift_mask", blocks.use_s, own_gene_shift_mask, batch
@@ -311,15 +291,12 @@ def masked_blocks(
             ],
             dim=-1,
         )
-    if blocks.use_q_sc:
-        q_gate = q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)
-        parts["q_sc"] = torch.cat(
-            [q_sc * q_gate, q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)], dim=-1
-        )
-    if blocks.use_e_g:
-        parts["e_g"] = e_g
-    if blocks.use_z_c:
-        parts["z_c"] = z_c
+    q_gate = q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)
+    parts["q_sc"] = torch.cat(
+        [q_sc * q_gate, q_sc_mask.to(dtype=q_sc.dtype).unsqueeze(-1)], dim=-1
+    )
+    parts["e_g"] = e_g
+    parts["z_c"] = z_c
     return parts
 
 
@@ -397,7 +374,7 @@ class GeneEffectNestedHead(nn.Module):
         Args:
             dims: Per-block feature widths; ``dims.z_c`` is the number of
                 context PCA components.
-            blocks: Per-block enable flags; ``use_z_c`` must be true.
+            blocks: Whether STATE's blocks feed the correction.
             n_genes: Rows of the free gene embedding (``len(inputs.genes)``).
             factor_rank: Width of the gene and context factors.
             dropout: Dropout on ``h``'s concatenated encodings and in ``C``'s
@@ -405,7 +382,7 @@ class GeneEffectNestedHead(nn.Module):
 
         Raises:
             ValueError: If ``n_genes`` or ``factor_rank`` is non-positive,
-                ``dropout`` is outside ``[0, 1)``, or ``z_c`` is disabled.
+                or ``dropout`` is outside ``[0, 1)``.
         """
         super().__init__()
         if n_genes < 1:
@@ -414,8 +391,6 @@ class GeneEffectNestedHead(nn.Module):
             raise ValueError(f"factor_rank must be positive, got {factor_rank}")
         if not 0.0 <= dropout < 1.0:
             raise ValueError(f"dropout must be in [0, 1), got {dropout}")
-        if not blocks.use_z_c:
-            raise ValueError("the nested head needs the line context (use_z_c=True)")
         self.dims = dims
         self.blocks = blocks
         self.n_genes = int(n_genes)
@@ -423,9 +398,7 @@ class GeneEffectNestedHead(nn.Module):
 
         self.gene_embedding = nn.Embedding(self.n_genes, self.factor_rank)
         nn.init.normal_(self.gene_embedding.weight, std=0.02)
-        self.gene_projection = (
-            nn.Linear(dims.e_g, self.factor_rank) if blocks.use_e_g else None
-        )
+        self.gene_projection = nn.Linear(dims.e_g, self.factor_rank)
         self.context_linear = nn.Linear(dims.z_c, self.factor_rank)
         # C starts at zero: with h's zero output layer the head predicts zero before
         # the first update, so a stack equals its prior there.
@@ -448,7 +421,7 @@ class GeneEffectNestedHead(nn.Module):
                     nn.LayerNorm(CORRECTION_ENCODER_WIDTHS[name]),
                 )
                 for name, width in inputs.items()
-                if getattr(blocks, f"use_{name}")
+                if name in blocks.enabled
             }
         )
         encoded = sum(CORRECTION_ENCODER_WIDTHS[name] for name in self.encoders)
@@ -490,9 +463,7 @@ class GeneEffectNestedHead(nn.Module):
                 f"gene_index must be an integer tensor shaped ({batch},), got "
                 f"shape={tuple(gene_index.shape)} dtype={gene_index.dtype}"
             )
-        gene = self.gene_embedding(gene_index)
-        if self.gene_projection is not None:
-            gene = gene + self.gene_projection(parts["e_g"])
+        gene = self.gene_embedding(gene_index) + self.gene_projection(parts["e_g"])
         context = self.context_linear(context) + self.context_residual(context)
         prediction = (gene * context).sum(dim=-1) / math.sqrt(self.factor_rank)
         if self.correction is not None:

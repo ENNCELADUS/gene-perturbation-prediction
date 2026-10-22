@@ -21,7 +21,6 @@ from src.experiments import revision
 SELECTIVE = ["G1", "G2"]
 CONFIG = {
     "output_root": "unused",
-    "precision": "bf16",
     "prepared_root": "unused",
     "train": {"patience": 5, "max_epochs": 30},
 }
@@ -452,7 +451,9 @@ def test_run_directory_refuses_a_different_config(world, monkeypatch):
     revision.run_revision(Path("c.yaml"), run_id="bound")
     revision.run_revision(Path("c.yaml"), run_id="bound")
     monkeypatch.setattr(
-        revision, "load_config", lambda path: {**config, "precision": "no"}
+        revision,
+        "load_config",
+        lambda path: {**config, "train": {**config["train"], "patience": 6}},
     )
     with pytest.raises(ValueError, match="different config"):
         revision.run_revision(Path("c.yaml"), run_id="bound")

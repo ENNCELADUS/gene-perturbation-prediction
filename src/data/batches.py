@@ -182,33 +182,3 @@ class DependencyBatch:
         )
 
 
-@dataclass(frozen=True)
-class ResponseBatch:
-    """Observed anchor perturbation bags with the anchor's basal control cells."""
-
-    model_ids: tuple[str, ...]
-    genes: tuple[str, ...]
-    control_hvg: tuple[torch.Tensor, ...]
-    observed_hvg: tuple[torch.Tensor, ...]
-
-    def to(self, device: torch.device | str) -> ResponseBatch:
-        return ResponseBatch(
-            model_ids=self.model_ids,
-            genes=self.genes,
-            control_hvg=_move(self.control_hvg, device),
-            observed_hvg=_move(self.observed_hvg, device),
-        )
-
-
-@dataclass(frozen=True)
-class ResponseForwardBatch:
-    """Response-anchor basal cells and genes carried through the joint forward call."""
-
-    basal_hvg: tuple[torch.Tensor, ...]
-    genes: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class E2EForwardOutput:
-    delta_hat: torch.Tensor
-    response_predicted: tuple[torch.Tensor, ...] | None = None

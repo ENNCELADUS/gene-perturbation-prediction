@@ -82,8 +82,7 @@ def _targets(source, model_id, hvg_order, target_sum):
             source,
             model_id,
             hvg_order,
-            max_cells_per_gene=None,
-            total_cells_per_line=None,
+            max_cells_per_gene=1000,
             seed=0,
         )
     )
@@ -154,8 +153,7 @@ def test_part_file_round_trip_gives_the_same_bags(tmp_path):
         source,
         "ACH-1",
         hvg_order,
-        max_cells_per_gene=None,
-        total_cells_per_line=None,
+        max_cells_per_gene=1000,
         seed=0,
     )
     assert read_response_part(path).genes == ("KIF11", "TP53")

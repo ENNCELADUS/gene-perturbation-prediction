@@ -24,9 +24,8 @@ import test_prepare as base
 from src.experiments import prepare
 from src.experiments.prepare import prepare_inputs
 
-#: Per-perturbation cap and per-line total cap of the capped world.
-CAPPED = {"response_max_cells_per_gene": 80, "response_total_cells_per_line": 2500}
-UNCAPPED = {"response_max_cells_per_gene": None, "response_total_cells_per_line": None}
+#: The world's per-perturbation response cap.
+CAPPED = {"response_max_cells_per_gene": 80}
 RESPONSE_GENES = tuple(f"P{i:02d}" for i in range(40))
 #: Response genes with an ESM2 vector; the rest are dropped from the cache.
 RESOLVED_RESPONSE_GENES = (*RESPONSE_GENES[:34], "KIF11", "TP53")
@@ -190,7 +189,6 @@ def naive_h5ad_cells(source: dict, hvg: tuple[str, ...], caps: dict, seed: int):
     from src.data.basal import (
         _cap_indices_by_group,
         _group_candidate_indices_by_label,
-        _select_indices_deterministic,
     )
 
     adata = ad.read_h5ad(source["h5ad_path"])
@@ -198,9 +196,6 @@ def naive_h5ad_cells(source: dict, hvg: tuple[str, ...], caps: dict, seed: int):
     candidate = np.flatnonzero(labels != source["control_label"])
     grouped = _group_candidate_indices_by_label(candidate, labels[candidate])
     selected = _cap_indices_by_group(grouped, caps["response_max_cells_per_gene"], seed)
-    selected = _select_indices_deterministic(
-        selected, caps["response_total_cells_per_line"], seed
-    )
     matrix = adata.X[selected]
     counts = np.asarray(
         matrix.toarray() if sparse.issparse(matrix) else matrix, dtype=np.float64
@@ -215,8 +210,6 @@ def naive_h5ad_cells(source: dict, hvg: tuple[str, ...], caps: dict, seed: int):
 
 def naive_xatlas_cells(source: dict, hvg: tuple[str, ...], caps: dict, seed: int):
     """``(labels, library sizes, dense HVG counts)`` of X-Atlas-Orion shards."""
-    from src.data.response_streaming import resolve_total_budget_keep_mask
-
     cap = caps["response_max_cells_per_gene"]
     rng = np.random.default_rng(seed)
     reservoirs: dict[str, list] = {}
@@ -232,22 +225,17 @@ def naive_xatlas_cells(source: dict, hvg: tuple[str, ...], caps: dict, seed: int
             cell = (np.asarray(row.gene_token_id), np.asarray(row.gene_expression))
             bucket = reservoirs.setdefault(gene, [])
             seen[gene] = seen.get(gene, 0) + 1
-            if cap is None or len(bucket) < cap:
+            if len(bucket) < cap:
                 bucket.append(cell)
                 continue
             replacement = int(rng.integers(0, seen[gene]))
             if replacement < cap:
                 bucket[replacement] = cell
     cells = [(gene, cell) for gene in sorted(reservoirs) for cell in reservoirs[gene]]
-    keep = resolve_total_budget_keep_mask(
-        len(cells), caps["response_total_cells_per_line"], seed
-    )
     metadata = pd.read_parquet(source["gene_metadata_path"])
     symbol = dict(zip(metadata["gene_token_id"], metadata["gene_name"].astype(str)))
     labels, sizes, aligned = [], [], []
-    for (gene, (tokens, values)), kept in zip(cells, keep, strict=True):
-        if not kept:
-            continue
+    for gene, (tokens, values) in cells:
         hvg_counts = np.zeros(len(hvg))
         size = 0.0
         for token, value in zip(tokens.tolist(), values.tolist(), strict=True):
@@ -296,11 +284,10 @@ def naive_response_targets(config: dict) -> tuple[float, list, list[np.ndarray]]
 # --- the tests ----------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module", params=["capped", "uncapped"])
-def pooled(request, tmp_path_factory) -> dict:
+@pytest.fixture(scope="module")
+def pooled(tmp_path_factory) -> dict:
     """The rich world prepared on process pools (the default)."""
-    caps = CAPPED if request.param == "capped" else UNCAPPED
-    config = build_rich_world(tmp_path_factory.mktemp(request.param), caps)
+    config = build_rich_world(tmp_path_factory.mktemp("capped"), CAPPED)
     prepare_inputs(config)
     return config
 

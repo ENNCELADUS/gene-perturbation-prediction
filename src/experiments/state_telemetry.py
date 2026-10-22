@@ -464,7 +464,6 @@ def write_plan(t: Telemetry) -> dict[str, Any]:
         "hvg": hvg_order,
         "cycle_genes": t.tirosh(),
         "var_ensembl_col": t.preparation["var_ensembl_col"],
-        "hvg_gene_symbol_col": t.preparation["hvg_gene_symbol_col"],
         "encode": {m: str(t.source(m)) for m in t.projected},
         "second": {m: str(p) for m, p in t.second_sources.items()},
         "samples": {str(s): str(t.layout.sample(s)) for s in t.seeds},
@@ -678,7 +677,7 @@ def second_cells(t: Telemetry, model_id: str) -> None:
         var_ensembl_col=t.preparation["var_ensembl_col"],
     )
     symbols = (
-        source.var[symbol_column(source.var, t.preparation["hvg_gene_symbol_col"])]
+        source.var[symbol_column(source.var)]
         .astype(str)
         .tolist()
     )
@@ -743,7 +742,7 @@ def line_cells(t: Telemetry, model_id: str) -> tuple[cs.LineCells, Any, list[str
         var_ensembl_col=t.preparation["var_ensembl_col"],
     )
     symbols = (
-        source.var[symbol_column(source.var, t.preparation["hvg_gene_symbol_col"])]
+        source.var[symbol_column(source.var)]
         .astype(str)
         .tolist()
     )

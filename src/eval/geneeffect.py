@@ -235,7 +235,7 @@ def _predict(
         rows = range(start, min(start + batch_size, len(dataset)))
         batch = dataset.collate(rows)
         with accelerator.autocast() if accelerator else nullcontext():
-            predicted = model(batch.conditions).delta_hat.float() + batch.prior
+            predicted = model(batch.conditions).float() + batch.prior
         positions.append(np.asarray(rows, dtype=np.int64))
         predictions.append(predicted.cpu().numpy())
     if not positions:
