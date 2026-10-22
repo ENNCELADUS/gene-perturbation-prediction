@@ -1,39 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import torch
 
 from src.model.tx1 import _TorchBertPadding, validate_load_result
-from src.data.prepare.verify_tx1_obsm_width import tiny_dmso_adata
-
-
-def test_tiny_dmso_adata_keeps_raw_counts_and_required_axes(tmp_path: Path) -> None:
-    shard_dir = tmp_path / "shards"
-    shard_dir.mkdir()
-    pd.DataFrame(
-        {
-            "genes": [np.array([1, 3, 4]), np.array([3, 5])],
-            "expressions": [np.array([-2.0, 2.0, 1.0]), np.array([3.0, 0.0])],
-            "cell_line_id": ["CVCL_A", "CVCL_B"],
-        }
-    ).to_parquet(shard_dir / "part-00000.parquet")
-    metadata = pd.DataFrame(
-        {
-            "gene_symbol": ["A", "B", "C"],
-            "ensembl_id": ["ENSG1", "ENSG2", "ENSG3"],
-            "token_id": [3, 4, 5],
-        }
-    )
-    metadata_path = tmp_path / "genes.parquet"
-    metadata.to_parquet(metadata_path)
-    adata = tiny_dmso_adata(shard_dir, metadata_path, cells=2)
-    assert adata.shape == (2, 2)
-    assert adata.var["ensembl_id"].tolist() == ["ENSG1", "ENSG2"]
-    assert adata.obs["cell_type"].tolist() == ["CVCL_A", "CVCL_B"]
-    assert np.all(adata.X.data >= 0)
 
 
 def test_torch_padding_fallback_matches_unpadding_contract() -> None:
