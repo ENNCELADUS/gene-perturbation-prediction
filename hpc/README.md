@@ -1,19 +1,43 @@
-# Joint GeneEffect execution
+# Running on the H20
 
-Run from the repository root on H20. The launcher uses `.venv-tx1/bin/python`;
-set `PYTHON_BIN` to select another installed environment. Every GPU step of `all` uses
-every visible GPU (Torch's count, respecting `CUDA_VISIBLE_DEVICES`), or only the ids
-given by `--gpus`. Synchronize code with Git before using the remote checkout.
+Run from the repository root on an H20 container (the `hpc-execution` skill holds ports, Git-only sync and launch
+rules). `hpc/run.sh` runs `.venv-tx1/bin/python` unless `PYTHON_BIN` names another; the PIE and stage-one commands run
+`.venv-pie` (`hpc/pie/setup.sh`) and the cell-state fits `.venv-states` (`hpc/states/setup.sh`). `hpc/run.sh --help`
+prints every command's arguments.
+
+## Commands
+
+| `hpc/run.sh` | Runs | Where | Section |
+| --- | --- | --- | --- |
+| `all CONFIG` | the joint pipeline to `summary.md` (`joint.all`) | every chosen GPU | [`all`](#the-all-command) |
+| `revision CONFIG` | one joint variant: training, then validation and test (`joint.revision`) | chosen GPUs | [`revision`](#the-revision-command) |
+| `test CHECKPOINT` | one checkpoint on test (`joint.evaluate`) | one GPU | [`revision`](#the-revision-command) |
+| `prior`, `prior-selected`, `prior-export`, `prior-stack`, `prior-noise` | the linear context prior and its analyses (`prior.*`) | CPU | [`prior`](#the-prior-command) |
+| `pie-reproduce` | PIE's released checkpoints re-scored (`stage_one.pie_reproduction`) | one GPU, `.venv-pie` | [PIE harness](#the-pie-harness) |
+| `ladder-inputs`, `gene-sources`, `pie-precompute` | the stage-one inputs and the frozen PIE's deltas | CPU; Tx1, ESM and PIE on GPUs | [Stage-one inputs](#the-stage-one-inputs) |
+| `stage-one`, `stage-one-queue`, `stage-one-report`, `stage-one-prior` | stage-one runs, their queue and report, the prior reference | one GPU per run (`.venv-pie`); the prior on CPU | [Stage-one model](#the-stage-one-model) |
+| `cell-states`, `pie-precompute --steps states` | the cell-state telemetry and the frozen PIE on its states | CPU; scVI and PIE on GPUs | [Cell states](#the-cell-states) |
+
+Direct entry points, `python -m src.<module>` from the repository root (`.venv-tx1` unless noted):
+
+| Module | Does | Documented in |
+| --- | --- | --- |
+| `experiments.prepare` | preparation alone, or growing the prepared root by new lines | [Extra single-cell lines](#extra-single-cell-lines) |
+| `experiments.joint.evaluate`, `experiments.joint.compare_runs` | a checkpoint on validation or train; the paired line bootstrap of two runs | [`revision`](#the-revision-command) |
+| `experiments.joint.train`, `.response_comparison`, `.baselines`, `.readout` | the steps `all` launches; alone only to debug | [`all`](#the-all-command) |
+| `experiments.joint.tx1_gmm_ridge` | the Tx1 GMM-ridge baseline | [Tx1 GMM-ridge baseline](#tx1-gmm-ridge-baseline) |
+| `experiments.states.programs` | the cNMF, starCAT and scVI fits (`.venv-states`), launched by `cell-states --steps fit` | [Cell states](#the-cell-states) |
+| `data.builders.build_extra_single_cell_sources`, `recount_extra_single_cell_sources`, `build_extra_single_cell_lines`, `plan_second_sources`, `build_cell_line_geneeffect_split` | the single-cell extras and the final split | [Extra single-cell lines](#extra-single-cell-lines) |
+| `data.builders.cellosaurus_context`, `embed_protein_sources`; `data.gene_sources` | the stage-one context text and gene sources | [Stage-one inputs](#the-stage-one-inputs) |
+| `data.builders.build_extra_bulk_lines`, `build_cell_line_geneeffect_226_split`, `build_sl_screen_benchmark`, `build_pc9_hela_basal` | tracked membership files and benchmarks | their cards: [bulk lines](../docs/data/extra-bulk-lines-26q1.md), [226](../docs/data/cell-line-geneeffect-226.md), [SL screens](../docs/data/sl-screen-benchmark.md), [context screen](../docs/data/sl-context-screen.md) |
+| `data.builders.build_context_reference`, `build_state_programs` | the prior's reference tables and pinned cell-state programs (on the Mac) | [context-generalization design](../docs/specs/2026-10-04-context-generalization-design.md), [noise-diagnosis design](../docs/specs/2026-10-12-noise-diagnosis-design.md) |
+| `data.builders.prepare_kinker_umi_h5ad`, `prepare_cell_line_atlas_raw_umi`, `materialize_exp13_original47_raw_umi`, `bootstrap_exp13_uniprot_cache`, `build_exp13_esm2_universe`, `precompute_esm2_embeddings` | the 226 benchmark's raw-UMI basal h5ad and ESM2 table | [226 card](../docs/data/cell-line-geneeffect-226.md), [Tx1 input record](../results/exp13_stage0/README.md) |
+| `experiments.historical.*` | retired probes and builders, kept runnable | [historical README](../src/experiments/historical/README.md) |
+
+## The `all` command
 
 ```bash
 hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
-hpc/run.sh revision configs/revision/frozen_huber.yaml [--run-id <id>] [--gpus 0,1,2,3]
-hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
-hpc/run.sh prior configs/context_prior/bridge_remedies.yaml [--run-id <id>] [--experiments affine,contrastive]
-hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_final_split_20261012
-hpc/run.sh prior-stack configs/context_prior/single_cell_stack.yaml --run-id <id>
-hpc/run.sh revision configs/correction/huber_no_state.yaml --run-id correction_huber_no_state_seed0
-uv run python -m src.experiments.joint.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
 
 `all` runs the whole pipeline in one command and prints its run id first (default
