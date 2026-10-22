@@ -20,6 +20,9 @@ from src.data import cell_states as cs
 from src.data.tx1_cache import EMBEDDING_WIDTH, write_line_cache
 from src.experiments.stage_one import ladder_inputs as ladder
 from src.experiments.states import state_telemetry as st
+from src.experiments.states import report as st_report
+from src.experiments.states import telemetry as st_telemetry
+from src.experiments.states import vocabularies as st_vocab
 from src.experiments.states.config import validate_states_config
 from tests.test_ladder_inputs import TEST, TRAIN, VAL, build_world
 
@@ -27,7 +30,7 @@ SECOND = ("ACH-T0", "ACH-T1", "ACH-T2", "ACH-V0")
 PROGRAM_KINDS = ("recurrent", "recurrent", "cycle", "background")
 
 
-def _stand_in_state_programs(t: st.Telemetry) -> None:
+def _stand_in_state_programs(t: st_telemetry.Telemetry) -> None:
     """Files of state_programs' format: a reference of two recurrent programs,
     a cycle phase and the background; usages and latents of every cell."""
     plan = json.loads(t.layout.plan.read_text())
@@ -47,10 +50,10 @@ def _stand_in_state_programs(t: st.Telemetry) -> None:
                 rng = np.random.default_rng(
                     zlib.crc32(f"{model_id}{seed}{second}".encode())
                 )
-                usage = st.usage_path(t.layout, seed, model_id, second)
+                usage = st_telemetry.usage_path(t.layout, seed, model_id, second)
                 usage.parent.mkdir(parents=True, exist_ok=True)
                 np.save(usage, rng.gamma(1.0, size=(n, 4)).astype(np.float32))
-                latent = st.latent_path(t.layout, seed, model_id, second)
+                latent = st_telemetry.latent_path(t.layout, seed, model_id, second)
                 latent.parent.mkdir(parents=True, exist_ok=True)
                 offset = 3.0 * (zlib.crc32(model_id.encode()) % 3)
                 np.save(latent, (rng.normal(size=(n, 3)) + offset).astype(np.float32))
@@ -149,13 +152,13 @@ def world(tmp_path_factory):
         config["references"][group] = str(path)
     config["report"].update(permutations=20, stability_cells=10)
     config = validate_states_config(config)
-    t = st.Telemetry(config, "telemetry")
-    original = st.run_state_programs
-    st.run_state_programs = _stand_in_state_programs
+    t = st_telemetry.Telemetry(config, "telemetry")
+    original = st_vocab.run_state_programs
+    st_vocab.run_state_programs = _stand_in_state_programs
     try:
         st.run(config, "telemetry", ["fit", "project", "inputs"])
     finally:
-        st.run_state_programs = original
+        st_vocab.run_state_programs = original
     return root, config, t
 
 
@@ -179,14 +182,14 @@ def test_fit_samples_read_training_lines_only(world):
 def test_a_mixed_source_cell_without_a_row_fails_closed(world):
     root, config, _ = world
     table = pd.read_csv(root / "chemistry.csv", keep_default_na=False)
-    t = st.Telemetry(config, "telemetry")
+    t = st_telemetry.Telemetry(config, "telemetry")
     t.chemistry_table = table.loc[table["arm"] != "expt_b"]  # expt_b cells uncovered
     ids = t.cell_arrays(TRAIN[5], "cell_ids")[0]
     with pytest.raises(ValueError, match="covers arm 'expt_b'"):
         t.cell_chemistry(TRAIN[5], ids)
-    params = st.load_mixture(t, 0, "hvg_k3")
+    params = st_vocab.load_mixture(t, 0, "hvg_k3")
     assert params["pca_components"].shape == (3, 4) and bool(params["centred"])
-    assert list(st.load_mixture(t, 0, "cycle")["states"]) != ["0", "1", "2"]
+    assert list(st_vocab.load_mixture(t, 0, "cycle")["states"]) != ["0", "1", "2"]
 
 
 def test_memberships_cover_every_projected_line_and_project_identically(world):
@@ -196,7 +199,7 @@ def test_memberships_cover_every_projected_line_and_project_identically(world):
     for model_id in t.projected:
         stored = np.load(t.layout.memberships(model_id))
         assert set(stored.files) == keys
-    again = st.project_line(t, "ACH-V1")
+    again = st_vocab.project_line(t, "ACH-V1")
     with np.load(t.layout.memberships("ACH-V1")) as stored:
         for key in keys:
             assert np.array_equal(again[key], stored[key])
@@ -255,12 +258,12 @@ def test_matched_states_count_unmatched_mass_against_zero():
     qb = qa[:, :2]  # the second fit lacks state 2
     ma = np.tile([0.5, 0.3, 0.2], (4, 1))
     mb = np.tile([0.6, 0.4], (4, 1))
-    result = st.matched_states(qa, qb, ma, mb)
+    result = st_report.matched_states(qa, qb, ma, mb)
     assert result["states"] == [3, 2] and result["unmatched_states"] == [1, 0]
     assert np.isclose(result["unmatched_mass_mean"], 0.2)
     # Matched |0.5 - 0.6| + |0.3 - 0.4| plus the unmatched 0.2, halved.
     assert np.isclose(result["matched_mass_tvd_mean"], 0.2)
-    same = st.matched_states(qa, qa, ma, ma)
+    same = st_report.matched_states(qa, qa, ma, ma)
     assert same["unmatched_mass_mean"] == 0 and same["matched_mass_tvd_mean"] == 0
 
 
@@ -270,7 +273,7 @@ def test_deposit_share_is_reported_per_state():
     deposit = pd.Series(["d1"] * 20 + ["d2"] * 20, index=lines)
     driven = np.where(deposit == "d1", 0.2, 0.6) + rng.normal(0, 0.02, 40)
     frame = pd.DataFrame({"driven": driven, "free": rng.uniform(0, 1, 40)}, index=lines)
-    shares = st.per_state_group_share(
+    shares = st_report.per_state_group_share(
         frame, deposit, pd.Series("Lung", index=lines), permutations=200, seed=0
     )
     assert shares["driven"]["observed"] > 0.9 > shares["driven"]["null_q95"]
@@ -282,7 +285,7 @@ def test_a_state_with_constant_mass_gets_no_deposit_p_value():
     lines = [f"ACH-{i}" for i in range(10)]
     deposit = pd.Series(["d1"] * 5 + ["d2"] * 5, index=lines)
     frame = pd.DataFrame({"constant": np.full(10, 0.5)}, index=lines)
-    shares = st.per_state_group_share(
+    shares = st_report.per_state_group_share(
         frame, deposit, pd.Series("Lung", index=lines), permutations=50, seed=0
     )
     assert np.isnan(shares["constant"]["observed"])
@@ -290,7 +293,9 @@ def test_a_state_with_constant_mass_gets_no_deposit_p_value():
     assert np.isnan(shares["constant"]["null_q95"])
 
 
-def _write_pie(root: Path, t: st.Telemetry, set_name: str, bump: float) -> None:
+def _write_pie(
+    root: Path, t: st_telemetry.Telemetry, set_name: str, bump: float
+) -> None:
     """A main pass and an assembled state pass on two genes where every context
     reads its line's main-pass deltas, one state of one line moved by ``bump``."""
     rng = np.random.default_rng(9)
@@ -339,12 +344,12 @@ def test_gap_is_zero_when_states_read_the_line_and_grows_with_a_moved_state(worl
     root, _, t = world
     assert t.layout.pie_states == t.layout.root / "pie"  # moves with states/
     _write_pie(root, t, "cycle", 0.0)
-    gap = st.gap_section(t, "cycle")
-    for name in st.DELTAS:
+    gap = st_report.gap_section(t, "cycle")
+    for name in st_telemetry.DELTAS:
         assert gap[name]["train_cells"]["gap_ratio"] < 1e-5
         assert gap[name]["train_cells"]["noise_ratio"] < 1e-5
     _write_pie(root, t, "cycle", 2.0)
-    moved = st.gap_section(t, "cycle")
+    moved = st_report.gap_section(t, "cycle")
     assert moved["dH"]["train_cells"]["gap_ratio"] > 1e-3
     assert moved["dH"]["val"]["gap_ratio"] < 1e-5
 
@@ -357,7 +362,7 @@ def test_gap_refuses_a_pass_over_other_state_inputs(world):
     payload["fingerprints"][TRAIN[0]] = "an earlier state input"
     index.write_text(json.dumps(payload))
     with pytest.raises(ValueError, match="other state inputs"):
-        st.gap_section(t, "programs")
+        st_report.gap_section(t, "programs")
     shutil.rmtree(t.layout.pie_states / "programs")
 
 
@@ -365,13 +370,15 @@ def test_report_writes_every_section(world):
     root, config, t = world
     st.run(config, "telemetry", ["report"])
     # Stability reads training lines only: 10 cells from each of the 10.
-    t_report = st.Telemetry(config, "telemetry")
-    st.stability_section(t_report, "cycle")
+    t_report = st_telemetry.Telemetry(config, "telemetry")
+    st_report.stability_section(t_report, "cycle")
     assert t_report.cache["stability_draw"]["cycle@seed0"].shape[0] == 10 * len(TRAIN)
     report = json.loads((root / "out" / "telemetry" / "report.json").read_text())
     assert set(report["vocabularies"]) == set(cs.vocabularies(config))
     entry = report["vocabularies"]["hvg_k2"]
-    assert set(entry["identity"]["members_listed"]) == set(st.REFERENCE_GROUPS)
+    assert set(entry["identity"]["members_listed"]) == set(
+        st_telemetry.REFERENCE_GROUPS
+    )
     assert entry["second_deposit"]["lines"] == len(SECOND)
     assert set(entry["stability"]) == {"0-1"}
     assert "unmatched_mass_mean" in entry["stability"]["0-1"]
