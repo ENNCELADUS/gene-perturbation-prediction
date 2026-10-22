@@ -8,7 +8,6 @@ never infers a cell line from a barcode or guesses whether rows are genes.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import tempfile
@@ -35,14 +34,6 @@ MANIFEST_COLUMNS = (
     "source_matrix",
     "matrix_semantics",
 )
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _read_one_column(path: Path, column: int) -> list[str]:
@@ -491,18 +482,14 @@ def _write_output(
             "sources": manifest["source"].value_counts().sort_index().to_dict(),
             "tx1_loader_probe": sorted(set(qc["tx1_loader_probe"] for qc in qcs)),
             "tx1_minimal_encoding": "not_run_gpu_resource_blocked",
-            "input_file_count": len(config["_input_sha256"]),
+            "input_file_count": config["_input_file_count"],
             "hvg_fill_rate_range": [
                 min(float(qc["hvg_fill_rate"]) for qc in qcs),
                 max(float(qc["hvg_fill_rate"]) for qc in qcs),
             ],
-            "config_sha256": _sha256(Path(config["_config_path"])),
         }
         (root / "provenance" / "config_snapshot.json").write_text(
             json.dumps(config["_config_snapshot"], indent=2, sort_keys=True) + "\n"
-        )
-        (root / "provenance" / "input_sha256.json").write_text(
-            json.dumps(config["_input_sha256"], indent=2, sort_keys=True) + "\n"
         )
         (root / "qc" / "summary.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
@@ -513,20 +500,7 @@ def _write_output(
             "Cell membership comes only from the audited selected_cells tables. "
             "`SOURCE_H5AD_VERIFIED` certifies raw-count, mapping, QC, and static "
             "Tx1 input checks; it does not certify GPU encoding or embedding "
-            "readiness. `sha256.txt` covers every regular bundle file created "
-            "before the success sentinel, including h5ad, QC, manifest, config "
-            "snapshot, and input-hash provenance; the sentinel itself is excluded.\n"
-        )
-        checksum_paths = sorted(
-            path
-            for path in root.rglob("*")
-            if path.is_file() and path.name != "sha256.txt"
-        )
-        (root / "sha256.txt").write_text(
-            "".join(
-                f"{_sha256(path)}  {path.relative_to(root)}\n"
-                for path in checksum_paths
-            )
+            "readiness.\n"
         )
         (root / "SOURCE_H5AD_VERIFIED").write_text(
             json.dumps(summary, sort_keys=True) + "\n"
@@ -565,7 +539,6 @@ def _input_paths(config: dict[str, Any], manifest: pd.DataFrame) -> list[Path]:
 def run(config_path: Path, output_dir: Path, only_model_id: str | None) -> None:
     config_snapshot = json.loads(config_path.read_text())
     config = dict(config_snapshot)
-    config["_config_path"] = str(config_path)
     config["_config_snapshot"] = config_snapshot
     manifest_path = Path(config["manifest_path"])
     manifest = pd.read_csv(manifest_path, dtype=str)
@@ -596,8 +569,7 @@ def run(config_path: Path, output_dir: Path, only_model_id: str | None) -> None:
     missing_inputs = [str(path) for path in input_paths if not path.is_file()]
     if missing_inputs:
         raise FileNotFoundError(f"missing provenance inputs: {missing_inputs}")
-    print(f"hashing {len(input_paths)} provenance inputs", flush=True)
-    config["_input_sha256"] = {str(path): _sha256(path) for path in input_paths}
+    config["_input_file_count"] = len(input_paths)
     gene_metadata, symbol_to_ensembl = _load_gene_mapping(config)
     hvg_names = _load_hvgs(Path(config["state_model_dir"]))
     built: list[tuple[ad.AnnData, dict[str, Any]]] = []

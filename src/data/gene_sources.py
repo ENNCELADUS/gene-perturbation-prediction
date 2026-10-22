@@ -25,7 +25,6 @@ the axis being the index of the ladder's ``genes.parquet`` and the selective gen
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import pickle
@@ -197,14 +196,6 @@ def align_sources(
     return {name: align(read_source(name, paths), axis) for name in names}
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 24), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def write_sources(
     out: Path,
     aligned: Mapping[str, AlignedSource],
@@ -233,7 +224,7 @@ def write_sources(
         os.replace(tmp, out / f"{name}.npz")
         record["sources"][name] = {
             **coverage(source, selective),
-            "inputs": {str(p): _sha256(p) for p in inputs[name]},
+            "inputs": [str(p) for p in inputs[name]],
         }
     tmp = out / f".coverage.{os.getpid()}.tmp.json"
     tmp.write_text(json.dumps(record, indent=2) + "\n")

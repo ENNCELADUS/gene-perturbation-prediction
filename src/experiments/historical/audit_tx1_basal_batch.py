@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 from collections import defaultdict
@@ -19,14 +18,6 @@ from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.preprocessing import StandardScaler
 
 GENE_RE = re.compile(r"^(.*?) \((\d+)\)$")
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def reservoir_cells(
@@ -255,11 +246,6 @@ def main() -> None:
             "cells_per_line": args.cells_per_line,
             "observed_dmso_cells": {
                 mapping[key]: observed[key] for key in sorted(mapping)
-            },
-            "source_sha256": {
-                "manifest": sha256_file(args.manifest),
-                "gene_metadata": sha256_file(args.gene_metadata),
-                "depmap_omics_expression": sha256_file(args.expression),
             },
         }
     )

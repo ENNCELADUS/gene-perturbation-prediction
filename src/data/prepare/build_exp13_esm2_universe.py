@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -23,21 +22,12 @@ class NpzCoverage:
     resolved_count: int
     missing: tuple[str, ...]
     vector_width: int
-    artifact_sha256: str
 
 
 @dataclass(frozen=True)
 class CoverageUniverse:
     symbols: tuple[str, ...]
     dropped: tuple[dict[str, object], ...]
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _unique_symbols(symbols: Sequence[object], label: str) -> tuple[str, ...]:
@@ -162,7 +152,6 @@ def inspect_npz_coverage(
         len(required) - len(missing),
         missing,
         int(vectors.shape[1]),
-        _sha256(npz_path),
     )
 
 

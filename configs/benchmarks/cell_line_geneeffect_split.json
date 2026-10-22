@@ -1754,20 +1754,16 @@
   },
   "inputs": {
     "split_226": {
-      "path": "configs/benchmarks/cell_line_geneeffect_226_split.json",
-      "sha256": "8a264acfa63bf8c2c07d302e1adb5c4ce17edb19dd902f59ef6fd9b6e5434521"
+      "path": "configs/benchmarks/cell_line_geneeffect_226_split.json"
     },
     "split_226_table": {
-      "path": "configs/benchmarks/cell_line_geneeffect_226_split.csv",
-      "sha256": "0aff7c3183f10979a36e21736b30a269e8bb9f0c9cd37ad000a34fd500cbee4d"
+      "path": "configs/benchmarks/cell_line_geneeffect_226_split.csv"
     },
     "single_cell": {
-      "path": "configs/benchmarks/extra_single_cell_lines_26Q1.json",
-      "sha256": "ae63c942434d5aa4d5e243564b88c62a6dec7f1fcc9dfeb8e60b64a3f66ae9de"
+      "path": "configs/benchmarks/extra_single_cell_lines_26Q1.json"
     },
     "bulk": {
-      "path": "configs/benchmarks/extra_bulk_lines_26Q1.json",
-      "sha256": "84ed123fb23b826fb3b273aa950d563b8e9f8c400bcb513a1e58d51b7a234b49"
+      "path": "configs/benchmarks/extra_bulk_lines_26Q1.json"
     }
   }
 }

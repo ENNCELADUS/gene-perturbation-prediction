@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import hashlib
 import json
 import re
 import tarfile
@@ -20,15 +19,7 @@ from scipy import io, sparse
 from src.data.basal import assert_tx1_input_contract
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _write_verified(adata: ad.AnnData, output: Path) -> str:
+def _write_verified(adata: ad.AnnData, output: Path) -> None:
     assert_tx1_input_contract(adata)
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".tmp.h5ad")
@@ -38,7 +29,6 @@ def _write_verified(adata: ad.AnnData, output: Path) -> str:
     if reread.shape != adata.shape or int(reread.X.sum()) != int(adata.X.sum()):
         raise ValueError("H5AD read-back verification failed")
     temporary.replace(output)
-    return _sha256(output)
 
 
 def _qc(adata: ad.AnnData) -> dict[str, object]:
@@ -101,17 +91,12 @@ def build_pc9(root: Path) -> dict[str, object]:
     keep = _minimum_qc_mask(adata)
     adata = adata[keep].copy()
     output = source / "formal/pc9_untreated_tx1_raw_counts.h5ad"
-    output_hash = _write_verified(adata, output)
+    _write_verified(adata, output)
     result = {
         "context": "PC9",
         "model_id": "ACH-000779",
         "cellosaurus_id": "CVCL_B260",
-        "source_files": {
-            str(path.relative_to(root)): _sha256(path)
-            for path in (matrix_path, genes_path, barcodes_path)
-        },
         "output_path": str(output.relative_to(root.parent.parent.parent.parent)),
-        "output_sha256": output_hash,
         "qc_filter": {
             "minimum_counts": 1000,
             "minimum_detected_genes": 500,
@@ -244,14 +229,12 @@ def build_hela(root: Path, gtf: Path) -> dict[str, object]:
     keep = _minimum_qc_mask(adata)
     adata = adata[keep].copy()
     output = source / "formal/hela_720_tx1_raw_counts.h5ad"
-    output_hash = _write_verified(adata, output)
+    _write_verified(adata, output)
     result = {
         "context": "HELA",
         "model_id": "ACH-001086",
         "cellosaurus_id": "CVCL_0030",
-        "source_files": {str(tar_path.relative_to(root)): _sha256(tar_path)},
         "gencode_gtf": str(gtf),
-        "gencode_gtf_sha256": _sha256(gtf),
         "ambiguous_gencode_symbols_excluded": len(ambiguous),
         "excel_symbol_repairs": {
             "1-Dec": "DEC1",
@@ -261,7 +244,6 @@ def build_hela(root: Path, gtf: Path) -> dict[str, object]:
         },
         "batch_stats": batch_stats,
         "output_path": str(output.relative_to(root.parent.parent.parent.parent)),
-        "output_sha256": output_hash,
         "qc_filter": {
             "minimum_counts": 1000,
             "minimum_detected_genes": 500,
@@ -278,7 +260,7 @@ def build_hela(root: Path, gtf: Path) -> dict[str, object]:
     return result
 
 
-def _register_formal_artifacts(root: Path, results: list[dict[str, object]]) -> None:
+def _register_formal_artifacts(root: Path) -> None:
     manifest_path = root / "SOURCE_MANIFEST.tsv"
     manifest = pd.read_csv(manifest_path, sep="\t", dtype=str)
     manifest.loc[
@@ -310,12 +292,9 @@ def _register_formal_artifacts(root: Path, results: list[dict[str, object]]) -> 
             ),
         },
     }
-    by_context = {str(result["context"]): result for result in results}
-    for context, row in rows.items():
-        result = by_context[context]
+    for row in rows.values():
         artifact = root / str(row["relative_path"])
         row["bytes"] = str(artifact.stat().st_size)
-        row["sha256"] = str(result["output_sha256"])
         match = (manifest["context"] == row["context"]) & (
             manifest["relative_path"] == row["relative_path"]
         )
@@ -339,7 +318,7 @@ def main() -> None:
     if args.context in {"HELA", "all"}:
         results.append(build_hela(args.candidate_root, args.gencode_gtf))
     if args.context == "all":
-        _register_formal_artifacts(args.candidate_root, results)
+        _register_formal_artifacts(args.candidate_root)
     print(json.dumps(results, indent=2, sort_keys=True))
 
 

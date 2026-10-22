@@ -33,15 +33,13 @@ blindly -- it is cross-checked against ``selected_cells.tsv``'s
 selected from the CPM matrix denote the same lines in this one.
 
 The frozen line manifest still declares ``matrix_semantics: processed_cpm``
-for these lines and is **not** edited here: its hash is pinned by
-``build_cell_line_geneeffect_226_split.py``'s ``PINNED_SHA256``, and the 226
-split membership is unchanged by this switch. Only the numeric source moves.
+for these lines and is **not** edited here: the 226 split was built from it, and
+its membership is unchanged by this switch. Only the numeric source moves.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import pickle
 import shutil
@@ -58,14 +56,6 @@ SEMANTICS = "raw_umi"
 STATUS = "verified_raw_umi"
 #: Non-gene rows the SCP matrix carries before its first gene row, in order.
 METADATA_ROWS: tuple[str, ...] = ("Cell_line", "Pool_ID")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _quantiles(values: np.ndarray) -> dict[str, float]:
@@ -303,9 +293,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                 f"expected {args.expected_selected_cells} selected cells, "
                 f"found {len(selected)}"
             )
-        matrix_sha256 = _sha256(args.matrix)
-        if args.expected_matrix_sha256 and matrix_sha256 != args.expected_matrix_sha256:
-            raise ValueError("UMI matrix disagrees with --expected-matrix-sha256")
 
         matrix_cells, row_metadata = read_matrix_head(args.matrix)
         if len(matrix_cells) != args.expected_source_cells:
@@ -420,14 +407,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         var_for_h5ad.index = var["ensembl_id"].astype(str)
         var_for_h5ad.index.name = None
         var.to_csv(staging / "gene_mapping.tsv", sep="\t", index=False)
-        source_hashes = {
-            "matrix_sha256": matrix_sha256,
-            "selected_cells_sha256": _sha256(args.selected_cells),
-            "line_manifest_sha256": _sha256(args.line_manifest),
-            "gene_metadata_sha256": _sha256(args.gene_metadata),
-            "vocab_sha256": _sha256(args.vocab_json),
-            "hvg_var_dims_sha256": _sha256(args.hvg_var_dims),
-        }
         line_rows: list[dict[str, object]] = []
         line_qc: dict[str, object] = {}
         for _, line in lines.sort_values("model_id").iterrows():
@@ -445,7 +424,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                     "source_dataset": "Kinker/scCCLE SCP542 UMIcount_data.txt",
                     "tx1_usage": "standard",
                     "tx1_standard_raw_count_compatible": True,
-                    "provenance_sha256": source_hashes,
                 }
             )
             assert_tx1_input_contract(adata)
@@ -484,7 +462,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                     "tx1_usage": "standard",
                     "tx1_raw_count_contract": "passed",
                     "h5ad": str(path.relative_to(staging)),
-                    "sha256": _sha256(path),
                 }
             )
 
@@ -527,7 +504,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             "tx1_raw_count_contract": "passed",
             "tx1_embedding_executed": False,
             "lines": line_qc,
-            "source_hashes": source_hashes,
         }
         (staging / "qc.json").write_text(json.dumps(qc_payload, indent=2) + "\n")
         (staging / "status.json").write_text(
@@ -553,11 +529,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             "`assert_tx1_input_contract`. Values are integral UMI counts; the "
             "library size is a free quantity, not normalized.\n"
         )
-        checksum_lines = []
-        for path in sorted(staging.rglob("*")):
-            if path.is_file() and path.name != "sha256.txt":
-                checksum_lines.append(f"{_sha256(path)}  {path.relative_to(staging)}")
-        (staging / "sha256.txt").write_text("\n".join(checksum_lines) + "\n")
         (staging / "RAW_UMI_H5AD_VERIFIED").write_text(STATUS + "\n")
         staging.rename(output_dir)
         return qc_payload
@@ -576,7 +547,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vocab-json", type=Path, required=True)
     parser.add_argument("--hvg-var-dims", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--expected-matrix-sha256", default=None)
     parser.add_argument("--selection-matrix-name", default="GSE157220_CPM_data.txt.gz")
     parser.add_argument("--manifest-matrix-semantics", default="processed_cpm")
     parser.add_argument("--expected-lines", type=int, default=152)

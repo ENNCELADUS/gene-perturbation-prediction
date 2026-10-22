@@ -168,7 +168,10 @@ def test_cli_writes_each_source_and_coverage(sources, tmp_path):
     assert record["axis"] == 4 and record["selective"] == 2
     assert record["sources"]["esmc_600m"]["covered"] == 2
     assert record["sources"]["esmc_600m"]["share_of_selective"] == 1.0
-    assert len(record["sources"]["gene2vec"]["inputs"]) == 2
+    assert record["sources"]["gene2vec"]["inputs"] == [
+        str(sources.gene2vec),
+        str(sources.gene_names),
+    ]
     with np.load(out / "string_space.npz") as payload:
         assert payload["axis"].tolist() == AXIS
         assert payload["present"].tolist() == [False, False, True, True]

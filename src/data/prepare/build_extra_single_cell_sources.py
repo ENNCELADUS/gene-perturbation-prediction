@@ -50,7 +50,6 @@ from src.data.prepare.prepare_cell_line_atlas_raw_umi import (
     _load_gene_mapping,
     _map_and_collapse_genes,
     _probe_tx1_loader,
-    _sha256,
 )
 from src.data.splits import FixedSplit, load_geneeffect_split
 
@@ -859,7 +858,6 @@ def build_source(
     return {
         "source": name,
         "wave": source["wave"],
-        "inputs": {rel: _sha256(root / rel) for rel in sorted(source["files"])},
         "libraries": reports,
         "dropped": dict(dropped),
         "lines": written,
@@ -983,7 +981,6 @@ def run(
             )
         print(f"{name}: building {len(wanted)} lines", flush=True)
         report = build_source(name, source, context, output, wanted)
-        report["spec_sha256"] = _sha256(spec_path)
         temporary = report_path.with_name(f".{report_path.name}.tmp")
         temporary.write_text(json.dumps(report, indent=2, default=float) + "\n")
         os.replace(temporary, report_path)

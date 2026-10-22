@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 
 import pandas as pd
@@ -19,10 +18,8 @@ from src.experiments.historical.build_sl_context_benchmark import (
 )
 
 
-def test_generated_manifest_does_not_encode_claim_policy(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(benchmark_builder, "_sha256", lambda _path: "0" * 64)
+def test_generated_manifest_does_not_encode_claim_policy() -> None:
     manifest = benchmark_builder._manifest(
-        tmp_path,
         min_class_count=10,
         selection_stats={},
         pre_split_stats={},
@@ -36,7 +33,6 @@ def test_generated_manifest_does_not_encode_claim_policy(monkeypatch, tmp_path) 
 
     assert "formal" not in manifest["split"]
     assert "claim_status" not in manifest["split"]
-    assert manifest["provenance"]["builder"]["sha256"] == "0" * 64
 
 
 def _row(**updates: object) -> dict[str, object]:
@@ -334,15 +330,12 @@ def test_context_split_rejects_pairs_crossing_on_distinct_source_rows() -> None:
         apply_context_split(rows, _split_contract())
 
 
-def test_split_evidence_hashes_and_model_ids_are_checked(tmp_path) -> None:
+def test_split_evidence_model_ids_are_checked(tmp_path) -> None:
     basal_path = tmp_path / "basal.json"
     artifact_path = tmp_path / "basal.h5ad"
     gene_effect_path = tmp_path / "gene_effect.csv"
     model_path = tmp_path / "model.csv"
     artifact_path.write_bytes(b"basal")
-
-    def digest(path) -> str:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
 
     basal_path.write_text(
         json.dumps(
@@ -356,7 +349,6 @@ def test_split_evidence_hashes_and_model_ids_are_checked(tmp_path) -> None:
                         "basal_source": "controls",
                         "cellosaurus_id": "CVCL_0001",
                         "artifact_path": str(artifact_path),
-                        "artifact_sha256": digest(artifact_path),
                         "artifact_status": "source_registered",
                     }
                 ],
@@ -383,15 +375,9 @@ def test_split_evidence_hashes_and_model_ids_are_checked(tmp_path) -> None:
         },
         "assignments": {"CELL": "train"},
         "registration_evidence": {
-            "basal_registry": {"path": str(basal_path), "sha256": digest(basal_path)},
-            "gene_effect": {
-                "path": str(gene_effect_path),
-                "sha256": digest(gene_effect_path),
-            },
-            "model_metadata": {
-                "path": str(model_path),
-                "sha256": digest(model_path),
-            },
+            "basal_registry": {"path": str(basal_path)},
+            "gene_effect": {"path": str(gene_effect_path)},
+            "model_metadata": {"path": str(model_path)},
         },
     }
 
@@ -404,28 +390,15 @@ def test_split_evidence_hashes_and_model_ids_are_checked(tmp_path) -> None:
     pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["WRONG"]}).to_csv(
         model_path, index=False
     )
-    contract["registration_evidence"]["model_metadata"]["sha256"] = digest(model_path)
     with pytest.raises(ValueError, match="DepMap identity mismatch"):
         validate_split_evidence(contract)
     pd.DataFrame({"ModelID": ["ACH-1"], "StrippedCellLineName": ["CELL"]}).to_csv(
         model_path, index=False
     )
-    contract["registration_evidence"]["model_metadata"]["sha256"] = digest(model_path)
-    artifact_path.write_bytes(b"drifted")
-    with pytest.raises(ValueError, match="Basal artifact hash mismatch"):
-        validate_split_evidence(contract)
-    artifact_path.write_bytes(b"basal")
     basal_payload = json.loads(basal_path.read_text())
     basal_payload["contexts"][0]["artifact_status"] = "typo"
     basal_path.write_text(json.dumps(basal_payload))
-    contract["registration_evidence"]["basal_registry"]["sha256"] = digest(basal_path)
     with pytest.raises(ValueError, match="Unsupported basal artifact status"):
-        validate_split_evidence(contract)
-    basal_payload["contexts"][0]["artifact_status"] = "source_registered"
-    basal_path.write_text(json.dumps(basal_payload))
-    contract["registration_evidence"]["basal_registry"]["sha256"] = digest(basal_path)
-    contract["registration_evidence"]["gene_effect"]["sha256"] = "0" * 64
-    with pytest.raises(ValueError, match="hash mismatch"):
         validate_split_evidence(contract)
 
 
@@ -440,9 +413,6 @@ def test_split_evidence_allows_gene_effect_absence_only_for_sl_only_test(
     artifact_path.write_bytes(b"basal")
     provenance_path.write_text("{}")
 
-    def digest(path) -> str:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-
     basal_path.write_text(
         json.dumps(
             {
@@ -455,10 +425,8 @@ def test_split_evidence_allows_gene_effect_absence_only_for_sl_only_test(
                         "basal_source": "controls",
                         "cellosaurus_id": "CVCL_0001",
                         "artifact_path": str(artifact_path),
-                        "artifact_sha256": digest(artifact_path),
                         "artifact_status": "tx1_contract_verified",
                         "provenance_path": str(provenance_path),
-                        "provenance_sha256": digest(provenance_path),
                     }
                 ],
             }
@@ -481,35 +449,19 @@ def test_split_evidence_allows_gene_effect_absence_only_for_sl_only_test(
         },
         "assignments": {"CELL": "test"},
         "registration_evidence": {
-            "basal_registry": {"path": str(basal_path), "sha256": digest(basal_path)},
-            "gene_effect": {
-                "path": str(gene_effect_path),
-                "sha256": digest(gene_effect_path),
-            },
-            "model_metadata": {
-                "path": str(model_path),
-                "sha256": digest(model_path),
-            },
+            "basal_registry": {"path": str(basal_path)},
+            "gene_effect": {"path": str(gene_effect_path)},
+            "model_metadata": {"path": str(model_path)},
         },
     }
 
     validate_split_evidence(contract)
-    provenance_path.write_text('{"drifted": true}')
-    with pytest.raises(ValueError, match="Basal provenance hash mismatch"):
-        validate_split_evidence(contract)
-    provenance_path.write_text("{}")
     pd.DataFrame({"ModelID": ["ACH-1"], "GENE": [-0.5]}).to_csv(
         gene_effect_path, index=False
-    )
-    contract["registration_evidence"]["gene_effect"]["sha256"] = digest(
-        gene_effect_path
     )
     with pytest.raises(ValueError, match="unexpectedly have GeneEffect rows"):
         validate_split_evidence(contract)
     pd.DataFrame({"ModelID": [], "GENE": []}).to_csv(gene_effect_path, index=False)
-    contract["registration_evidence"]["gene_effect"]["sha256"] = digest(
-        gene_effect_path
-    )
     contract["assignments"]["CELL"] = "train"
     with pytest.raises(ValueError, match="SL-only context must be assigned to test"):
         validate_split_evidence(contract)

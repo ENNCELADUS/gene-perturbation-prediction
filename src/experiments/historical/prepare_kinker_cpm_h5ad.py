@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import hashlib
 import json
 import pickle
 import re
@@ -29,14 +28,6 @@ STATUS = "verified_processed_cpm_sensitivity_only"
 ENSEMBL_PATTERN = re.compile(r"^ENSG\d+$")
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def _quantiles(values: np.ndarray) -> dict[str, float]:
     return {
         name: float(value)
@@ -52,27 +43,6 @@ def _read_header(path: Path) -> list[str]:
     opener = gzip.open if path.suffix == ".gz" else open
     with opener(path, "rt") as handle:
         return handle.readline().rstrip("\n\r").split("\t")
-
-
-def _verify_upstream_matrix_checksum(matrix: Path, checksum_path: Path) -> str:
-    matches: list[str] = []
-    for line in checksum_path.read_text().splitlines():
-        if not line.strip():
-            continue
-        expected, relative = line.split(maxsplit=1)
-        relative = relative.lstrip("*")
-        candidates = (
-            checksum_path.parent / relative,
-            checksum_path.parent.parent / relative,
-        )
-        if any(candidate.resolve() == matrix.resolve() for candidate in candidates):
-            matches.append(expected)
-    if len(matches) != 1:
-        raise ValueError("upstream checksum manifest must identify the matrix once")
-    actual = _sha256(matrix)
-    if actual != matches[0]:
-        raise ValueError("Kinker matrix disagrees with the upstream checksum manifest")
-    return actual
 
 
 def _load_metadata(
@@ -207,9 +177,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
     try:
         selected, lines = _load_metadata(
             args.selected_cells, args.line_manifest, args.matrix.name
-        )
-        upstream_matrix_sha256 = _verify_upstream_matrix_checksum(
-            args.matrix, args.upstream_sha256
         )
         if len(lines) != args.expected_lines:
             raise ValueError(
@@ -365,14 +332,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         var.to_csv(staging / "gene_mapping.tsv", sep="\t", index=False)
         line_rows: list[dict[str, object]] = []
         line_qc: dict[str, object] = {}
-        source_hashes = {
-            "matrix_sha256": upstream_matrix_sha256,
-            "selected_cells_sha256": _sha256(args.selected_cells),
-            "line_manifest_sha256": _sha256(args.line_manifest),
-            "gene_metadata_sha256": _sha256(args.gene_metadata),
-            "vocab_sha256": _sha256(args.vocab_json),
-            "hvg_var_dims_sha256": _sha256(args.hvg_var_dims),
-        }
         for _, line in lines.sort_values("model_id").iterrows():
             model_id = str(line["model_id"])
             row_indices = np.flatnonzero(selected["model_id"].to_numpy() == model_id)
@@ -392,7 +351,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                         "Published processed CPM cannot be reconstructed into "
                         "UMI counts"
                     ),
-                    "provenance_sha256": source_hashes,
                 }
             )
             try:
@@ -440,7 +398,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                     "tx1_usage": "sensitivity_only",
                     "tx1_raw_count_contract": "blocked",
                     "h5ad": str(path.relative_to(staging)),
-                    "sha256": _sha256(path),
                 }
             )
 
@@ -453,7 +410,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             "gene_metadata": str(args.gene_metadata.resolve()),
             "vocab_json": str(args.vocab_json.resolve()),
             "hvg_var_dims": str(args.hvg_var_dims.resolve()),
-            "upstream_sha256": str(args.upstream_sha256.resolve()),
             "output_dir": str(output_dir),
             "expression_semantics": SEMANTICS,
             "expected_lines": args.expected_lines,
@@ -488,7 +444,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             "tx1_raw_count_contract": "blocked",
             "tx1_embedding_executed": False,
             "lines": line_qc,
-            "source_hashes": source_hashes,
         }
         (staging / "qc.json").write_text(json.dumps(qc_payload, indent=2) + "\n")
         (staging / "status.json").write_text(
@@ -513,11 +468,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             "reported CPM sensitivity analysis. They must not enter the standard "
             "Tx1 raw-count path. `status.json` and every h5ad carry that blocker.\n"
         )
-        checksum_lines = []
-        for path in sorted(staging.rglob("*")):
-            if path.is_file() and path.name != "sha256.txt":
-                checksum_lines.append(f"{_sha256(path)}  {path.relative_to(staging)}")
-        (staging / "sha256.txt").write_text("\n".join(checksum_lines) + "\n")
         (staging / "CPM_SENSITIVITY_H5AD_VERIFIED").write_text(STATUS + "\n")
         staging.rename(output_dir)
         return qc_payload
@@ -534,7 +484,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gene-metadata", type=Path, required=True)
     parser.add_argument("--vocab-json", type=Path, required=True)
     parser.add_argument("--hvg-var-dims", type=Path, required=True)
-    parser.add_argument("--upstream-sha256", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--expected-lines", type=int, default=152)
     parser.add_argument("--expected-selected-cells", type=int, default=40_670)

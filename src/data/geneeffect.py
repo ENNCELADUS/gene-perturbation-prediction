@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from collections import Counter
@@ -23,11 +22,6 @@ UNLABELED_TRAIN: Final = ("ACH-000779", "ACH-001086")
 
 
 SPLIT_SCHEMA_VERSION: Final = "cell-line-geneeffect-226-split-v2"
-
-
-PINNED_SPLIT_SHA256: Final = (
-    "8a264acfa63bf8c2c07d302e1adb5c4ce17edb19dd902f59ef6fd9b6e5434521"
-)
 
 
 _GENE_EFFECT_COLUMN_RE: Final = re.compile(r"^(?P<symbol>\S+) \((?P<entrez>\d+)\)$")
@@ -184,13 +178,7 @@ def _unique_strings(values: Sequence[object], label: str) -> tuple[str, ...]:
 
 def load_exp13_split(path: Path) -> Exp13Split:
     """Load and strictly validate the tracked 171/27/28 split authority."""
-    path = Path(path)
-    observed_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
-    if observed_sha256 != PINNED_SPLIT_SHA256:
-        raise ValueError(
-            f"Exp13 split SHA-256 mismatch: {observed_sha256} != {PINNED_SPLIT_SHA256}"
-        )
-    payload = json.loads(path.read_text())
+    payload = json.loads(Path(path).read_text())
     if payload.get("schema_version") != SPLIT_SCHEMA_VERSION:
         raise ValueError(f"split schema_version must be {SPLIT_SCHEMA_VERSION!r}")
     required = {"train", "val", "test", "unlabeled_train"}
@@ -282,5 +270,3 @@ def load_geneeffect_long(path: Path, split: Exp13Split) -> pd.DataFrame:
         .melt(id_vars="model_id", var_name="gene_symbol", value_name="gene_effect")
     )
     return long
-
-

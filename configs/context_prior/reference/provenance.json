@@ -9,48 +9,39 @@
   "files": {
     "paralogs.tsv.gz": {
       "source": "https://useast.ensembl.org/biomart/martservice",
-      "rows": 93520,
-      "sha256": "1b530c26125f60fb19983331e001d13ebb8ca7fa06638ee925f90e49da28af17"
+      "rows": 93520
     },
     "complexes.tsv": {
       "source": "https://mips.helmholtz-muenchen.de/fastapi-corum/public/file/download_current_file?file_id=human&file_format=txt",
-      "rows": 18932,
-      "sha256": "1f6e33e9a19a8bee5d1615a45088b3d8c1ba648ed192abb48cc3638042450bca"
+      "rows": 18932
     },
     "hallmark.tsv": {
       "source": "https://data.broadinstitute.org/gsea-msigdb/msigdb/release/2024.1.Hs/h.all.v2024.1.Hs.symbols.gmt",
-      "rows": 7322,
-      "sha256": "0af0d0ef59a7a3f42aa13fb3aaacb73f96fb3b4b966778c88d6ce7dbe2f12519"
+      "rows": 7322
     },
     "progeny.tsv": {
       "source": "https://omnipathdb.org/annotations?resources=PROGENy&format=tsv",
-      "rows": 1400,
-      "sha256": "92dd89c436dce6440b80d93c4db3473e1302070e5fb470ce9c914423004f28d2"
+      "rows": 1400
     },
     "drivers.tsv": {
       "source": "data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv",
-      "rows": 1904,
-      "sha256": "d6fbb8b6ca448ecd39c14281cd35765444e57b0cc10c266935db7c0f9cee06ff"
+      "rows": 1904
     },
     "msi.tsv": {
       "source": "https://ndownloader.figshare.com/files/51065726",
-      "rows": 1865,
-      "sha256": "34d0d924d40548167d6b21211e6e6a8336d5c7dcb00fe201f7de2b6c75c4a4fa"
+      "rows": 1865
     },
     "cell_cycle.tsv": {
       "source": "https://raw.githubusercontent.com/satijalab/seurat/00e55c9b54c8b12b5ae85ffafc1c18d683c73a9f/data/cc.genes.rda",
-      "rows": 97,
-      "sha256": "abf12ba8ac7477e9bfd6f0defdf9245fa40ea48233afd17ca0d6b192ad27cfc2"
+      "rows": 97
     },
     "meta_programs.tsv": {
       "source": "https://raw.githubusercontent.com/tiroshlab/3ca/21a784103528cdf15008761f9669e2025159d6d2/ITH_hallmarks/MPs_distribution/MP_list.RDS.gz",
-      "rows": 2050,
-      "sha256": "21b57bc8421b0fbe4575f07e6ef36845d3b48fee142ddc5d1063d01e4b6fe39e"
+      "rows": 2050
     },
     "meta_program_sources.tsv": {
       "source": "https://raw.githubusercontent.com/tiroshlab/3ca/21a784103528cdf15008761f9669e2025159d6d2/ITH_hallmarks/TCGA_analysis/study_contribution_per_MP.RDS",
-      "rows": 41,
-      "sha256": "340df0294341727f400d17ebc49fd88ae7329d5dbf61d5e6394135bc3e32c40b"
+      "rows": 41
     }
   },
   "line_tables_rebuilt": "2026-10-11",

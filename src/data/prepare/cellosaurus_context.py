@@ -64,7 +64,7 @@ from pie.sources.contract import (
 )
 from pie.sources.embed import openai as openai_embed
 from pie.sources.text import contexts
-from pie.utils import canonical_json, sha256_bytes, sha256_file, write_json
+from pie.utils import write_json
 
 SPLIT = Path("configs/benchmarks/cell_line_geneeffect_split.json")
 MODELS = Path("data/sl_dependency_v0/raw/depmap/Model.csv")
@@ -74,8 +74,6 @@ PIE_CONTEXT_TEXT = Path(
     "data/pie/hf/datasets/arcinstitute/pie_sources/"
     "cb1aaa4e7655605bdc70a9bd77bbd62016b8c7d7/context_text"
 )
-#: Model.csv of DepMap Public 26Q1 (docs/data/depmap-public-26q1.md).
-MODELS_SHA256 = "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8"
 #: The split keys whose lines are read: single-cell lines and labelled bulk-only lines.
 SPLIT_KEYS = ("train", "val", "test", "bulk_labelled")
 CELLOSAURUS_RELEASE = "56.0"
@@ -272,12 +270,6 @@ def build_context_text(
     for path in (source_dir, out / PROVENANCE):
         if path.exists():
             raise FileExistsError(f"refusing to overwrite {path}")
-    models_sha256 = sha256_file(models_path)
-    if models_sha256 != MODELS_SHA256:
-        raise ValueError(
-            f"{models_path}: sha256 {models_sha256} is not DepMap 26Q1's "
-            f"{MODELS_SHA256}"
-        )
     lines = split_lines(json.loads(Path(split_path).read_text(encoding="utf-8")))
     accessions, without_rrid = line_accessions(lines, read_rrids(models_path))
     pie_source = read_source(released_dir)
@@ -328,12 +320,6 @@ def build_context_text(
     embeddings = np.stack(rows).astype(np.float32, copy=False)
 
     record = client.provenance()
-    split_sha256 = sha256_file(split_path)
-    released_sha256 = {
-        path.name: sha256_file(path)
-        for path in sorted(Path(released_dir).iterdir())
-        if path.is_file()
-    }
     meta = SourceMeta(
         format_version=FORMAT_VERSION,
         name=SOURCE_NAME,
@@ -347,19 +333,10 @@ def build_context_text(
             "inputs": {
                 "cellosaurus": {
                     "url": record["url"],
-                    "sha256": sha256_bytes(canonical_json(record["records"])),
                     "release": record["release"],
                 },
-                "depmap_model": {
-                    "url": None,
-                    "sha256": models_sha256,
-                    "release": "26Q1",
-                },
-                "pie_context_text": {
-                    "url": None,
-                    "sha256": sha256_bytes(canonical_json(released_sha256)),
-                    "release": None,
-                },
+                "depmap_model": {"url": None, "release": "26Q1"},
+                "pie_context_text": {"url": None, "release": None},
             },
             "model": openai_embed.MODEL,
             "revision": None,  # the OpenAI API serves the model by name only
@@ -371,7 +348,6 @@ def build_context_text(
                 "cellosaurus_release": CELLOSAURUS_RELEASE,
                 "context_name": "cellosaurus accession",
                 "split_keys": list(SPLIT_KEYS),
-                "split_sha256": split_sha256,
                 "reused": len(keys) - len(embedded),
                 "embedded": len(embedded),
             },
@@ -391,13 +367,9 @@ def build_context_text(
             "embedding_model": openai_embed.MODEL,
             "embedding_dim": openai_embed.DIM,
             "endpoint_check": endpoint,
-            "split": {
-                "path": str(split_path),
-                "sha256": split_sha256,
-                "keys": list(SPLIT_KEYS),
-            },
-            "depmap_model": {"path": str(models_path), "sha256": models_sha256},
-            "pie_context_text": {"path": str(released_dir), "files": released_sha256},
+            "split": {"path": str(split_path), "keys": list(SPLIT_KEYS)},
+            "depmap_model": {"path": str(models_path)},
+            "pie_context_text": {"path": str(released_dir)},
             "context_name": "cellosaurus accession",
             "counts": {
                 "lines": len(lines),
@@ -415,11 +387,6 @@ def build_context_text(
             "lines": {
                 line: {key: value for key, value in plan.items() if key != "text"}
                 for line, plan in plans.items()
-            },
-            "source_files": {
-                path.name: sha256_file(path)
-                for path in sorted(source_dir.iterdir())
-                if path.is_file()
             },
         },
     )

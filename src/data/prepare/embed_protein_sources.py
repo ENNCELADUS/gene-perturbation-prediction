@@ -13,7 +13,7 @@ these steps in order, each skipped when its output exists, so rerunning resumes:
   compares the table's SHA-256 with the one PIE recorded (equal only when the UniProt
   release is PIE's).
 - ``afdb`` (any env, CPU): the AlphaFold DB v6 human-proteome archive from EBI's FTP
-  host into ``--afdb-dir`` (resumed by byte range), with its SHA-256 in ``afdb.json``.
+  host into ``--afdb-dir`` (resumed by byte range), recorded in ``afdb.json``.
 - ``esmc`` (an ``esm`` environment, ``ESM_PYTHON`` in ``hpc/run.sh``; 1 GPU): ESM C
   600M over every protein.
 - ``esm3`` (the same environment; 1 GPU): ESM3-open over sequence and structure, for the
@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import hashlib
 import io
 import json
 import logging
@@ -187,14 +186,6 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(DOWNLOAD_BLOCK), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def _atomic_json(path: Path, record: dict[str, Any]) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
@@ -255,7 +246,11 @@ def proteins(pie_sources: Path, out: Path) -> None:
         out / "proteins.json",
         {
             "created": _now(),
-            "uniprot_reviewed_human": input_record(stream_path, uniprot.STREAM_URL),
+            "uniprot_reviewed_human": {
+                key: value
+                for key, value in input_record(stream_path, uniprot.STREAM_URL).items()
+                if key != "sha256"
+            },
             "uniprot_query": uniprot.QUERY,
             "pie_esm2_inputs": meta["provenance"]["inputs"],
             "esm2_keys": len(keys),
@@ -266,7 +261,6 @@ def proteins(pie_sources: Path, out: Path) -> None:
             "proteins_sha256": ours,
             "pie_proteins_sha256": pie_sha,
             "proteins_sha256_equals_pie": ours == pie_sha,
-            "proteins_tsv_sha256": sha256_file(out / PROTEINS),
         },
     )
     log.info(
@@ -328,7 +322,6 @@ def afdb(afdb_dir: Path, out: Path) -> None:
             "version": AFDB_VERSION,
             "path": str(dest),
             "bytes": total,
-            "sha256": sha256_file(dest),
             "headers": headers,
         },
     )
@@ -519,15 +512,13 @@ def embed(pin: ModelPin, out: Path, device: str, chunk: int) -> None:
         "proteins": int(len(read_proteins(out))),
         "embedded": int(len(symbols)),
         "uniprot_reviewed_human": protein_record["uniprot_reviewed_human"],
-        "proteins_tsv_sha256": protein_record["proteins_tsv_sha256"],
         "proteins_sha256_equals_pie": protein_record["proteins_sha256_equals_pie"],
-        "npz_sha256": sha256_file(out / f"{pin.name}.npz"),
         "python": platform.python_version(),
     }
     if afdb_record is not None:
         counts = structures(out, Path(afdb_record["path"]))["status"].value_counts()
         record["structure"] = {
-            "afdb": {k: afdb_record[k] for k in ("url", "version", "sha256", "bytes")},
+            "afdb": {k: afdb_record[k] for k in ("url", "version", "bytes")},
             "member": f"AF-<accession>-F1-model_{AFDB_VERSION}.pdb.gz",
             "rule": "used only when its sequence equals the UniProt sequence; "
             "otherwise the protein has no entry",

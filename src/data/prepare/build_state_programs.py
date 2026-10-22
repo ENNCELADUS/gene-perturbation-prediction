@@ -11,7 +11,7 @@ the H20 through git. Writes under configs/context_prior/reference/
   how many studies each meta-program was derived from, and how many of them are
   cell-line studies (Kinker et al. 2020's CCLE pools and the other cell-line sets),
 
-and records each file's source, row count and sha256 in ``provenance.json``. A
+and records each file's source and row count in ``provenance.json``. A
 config chooses which programs a run reads; nothing here drops one.
 
 uv run --extra data python -m src.data.prepare.build_state_programs \
@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import gzip
-import hashlib
 import json
 import re
 import subprocess
@@ -160,11 +159,7 @@ def _read_r(payload: bytes) -> object:
 def _write(out: Path, name: str, frame: pd.DataFrame, source: str) -> dict:
     path = out / name
     frame.to_csv(path, sep="\t", index=False)
-    return {
-        "source": source,
-        "rows": len(frame),
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-    }
+    return {"source": source, "rows": len(frame)}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

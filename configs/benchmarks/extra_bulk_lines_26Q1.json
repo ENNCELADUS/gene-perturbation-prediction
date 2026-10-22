@@ -1515,16 +1515,13 @@
   },
   "sources": {
     "model": {
-      "path": "data/sl_dependency_v0/raw/depmap/Model.csv",
-      "sha256": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8"
+      "path": "data/sl_dependency_v0/raw/depmap/Model.csv"
     },
     "gene_effect": {
-      "path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
-      "sha256": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e"
+      "path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv"
     },
     "bulk": {
-      "path": "data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv",
-      "sha256": "0377be80c525fde98cbd2c6e8b06bdf2a4014a9683eb70182c1f8649d711021a"
+      "path": "data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv"
     }
   }
 }

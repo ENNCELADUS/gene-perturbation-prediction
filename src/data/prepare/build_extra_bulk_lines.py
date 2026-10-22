@@ -1,4 +1,4 @@
-"""Build configs/benchmarks/extra_bulk_lines_26Q1.json from the pinned 26Q1 files.
+"""Build configs/benchmarks/extra_bulk_lines_26Q1.json from the 26Q1 files.
 
 uv run python -m src.data.prepare.build_extra_bulk_lines \
     --model data/sl_dependency_v0/raw/depmap/Model.csv \
@@ -11,7 +11,6 @@ uv run python -m src.data.prepare.build_extra_bulk_lines \
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from collections.abc import Collection
 from pathlib import Path
@@ -60,14 +59,6 @@ def build_extra_lines(
     }
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("model", "gene-effect", "bulk", "split", "out"):
@@ -80,7 +71,7 @@ def main(argv=None) -> int:
         split=load_geneeffect_split(args.split),
     )
     payload["sources"] = {
-        name: {"path": str(path), "sha256": _sha256(path)}
+        name: {"path": str(path)}
         for name, path in (
             ("model", args.model),
             ("gene_effect", args.gene_effect),

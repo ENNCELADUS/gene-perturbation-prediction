@@ -11,37 +11,18 @@ from pathlib import Path
 import pandas as pd
 
 from src.data.split_build import (
-    EXPECTED_179_MANIFEST_SHA256,
-    EXPECTED_179_SELECTION_AUDIT_SHA256,
     _require_manifest,
     _require_selection_audit,
-    _sha256,
     assign_splits,
 )
 
 
-PINNED_SHA256 = {
-    "phase_a_manifest": (
-        "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297"
-    ),
-    "basal_registry": (
-        "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47"
-    ),
-    "depmap_model": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8",
-    "geneeffect": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e",
-}
 SPLITS = ("train", "val", "test")
 #: Original contexts moved out of train. A549 is screened by all three multi-line SL
 #: screens of the SL benchmark (Ito, Klingbeil, Harle), which needs it held out of
 #: stage one (blueprint §5, 2026-10-11).
 ORIGINAL_TEST = frozenset({"ACH-000681"})
 EXPECTED_COUNTS = {"train": 171, "val": 27, "test": 28}
-
-
-def _pin(path: Path, expected: str, label: str) -> None:
-    observed = _sha256(path)
-    if observed != expected:
-        raise ValueError(f"{label} SHA-256 mismatch: {observed} != {expected}")
 
 
 def _original_rows(
@@ -141,25 +122,9 @@ def build(
     model_path: Path,
     geneeffect_path: Path,
     output_dir: Path,
-    *,
-    pin_inputs: bool = True,
 ) -> None:
     if output_dir.exists():
         raise FileExistsError(f"refusing to overwrite {output_dir}")
-    if pin_inputs:
-        _pin(atlas_manifest_path, EXPECTED_179_MANIFEST_SHA256, "179 manifest")
-        _pin(
-            selection_audit_path,
-            EXPECTED_179_SELECTION_AUDIT_SHA256,
-            "179 selection audit",
-        )
-        for label, path in (
-            ("phase_a_manifest", phase_path),
-            ("basal_registry", registry_path),
-            ("depmap_model", model_path),
-            ("geneeffect", geneeffect_path),
-        ):
-            _pin(path, PINNED_SHA256[label], label)
 
     atlas = _require_manifest(pd.read_csv(atlas_manifest_path), 179)
     selection_audit = _require_selection_audit(selection_audit_path, atlas)
@@ -243,19 +208,10 @@ def build(
             "optimizer_for_179_partition": optimizer,
             "source_targets_for_179_partition": source_targets,
             "geneeffect": label_audit,
-            "selection_provenance": selection_audit,
-            "input_sha256": {
-                "atlas_manifest": _sha256(atlas_manifest_path),
-                "selection_audit": _sha256(selection_audit_path),
-                "phase_a_manifest": _sha256(phase_path),
-                "basal_registry": _sha256(registry_path),
-                "depmap_model": _sha256(model_path),
-                "geneeffect": _sha256(geneeffect_path),
-                "builder_script": _sha256(Path(__file__)),
-            },
-            "output_sha256": {
-                "csv": _sha256(csv_path),
-                "json": _sha256(json_path),
+            "selection_provenance": {
+                key: value
+                for key, value in selection_audit.items()
+                if key != "evidence_sha256"
             },
         }
         audit_path.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n")

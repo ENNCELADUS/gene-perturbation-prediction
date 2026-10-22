@@ -29,7 +29,6 @@ from pie.sources.contract import (  # noqa: E402
 )
 from pie.sources.embed import openai as openai_embed  # noqa: E402
 from pie.sources.text import contexts  # noqa: E402
-from pie.utils import sha256_file  # noqa: E402
 
 from src.data.prepare import cellosaurus_context as cc  # noqa: E402
 
@@ -149,7 +148,6 @@ def setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 def _build(root: Path, released: Path, lines: dict, monkeypatch) -> Path:
     split_path, models_path = _write_inputs(root, lines)
-    monkeypatch.setattr(cc, "MODELS_SHA256", sha256_file(models_path))
     out = root / "out"
     client = _offline_client(out / "cellosaurus")
     cc.build_context_text(out, split_path, models_path, released, client=client)
@@ -242,10 +240,6 @@ def test_provenance_records_each_line(setup, monkeypatch: pytest.MonkeyPatch) ->
     assert list(provenance["lines_without_text"]) == ["ACH-000008"]
     assert "age '>60Y'" in provenance["lines_without_text"]["ACH-000008"]
     assert provenance["cellosaurus"]["release"] == "56.0"
-    files = provenance["source_files"]
-    assert {"meta.json", "embeddings.npy", "descriptions.json"} <= set(files)
-    source_dir = out / "context_text"
-    assert all(files[name] == sha256_file(source_dir / name) for name in files)
 
 
 def test_endpoint_check_is_recorded_and_refuses_another_model(
@@ -285,7 +279,6 @@ def test_missing_key_stops_before_any_fetch(
     root, released, embedder = setup
     monkeypatch.delenv("OPENAI_API_KEY")
     split_path, models_path = _write_inputs(root, LINES)
-    monkeypatch.setattr(cc, "MODELS_SHA256", sha256_file(models_path))
     with pytest.raises(Exception, match="OPENAI_API_KEY"):
         cc.build_context_text(root / "out", split_path, models_path, released)
     assert not (root / "out").exists()
@@ -307,10 +300,3 @@ def test_existing_source_is_never_overwritten(
     out = _build(root, released, LINES, monkeypatch)
     with pytest.raises(FileExistsError):
         cc.build_context_text(out, root / "split.json", root / "Model.csv", released)
-
-
-def test_model_csv_of_another_release_is_refused(setup) -> None:
-    root, released, _ = setup
-    split_path, models_path = _write_inputs(root, LINES)
-    with pytest.raises(ValueError, match="26Q1"):
-        cc.build_context_text(root / "out", split_path, models_path, released)

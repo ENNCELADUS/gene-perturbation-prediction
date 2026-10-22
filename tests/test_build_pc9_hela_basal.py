@@ -72,11 +72,10 @@ def test_build_pc9_transposes_gene_by_cell_matrix(monkeypatch, tmp_path) -> None
 
     captured: dict[str, ad.AnnData] = {}
 
-    def fake_write(adata: ad.AnnData, output) -> str:
+    def fake_write(adata: ad.AnnData, output) -> None:
         captured["adata"] = adata.copy()
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"formal")
-        return "0" * 64
 
     monkeypatch.setattr(builder, "_write_verified", fake_write)
 
