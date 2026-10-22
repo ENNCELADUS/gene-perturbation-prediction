@@ -10,14 +10,14 @@ ModelID or RRID, else a Model.csv name (``StrippedCellLineName`` or
 synonym whose accession is a Model.csv RRID. Rows it cannot settle are flagged
 (``ambiguous``, ``no_match``, ``problematic``, ``derived``) for review by hand.
 
-uv run python -m src.data.prepare.build_extra_single_cell_lines propose \
+uv run python -m src.data.build.build_extra_single_cell_lines propose \
     --candidates configs/benchmarks/single_cell_atlas_candidates.csv \
     --model data/sl_dependency_v0/raw/depmap/Model.csv
 
 ``build`` (H20) writes the membership file from the reviewed map, the 26Q1 files
 and the built sources' QC reports (``<basal_raw_umi>/qc/<source>.json``).
 
-uv run python -m src.data.prepare.build_extra_single_cell_lines build \
+uv run python -m src.data.build.build_extra_single_cell_lines build \
     --candidates configs/benchmarks/single_cell_atlas_candidates.csv \
     --model data/sl_dependency_v0/raw/depmap/Model.csv \
     --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \

@@ -11,9 +11,9 @@ rows of the identity map; a name the map lacks raises. It then writes one
 source (never a line of the 226), and ``<output-dir>/qc/<source>.json`` last. A
 source whose QC report exists is skipped; no h5ad is overwritten.
 
-uv run python -m src.data.prepare.build_extra_single_cell_sources \
+uv run python -m src.data.build.build_extra_single_cell_sources \
     --spec configs/data/extra_single_cell_sources_26Q1.json --wave 1 --print-downloads
-uv run python -m src.data.prepare.build_extra_single_cell_sources \
+uv run python -m src.data.build.build_extra_single_cell_sources \
     --spec configs/data/extra_single_cell_sources_26Q1.json --wave 1 \
     --output-dir data/sl_dependency_v0/processed/basal_raw_umi
 """  # noqa: E501
@@ -44,8 +44,8 @@ from scipy.io import mmread
 
 from src.data.basal import align_columns, assert_tx1_input_contract
 from src.data.depmap import read_depmap_matrix, read_model_ids, read_models
-from src.data.prepare.build_extra_single_cell_lines import Admission, admit, read_map
-from src.data.prepare.prepare_cell_line_atlas_raw_umi import (
+from src.data.build.build_extra_single_cell_lines import Admission, admit, read_map
+from src.data.build.prepare_cell_line_atlas_raw_umi import (
     assert_raw_integer,
     load_gene_mapping,
     map_and_collapse_genes,

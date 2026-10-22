@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from src.data.prepare.recount_extra_single_cell_sources import (
+from src.data.build.recount_extra_single_cell_sources import (
     build_index,
     count,
     index_paths,

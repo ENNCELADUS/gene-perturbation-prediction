@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from src.data.extra_lines import load_extra_single_cell_lines
-from src.data.prepare.build_extra_single_cell_lines import (
+from src.data.build.build_extra_single_cell_lines import (
     MAP_COLUMNS,
     admit,
     build_membership,

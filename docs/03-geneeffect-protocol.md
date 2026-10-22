@@ -1028,11 +1028,11 @@ in code.
   in the §3 cache format.
 - **Gene sources** (`gene_sources/`). `gene_text` and `string_space` from PIE's sources; ESM C 600M and ESM3-open (sequence
   and its AlphaFold DB structure when the structure's sequence equals the UniProt one, else masked) over the reviewed
-  human UniProt sequences PIE's `esm2` uses (`src/data/prepare/embed_protein_sources.py`, an `esm` environment); Gene2vec through
+  human UniProt sequences PIE's `esm2` uses (`src/data/build/embed_protein_sources.py`, an `esm` environment); Gene2vec through
   Geneformer's symbol map as Cilantro reads it. Aligned case-insensitively to the gene axis, coverage per source
   (`src/data/gene_sources.py`).
 - **Cellosaurus text** (`context_text/`). A PIE `context_text` source keyed by ModelID
-  (`src/data/prepare/cellosaurus_context.py`, on the Mac: the H20 cannot reach Cellosaurus or OpenAI). A line whose
+  (`src/data/build/cellosaurus_context.py`, on the Mac: the H20 cannot reach Cellosaurus or OpenAI). A line whose
   Cellosaurus accession PIE released a basal context for takes PIE's vector and text byte for byte; every other line with
   an RRID is rendered by PIE's template from its Cellosaurus 56.0 record under its accession and embedded with
   `text-embedding-3-large`. Before embedding, the endpoint (OpenAI or a relay named by `OPENAI_BASE_URL`) re-embeds the
@@ -1186,7 +1186,7 @@ vocabularies Task 9 precomputes. No model is trained on GeneEffect and nothing i
 the frozen PIE's state outputs under `states/pie/` ([data card](data/cell-states.md)). `hpc/run.sh cell-states CONFIG --steps fit,project,inputs`, then
 `hpc/run.sh pie-precompute CONFIG --steps states --set ALL --shard I/N` and `--steps assemble_states --set ALL`, then
 `hpc/run.sh cell-states CONFIG --steps report` (`src/experiments/state_telemetry.py`, `src/data/cell_states.py`;
-`src/data/prepare/state_programs.py` in `.venv-states`, built by `hpc/states/setup.sh`). Every step skips what exists;
+`src/experiments/states/programs.py` in `.venv-states`, built by `hpc/states/setup.sh`). Every step skips what exists;
 `states/manifest.json` records the settings and refuses a root written under others (the projected roles may grow);
 moving `states/` aside moves the frozen PIE's state outputs with it.
 

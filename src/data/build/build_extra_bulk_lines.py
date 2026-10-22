@@ -1,6 +1,6 @@
 """Build configs/benchmarks/extra_bulk_lines_26Q1.json from the 26Q1 files.
 
-uv run python -m src.data.prepare.build_extra_bulk_lines \
+uv run python -m src.data.build.build_extra_bulk_lines \
     --model data/sl_dependency_v0/raw/depmap/Model.csv \
     --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
     --bulk data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv \

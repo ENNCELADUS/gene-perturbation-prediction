@@ -49,7 +49,7 @@ final split the rule covers every training-side line, single-cell training lines
 ## Rebuild
 
 ```bash
-uv run python -m src.data.prepare.build_extra_bulk_lines \
+uv run python -m src.data.build.build_extra_bulk_lines \
     --model data/sl_dependency_v0/raw/depmap/Model.csv \
     --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
     --bulk data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv \
@@ -65,7 +65,7 @@ duplicate ModelIDs or any overlap between labelled, unlabelled, excluded and the
 - `configs/benchmarks/extra_bulk_lines_26Q1.json`: membership, the exclusion reasons, the
   policy text and the path and SHA-256 of the three source files (Model.csv,
   CRISPRGeneEffect.csv, the protein-coding bulk TPM matrix).
-- `src/data/prepare/build_extra_bulk_lines.py`: the builder.
+- `src/data/build/build_extra_bulk_lines.py`: the builder.
 - `src/data/extra_lines.py`: the loader.
 
 ## Use

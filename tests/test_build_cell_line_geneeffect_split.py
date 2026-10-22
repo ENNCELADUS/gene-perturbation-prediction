@@ -17,7 +17,7 @@ from src.data.extra_lines import (
     load_extra_lines,
     load_extra_single_cell_lines,
 )
-from src.data.prepare.build_cell_line_geneeffect_split import build_split, main
+from src.data.build.build_cell_line_geneeffect_split import build_split, main
 from src.data.splits import FixedSplit, load_geneeffect_split
 
 SPLIT = FixedSplit(

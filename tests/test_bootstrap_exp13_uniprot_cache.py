@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.data.prepare.bootstrap_exp13_uniprot_cache import build_cache
+from src.data.build.bootstrap_exp13_uniprot_cache import build_cache
 
 
 def _alias(accession: str, primary_symbol: str) -> dict[str, str]:

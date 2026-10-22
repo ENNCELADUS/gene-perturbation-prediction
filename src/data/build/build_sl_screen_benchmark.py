@@ -6,7 +6,7 @@ blueprint §5).
 One row is one (screen, line, unordered gene pair) with the published scores, an SL
 label and the line's side of the nested split. Runs on the H20, where the tables are.
 
-uv run python -m src.data.prepare.build_sl_screen_benchmark \
+uv run python -m src.data.build.build_sl_screen_benchmark \
     --raw data/sl_screens/raw \
     --lines configs/benchmarks/sl_screen_lines.csv \
     --split configs/benchmarks/cell_line_geneeffect_226_split.json \

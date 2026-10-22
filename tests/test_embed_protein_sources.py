@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.data.prepare import embed_protein_sources as eps
+from src.data.build import embed_protein_sources as eps
 
 
 def test_windows_follow_pie_esm2():

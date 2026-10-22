@@ -2,7 +2,7 @@
 §3.5, Task 8), run in ``.venv-states`` (``hpc/states/setup.sh``: cNMF, starCAT,
 scvi-tools).
 
-``python -m src.data.prepare.state_programs --plan <ladder>/states/fit/plan.json``
+``python -m src.experiments.states.programs --plan <ladder>/states/fit/plan.json``
 (called by ``src.experiments.state_telemetry``'s ``fit`` step through
 ``STATES_PYTHON``). It exchanges files only: it reads the plan, the fit samples
 and the raw h5ads, and writes under the plan's root, per fitting seed, skipping

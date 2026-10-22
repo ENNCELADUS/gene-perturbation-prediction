@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 
 from src.data.basal import assert_tx1_input_contract
-from src.data.prepare.prepare_kinker_umi_h5ad import build
+from src.data.build.prepare_kinker_umi_h5ad import build
 
 
 def _write_matrix(path: Path, rows: list[str]) -> None:

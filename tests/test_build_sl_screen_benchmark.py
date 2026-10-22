@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from src.data.extra_lines import ExtraSingleCellLines
-from src.data.prepare.build_sl_screen_benchmark import (
+from src.data.build.build_sl_screen_benchmark import (
     finish_rows,
     geneeffect_namer,
     kebabci_labels,

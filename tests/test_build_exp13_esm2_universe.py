@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from src.data.geneeffect import Exp13Split
-from src.data.prepare.build_exp13_esm2_universe import (
+from src.data.build.build_exp13_esm2_universe import (
     build_coverage_universe,
     build_embedding_union,
     inspect_npz_coverage,

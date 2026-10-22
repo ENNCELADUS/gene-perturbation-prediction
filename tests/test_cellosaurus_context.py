@@ -30,7 +30,7 @@ from pie.sources.contract import (  # noqa: E402
 from pie.sources.embed import openai as openai_embed  # noqa: E402
 from pie.sources.text import contexts  # noqa: E402
 
-from src.data.prepare import cellosaurus_context as cc  # noqa: E402
+from src.data.build import cellosaurus_context as cc  # noqa: E402
 
 FIXTURES = (
     Path(__file__).resolve().parents[1]

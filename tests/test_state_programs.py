@@ -1,4 +1,4 @@
-"""The ``.venv-states`` fits (``src.data.prepare.state_programs``) on synthetic
+"""The ``.venv-states`` fits (``src.experiments.states.programs``) on synthetic
 lines sharing two programs and a cycle program: recurrent programs found across
 lines, cycle programs set aside, usages and scVI latents for every cell.
 
@@ -58,7 +58,7 @@ def test_programs_and_scvi_on_synthetic_lines(tmp_path):
     pytest.importorskip("cnmf")
     pytest.importorskip("starcat")
     pytest.importorskip("scvi")
-    from src.data.prepare import state_programs as sp
+    from src.experiments.states import programs as sp
 
     paths = _world(tmp_path)
     train = list(LINES[:5])
@@ -168,7 +168,7 @@ def test_programs_and_scvi_on_synthetic_lines(tmp_path):
 
 def test_program_spectra_orientation_and_alignment():
     pytest.importorskip("cnmf")
-    from src.data.prepare import state_programs as sp
+    from src.experiments.states import programs as sp
 
     panel = [f"G{i}" for i in range(6)]
     # cNMF's load_results: genes x programs, programs labelled 1..K.
@@ -198,7 +198,7 @@ def test_the_worker_pool_spawns_rather_than_forks(monkeypatch):
     on the H20; workers are spawned, and the calls still run."""
     from functools import partial
 
-    from src.data.prepare import state_programs
+    from src.experiments.states import programs as state_programs
 
     contexts = []
     real = state_programs.ProcessPoolExecutor

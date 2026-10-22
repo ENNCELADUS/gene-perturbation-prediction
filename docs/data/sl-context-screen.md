@@ -140,7 +140,7 @@ three matrices; the source omits mitochondrial genes, so mitochondrial QC is una
 ## Generated Files
 
 Build: `uv run python -m src.experiments.historical.build_sl_context_benchmark`.
-PC9/HeLa basal build: `uv run python -m src.data.prepare.build_pc9_hela_basal` on the HPC.
+PC9/HeLa basal build: `uv run python -m src.data.build.build_pc9_hela_basal` on the HPC.
 Historical unsplit v1 is archived under `archive/2026-09-05-inactive-routes/data/SL_Benchmark_Formal/derived/context_screen_v1/` with `sl_context_pairs.csv`, `context_inventory.csv`, and `manifest.json`.
 The pair table has no split/fold; `source_row_min_fdr` is aggregate-row, not per-context. Its inventory reports unique
 genes and genes with both labels; the manifest freezes source/output hashes, filtering rules,

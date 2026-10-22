@@ -60,7 +60,7 @@ scores a report config's rows into outputs/stage_one/<task>/<config stem>/
 components reader read.
 `cell-states` runs the state telemetry of a configs/stage_one/states config
 (src.experiments.state_telemetry): `fit` writes the fit samples and plan, runs
-src.data.prepare.state_programs in STATES_PYTHON (default .venv-states/bin/python,
+src.experiments.states.programs in STATES_PYTHON (default .venv-states/bin/python,
 built by hpc/states/setup.sh) for the cNMF programs and scVI, then fits the
 mixtures; `project`, `inputs` and `report` follow. `pie-precompute` on the same
 config with `--steps states --set ALL` runs the frozen PIE on the state inputs.
@@ -119,11 +119,11 @@ case "$command" in
   gene-sources)
     step=$1; shift
     case "$step" in
-      proteins) exec "$repo_root/.venv-pie/bin/python" -m src.data.prepare.embed_protein_sources --steps proteins "$@" ;;
-      afdb) exec "$esm_python" -m src.data.prepare.embed_protein_sources --steps afdb "$@" ;;
+      proteins) exec "$repo_root/.venv-pie/bin/python" -m src.data.build.embed_protein_sources --steps proteins "$@" ;;
+      afdb) exec "$esm_python" -m src.data.build.embed_protein_sources --steps afdb "$@" ;;
       esm)
         export HF_HOME="$esm_hf_home" HF_HUB_OFFLINE=1
-        exec "$esm_python" -m src.data.prepare.embed_protein_sources --steps esmc,esm3 "$@" ;;
+        exec "$esm_python" -m src.data.build.embed_protein_sources --steps esmc,esm3 "$@" ;;
       align) exec "$python_bin" -m src.data.gene_sources "$@" ;;
       *) usage >&2; exit 2 ;;
     esac ;;

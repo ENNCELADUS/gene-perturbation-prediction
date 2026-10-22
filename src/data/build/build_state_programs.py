@@ -14,7 +14,7 @@ the H20 through git. Writes under configs/context_prior/reference/
 and records each file's source and row count in ``provenance.json``. A
 config chooses which programs a run reads; nothing here drops one.
 
-uv run --extra data python -m src.data.prepare.build_state_programs \
+uv run --extra data python -m src.data.build.build_state_programs \
     --out configs/context_prior/reference
 """  # noqa: E501
 

@@ -5,7 +5,7 @@ under configs/context_prior/reference/ and reach it through git. Line tables hol
 training-side lines only: validation and test lines and every line sharing their
 patients never enter one.
 
-uv run python -m src.data.prepare.build_context_reference \
+uv run python -m src.data.build.build_context_reference \
     --split configs/benchmarks/cell_line_geneeffect_226_split.json \
     --extra-lines configs/benchmarks/extra_bulk_lines_26Q1.json \
     --hotspot data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv \

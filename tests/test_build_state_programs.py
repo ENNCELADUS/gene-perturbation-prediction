@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.data.prepare.build_state_programs import (
+from src.data.build.build_state_programs import (
     cell_cycle_table,
     is_cell_line_study,
     meta_program_table,

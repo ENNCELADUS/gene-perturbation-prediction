@@ -1,4 +1,4 @@
-"""Offline unit tests for src/data/prepare/precompute_esm2_embeddings.py.
+"""Offline unit tests for src/data/build/precompute_esm2_embeddings.py.
 
 Tests cover:
   - FIX 1: corrupt JSON cache recovery in load_or_fetch_sequences
@@ -51,7 +51,7 @@ def _import_module() -> types.ModuleType:
 
     # Force reload so the module picks up stubs if first import in this process.
     spec_path = (
-        Path(__file__).parent.parent / "src/data/prepare/precompute_esm2_embeddings.py"
+        Path(__file__).parent.parent / "src/data/build/precompute_esm2_embeddings.py"
     )
     spec = importlib.util.spec_from_file_location(
         "precompute_esm2_embeddings", spec_path

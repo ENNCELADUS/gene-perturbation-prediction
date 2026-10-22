@@ -287,7 +287,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
 
     from src.data.expression import median_library_size
     from src.data.geneeffect import load_geneeffect_long
-    from src.data.prepare.build_exp13_esm2_universe import (
+    from src.data.build.build_exp13_esm2_universe import (
         build_coverage_universe,
         restrict_coverage_universe_to_copy_prior,
         write_embedding_union,
