@@ -1,6 +1,5 @@
-"""Pure-logic tests of the Cilantro harness's fast paths (hpc/cilantro/fast_core.py):
-the sliced training loader reproduces the released per-item DataLoader's batches and
-RNG consumption, and the line selection and deletion match the released rules."""
+"""The Cilantro harness's fast paths (hpc/cilantro/fast_core.py) reproduce the released
+loader's batches and RNG use, and its line selection and deletion rules."""
 
 from __future__ import annotations
 

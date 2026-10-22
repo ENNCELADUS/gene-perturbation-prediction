@@ -6,35 +6,18 @@ import os
 
 import pytest
 
-# MPS fallback guard for torch tests. Some losses use
-# torch.cdist, whose backward is unimplemented on the MPS backend; the energy
-# distance therefore needs the CPU fallback. This env var must be set before
-# torch initializes the MPS backend, so it lives here in conftest (imported
-# before any test module) rather than inside an individual test file.
+# Set before torch initialises: cdist's backward (the energy distance) has no MPS
+# kernel.
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
-
-# macOS OpenMP thread-pool guard. scipy and torch each bundle their own libomp;
-# converting a scipy sparse matrix and then building a torch sparse tensor in the
-# same process (exp10 ddgcn graph utils) segfaults under the default multi-thread
-# OpenMP pool. Pinning a single OpenMP thread before torch initializes avoids the
-# crash. setdefault so an explicit caller value still wins.
+# scipy and torch bundle their own libomp; one OpenMP thread keeps them from
+# segfaulting together on macOS.
 os.environ.setdefault("OMP_NUM_THREADS", "1")
-
-# macOS OpenMP load-order guard. xgboost and torch each bundle their own libomp;
-# loading torch's runtime first and then fitting xgboost segfaults the process.
-# conftest is imported before any test module, so importing xgboost here pins the
-# safe (xgboost-then-torch) load order for the whole suite. Guarded so the suite
-# still collects if xgboost is absent.
-try:  # noqa: SIM105
-    import xgboost  # noqa: F401
-except ImportError:
-    pass
 
 
 @pytest.fixture
 def cpu(monkeypatch):
     """Keep Accelerate off a visible MPS device, on one torch thread."""
-    import torch  # after xgboost, above
+    import torch
 
     monkeypatch.setenv("ACCELERATE_USE_CPU", "true")
     torch.set_num_threads(1)

@@ -77,7 +77,7 @@ def tiny_config(tmp_path: Path) -> dict:
 
 
 def synthetic_base(config) -> prior_base.RunBase:
-    """The bridging test's lines; labels follow expression with noise."""
+    """Lines whose labels follow expression with noise."""
     bridge = base()
     extras = [m for m in bridge.bulk.index if m not in set(bridge.paired)]
     expression = pd.concat([bridge.pseudobulk, bridge.bulk.loc[extras]])
