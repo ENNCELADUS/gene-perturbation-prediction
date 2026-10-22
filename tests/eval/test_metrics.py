@@ -9,11 +9,14 @@ import time
 import numpy as np
 import pandas as pd
 import pytest
-
 from src.eval.accuracy import aggregate_geneeffect
 from src.eval.metrics import (
+    average_precision,
     paired_line_bootstrap,
     per_gene_spearman,
+    row_correlations,
+    unit_pearson,
+    unit_spearman,
 )
 
 
@@ -314,3 +317,35 @@ def test_paired_line_bootstrap_is_fast_at_production_size() -> None:
     elapsed = time.perf_counter() - start
     assert result["difference"] > 0 and result["interval"][0] > 0
     assert elapsed < 30, elapsed
+
+
+def test_row_correlations_match_the_per_unit_definitions() -> None:
+    rng = np.random.default_rng(3)
+    truth = np.round(rng.normal(size=(400, 9)), 1)  # rounding makes ties
+    pred = np.round(truth + rng.normal(size=(400, 9)), 1)
+    truth[rng.random(truth.shape) < 0.2] = np.nan
+    pred[rng.random(pred.shape) < 0.1] = np.inf
+    truth[:20] = 0.5  # constant truth
+    pred[20:40, 2:] = np.nan  # too few pairs
+    count, pearson, spearman = row_correlations(truth, pred)
+    for i in range(len(truth)):
+        assert count[i] == (np.isfinite(truth[i]) & np.isfinite(pred[i])).sum()
+        for got, want in ((pearson[i], unit_pearson), (spearman[i], unit_spearman)):
+            expected = want(truth[i], pred[i])
+            assert (math.isnan(got) and math.isnan(expected)) or got == pytest.approx(
+                expected, abs=1e-12
+            )
+
+
+def test_average_precision_matches_sklearn_with_ties() -> None:
+    from sklearn.metrics import average_precision_score
+
+    rng = np.random.default_rng(4)
+    for _ in range(200):
+        positive = rng.random(12) < 0.4
+        if positive.all() or not positive.any():
+            continue
+        score = np.round(rng.normal(size=12), 0)  # heavy ties
+        assert average_precision(positive, score) == pytest.approx(
+            average_precision_score(positive, score), abs=1e-12
+        )
