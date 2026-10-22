@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pandas as pd
 
 from src.baselines.residual import run_r1_ladder
 from src.data.splits import load_geneeffect_split
+from src.experiments.run_dir import REPO_ROOT
 
-
-ROOT = Path(__file__).resolve().parents[1]
-CSV = ROOT / "configs/benchmarks/cell_line_geneeffect_226_split.csv"
-SPLIT = ROOT / "configs/benchmarks/cell_line_geneeffect_226_split.json"
-AUDIT = ROOT / "configs/benchmarks/cell_line_geneeffect_226_split_audit.json"
+CSV = REPO_ROOT / "configs/benchmarks/cell_line_geneeffect_226_split.csv"
+SPLIT = REPO_ROOT / "configs/benchmarks/cell_line_geneeffect_226_split.json"
+AUDIT = REPO_ROOT / "configs/benchmarks/cell_line_geneeffect_226_split_audit.json"
 
 
 def test_single_split_keeps_original_contexts_in_train_except_a549() -> None:

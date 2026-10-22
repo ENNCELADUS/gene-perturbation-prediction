@@ -12,11 +12,11 @@ from __future__ import annotations
 import copy
 import json
 import os
-from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 import torch
@@ -25,10 +25,11 @@ import yaml
 pytest.importorskip("accelerate")
 pytest.importorskip("state.tx.models.state_transition")
 
-from tests.fixtures import prepare as prepare_world  # noqa: E402
 from src.experiments.joint import all as pipeline  # noqa: E402
 from src.experiments.joint import pipeline as joint_pipeline
+from src.experiments.run_dir import REPO_ROOT  # noqa: E402
 from src.model.state import build_state  # noqa: E402
+from tests.fixtures import prepare as prepare_world  # noqa: E402
 
 VOCABULARY = ("GA", "GC", "non-targeting")
 
@@ -475,9 +476,7 @@ child = pipeline.Job("sleeper", ("sh", "-c", "sleep 60 & echo $$ > {group_file};
 with pipeline.sigterm_raises():
     pipeline.run_pool([child], [("0",)], Path({str(tmp_path)!r}))
 """
-    runner = subprocess.Popen(
-        [sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1]
-    )
+    runner = subprocess.Popen([sys.executable, "-c", script], cwd=REPO_ROOT)
     deadline = time.monotonic() + 30
     while not group_file.is_file() or not group_file.read_text().strip():
         assert runner.poll() is None and time.monotonic() < deadline

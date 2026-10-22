@@ -6,16 +6,17 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 from torch.utils.data import DataLoader, Dataset
 
+from src.experiments.run_dir import REPO_ROOT
+
 spec = importlib.util.spec_from_file_location(
     "fast_core",
-    Path(__file__).resolve().parents[1] / "hpc" / "cilantro" / "fast_core.py",
+    REPO_ROOT / "hpc" / "cilantro" / "fast_core.py",
 )
 fast_core = importlib.util.module_from_spec(spec)
 sys.modules["fast_core"] = fast_core
