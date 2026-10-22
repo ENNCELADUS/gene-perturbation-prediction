@@ -1,10 +1,4 @@
-"""Six-arm response-model comparison on a synthetic four-anchor world.
-
-The world has 4 anchors (one of them HCT116), 12 response genes, 8 control cells
-per anchor, 6 expression genes, 5-wide Tx1 cells and 4-wide ESM2 vectors. STATE
-is the small STATE-shaped ``LinearMockStateModel`` below; the released one-hot
-vocabulary is a tiny ``pert_onehot_map.pt`` covering 9 of the 12 genes.
-"""
+"""Six-arm response-model comparison on a synthetic four-anchor world."""
 
 from __future__ import annotations
 
@@ -23,11 +17,7 @@ from src.experiments.joint import response_arms as arms
 
 
 class LinearMockStateModel(nn.Module):
-    """Small STATE-shaped model for tests without arc-state or a checkpoint.
-
-    It reads the same batch keys as STATE (``ctrl_cell_emb``, ``pert_emb``) and
-    returns one output row per input cell.
-    """
+    """STATE's batch keys (``ctrl_cell_emb``, ``pert_emb``) in, one row per cell out."""
 
     def __init__(
         self, input_dim: int, output_dim: int, pert_dim: int, cell_set_len: int = 64

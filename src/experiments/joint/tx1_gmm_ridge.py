@@ -10,8 +10,6 @@ def evaluate_model(model, inputs, *, split):
 
     from src.eval.accuracy import EvalResult, aggregate_geneeffect
 
-    if split not in {"train", "val", "test"}:
-        raise ValueError("split must be train, val or test")
     model_ids = (
         inputs.split.supervised_train
         if split == "train"
@@ -81,7 +79,7 @@ def fit_baseline(config_path: Path, out_dir: Path) -> Path:
     import sklearn
 
     from src.baselines.tx1_gmm import Tx1GMMRidge
-    from src.data.io import write_json as write_json
+    from src.data.io import write_json
     from src.data.prepared import load_inputs
     from src.experiments.joint.config import load_config
     from src.experiments.run_dir import git_revision, set_status
@@ -143,8 +141,6 @@ def evaluate_checkpoint(path: Path, *, split):
 
     from src.data.prepared import load_inputs
 
-    if split not in {"train", "val", "test"}:
-        raise ValueError("split must be train, val or test")
     path = Path(path)
     bundle = joblib.load(path)
     if (

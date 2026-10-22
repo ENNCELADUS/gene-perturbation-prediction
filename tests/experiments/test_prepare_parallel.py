@@ -1,12 +1,4 @@
-"""Parallel, memory-bounded preparation writes exactly what serial preparation wrote.
-
-The world is ``test_prepare.build_world`` with richer response anchors: several
-read chunks, rows interleaved across perturbations, case and whitespace label
-variants, duplicate gene symbols, an anchor with a dense matrix, an anchor
-missing a STATE HVG, and an X-Atlas-Orion anchor spread over several parquet
-shards with control, guide-QC-failing, zero-valued, duplicate and unknown-token
-entries.
-"""
+"""Parallel, memory-bounded preparation writes exactly what serial preparation wrote."""
 
 from __future__ import annotations
 
@@ -123,11 +115,9 @@ def assert_identical(actual: dict[str, object], expected: dict[str, object]) -> 
             assert actual[key] == value, key
 
 
-# --- a straightforward single-process reference ---------------------------------
-#
-# Whole sources in memory, one cell at a time, as preparation computed targets
-# before reading became chunked and parallel. Counts are integers, so every
-# library size and HVG sum is exact whatever the summation order.
+# The single-process reference: whole sources in memory, one cell at a time.
+# Counts are integers, so every library size and HVG sum is exact whatever the
+# summation order.
 
 
 def naive_h5ad_cells(source: dict, hvg: tuple[str, ...], caps: dict, seed: int):
@@ -184,9 +174,6 @@ def naive_response_targets(config: dict) -> tuple[float, list, list[np.ndarray]]
             keys.append((anchor, str(gene)))
             bags.append(log_normalize(aligned[rows], sizes[rows], target_sum))
     return target_sum, keys, bags
-
-
-# --- the tests ----------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")

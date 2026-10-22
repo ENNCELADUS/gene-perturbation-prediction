@@ -12,20 +12,10 @@ from src.data.io import write_json
 from src.experiments.joint.config import mixed_precision
 
 if TYPE_CHECKING:
-    from src.data.prepared import PreparedInputs
     from src.eval.accuracy import EvalResult
 
 
-def evaluate_checkpoint(
-    checkpoint: Path,
-    *,
-    split: str,
-    inputs: PreparedInputs | None = None,
-) -> EvalResult:
-    """Score a checkpoint on one split with its saved preprocessing; never fits.
-
-    ``inputs`` replaces ``load_inputs`` for synthetic tests.
-    """
+def evaluate_checkpoint(checkpoint: Path, *, split: str) -> EvalResult:
     from accelerate import Accelerator
 
     from src.eval.accuracy import evaluate_model
@@ -33,12 +23,11 @@ def evaluate_checkpoint(
 
     saved = load_checkpoint(Path(checkpoint))
     config = saved["config"]
-    if inputs is None:
-        from src.data.prepared import load_inputs
+    from src.data.prepared import load_inputs
 
-        inputs = load_inputs(
-            config, preprocessing=saved["preprocessing"], include_test=split == "test"
-        )
+    inputs = load_inputs(
+        config, preprocessing=saved["preprocessing"], include_test=split == "test"
+    )
     # The same precision as training-time validation, so the numbers agree.
     accelerator = Accelerator(mixed_precision=mixed_precision())
     if accelerator.num_processes > 1:
@@ -52,7 +41,6 @@ def evaluate_checkpoint(
 
 
 def export_evaluation(result: EvalResult, out_dir: Path) -> None:
-    """Write predictions.parquet, metrics.json, per_line.csv and per_gene.csv."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     result.predictions.to_parquet(out_dir / "predictions.parquet", index=False)

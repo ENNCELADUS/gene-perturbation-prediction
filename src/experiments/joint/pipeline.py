@@ -29,15 +29,9 @@ BASELINE_NAMES = {
         "Linear context prior + Tx1 context-PCA ridge"
     ),
 }
-
-
 # Controls that exist only when the config names a prior export (paths.prior).
 PRIOR_CONTROLS = ("context_prior", "context_prior+context_pca_ridge[tx1]")
-
-
 POLL_SECONDS = 10.0
-
-
 STOP_SECONDS = 30.0
 
 
@@ -62,10 +56,7 @@ def visible_gpus() -> tuple[str, ...]:
 def choose_gpus(
     requested: Sequence[str] | None, visible: tuple[str, ...]
 ) -> tuple[str, ...]:
-    """Every visible GPU, or the requested ones after checking they are visible.
-
-    GPU ids are the ones ``CUDA_VISIBLE_DEVICES`` lists, or 0..n-1 without it.
-    """
+    """Every visible GPU, or the requested ones after checking they are visible."""
     if requested is None:
         return visible
     chosen = tuple(requested)

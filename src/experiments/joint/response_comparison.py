@@ -1,27 +1,8 @@
 """Six-arm response-model comparison in STATE's log expression space.
 
-Leave-one-anchor-out over the four response anchors: each fold trains on every
-condition of three anchors and scores every condition of the fourth. The arms
-answer two questions: what the STATE transformer adds over a plain MLP on the
-same log HVG cells, and what Tx1 adds as the MLP's cell representation.
-
-- no-change: the anchor's basal control bag is the prediction;
-- global mean effect: the source anchors' mean shift added to every basal cell,
-  gene-blind;
-- released STATE checkpoint, untrained, driven by its own one-hot perturbation
-  vocabulary; conditions whose gene is outside the vocabulary are skipped and
-  counted;
-- STATE as in the joint model: released STATE plus a new ESM2 adapter, trained;
-- MLP on log HVG cells and MLP on Tx1 cell embeddings, both zero-initialised so
-  they start exactly at no-change, trained.
-
-Every arm x fold result is written to ``folds/<arm>__<anchor>.json`` and is not
-recomputed on rerun; ``verdicts.json`` is written last and marks the run done.
-
-The work splits into independent jobs: the untrained arms (with ``sanity.json``),
-one job per trained arm and held-out anchor, and the summary. A trained job
-starts from a fixed seed and reads the no-change losses from the untrained fold
-files, so jobs may run in any order, in one process or on separate GPUs.
+Leave-one-anchor-out over the four response anchors, as independent jobs (the
+untrained arms, one per trained arm and held-out anchor, the summary) that each
+write ``folds/<arm>__<anchor>.json`` once; ``verdicts.json`` is written last.
 """
 
 from __future__ import annotations
@@ -456,13 +437,8 @@ def run_comparison(
     inputs: Any = None,
     state_factory: Callable[[], nn.Module] | None = None,
 ) -> pd.DataFrame:
-    """Run (or resume) the whole comparison in this process; the arm x fold table.
-
-    The untrained arms, every pending trained job and the summary, in that
-    order. ``state_factory`` returns a fresh released STATE model on each call;
-    by default it loads ``paths.state_checkpoint``. Returns the existing table
-    without recomputing when ``verdicts.json`` exists.
-    """
+    """Run (or resume) the whole comparison in this process; the arm x fold table,
+    read back without recomputing when ``verdicts.json`` exists."""
     out_dir = Path(out_dir)
     if (out_dir / "verdicts.json").is_file():
         return pd.read_csv(out_dir / "comparison.csv")

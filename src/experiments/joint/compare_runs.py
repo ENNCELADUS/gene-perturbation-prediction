@@ -1,9 +1,6 @@
 """Paired line bootstrap of selective Spearman between two runs of one split.
 
-``python -m src.experiments.joint.compare_runs RUN_A RUN_B --split val`` reads
-``evaluation/<split>/predictions.parquet`` of two revision run directories and prints
-A minus B with its 95% interval (1,000 resamples, seed 0) over the selective genes
-of A's ``best.pt``. It reports; the reader decides.
+Prints A minus B with its 95% interval over the selective genes of A's ``best.pt``.
 """
 
 from __future__ import annotations

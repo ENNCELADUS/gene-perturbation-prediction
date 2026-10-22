@@ -63,7 +63,6 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def load_config(path: Path) -> dict[str, Any]:
-    """Load and validate a YAML config; relative paths resolve from the repo root."""
     return validate_config(read_yaml(path))
 
 

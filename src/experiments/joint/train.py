@@ -25,13 +25,9 @@ def run_training(
     *,
     inputs: PreparedInputs | None = None,
 ) -> Path:
-    """Train into ``run_dir`` and return its ``best.pt``.
-
-    Resumes from ``run_dir/last.pt`` when present (the saved config must equal
-    ``config``); returns at once when ``done.json`` exists. Works as one CPU
-    process or under ``accelerate launch``. ``inputs`` replaces ``load_inputs``
-    for synthetic tests.
-    """
+    """Return ``run_dir/best.pt``. Resumes from ``last.pt`` (its saved config must
+    equal ``config``); returns at once when ``done.json`` exists. ``inputs``
+    replaces ``load_inputs`` for synthetic tests."""
     import numpy as np
     import torch
     import yaml

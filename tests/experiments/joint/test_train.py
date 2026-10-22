@@ -1,9 +1,4 @@
-"""Joint GeneEffect model: STATE on its own HVG basal path, training and evaluation.
-
-Every test builds ``PreparedInputs`` directly (2000 HVGs, 8-wide Tx1 cells, 4-wide
-ESM2 vectors) and a tiny released-STATE checkpoint from the installed arc-state
-class, so nothing reads raw data, Tx1 weights or the real prepared root.
-"""
+"""Joint GeneEffect model: STATE on its own HVG basal path, training and evaluation."""
 
 from __future__ import annotations
 
