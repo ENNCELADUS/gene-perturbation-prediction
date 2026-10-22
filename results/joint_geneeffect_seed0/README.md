@@ -2,9 +2,7 @@
 
 Verified 2026-09-07 on apg3op6hp3v99-0, checkout `/2023533015/VCC_Project`, revision `a0af4999b73ba6539af58b415291fbac9ea6d90e`.
 
-Run: `joint_seed0_20260906T174818Z_b1024`. Test uses validation-selected best.pt, epoch 3 (stored index 2), step 13250. Training was not resumed. Test evaluation is completed, both worker PIDs exited, both GPUs released. All six baseline variants exported predictions, metrics and detailed per-line/per-gene tables.
-
-Checkpoint SHA256: `37405454717cb12164497542623722cd31e9dc793ebbfef3d79a3ef868e63c59`.
+Run: `joint_seed0_20260906T174818Z_b1024`. Test uses validation-selected best.pt, epoch 3 (stored index 2), step 13250. Training was not resumed. All six baseline variants exported predictions, metrics and detailed per-line/per-gene tables.
 
 All methods have exactly the same 478501 observed (ModelID, gene_symbol) keys across 27 test cell lines; 1748 missing labels out of 480249 possible pairs remain excluded. Target values agree within 1.72e-7 (float precision). Residual correlations use the same 4447 train-defined variable genes. Baseline transforms and fits use supervised train only. Seed 0 only; no cross-seed variance or significance claim.
 
@@ -21,13 +19,11 @@ All methods have exactly the same 478501 observed (ModelID, gene_symbol) keys ac
 ## Interpretation
 
 1. Joint Huber loss improves over gene mean by only 0.0773%; absolute Spearman is slightly lower. The high absolute Pearson is already present in the context-blind prior.
-2. Joint residual Pearson/Spearman (0.05414/0.05280) are below Tx1 PCA-ridge (0.12161/0.11574), and below the other contextual baselines in this run. This does not establish useful context-modeling superiority.
-3. Gene-mean and copy-prior have undefined residual correlations because their per-gene predictions are constant across contexts; these are not zeros. Baseline bootstrap warnings about nonfinite values are consistent with these undefined metrics; all expected exports are present.
+2. Joint residual Pearson/Spearman are below Tx1 PCA-ridge and below the other contextual baselines in this run. This does not establish useful context-modeling superiority.
+3. Gene-mean and copy-prior have undefined residual correlations because their per-gene predictions are constant across contexts; these are not zeros.
 4. Response MSE/energy/total are 85.58490/370.35131/455.93621 over 3285 held-out conditions from four training anchors. These reuse the response holdout and do not represent responses measured on the 27 GeneEffect test lines.
 
-## Next experiments
-
-Use validation for further model decisions: compare matched-batch response_weight=0 versus 1, and inspect residual prediction variance/calibration. Treat this test set as observed; do not use repeated test comparisons to select the next model. These are GeneEffect results, not SL interaction evidence; Tx1 pretraining exposure limits remain.
+These are GeneEffect results, not SL interaction evidence; Tx1 pretraining exposure limits remain.
 
 ## Artifacts
 

@@ -2,9 +2,8 @@
 
 Runs of 2026-10-07 and 2026-10-08 on the H20 container on port 30838 (worktree `/2023533015/VCC_Project_correction`,
 branch `feat/single-cell-correction`), following
-[protocol §12](../../docs/03-geneeffect-protocol.md#12-single-cell-correction). The correction stacks the nested head of
-protocol §4 on the default linear context prior: prediction = the prior's offset + the head, and the head starts at zero,
-so the stack starts at the prior and validation before the first update (epoch −1) is a `best.pt` candidate. Records:
+[protocol §12](../../docs/03-geneeffect-protocol.md#12-single-cell-correction): the head starts at zero on the default
+linear context prior, so the model before the first update (epoch −1, the prior alone) is a `best.pt` candidate. Records:
 the [prior export](prior_export.json) and the `summary.md` of every run (`summary_<run>.md`); checkpoints, predictions
 and `revision.json` stay in `outputs/geneeffect_correction/<run id>/` on the host. Nothing here is synthetic-lethality
 evidence.
@@ -13,8 +12,7 @@ evidence.
 then standardised MSE with frozen and with trainable STATE) `best.pt` is the model before its first update, so every
 stack scores exactly the prior: selective Spearman 0.2290 validation / 0.2338 test. Every trained epoch of every run
 scores lower on validation while the training lines' score rises. The linear version of the correction, the Tx1
-context-PCA ridge fitted on what the prior leaves, lowers the prior too (0.1826 / 0.1823). Per the plan, nothing else
-launches until the research plan has been discussed.
+context-PCA ridge fitted on what the prior leaves, lowers the prior too (0.1826 / 0.1823).
 
 ## The prior export
 
@@ -30,9 +28,8 @@ validation and 27 test lines from the full fit, in residual-SD units.
 | Test | 0.2338 | 0.1910 | 0.2286 | 0.1139 |
 
 Validation and test reproduce the default prior's row of the
-[follow-ups](../default_prior_followups_seed0/README.md) (0.2290 / 0.2338). The out-of-fold training score is close to
-validation, so the training offsets carry the error a query line will have. Every run below accepted the export
-(gene order, residual SD and lines checked when the inputs open).
+[follow-ups](../default_prior_followups_seed0/README.md). The out-of-fold training score is close to validation, so
+the training offsets carry the error a query line will have.
 
 ## Objective screen, STATE absent
 
@@ -77,16 +74,9 @@ Paired line bootstrap of selective Spearman (1,000 resamples, seed 0):
 | Linear context prior | 0.0000 [0.0000, 0.0000] | 0.0000 [0.0000, 0.0000] |
 | Linear context prior + Tx1 context-PCA ridge | +0.0464 [0.0220, 0.0684] | +0.0514 [0.0264, 0.0730] |
 
-The linear special case of the correction, the Tx1 ridge fitted on what the prior leaves, also lowers the prior:
-−0.046 on validation and −0.051 on test, both intervals clear of zero, with an SD ratio of 0.29 against the prior's
-0.12. The per-lineage table is [below](#per-lineage).
-
-**Choice.** The reading rule (protocol §9.3) takes the highest validation selective Spearman at `best.pt`; all four
-tie exactly (`compare_runs` gives 0.0000 [0.0000, 0.0000] for standardised MSE minus each other objective), and the
-plan breaks a tie between the single-term losses by the higher point estimate, which is also tied. The trained epochs
-are the only thing that separates them: standardised MSE has the highest trained-epoch validation score (0.2116 at
-epoch 0, against 0.2096 for dependency classification, 0.2046 for Huber and 0.1923 for line ranking), so the STATE
-runs use standardised MSE.
+**Choice** (protocol §9.3). All four tie exactly at `best.pt` (`compare_runs` gives 0.0000 [0.0000, 0.0000] for
+standardised MSE minus each other objective); only the trained epochs separate them, and standardised MSE has the
+highest trained-epoch validation score (epoch 0), so the STATE runs use standardised MSE.
 
 ## STATE, with standardised MSE
 

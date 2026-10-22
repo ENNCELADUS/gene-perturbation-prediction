@@ -6,16 +6,11 @@ what its number is. The findings are in the [README](README.md).
 
 ## Terms
 
-- **The prior.** The default linear context prior (GeneEffect protocol §10, `configs/context_prior/default_prior.yaml`).
-  It predicts each line's GeneEffect residual (GeneEffect minus the gene's training mean) from one expression profile
-  per line. The profile is bulk RNA for bulk-only lines, and for single-cell lines (every validation and test line)
-  their pseudo-bulk (all basal cells summed, CPM, log1p) mapped onto the bulk scale by a per-gene affine bridge.
-  Two ridge stages: 128 expression components (penalty 1), then per gene its 50 data-selected genes (penalty 10).
-  It is fitted on 947 labelled lines. The **export** is its out-of-fold prediction of every training line (five
-  patient-grouped folds).
-- **Selective Spearman.** Per selective gene (4,323 genes with a dependent tail among the 377 labelled training
-  lines), the Spearman across the scored lines between predicted and measured GeneEffect; then the mean over genes.
-  Validation has 27 lines, test 28. The prior scores 0.2045 / 0.2025.
+- **The prior.** The default linear context prior (GeneEffect protocol §10, `configs/context_prior/default_prior.yaml`):
+  128 expression components (penalty 1), then per gene its 50 data-selected genes (penalty 10), fitted on 947
+  labelled lines. The **export** is its out-of-fold prediction of every training line (five patient-grouped folds).
+- **Selective Spearman** (protocol §6, as are the other metrics) over the 4,323 selective genes of the 377 labelled training lines. Validation
+  has 27 lines, test 28. The prior scores 0.2045 / 0.2025.
 - **Gain `x [lo, hi]`.** A row's selective Spearman minus a reference's on the same lines. The bracket is a 95% paired
   line bootstrap (1,000 resamples of the lines, the same draw for both).
 - **Median `[Q25, Q75]`.** For agreements and reliabilities, the bracket is the quartiles over genes, not an interval.
@@ -84,8 +79,7 @@ Columns: `Null mean` and `Null 95%` are the mean and 95th percentile of η² ove
 shuffles reaching the observed value (0.001 is the smallest possible).
 
 Reading (an inference, not a test): the label alone, which no deposit touched, shows about the same excess over its
-null (0.0045) as the error (0.0050). So the error's grouping by deposit is about what the choice of lines in each
-deposit already produces in the label, which leaves little room for a batch effect on top.
+null (0.0045) as the error (0.0050).
 
 **Per-deposit table.** Per deposit, the mean squared error over its lines and the selective genes, divided by that of
 all lines (1.0 = average).
@@ -159,13 +153,10 @@ penalty 10. Gains are against the first row.
 
 Other columns:
 
-- **AUPR lift.** Per selective gene with both dependent and non-dependent lines in the split, the average precision of
-  ranking lines by predicted GeneEffect for the dependent ones (GeneEffect below −0.5), minus their share; then the
-  mean. The reference scores 0.1963 / 0.1827.
-- **Residual Pearson.** Per variable gene, the Pearson across lines between predicted and measured residual; then the
-  mean. The reference scores 0.2220 / 0.2221.
-- **Oracle.** The same fit queried with validation lines' bulk RNA instead of their cells. It is not a model; it shows
-  what the bridge costs. The reference scores 0.2216, and every encoding scores lower (0.2190, 0.2111, 0.2149).
+- **AUPR lift** (dependent: GeneEffect below −0.5). The reference scores 0.1963 / 0.1827.
+- **Residual Pearson** over the variable genes. The reference scores 0.2220 / 0.2221.
+- **Oracle.** The same fit queried with validation lines' bulk RNA instead of their cells; not a model. The reference
+  scores 0.2216, and every encoding scores lower (0.2190, 0.2111, 0.2149).
 
 **Bridge diagnostics.** Per gene, the Pearson across the 343 paired lines between bridged pseudo-bulk (out of fold)
 and bulk, as median and quartiles. Then counts of genes at or above 0.3 / 0.5 / 0.7, among all 8,737 space genes,
@@ -178,5 +169,4 @@ the 2,928 selective genes in the space and their 2,394 paralogs. `Gene space` `a
 | Rank value, top 2,048 | 0.302 | 4,391 / 1,572 / 222 |
 | Expression, top 2,048 | 0.252 | 3,460 / 1,001 / 215 |
 
-Ranking every gene raises the median agreement slightly but loses the most faithful genes (654 against 1,062 at 0.7).
-Truncating to 2,048 genes lowers agreement for most genes.
+Ranking every gene raises the median agreement slightly but loses the most faithful genes. Truncating to 2,048 genes lowers agreement for most genes.

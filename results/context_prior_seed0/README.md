@@ -2,11 +2,10 @@
 
 Run 2026-10-04 on the H20 container on port 30838 (worktree `/2023533015/VCC_Project_context_prior`, branch
 `feat/context-prior` at `4334eae`), CPU only. Design: [spec](../../docs/specs/2026-10-04-context-generalization-design.md);
-protocol §10 of the [GeneEffect protocol](../../docs/03-geneeffect-protocol.md). The DepMap inputs on the host match
-the SHA256s pinned in `configs/benchmarks/extra_bulk_lines_26Q1.json`. One config is one run at seed 0; validation
-chooses; each run scored its chosen prior once on test. Nothing here is synthetic-lethality evidence.
+protocol §10 of the [GeneEffect protocol](../../docs/03-geneeffect-protocol.md). Nothing here is synthetic-lethality
+evidence.
 
-| Run | Config | Summary |
+| Run | Config (at `4334eae`; both since removed) | Summary |
 | --- | --- | --- |
 | `prior_20261004` | `configs/context_prior/prior.yaml` (all 919 extra labelled lines) | [summary](summary_prior_20261004.md) |
 | `prior_no_haematopoietic_20261004` | `configs/context_prior/prior_no_haematopoietic.yaml` (the 133 Lymphoid and Myeloid extras dropped) | [summary](summary_prior_no_haematopoietic_20261004.md) |
@@ -62,8 +61,7 @@ bridged and bulk scores of the chosen prior differ by 0.013 (0.223 vs 0.236).
 In both runs only the expression components were kept. On bridged input the gene-level blocks hurt: in the chosen
 run own expression −0.012 to −0.004 and reduced rank 64 −0.029 to −0.007; pathway scores, predicted genotype,
 partners and data-selected genes had intervals spanning zero. In the single-cell-only run own expression and
-partners cost 0.03 to 0.07. The bridge's median per-gene correlation across out-of-fold training lines is 0.43,
-which is the likely reason gene-level features carry over badly while components survive.
+partners cost 0.03 to 0.07. The bridge's median per-gene correlation across out-of-fold training lines is 0.43.
 
 ## Caveats
 
@@ -78,9 +76,3 @@ which is the likely reason gene-level features carry over badly while components
 - **Claim boundary.** Single-gene dependency evidence only, with a training-data change (extra DepMap bulk-RNA lines)
   scored on the unchanged validation and test lines; validation lines' bulk RNA entered only the oracle rows.
 
-## Next steps the results point to
-
-1. A better bridge (the design's contrastive-PCA alignment), since bulk input still beats bridged input and
-   gene-level blocks fail through the bridge.
-2. A wider penalty grid for the components stage.
-3. The single-cell correction on top of the chosen prior (the next plan): what Tx1, `q_sc` and STATE add.

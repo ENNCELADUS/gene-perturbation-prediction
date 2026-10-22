@@ -4,13 +4,6 @@ Historical staged protocol, retired on 2026-09-06. The replacement
 joint training design (`docs/specs/2026-09-06-modular-joint-training-design.md`, removed; `git show 1694f5c:<path>`)
 has no scientific run yet; the results below belong to the original staged run.
 
-## Status
-
-The one-seed 226-line Stage 2 run is complete and terminally verified. Its held-out
-test result is a **negative point estimate**: the selected end-to-end model is below
-both registered context-conditioned baselines on both reported rank metrics. This
-does not support a positive context-prediction claim and is never SL evidence.
-
 ## What was tested
 
 The fixed split contains 172 train, 27 validation, and 27 test cell lines over
@@ -30,14 +23,9 @@ gene-mean.
   Spearman. The finalization recomputation was 0.025902 versus 0.025867 in the
   selected training row, a 0.000034 difference within the registered BF16 rank-noise
   tolerance.
-- Selected and packaged checkpoint SHA-256:
-  `67efa21c3ba41687831d1329e0d687c7c3ab1dbb8476a952fb121329c696b949`.
-- Terminal `complete.json` SHA-256:
-  `1bbdf819f41c89535075b8d91e3e9e54dd58a503b0fe5ed497c1a37e49357d53`.
 
-Historical Stage 1 training-data/code lineage remains incomplete, although the
-selected checkpoint and its recorded inputs passed the then-required compatibility and
-input seal. Tahoe-100M pretraining exposure also remains a scope qualifier.
+Historical Stage 1 training-data/code lineage remains incomplete. Tahoe-100M pretraining exposure also remains a
+scope qualifier.
 
 ## Learning curves
 
@@ -46,10 +34,12 @@ input seal. Tahoe-100M pretraining exposure also remains a scope qualifier.
 Warmup training loss decreases monotonically through epoch 15, but validation is
 noisy and peaks at epoch 5 (0.028389). During joint tuning, the total, response, and
 dependency losses continue to decrease, while validation Spearman decreases from
-0.025867 at epoch 0 to 0.020758 at epoch 2. The registered selection therefore keeps
-the first joint checkpoint rather than the lowest training-loss checkpoint.
+0.025867 at epoch 0 to 0.020758 at epoch 2.
 
 ## Result
+
+The held-out test result is a **negative point estimate**: the selected end-to-end model is below both registered
+context-conditioned baselines on both reported rank metrics.
 
 | Method | Test macro per-gene Spearman | 95% CI | Test macro per-line Spearman | 95% CI |
 | --- | ---: | ---: | ---: | ---: |
@@ -66,40 +56,23 @@ effect is small. Test is close to validation: -0.003430 per gene and +0.000069 p
 line. The 27 model-specific values are in
 the locally retained `e2e_test_per_line.csv` (not tracked in Git).
 
-## Interpretation
-
-The optimization trace rules out a simple failure to reduce the training objective:
-all observed training terms fall. Instead, validation stops improving before joint
-tuning and declines while training loss continues downward. On this fixed split,
-the learned composition does not convert its extra machinery into better held-out
-context ranking than either simple context-conditioned baseline.
-
 No paired end-to-end-versus-baseline bootstrap interval was emitted, and only one
-seed was run. The defensible conclusion is therefore a negative point estimate, not
-a claim of statistical significance or multi-seed stability. The Stage 1 response
-before/after records are not comparable because the historical input lineage is
-incomplete; no response delta is reported.
-
-## Verdict and scope
-
-Formal Stage 2 completed, but it does not license a positive GeneEffect
-context-prediction claim. GeneEffect is single-gene dependency, so this result is
-not synthetic-lethality evidence, does not test unseen genes, and does not substitute
-for `context_screen_v2`.
+seed was run: a negative point estimate, not a claim of statistical significance or multi-seed stability. The Stage 1
+response before/after records are not comparable because the historical input lineage is incomplete; no response
+delta is reported. This does not support a positive context-prediction claim; GeneEffect is single-gene dependency, so
+this result is not synthetic-lethality evidence, does not test unseen genes, and does not substitute for
+`context_screen_v2`.
 
 ## Reproduction
 
 The locally retained telemetry and metric extracts are `learning_curves.csv`,
 `test_results.csv` and `e2e_test_per_line.csv`; these CSV files are not tracked in
-Git. The figure and plotting source are tracked. With those extracts available,
-rebuild the figure with:
+Git. With those extracts available, rebuild the figure with:
 
 ```bash
 uv run python results/exp13_stage2_full/plot_learning_curves.py
 ```
 
-The plotting source is
-[`plot_learning_curves.py`](plot_learning_curves.py). The source
-run artifacts are the authenticated `warmup_train_log.csv`, `joint_train_log.csv`,
+The source run artifacts are `warmup_train_log.csv`, `joint_train_log.csv`,
 `geneeffect_residual_metrics.json`, `checkpoint_selection.json`, `run_manifest.json`,
 and `complete.json` in the formal H20 run directory.

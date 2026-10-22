@@ -3,22 +3,20 @@
 Run `bridge_remedies_20261004`, 2026-10-04, on the H20 container on port 30838 (worktree
 `/2023533015/VCC_Project_bridge_remedies`, branch `feat/bridge-remedies`), CPU only, config
 `configs/context_prior/bridge_remedies.yaml`;
-protocol §10 of the [GeneEffect protocol](../../docs/03-geneeffect-protocol.md). The runner scores every remedy setting,
-block set and penalty on validation and test and decides nothing. Its only automatic choice is the components penalty
-under gene-level blocks, taken as the best validation point estimate for components alone. Every choice below is read
-on validation. Full table: [results.md](results.md). Nothing here is synthetic-lethality evidence.
+protocol §10 of the [GeneEffect protocol](../../docs/03-geneeffect-protocol.md). The runner's only automatic choice is
+the components penalty under gene-level blocks, taken as the best validation point estimate for components alone.
+Every choice below is read on validation. Full table: [results.md](results.md). Nothing here is synthetic-lethality
+evidence.
 
 | Process (`--experiments`) | Settings | Code |
 | --- | --- | --- |
 | `affine,contrastive` | affine bridge (1), contrastive PCA (8) | affine bridge at `4b895f5`; contrastive at `b98a3c9` |
 | `gating,noise_matched,denoise` | reliability gating (3), noise-matched fitting (1), low-rank denoising (3) | gating at 0.3 and 0.5 at `4b895f5`; the rest at `b98a3c9` |
 
-Both processes shared one run directory and started at `4b895f5`. A Codex adversarial review then found two
-problems. The contrastive alignment and the denoising components were fitted with the held fold's bulk, so those
-remedies' bridge diagnostics were partly in-sample. The two processes could also race on `run_config.json` and
-`results.md`. `b98a3c9` refits both remedies per fold for the out-of-fold rows and locks the run directory, and both
-processes were restarted on it. The rows kept from `4b895f5` (the affine bridge, and gating at 0.3 and 0.5) compute
-exactly what `b98a3c9` computes. The leak touched diagnostics only, never a validation or test score.
+`b98a3c9` refits the contrastive alignment and the denoising components per fold for the out-of-fold rows (at
+`4b895f5` they saw the held fold's bulk, so those bridge diagnostics were partly in-sample) and locks the run
+directory. The rows kept from `4b895f5` compute exactly what `b98a3c9` computes; the fix changes no validation or test
+score.
 
 Training side as the [first runs](../context_prior_seed0/README.md) chose it: 953 labelled lines with bulk RNA (of
 1,405 training-side lines; Lymphoid and Myeloid extras dropped); 167 of the 170 labelled single-cell training lines
@@ -34,11 +32,10 @@ a 95% paired line-bootstrap interval.
 
 ## Result
 
-**No remedy beats the reference on validation, and no gene-level block set gains over the reference on validation
-under any remedy.** The reference reproduces the first runs' chosen prior to four decimals: 0.2232 on validation and
-0.2227 on test. That second clause comes from the runner's components-penalty pick (next sections); the
-[rerun over the full penalty grid](#rerun-over-the-full-penalty-grid) reverses it: under the affine bridge, all
-three gene-level blocks gain +0.0068 on validation and +0.0125 on test, both intervals above zero.
+**No remedy beats the reference on validation.** The reference reproduces the first runs' chosen prior to four
+decimals: 0.2232 on validation and 0.2227 on test. Under the runner's components-penalty pick no gene-level block set
+gains over the reference on validation under any remedy; the
+[rerun over the full penalty grid](#rerun-over-the-full-penalty-grid) reverses that.
 
 | Remedy | Best row on validation | Val | Test | Val gain | Test gain | Oracle val |
 | --- | --- | ---: | ---: | --- | --- | ---: |
@@ -49,7 +46,7 @@ three gene-level blocks gain +0.0068 on validation and +0.0125 on test, both int
 | Noise-matched fitting (`noise_matched`) | + own expression and partners, gene penalty 10 | 0.2021 | 0.2008 | −0.0210 [−0.0291, −0.0122] | −0.0219 [−0.0278, −0.0145] | 0.2023 |
 
 Gating and noise-matched fitting change only the gene-level blocks, so their components-alone row is the reference's.
-The oracle reads validation lines' bulk RNA (off-contract; never a model row).
+The oracle reads validation lines' bulk RNA (off-contract; never a model row; its differences carry no interval).
 
 ## Bridge quality
 
@@ -65,30 +62,26 @@ setting's row is in [results.md](results.md).
 | Denoising, rank 32 | 0.406 | 0.301 | 0.510 | 2,661 | 1,608 / 465 / 40 | 667 |
 | Denoising, rank 64 | 0.462 | 0.361 | 0.559 | 3,822 | 1,906 / 730 / 53 | 917 |
 
-The contrastive alignment lifts the median from 0.43 to 0.58–0.60. It raises the number of selective genes at or
-above 0.5 from 604 to between 1,519 and 1,681. It is measured in each fold's aligned space, where the removed
-directions are gone from the bulk target too, so part of that lift comes from a changed yardstick. Denoising lowers
-quality at ranks 16 and 32. At rank 64 it lifts the median to 0.462 but cuts the genes at or above 0.7 from 1,058 to
-452. Gating keeps the affine bridge, and its gene-level blocks read 6,877, 3,612 or 1,058 genes at thresholds 0.3,
-0.5 and 0.7. **Bridge quality does not predict the score.** The contrastive settings have the best diagnostics, yet
-they lower the components' validation score in all eight settings.
+The contrastive rows are measured in each fold's aligned space, where the removed directions are gone from the bulk
+target too, so part of their lift comes from a changed yardstick. At rank 64 denoising cuts the genes at or above 0.7
+from 1,058 to 452. **Bridge quality does not predict the score.** The contrastive settings have the best diagnostics,
+yet they lower the components' validation score in all eight settings.
 
 ## The components penalty decides what the gene-level blocks do
 
 The gene-level stages are fitted to the residual the components stage leaves, and the two predictions are summed.
-Selective Spearman is scale-free, so the components' validation score moves by at most 0.0003 between penalties 10
-and 1000 in any setting. Over the same range their size falls about tenfold per step: the reference's validation SD
-ratio is 0.0161, 0.0018 and 0.0002. The own-expression-and-partners block's pooled weights are fitted unshrunk, so
-above penalty 10 the block is fitted to nearly the whole residual and outweighs the components in the sum. Tuning on
-components alone then breaks near-ties. Six settings landed on penalty 100 or 1000 by margins of 0.00001 to 0.0003
-over penalty 10: contrastive 2/0, 8/0, 16/0 and 4/4, and denoising at ranks 32 and 64. The reference itself chose 10
-over 1000 by 0.00003. Under those six settings, own expression and partners collapse to 0.065–0.119 on validation and
-0.093–0.143 on bulk input. Data-selected genes and all three lose 0.010–0.026 against the setting's own components.
-Those rows measure the tie, not the remedy.
+The components' validation score moves by at most 0.0003 between penalties 10 and 1000 in any setting, while their
+size falls about tenfold per step: the reference's validation SD ratio is 0.0161, 0.0018 and 0.0002. Above penalty 10
+the own-expression-and-partners block (pooled weights fitted unshrunk) fits nearly the whole residual and outweighs
+the components in the sum. Tuning on components alone then breaks near-ties. Six settings landed on penalty 100 or
+1000 by margins of 0.00001 to 0.0003 over penalty 10: contrastive 2/0, 8/0, 16/0 and 4/4, and denoising at ranks 32
+and 64. The reference itself chose 10 over 1000 by 0.00003. Under those six settings, own expression and partners
+collapse to 0.065–0.119 on validation and 0.093–0.143 on bulk input. Data-selected genes and all three lose
+0.010–0.026 against the setting's own components. Those rows measure the tie, not the remedy.
 
-The oracle rows separate the bridge from the blocks. Denoising fits the prior on the reference's bulk rows and reads
-the reference's oracle input. Its oracle rows are therefore the reference prior on bulk input, at components penalty
-1 (rank 16) and 1000 (ranks 32 and 64). Each cell gives gene penalty 0.1 / 1 / 10.
+Denoising fits the prior on the reference's bulk rows and reads the reference's oracle input, so its oracle rows are
+the reference prior on bulk input, at components penalty 1 (rank 16) and 1000 (ranks 32 and 64). Each cell gives gene
+penalty 0.1 / 1 / 10.
 
 | Input, components penalty | Components alone | + own expression and partners | + data-selected genes | + all three |
 | --- | ---: | --- | --- | --- |
@@ -98,22 +91,19 @@ the reference's oracle input. Its oracle rows are therefore the reference prior 
 | Affine-bridged validation, 10 | 0.2232 | 0.1800 / 0.2002 / 0.2167 | 0.1661 / 0.2006 / 0.2081 | 0.1671 / 0.2036 / 0.2123 |
 
 - **At the reference's penalty, the gene-level blocks add nothing even on bulk input.** The best is +0.0003, and the
-  bridge turns that into a loss of 0.0065 or more. They do not fail only because of the bridge.
+  bridge turns that into a loss of 0.0065 or more.
 - **At components penalty 1 they add on bulk input.** Over components alone at 1, they gain up to +0.0073 (own
   expression and partners), +0.0112 (data-selected genes) and +0.0125 (all three, gene penalty 10). That is +0.0118
-  over the best components-alone bulk score. This is the first sign in these runs that gene-level blocks carry signal
-  beyond the components. Oracle differences carry no interval.
-- **The affine bridge with gene-level blocks at components penalty 1 was not run**, because the runner tunes that
-  penalty on components alone. The only bridged rows at penalty 1 come from contrastive 8/4 and 16/4 and from
-  denoising at rank 16, whose rank-16 queries strip gene-level detail.
+  over the best components-alone bulk score.
+- **The affine bridge with gene-level blocks at components penalty 1 was not run** in this run (the rerun below
+  covers it). The only bridged rows at penalty 1 come from contrastive 8/4 and 16/4 and from denoising at rank 16.
 
 ## Remedies
 
 ### Contrastive PCA
 
-This remedy projects out of both sources the directions along which only one source varies. The setting gives the
-number of pseudo-bulk-excess and bulk-excess directions removed. The last column is the best gene-level row minus the
-setting's own components row, on validation, test and bulk input, with no interval.
+Projects out of both sources the directions along which only one source varies. The last column is the best
+gene-level row minus the setting's own components row, on validation, test and bulk input, with no interval.
 
 | Directions (pseudo-bulk / bulk) | Components penalty | Components alone, val / test | Best gene-level row on val | Val / test | Val gain | Test gain | Added over own components, val / test / bulk |
 | --- | ---: | --- | --- | --- | --- | --- | --- |
@@ -128,12 +118,11 @@ setting's own components row, on validation, test and bulk input, with no interv
 
 - **Components.** At the tuned penalty they lose on validation in all eight settings (−0.0078 to −0.0273), while
   test moves between −0.0044 and +0.0014. Removing bulk-excess directions also costs bulk input: at the tuned
-  penalty the components oracle falls to 0.2152–0.2296, against 0.2358. Those directions carry signal the prior uses.
+  penalty the components oracle falls to 0.2152–0.2296, against 0.2358.
 - **Gene-level blocks.** Under the affine bridge, all three lose 0.0109 against components alone on validation but
   only 0.0015 on bulk, a gap of 0.0094 that the bridge causes. Where the contrastive tuning landed on penalty 10 or
-  1, the gap between what the blocks add on validation and on bulk shrinks to between −0.0048 and +0.0032. So the
-  alignment removes most of what the bridge costs these blocks. Where the tuning landed on 100 or 1000, the blocks
-  lose. The components' own loss keeps every row below the reference on validation.
+  1, the gap between what the blocks add on validation and on bulk shrinks to between −0.0048 and +0.0032, so the
+  alignment removes most of what the bridge costs these blocks; where it landed on 100 or 1000, the blocks lose. The components' own loss keeps every row below the reference on validation.
 
 ### Reliability gating
 
@@ -147,30 +136,23 @@ Gene-level blocks read only genes whose out-of-fold affine bridge quality reache
 | 0.7 | 1,058 | 0.2200 / 0.2151 | −0.0032 [−0.0070, 0.0016] | −0.0075 [−0.0111, −0.0034] | 0.1959 / 0.2012 | 0.1968 / 0.2013 |
 
 - **Own expression and partners.** On validation, gating moves this block toward zero as the threshold rises; test
-  does not follow. On bulk input it scores 0.2343, 0.2364 and 0.2370 against 0.2358 for components alone, so the
-  gated blocks add nothing on bulk either.
+  does not follow. On bulk input it scores 0.2343, 0.2364 and 0.2370 against 0.2358 for components alone.
 - **Data-selected genes.** The threshold narrows what this block can choose from, which costs it more at every step.
 
 ### Noise-matched fitting
 
-This remedy fits the gene-level blocks on the 170 single-cell training lines' out-of-fold bridged pseudo-bulk instead
-of the 953 bulk lines. The affine bridge already regresses bulk on pseudo-bulk per gene, so a bridged value is a
-shrunk estimate of bulk and refitting own expression on it is close to a change of units; what changes is the
-partners, the data-selected genes, the pooled weight and the per-gene intercepts, now fitted on 170 lines. The smaller
-line count dominates. The best row (own expression and partners, gene penalty 10) has gains of −0.0210 [−0.0291, −0.0122]
-on validation and −0.0219 [−0.0278, −0.0145] on test; data-selected genes and all three lose 0.049–0.087 on validation,
-and the data-selected block overfits (at gene penalty 0.1, validation SD ratio 0.64 and Huber 0.0197 against 0.0162
-for the reference). Its oracle is not an upper bound: blocks fitted on bridged rows read bulk out of their range.
+Fits the gene-level blocks on the 170 single-cell training lines' out-of-fold bridged pseudo-bulk instead of the 953
+bulk lines. The smaller line count dominates. Data-selected genes and all three lose 0.049–0.087 on validation, and
+the data-selected block overfits (at gene penalty 0.1, validation SD ratio 0.64 and Huber 0.0197 against 0.0162 for
+the reference). Its oracle is not an upper bound: blocks fitted on bridged rows read bulk out of their range.
 
 ### Low-rank denoising
 
-This remedy projects the bridged validation and test rows onto the leading 16, 32 or 64 components of the
-standardised training bulk.
+Projects the bridged validation and test rows onto the leading 16, 32 or 64 components of the standardised training
+bulk.
 
-- **Components.** At ranks 16, 32 and 64, the components lose 0.0579, 0.0279 and 0.0133 [−0.0267, 0.0013] on
-  validation. On test they lose 0.0257 and 0.0051 at ranks 16 and 32, and gain +0.0043 [−0.0107, 0.0194] at rank 64.
-  The score climbs back toward the reference as the rank grows, because the projection removes query signal along
-  with noise.
+- **Components.** At ranks 16, 32 and 64, the components lose 0.0579, 0.0279 and 0.0133 on validation. On test they
+  lose 0.0257 and 0.0051 at ranks 16 and 32, and gain +0.0043 at rank 64.
 - **Gene-level blocks.** They add nothing at rank 16 (−0.0012 to −0.0005 on validation), because their features
   read a rank-16 reconstruction. At ranks 32 and 64 they sit on components penalty 1000 (see above).
 
@@ -178,14 +160,12 @@ standardised training bulk.
 
 None of the following is chosen on test.
 
-- **Contrastive PCA.** Every setting loses more on validation than on test. The sign is the same across all eight
-  settings, which points to a property of which lines sit in validation rather than to noise in one row; this is an
-  inference.
+- **Contrastive PCA.** Every setting loses more on validation than on test; the same sign across all eight settings
+  points to which lines sit in validation rather than to noise in one row (an inference).
 - **Gains on test only.** Contrastive 8/4 at components penalty 1 and gene penalty 10 has the only intervals above
   zero in the run, all of them on test: +0.0139 [0.0003, 0.0261] with data-selected genes and +0.0159
   [0.0025, 0.0279] with all three. On validation the same rows score −0.0108 and −0.0087, with intervals spanning
-  zero. Denoising at rank 64 (test +0.0043, validation −0.0133) and the best contrastive row (test +0.0055,
-  validation −0.0075) also gain on test only.
+  zero. Denoising at rank 64 and the best contrastive row also gain on test only.
 - **The reverse.** Gating at 0.7 has a validation interval that spans zero, while its test interval excludes zero
   below.
 
@@ -207,11 +187,9 @@ validation, with its test score; gains are over the reference row (components al
 | Contrastive 8/4 | + all three | 1, 10 | 0.2145 | 0.2386 | −0.0087 [−0.0244, 0.0068] | +0.0159 [0.0025, 0.0279] | 0.2317 |
 | Gating at 0.7 | + all three | 1, 10 | 0.2264 | 0.2285 | +0.0032 [−0.0048, 0.0118] | +0.0058 [−0.0043, 0.0156] | 0.2430 |
 
-- **Gene-level blocks survive the affine bridge** once the components penalty is searched with the gene penalty.
-  At components penalty 1 the components stage removes more of the residual and the gene-level stages fit what
-  is left; all three blocks then gain on validation and on test with intervals above zero. The bulk-input gain
-  (+0.0119 over the best components-alone oracle) mostly carries through the bridge (+0.0068 validation, +0.0125
-  test).
+- **Gene-level blocks survive the affine bridge** once the components penalty is searched with the gene penalty:
+  all three gain on validation and on test with intervals above zero. The bulk-input gain (+0.0119 over the best
+  components-alone oracle) mostly carries through the bridge.
 - **Data-selected genes carry most of it.** Own expression and partners alone add +0.0027 with intervals spanning
   zero on both splits.
 - **No remedy improves on the affine bridge on validation.** Contrastive 4/0 and 8/4 gain more on test than the
@@ -219,45 +197,22 @@ validation, with its test score; gains are over the reference row (components al
 - **Grid edges.** The chosen pair (1, 10) is interior on both grids. The row was chosen among 75 gene-level rows of
   the affine bridge on validation, so its validation gain is optimistic; the test gain is the unbiased estimate.
 
-## Recommendation (my reading; the user decides)
-
-1. **Integrate no remedy into the prior, but add the gene-level blocks.** After the full-grid rerun, the prior to
-   carry forward is the affine bridge with expression components (penalty 1) plus own expression, partners and
-   data-selected genes (gene penalty 10): 0.2300 validation / 0.2352 test, against 0.2232 / 0.2227 for components
-   alone. No remedy's best validation row reaches it.
-2. **Carry nothing forward from noise-matched fitting or low-rank denoising.** Every validation row is below the
-   reference. Denoising removes components signal at every rank, and noise-matched fitting trades 953 lines for 170.
-3. **Done:** the runner now reports every components and gene penalty pair (`d314b74`), and the rerun above
-   answered the open question.
-
 ## Caveats
 
-- **Seed and split.** These are seed-0 numbers on one split, with 27 validation and 27 test lines. Intervals are
-  about 0.01 wide for own expression and partners and 0.03 or more for sets with data-selected genes; most
-  differences between remedies' best rows sit inside them. Additions within a setting (gene-level minus that
-  setting's components) have no interval.
-- **Diagnostics versus scores.** Diagnostics are per-gene correlations over the 167 paired training lines, and the
-  contrastive ones are measured in the aligned space. Better diagnostics did not give better scores.
-- **Grid edges.** Gene penalty 10, the top of its grid, wins on validation for every affine block set, for own
-  expression and partners at every gating threshold, for every noise-matched block set and for the best gene-level
-  row of all eight contrastive settings; 0.1, the bottom, wins for data-selected genes and all three under denoising
-  at ranks 32 and 64. The components penalty sits at 1000, its top edge, in three settings (contrastive 8/0,
-  denoising at ranks 32 and 64) and never at 0.1. The components-alone score is flat from 10 to 1000, so that edge
-  is a tie rather than too narrow a grid, but it decides the gene-level rows.
-- **The oracle is off-contract.** It reads validation lines' bulk RNA, enters no comparison as a model, and its
-  differences have no interval. Under contrastive PCA it reads aligned bulk. Under noise-matched fitting it is not an
-  upper bound.
-- **Provenance.** The rows come from two commits, and the fix between them changes no score.
-- **Claim boundary.** This is single-gene dependency evidence on the unchanged validation and test lines, and it
-  estimates no genetic interaction.
+- **Seed and split.** Seed-0 numbers on one split, with 27 validation and 27 test lines. Intervals are about 0.01 wide
+  for own expression and partners and 0.03 or more for sets with data-selected genes; most differences between
+  remedies' best rows sit inside them.
+- **Grid edges (first run).** Gene penalty 10, the top of its grid, wins on validation for every affine block set, for
+  own expression and partners at every gating threshold, for every noise-matched block set and for the best
+  gene-level row of all eight contrastive settings; 0.1, the bottom, wins for data-selected genes and all three under
+  denoising at ranks 32 and 64. The components penalty sits at 1000, its top edge, in three settings (contrastive
+  8/0, denoising at ranks 32 and 64) and never at 0.1.
+- **Oracle.** Under contrastive PCA it reads aligned bulk. Under noise-matched fitting it is not an upper bound.
+- **Claim boundary.** Single-gene dependency evidence on the unchanged validation and test lines; it estimates no
+  genetic interaction.
 
-## Next steps the results point to
-
-1. The single-cell correction on top of the prior with gene-level blocks: what Tx1, `q_sc` and STATE add.
-2. Which data-selected genes carry the gain, and whether partner features help once data-selected genes are in.
-
-**Decision (2026-10-07).** The user took recommendation 1, then the
-[follow-ups](../default_prior_followups_seed0/README.md) answered step 2: own expression and partners add +0.0010 on
+**Decision (2026-10-07).** The user integrated no remedy and added the gene-level blocks; the
+[follow-ups](../default_prior_followups_seed0/README.md) then found own expression and partners add +0.0010 on
 validation (interval spanning zero) once data-selected genes are in. The default prior is the affine bridge with
 expression components at penalty 1 and data-selected genes at gene penalty 10 (0.2290 / 0.2338), and the single-cell
 correction stacks on it.

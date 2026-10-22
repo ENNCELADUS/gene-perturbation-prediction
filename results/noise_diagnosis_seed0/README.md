@@ -4,7 +4,7 @@ Runs of 2026-10-12 on the H20 container on port 30838, CPU only, branch `feat/no
 [final split](../../docs/data/cell-line-geneeffect-split.md) and its default prior (`default_prior_final_split_20261012`:
 0.2045 validation / 0.2025 test, [record](../final_split_seed0/README.md)). Design:
 [noise diagnosis](../../docs/specs/2026-10-12-noise-diagnosis-design.md); protocol §14. Nothing here is
-synthetic-lethality evidence; nothing is chosen in code.
+synthetic-lethality evidence.
 
 - `noise_20261012`: `hpc/run.sh prior-noise` with `configs/context_prior/noise_diagnosis.yaml`
   ([table](noise_20261012.results.md)). `learning_curve`, `cell_sampling` and `cell_states` at
@@ -92,8 +92,5 @@ Rank-value encoding is a tie; truncating to 2,048 genes loses on validation (bri
 0.302 and 0.252 per gene).
 
 **Reading.** The technical noise of single cells does not limit the default prior: it reads a line from ten cells as
-well as from all of them, and neither state programs, clusters nor Cilantro's reductions improve it. What limits it is
-how much of the dependency a linear read of expression can reach (bulk RNA as input adds only 0.017); more labelled
-lines helped up to three quarters here, and the 2026-10-14 rerun ([record](../noise_lines_seed0/README.md)) found the
-curve flat from 7/8 to all lines. Deposit batch changes a line's input more than
-anything else measured here but not its accuracy, so batch correction is not a lever for this prior either.
+well as from all of them, and neither state programs, clusters nor Cilantro's reductions improve it. Deposit batch
+changes a line's input more than anything else measured here but not its accuracy.

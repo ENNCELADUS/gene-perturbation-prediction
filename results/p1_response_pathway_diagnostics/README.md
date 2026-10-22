@@ -9,7 +9,7 @@ response-adaptation diagnostic (`docs/specs/2026-09-07-p1b-response-adaptation-d
 interface-isolation diagnostic (`docs/specs/2026-09-08-p1c-interface-isolation-design.md`, removed; `git show 1694f5c:<path>`).
 Protocol: [GeneEffect protocol §8](../../docs/03-geneeffect-protocol.md#8-where-the-model-stalls-response-pathway-diagnostics).
 Backbone under test: the selected seed-0 joint checkpoint
-(`joint_seed0_20260906T174818Z_b1024/best.pt`, SHA-256 `37405454…63c59`,
+(`joint_seed0_20260906T174818Z_b1024/best.pt`,
 [result](../joint_geneeffect_seed0/README.md)), called the seed-0 joint backbone (P0) below.
 
 ## What was tested
@@ -17,9 +17,8 @@ Backbone under test: the selected seed-0 joint checkpoint
 1. **Fixed-backbone head diagnostic (P1-A).** With the seed-0 joint backbone frozen, does an explicit gene-specific context slope
    (PCA8 of the Tx1 context features) improve validation residual readout over the
    shared MLP head, and does the backbone's response block (R) add anything? Four heads: shared MLP head (A0), an MLP on
-   direct features (D); shared MLP head + response block (A1), an MLP on the direct features plus the response block;
-   explicit context-slope head (A2), an MLP plus gene-specific slope on the direct features; explicit context-slope
-   head + response block (A3), the explicit context-slope head plus the response block.
+   direct features (D); explicit context-slope head (A2), an MLP plus gene-specific slope on D; each also with the
+   response block (A1, A3).
 2. **Response-adaptation diagnostic (P1-B).** Does the seed-0 joint backbone's response pathway use perturbation identity, and does adapting
    only the new interface (basal encoder 328 × 2560, ESM2 adapter, residual head) at 1e-4
    recover response prediction on the three source anchors and transfer to Jurkat, which
@@ -31,7 +30,7 @@ Backbone under test: the selected seed-0 joint checkpoint
    1e-4) under the response-adaptation recipe. Interface-variant comparison (Tier 3): four interface variants under leave-one-anchor-out
    (LOAO) folds with a pre-registered keep predicate: adapted Tx1 basal encoder (V0; = the response-adaptation interface),
    expression-residual interface (V1; null-subtracted expression residual, exactly no-change at initialisation),
-   native basal path (ESM-2 perturbation tokens; V2-null), the native basal path only, native basal path + trainable
+   native basal path only (ESM-2 perturbation tokens; V2-null), native basal path + trainable
    Tx1 context term (V2), with the Tx1 context zero-initialised, and native basal path + Tx1 term + expression residual
    (V3), conditional on a keep. Head-seed stability (Tier 4): the shared MLP head and the explicit context-slope head of
    the fixed-backbone head diagnostic at head seeds 1 and 2.
@@ -64,9 +63,9 @@ Backbone under test: the selected seed-0 joint checkpoint
   fold; (b) equal-fold mean of per-fold held-out ratios below 1 with a synchronous
   gene-bootstrap interval excluding 1; (c) identity advantage positive with interval
   excluding 0 on every held-out fold.
-- The interface-isolation diagnostic ran as one pipeline (`hpc/p1c_pipeline.sh`), exit 0 on 2026-09-09; every arm
-  exit 0; init checks passed on every variant fold (expression-residual interface max deviation from the control
-  bag 0.0; both native-basal-path variants reproduce the native null forward to within 3 × 10⁻⁴ relative).
+- The interface-isolation diagnostic ran as one pipeline on 2026-09-09. Init checks on every variant fold:
+  expression-residual interface max deviation from the control bag 0.0; both native-basal-path variants reproduce the
+  native null forward to within 3 × 10⁻⁴ relative.
 - Curated evidence under [`evidence/`](evidence/): fixed-backbone head diagnostic `comparison/` and
   `analysis/audit.json`; response-adaptation diagnostic `comparison/` tables; interface-isolation diagnostic `comparison/` (`variants.csv`,
   `summary.csv`, `kept.json`, `learning_curves.png`), `tier0/`, `heads/seed{1,2}/comparison/`,
@@ -102,9 +101,8 @@ holdout; "Jurkat" is the external anchor, no-change reference 34.31.
 | Interface adaptation with STATE unfrozen (B-unfreeze; + inherited STATE) | interface + STATE | 26.54 | 179.98 | 5.25 | positive |
 
 The joint backbone as trained is about 21 × the no-change reference on its own anchors' holdout. Adaptation
-recovers source-anchor reconstruction (900 → 33) and a small identity advantage but
-never beats no-change on any held-out condition set, and the Jurkat error grows as
-source training continues.
+recovers source-anchor reconstruction and a small identity advantage but never beats no-change on any held-out
+condition set, and the Jurkat error grows as source training continues.
 
 ### Interface-isolation diagnostic, existing-export analysis: bias decomposition and matched coverage
 
@@ -176,12 +174,12 @@ Run `outputs/p1c/p1c_log3500_seed0_20260909T110631Z` (code `3f226e5`, host 30030
 every fold prepared under log1p over HVG-panel row sums normalised to 3,500; loss,
 references, derangements and cross-context metrics computed in that space; existing-export analysis and
 head-seed stability not repeated; the released STATE checkpoint, untrained (N-native), evaluated at the same transform on every fold (batch index 0).
-Init checks passed on every fold (expression-residual interface deviation 0.0; both native-basal-path variants within 1.8% of the native
-null forward). The interface-variant comparison table below is from the first comparison pass (compare-1)
-([`evidence/p1c/round2/comparison/`](evidence/p1c/round2/comparison/), copied from the run's
-`comparison/`; kept.json all false, the native basal path + Tx1 term + expression residual not eligible). The two adapted Tx1 basal encoder learning-rate arms
-(1e-5, 1e-6, Jurkat fold) stopped without an exit record: their logs end on 2026-09-10 at
-epochs 22 and 23 of 50, and the final comparison pass (compare-final) never ran.
+Init checks: expression-residual interface deviation 0.0; both native-basal-path variants within 1.8% of the native
+null forward. The table is from the first comparison pass (compare-1)
+([`evidence/p1c/round2/comparison/`](evidence/p1c/round2/comparison/); kept.json all false, the native basal path +
+Tx1 term + expression residual not eligible). The two adapted Tx1 basal encoder learning-rate arms (1e-5, 1e-6, Jurkat
+fold) stopped without an exit record at epochs 22 and 23 of 50 (logs end 2026-09-10), and the final comparison pass
+(compare-final) never ran.
 
 | Variant | jurkat | k562 | hepg2 | hct116 | Pooled ratio [95%] | Held-out identity share | Kept |
 | --- | ---: | ---: | ---: | ---: | --- | --- | --- |
@@ -200,38 +198,25 @@ keeps the largest held-out identity use of any trained arm but never lowers the 
 
 ## Interpretation
 
-- **The numeric interface is the defect.** The composite feeds raw UMI counts into a
-  STATE decoder trained on log1p-normalised expression and scores against count-space
-  targets. Everything measured about the seed-0 joint backbone's response pathway in the response-adaptation
-  diagnostic (no identity use, 21 × no-change) and the count-space variants in the interface-isolation diagnostic
-  follows from this. The released
-  checkpoint carries real response functionality in approximately its own space: it beats
-  no-change on HepG2 and Jurkat with identity use of 22–66% of loss, and misses the K562
-  gate by a margin (27.5%) that the HVG-panel proxy normalisation may explain. HCT116
-  fails at every scale, consistent with an X-Atlas-Orion platform mismatch rather than a
-  scale issue.
-- **The expression-residual interface isolates the interface without transferring anything.** Starting exactly at
-  no-change removes the blow-up on every held-out fold (ratios 1.00–1.06) and beats
-  no-change on every source anchor, but the pooled held-out interval excludes 1 from above
-  and the held-out identity advantage collapses from 0.92 on Jurkat to 0.003 on HCT116.
-  In count space the residual head learns a shared per-context shift, not a
-  perturbation-specific effect.
-- **In the decoder's own space the failure is the basal skip, then the interface.** The
-  held-out error scales with how much of STATE's hidden-space skip is trained on Tx1 input
-  (adapted Tx1 basal encoder 18–33 ×, native basal path + trainable Tx1 context term 6–13 ×, native basal path
-  (ESM-2 perturbation tokens) ≈ 1 ×); the expression-residual interface, which bypasses the skip, is at parity with
-  identity use of 2–3% and is matched by a constant shift. The native basal encoder cannot
-  absorb the HCT116 platform shift on either side (8.9 untrained, 10.3 trained).
-- **Learning rate is monotone but not isolated.** 1e-6 barely moves the interface within
-  the budget, consistent with the insufficient-adaptation hypothesis (H1; the seed-0 joint backbone gave the new basal
-  encoder the STATE rate 1e-6), but every arm is fitting a count-space offset, so learning-rate isolation bounds the
-  insufficient-adaptation hypothesis rather than isolating it.
-- **The head result is stable.** The explicit context-slope head minus the shared MLP head is +0.07 to +0.08 residual
-  Pearson with intervals excluding 0 at all three head seeds; the response block adds nothing at any seed; the explicit
-  context-slope head does not separate from Tx1 PCA8-ridge. The explicit context-slope head remains the head control for
-  any future response representation.
-- **Shared bias dominates** the adapted states' Jurkat error (82–87%), and the
-  perturbation-mean prior is not a useful reference on covered sets.
+- **The numeric interface is the defect.** The composite feeds raw UMI counts into a STATE decoder trained on
+  log1p-normalised expression and scores against count-space targets; the response-adaptation results and the
+  count-space variants follow from this. The released checkpoint carries real response functionality in approximately
+  its own space; its K562 gate miss may be explained by the HVG-panel proxy normalisation. HCT116 fails at every scale,
+  consistent with an X-Atlas-Orion platform mismatch rather than a scale issue.
+- **The expression-residual interface isolates the interface without transferring anything.** In count space the
+  residual head learns a shared per-context shift, not a perturbation-specific effect.
+- **In the decoder's own space the failure is the basal skip, then the interface.** The held-out error scales with how
+  much of STATE's hidden-space skip is trained on Tx1 input; the expression-residual interface, which bypasses the
+  skip, is at parity and is matched by a constant shift. The native basal encoder cannot absorb the HCT116 platform
+  shift on either side (8.9 untrained, 10.3 trained).
+- **Learning rate is monotone but not isolated.** 1e-6 barely moves the interface within the budget, consistent with
+  the insufficient-adaptation hypothesis (H1; the seed-0 joint backbone gave the new basal encoder the STATE rate
+  1e-6), but every arm is fitting a count-space offset, so learning-rate isolation bounds that hypothesis rather than
+  isolating it.
+- **The head result is stable** at all three head seeds; the response block adds nothing at any seed; the explicit
+  context-slope head does not separate from Tx1 PCA8-ridge.
+- **Shared bias dominates** the adapted states' Jurkat error (82–87%), and the perturbation-mean prior is not a useful
+  reference on covered sets.
 
 ## Verdict and scope
 
@@ -246,22 +231,16 @@ fold is a diagnostic re-evaluation; the K562, HepG2 and HCT116 folds supply the 
 evidence. The released STATE checkpoint is named for Replogle training data, so K562 is
 not held out from its pretraining; exposure of the Nadig 2025 HepG2/Jurkat and
 X-Atlas-Orion HCT116 sets is not established here. Tx1 Tahoe-100M exposure applies to
-every Tx1-conditioned arm. Any further response work must first move preparation into the
-response model's own numeric space; the count-space round is retained as the record of
-the defect and is never pooled with a log-space round.
+every Tx1-conditioned arm. The count-space round is the record of the defect and is never pooled with a log-space
+round.
 
 ## Reproduction
 
-```bash
-# P1-A (afdd7fc): outputs/launches/p1a_seed0_20260907T144045Z/launch.json
-# P1-B (0723462): outputs/launches/p1b_seed0_20260907T164813Z/launch.json
-# P1-C (4b48381 / ca6a71e): outputs/launches/p1c_seed0_20260908T112354Z/launch.json
-RUN=outputs/p1c/<run_id> P0_CHECKPOINT=... P1B_PREPARED=... P1B_RUNS=... P1A_FEATURES=... \
-P1A_REFERENCE_P0=... P1A_REFERENCE_PCA=... GPUS="0 1" bash hpc/p1c_pipeline.sh
-uv run python -m src.experiments.p1c prepare --checkpoint <best.pt> --out-dir <dir> --fold jurkat \
-  --reference-manifest <p1b_prepared>/manifest.json --transform log1p_norm --target-sum 3500   # Tier 1b
-uv run python -m src.experiments.p1c evaluate-native --prepared <dir> --runs <runs> --batch-indices 0 1 2 3 4
-uv run python -m src.experiments.p1c compare --root $RUN --out-dir $RUN/comparison
-```
+The P1 code (`hpc/p1c_pipeline.sh`, `src.experiments.p1c`) has since been removed; reproduce at the listed commits.
+Launch records on the host:
 
-Operator details: [runbook, interface-isolation section](../../hpc/README.md#p1-c-interface-isolation).
+```text
+P1-A (afdd7fc): outputs/launches/p1a_seed0_20260907T144045Z/launch.json
+P1-B (0723462): outputs/launches/p1b_seed0_20260907T164813Z/launch.json
+P1-C (4b48381 / ca6a71e): outputs/launches/p1c_seed0_20260908T112354Z/launch.json
+```

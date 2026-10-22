@@ -69,7 +69,6 @@ bootstraps.
   +0.0026: the stack's own-statistics and data-selected stages add a little to the prior once shrunk hard, the `mean`
   arm (close to pseudo-bulk) included.
 - One of the 26 distinct single-cell-against-`mean` comparisons on validation has an interval above zero: `single_cell`
-  at own shrinkage 10 and selected penalty 1,000, +0.0009 [+0.0001, +0.0017]; on test it is +0.0003 [−0.0004, +0.0010].
-  Nine fall below zero, all at selected penalties 1 and 10, where every arm is under the prior; the other 16 span zero.
+  at own shrinkage 10 and selected penalty 1,000 (bold above; test interval spans zero). Nine fall below zero, all at selected penalties 1 and 10, where every arm is under the prior; the other 16 span zero.
   On the 226 split (`single_cell_stack_grid_resplit_20261012`, [record](../default_prior_rerun_seed0/README.md)) the
   same row was +0.0010 [−0.0006, +0.0023].

@@ -14,8 +14,8 @@ run's `results.md`), [comparison.csv](comparison.csv) (every context and metric)
   `unseen_ctx` test split.
 - `arcinstitute/PIE_replogle_xdataset@f6da960` (trained on Tahoe, Jiang, ARC VCC 25 and X-Atlas/Orion): Replogle
   `test_seen` and `test_unseen`, zero-shot.
-- Splits `PIE_splits@396ab95`; datasets and sources at the revisions each checkpoint pins (27 assets, about 100 GB in
-  `data/pie/hf/`, each array checked by PIE against its `meta.json` SHA-256). Evaluation rebuilt PIE's
+- Splits `PIE_splits@396ab95`; datasets and sources at the revisions each checkpoint pins (27 assets in
+  `data/pie/hf/`). Evaluation rebuilt PIE's
   same-perturbation evidence from each checkpoint's training split; `best_auprc.ckpt` loaded strictly in all five.
 
 ## Results
@@ -45,14 +45,7 @@ most 4.3e-04 on any pair.
 ## Reading
 
 The vendored copy, `.venv-pie`, the data path and the sources reproduce PIE's released results to rounding on this
-hardware, so Task 2 can read the frozen cross-dataset checkpoint through this copy. cu128 wheels run on driver 550
-(CUDA minor-version compatibility); no forward-compatibility libraries were needed.
+hardware, so Task 2 can read the frozen cross-dataset checkpoint through this copy.
 
-## Provenance notes
-
-- The H20's connections to hf-mirror's CDN redirect (`us.aws.cdn.hf.co`, `cas-bridge.xethub.hf.co`) fail and recover
-  over minutes (DNS failures, TLS handshake timeouts, dropped streams), so the `download` step retries each asset; one
-  file (`pie_replogle_nadig_essential` `fold_changes.npy`) was also copied from the Mac with matching SHA-256 after the
-  H20 had fetched it itself (same bytes).
-- The four wdataset folds were scored at 09:41–09:43 UTC by an earlier `evaluate` process that later stopped on a DNS
-  failure while fetching Tahoe; `run.json` records the step times of the process that finished the xdataset.
+The four wdataset folds were scored at 09:41–09:43 UTC by an earlier `evaluate` process; `run.json` records the step
+times of the process that finished the xdataset.

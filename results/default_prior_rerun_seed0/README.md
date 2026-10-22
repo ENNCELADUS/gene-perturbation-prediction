@@ -8,7 +8,7 @@ each `hpc/run.sh prior CONFIG --run-id ID` then `hpc/run.sh prior-export CONFIG 
 
 - `default_prior_resplit_20261012`: `configs/context_prior/default_prior.yaml`, the default prior unchanged
   (`training_side.single_cell_extras: false`), on the split rebuilt on 2026-10-11 with A549 in test (171/27/28);
-- `default_prior_single_cell_extras_20261012`: `configs/context_prior/default_prior_single_cell_extras.yaml`, the same
+- `default_prior_single_cell_extras_20261012`: `configs/context_prior/default_prior_single_cell_extras.yaml` (since removed), the same
   prior with the 208 single-cell extras as single-cell training lines (GeneEffect protocol §10).
 
 Tables: [unchanged](default_prior_resplit_20261012.results.md), [with the extras](default_prior_single_cell_extras_20261012.results.md);
@@ -32,10 +32,9 @@ different paired lines, so that comparison is not like for like. The oracle (val
 in both.
 
 The exports: the unchanged run predicts its 169 single-cell training lines out of fold (selective Spearman 0.2109), the
-extras run its 377 (the 208 extras among them; 0.2121). A joint config with `train.single_cell_extras` needs the
-second: `load_inputs` refuses an export lacking a line the run exposes. Checked on the host with
-`configs/correction/standardized_mse_no_state.yaml`: 377 training lines, 6,690,108 training rows, every prior offset
-finite (no training was run).
+extras run its 377 (the 208 extras among them; 0.2121). The second, read by
+`configs/correction/standardized_mse_no_state.yaml` on the host (no training): 377 training lines, 6,690,108 training
+rows, every prior offset finite.
 
 ## Against the old split
 
@@ -47,9 +46,8 @@ and ACH-003012, which shares A549's patient.
 
 ## Check
 
-An earlier run of `default_prior.yaml` with the code before the switch (`0db59ad`, run `default_prior_20261012`) gave
-an identical export (largest absolute difference 0) and identical row files: the switch off reproduces the code before
-it. That run directory, whose bound config predates the switch, was removed.
+An earlier run of `default_prior.yaml` with the code before the switch (`0db59ad`, run `default_prior_20261012`, its
+directory since removed) gave an identical export (largest absolute difference 0) and identical row files.
 
 ## The single-cell statistics stack on this split
 

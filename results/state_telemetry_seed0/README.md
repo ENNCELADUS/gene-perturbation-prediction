@@ -7,7 +7,7 @@ inputs, from `configs/stage_one/states/telemetry.yaml`. Run on the H20 container
 `data/geneeffect_joint/v2/ladder/states/` there and the report in
 `outputs/stage_one/state_telemetry/telemetry/` (copied here as [telemetry_results.md](telemetry_results.md), beside
 its `report.json` on the host). Fitting seed 0 is the one projected. Telemetry only: no model is trained on
-GeneEffect, nothing is chosen in code, and nothing here is SL evidence.
+GeneEffect, and nothing here is SL evidence.
 
 ## What ran
 
@@ -88,7 +88,4 @@ and not copied here.
 
 Every vocabulary is built, projected and read through the frozen PIE, and the inputs Task 9 needs exist for all of
 them. Deposit is the largest visible structure in most vocabularies, and the absolute scVI states encode the line
-rather than a state within it. The frozen PIE's state gap is one to two percent of the across-line spread of its
-whole-line ΔE, close to the permuted control's and matched by the QC states: on frozen PIE, mixing states adds little
-beyond the line's mean input. Under protocol §17 a gap no larger than the permuted control's is not by itself a
-reason to stop; people choose which vocabularies Task 9 precomputes.
+rather than a state within it. On frozen PIE, mixing states adds little beyond the line's mean input.

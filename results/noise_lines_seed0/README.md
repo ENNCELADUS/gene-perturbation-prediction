@@ -7,7 +7,7 @@ learning_curve`, against the final split's default prior (`default_prior_final_s
 protocol §14. Tables: [results](noise_lines_20261014.results.md), [JSON](noise_lines_20261014.learning_curve.json).
 Cilantro-SL's predictions: `hpc/cilantro/stage_one_predictions.py` on the released `as_released_gc95M` stage one
 (`outputs/cilantro_analysis/stage_one_split_lines.csv` on the H20; 102,972 pairs, 4,681 genes, 54 of the 55 validation
-and test lines). Nothing here is synthetic-lethality evidence; nothing is chosen in code.
+and test lines). Nothing here is synthetic-lethality evidence.
 
 **Question.** Does using up DepMap's labelled lines make the prior predict GeneEffect more accurately, above all in the
 part it adjusts per line? One patient order (seed 0); the variance from which lines are dropped is not measured.
@@ -37,7 +37,7 @@ bootstraps; "over full" is the row minus the full prior.
 
 Per-line Pearson across genes and RMSE over every pair, prior against its gene mean: 0.9096 / 0.9088 at 1/8 to 0.9136 /
 0.9095 at all lines on validation (test 0.9119 / 0.9106 to 0.9149 / 0.9112); RMSE 0.1814 / 0.1822 to 0.1776 / 0.1816
-(test 0.1788 / 0.1801 to 0.1760 / 0.1795). The gene mean carries almost all of it.
+(test 0.1788 / 0.1801 to 0.1760 / 0.1795).
 
 ## Cilantro-SL's stage one on its covered pairs
 

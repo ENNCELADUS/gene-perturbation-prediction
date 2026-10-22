@@ -1,9 +1,9 @@
 # Stage-one inputs and the frozen-PIE pass
 
 Task 2 of the [stage-one design](../../docs/specs/2026-10-16-pie-geneeffect-ladder-design.md): the fixed inputs every
-later task reads, under `data/geneeffect_joint/v2/ladder/` (695 GB) and `data/tx1_basal_embeddings/v2_all/` (20 GB) on
-the H20 container on port 30838, from `configs/stage_one/ladder_inputs.yaml` at `c219707` (`hpc/run.sh ladder-inputs`
-and `hpc/run.sh pie-precompute`, recipes in `hpc/README.md`). Contents and definitions are in the
+later task reads, under `data/geneeffect_joint/v2/ladder/` and `data/tx1_basal_embeddings/v2_all/` on the H20
+container on port 30838, from `configs/stage_one/ladder_inputs.yaml` at `c219707` (`hpc/run.sh ladder-inputs` and
+`hpc/run.sh pie-precompute`, recipes in `hpc/README.md`). Contents and definitions are in the
 [data card](../../docs/data/ladder-inputs.md) and protocol §15. Finished 2026-10-17 18:12 UTC.
 
 ## What was built
@@ -20,9 +20,6 @@ and `hpc/run.sh pie-precompute`, recipes in `hpc/README.md`). Contents and defin
 | PIE pilot and basis | 2026-10-17 06:34 | 200 random panel genes (44 selective) × 1,036 lines |
 | PIE full pass | 2026-10-17 16:26 | 17,407 genes in four shards plus the pilot's 200; 7.5 s per gene per GPU over 1,036 lines (about 7.2 ms per pair) |
 | PIE assemble | 2026-10-17 16:38 | 17,607 genes × 1,036 lines |
-
-Shard 1 of the Tx1 pass's four was rerun as shards 1, 5, 9 and 13 of 16, which together cover its lines; the manifest
-records the four sixteenths in its place.
 
 ## What masking PIE's DepMap source costs PIE
 

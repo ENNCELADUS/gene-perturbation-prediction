@@ -41,6 +41,5 @@ the mean arm at matched penalties:
 
 **Reading.** In this linear form, the detected fraction and variance of a gene across a line's cells carry no
 dependency information that the gene's mean expression does not, and a second stage of any of them adds at most about
-0.005 selective Spearman to the default prior. The research plan's next layer (distributional models, cell-state
-proportions, AI-virtual-cell representations) therefore has no single-cell statistic here to start from; per-line
-cell-state proportions and partner fractions were not part of this stack.
+0.005 selective Spearman to the default prior. Per-line cell-state proportions and partner fractions were not part of
+this stack.

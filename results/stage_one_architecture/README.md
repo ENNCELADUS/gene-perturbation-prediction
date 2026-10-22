@@ -11,7 +11,7 @@ of the host's `report_3a/results.md`, beside its `results.json`). Seed 0. Nothin
 
 | Step | Finished (UTC) | Notes |
 | --- | --- | --- |
-| first queue | 2026-10-20 | every row; `direct_readout_warm`, `film_dE_full` and `multi_dE_full` (18 runs) failed: `PIE_RUNS_ROOT` unset for the warm start, and the open-file limit for the full-panel stream (fixed in `05006e7`) |
+| first queue | 2026-10-20 | every row; `direct_readout_warm`, `film_dE_full` and `multi_dE_full` (18 runs) failed (fixed in `05006e7`) |
 | retry queue | 2026-10-21 21:28 | those 18 runs, none failed |
 | hybrid queue | 2026-10-22 00:20 | `hybrid_dE` (added in `f5fefbe` once ΔE read best), main plus five folds |
 | report | 2026-10-22 01:40 | code at `f5fefbe` |
