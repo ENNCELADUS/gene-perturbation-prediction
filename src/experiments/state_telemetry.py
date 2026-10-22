@@ -9,7 +9,7 @@ skipping what exists, so rerunning resumes:
   contributes (``fit/sample_seed<s>.parquet``: at most ``fit.cells_per_line``
   distinct cells per line, so smaller lines weigh less; each cell's chemistry
   from the reviewed table by its deposit, line and arm); ``fit/plan.json`` and, in
-  ``.venv-states`` (``STATES_PYTHON``), ``src.data.prepare.state_programs``:
+  ``.venv-states`` (``STATES_PYTHON``), ``src.experiments.states.programs``:
   consensus NMF programs and their starCAT-style reference, scVI, and program
   usages and scVI latents for every cell of the projected lines and their second
   deposits (``programs/``, ``scvi/``); then the mixtures (``fit/seed<s>/
@@ -229,7 +229,7 @@ class Telemetry:
     @cached_property
     def deposits(self) -> pd.Series:
         """Each split line's deposit (the noise diagnosis's ``_deposits``)."""
-        from src.data.prepare.plan_second_sources import PRIMARY_KEYS
+        from src.data.build.plan_second_sources import PRIMARY_KEYS
 
         path = absolute(self.setup.joint["paths"]["split"]).with_suffix(".csv")
         table = pd.read_csv(path)
@@ -433,7 +433,7 @@ def _states_outputs_complete(t: Telemetry) -> bool:
 
 
 def run_state_programs(t: Telemetry) -> None:
-    """``src.data.prepare.state_programs`` in ``.venv-states`` (``STATES_PYTHON``)."""
+    """``src.experiments.states.programs`` in ``.venv-states`` (``STATES_PYTHON``)."""
     if _states_outputs_complete(t):
         return
     python = os.environ.get("STATES_PYTHON")
@@ -446,7 +446,7 @@ def run_state_programs(t: Telemetry) -> None:
         [
             python,
             "-m",
-            "src.data.prepare.state_programs",
+            "src.experiments.states.programs",
             "--plan",
             str(t.layout.plan),
         ],

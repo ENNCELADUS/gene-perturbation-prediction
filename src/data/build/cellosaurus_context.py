@@ -30,7 +30,7 @@ below ``ENDPOINT_MIN_COSINE`` (another model, or truncated vectors) stops the ru
 
     uv run --isolated --no-project --python 3.12 \\
         --with-editable 'third_party/pie[sources]' \\
-        python -m src.data.prepare.cellosaurus_context --out data/ladder_context_text
+        python -m src.data.build.cellosaurus_context --out data/ladder_context_text
 
 Under ``--out``: ``cellosaurus/`` (the client's record cache, reused on a rerun),
 ``embed/context_text/`` (PIE's per-batch embedding checkpoint, reused on a rerun),

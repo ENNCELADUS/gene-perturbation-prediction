@@ -50,7 +50,7 @@ lineage, cells and arms), `pending` (labelled, source not built or no cell after
 Preparation and the SL benchmark read only `labelled`. `inputs` records the SHA-256 of every input.
 
 **Second deposits** (2026-10-12, for the [noise diagnosis](../specs/2026-10-12-noise-diagnosis-design.md)'s deposit
-swap): `configs/data/second_source_lines_26Q1.json` (`src/data/prepare/plan_second_sources.py`) names, for each labelled
+swap): `configs/data/second_source_lines_26Q1.json` (`src/data/build/plan_second_sources.py`) names, for each labelled
 single-cell training line, one more source: an `ok`, raw-count row of the map from a source of the spec, other than the
 line's own (the final split table's `expression_source`; `kinker_sccle` and `Tahoe-100M DMSO` are the map's
 `kinker_scp542` and `tahoe100m`) and from another accession, chosen by the policy above. 99 lines have one: 36 Kinker to
@@ -60,7 +60,7 @@ file. All 99 were built on the H20 on 2026-10-12 (both waves, no failure).
 
 ## Builder
 
-`src/data/prepare/build_extra_single_cell_sources.py` reads the tracked source spec
+`src/data/build/build_extra_single_cell_sources.py` reads the tracked source spec
 `configs/data/extra_single_cell_sources_26Q1.json` (per source: files and their URLs, archives to
 unpack, gene id kind, basal arms, libraries). Per library:
 
@@ -77,7 +77,7 @@ unpack, gene id kind, basal arms, libraries). Per library:
   a small cap, or one holding corrected integer counts, passes that check, so it is excluded at
   review.
 - **Re-count:** a source with a `recount` entry is counted from its SRA runs before it is built
-  (`src/data/prepare/recount_extra_single_cell_sources.py`): `fasterq-dump` with technical reads,
+  (`src/data/build/recount_extra_single_cell_sources.py`): `fasterq-dump` with technical reads,
   then `kb count` (kb-python 0.30.2, kallisto 0.52.0, bustools 0.45.1, standard workflow) against a
   kallisto index of GENCODE v44 on the GRCh38 primary assembly, built once by `kb ref` with the
   genome as its D-list. kb's unfiltered gene matrix is kept in Cell Ranger layout under
@@ -260,7 +260,7 @@ New sources enter as map rows (with an empty `review`) and spec entries; then, o
 `propose` fills the rows and the flagged ones are reviewed by hand:
 
 ```bash
-uv run python -m src.data.prepare.build_extra_single_cell_lines propose \
+uv run python -m src.data.build.build_extra_single_cell_lines propose \
     --candidates configs/benchmarks/single_cell_atlas_candidates.csv \
     --model data/sl_dependency_v0/raw/depmap/Model.csv
 ```

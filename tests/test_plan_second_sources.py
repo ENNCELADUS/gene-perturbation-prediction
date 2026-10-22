@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.data.prepare.build_extra_single_cell_lines import MAP_COLUMNS
-from src.data.prepare.plan_second_sources import plan, primary_sources
+from src.data.build.build_extra_single_cell_lines import MAP_COLUMNS
+from src.data.build.plan_second_sources import plan, primary_sources
 
 
 def _rows(*rows):

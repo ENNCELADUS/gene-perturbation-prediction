@@ -10,7 +10,7 @@ ladder_root: data/geneeffect_joint/v2/ladder
 paths:
   gene_text: data/pie/hf/datasets/arcinstitute/pie_sources/cb1aaa4e7655605bdc70a9bd77bbd62016b8c7d7/gene_text
   pie_checkpoint: data/pie/released/PIE_replogle_xdataset@f6da9607226139a1040b6992736118c9b5c7c313/best_auprc.ckpt
-  # The Cellosaurus text of every line (src.data.prepare.cellosaurus_context, on the Mac), a PIE context_text source.
+  # The Cellosaurus text of every line (src.data.build.cellosaurus_context, on the Mac), a PIE context_text source.
   context_text: data/geneeffect_joint/v2/ladder/context_text
   tx1_cache: data/tx1_basal_embeddings/v2_all
 frame: {folds: 5}

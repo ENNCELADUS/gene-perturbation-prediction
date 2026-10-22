@@ -10,7 +10,7 @@ accession than the primary's. Lines without one are left out. Reads tracked file
 only; writes ``configs/data/second_source_lines_26Q1.json``, which
 ``build_extra_single_cell_sources --second-source`` builds into its own directory.
 
-uv run python -m src.data.prepare.plan_second_sources \
+uv run python -m src.data.build.plan_second_sources \
     --candidates configs/benchmarks/single_cell_atlas_candidates.csv \
     --split configs/benchmarks/cell_line_geneeffect_split.json \
     --spec configs/data/extra_single_cell_sources_26Q1.json \
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.data.prepare.build_extra_single_cell_lines import choose_sources, read_map
+from src.data.build.build_extra_single_cell_lines import choose_sources, read_map
 from src.data.splits import load_geneeffect_split
 
 SCHEMA_VERSION = 1

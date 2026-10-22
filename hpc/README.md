@@ -219,7 +219,7 @@ The ESM steps run in `ESM_PYTHON` (default the H20's
 `/2023533015/ppi-mutation-ddg/.venv`, `esm` 3.2.1) with `ESM_HF_HOME` (default `/2023533015/.cache/huggingface`) offline;
 `hpc/esm/setup.sh` builds an own `.venv-esm` should that environment go. The Cellosaurus text is built on the Mac
 (`uv run --isolated --no-project --python 3.12 --with-editable 'third_party/pie[sources]' python -m
-src.data.prepare.cellosaurus_context --out DIR`, with `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` set on that
+src.data.build.cellosaurus_context --out DIR`, with `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` set on that
 command line only; a SOCKS `ALL_PROXY` in the shell needs `--with socksio`) and copied to `ladder/context_text/` with a
 SHA-256 check.
 
@@ -351,16 +351,16 @@ membership file changes, rebuild the final split (on the Mac; it reads tracked f
 
 ```bash
 S=configs/data/extra_single_cell_sources_26Q1.json
-.venv-tx1/bin/python -m src.data.prepare.build_extra_single_cell_sources --spec $S --wave 1 --print-downloads \
+.venv-tx1/bin/python -m src.data.build.build_extra_single_cell_sources --spec $S --wave 1 --print-downloads \
   | while IFS=$'\t' read url path; do mkdir -p "$(dirname "$path")"; wget -c -O "$path" "$url"; done
-OMP_NUM_THREADS=16 nohup .venv-tx1/bin/python -m src.data.prepare.build_extra_single_cell_sources --spec $S --wave 1 \
+OMP_NUM_THREADS=16 nohup .venv-tx1/bin/python -m src.data.build.build_extra_single_cell_sources --spec $S --wave 1 \
   --output-dir data/sl_dependency_v0/processed/basal_raw_umi > outputs/launches/extras_wave1.log 2>&1 &
-.venv-tx1/bin/python -m src.data.prepare.build_extra_single_cell_lines build \
+.venv-tx1/bin/python -m src.data.build.build_extra_single_cell_lines build \
   --candidates configs/benchmarks/single_cell_atlas_candidates.csv --model data/sl_dependency_v0/raw/depmap/Model.csv \
   --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
   --split configs/benchmarks/cell_line_geneeffect_226_split.json \
   --qc-dir data/sl_dependency_v0/processed/basal_raw_umi/qc --out configs/benchmarks/extra_single_cell_lines_26Q1.json
-uv run python -m src.data.prepare.build_cell_line_geneeffect_split \
+uv run python -m src.data.build.build_cell_line_geneeffect_split \
   --split-226 configs/benchmarks/cell_line_geneeffect_226_split.json \
   --single-cell configs/benchmarks/extra_single_cell_lines_26Q1.json \
   --bulk configs/benchmarks/extra_bulk_lines_26Q1.json --out configs/benchmarks/cell_line_geneeffect_split.json
@@ -382,8 +382,8 @@ checkout under `/2023533015/tools/`; `pysam` from the `data` extra is in `.venv-
 
 ```bash
 K="--kb /2023533015/tools/kb-venv/bin/kb --fasterq-dump /2023533015/tools/sratoolkit/bin/fasterq-dump"
-.venv-tx1/bin/python -m src.data.prepare.recount_extra_single_cell_sources --spec $S --wave 2 $K index
-.venv-tx1/bin/python -m src.data.prepare.recount_extra_single_cell_sources --spec $S --wave 2 $K count \
+.venv-tx1/bin/python -m src.data.build.recount_extra_single_cell_sources --spec $S --wave 2 $K index
+.venv-tx1/bin/python -m src.data.build.recount_extra_single_cell_sources --spec $S --wave 2 $K count \
   [--sources gse142750_recount]
 ```
 
@@ -401,7 +401,7 @@ time; the training caches are not touched:
 ```bash
 S=configs/data/extra_single_cell_sources_26Q1.json; P=configs/data/second_source_lines_26Q1.json
 O=data/sl_dependency_v0/processed/basal_raw_umi_second_source
-for W in 1 2; do OMP_NUM_THREADS=16 .venv-tx1/bin/python -m src.data.prepare.build_extra_single_cell_sources --spec $S \
+for W in 1 2; do OMP_NUM_THREADS=16 .venv-tx1/bin/python -m src.data.build.build_extra_single_cell_sources --spec $S \
   --wave $W --second-source $P --output-dir $O; done > outputs/launches/second_sources.log 2>&1
 ```
 

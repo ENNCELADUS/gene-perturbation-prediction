@@ -7,7 +7,7 @@
 # torchvision and torchtext, which no inference module imports and whose wheels pin older torch, so esm goes in with
 # --no-deps and its imported dependencies are listed here, with transformers held below 4.48.2 as esm requires. torch is
 # 2.10.0 from the PyTorch cu128 index, as in .venv-pie (cu128 wheels run on driver 550 by minor-version compatibility).
-# The weights go to data/esm/hf; src.data.prepare.embed_protein_sources refuses any snapshot but its pinned revisions.
+# The weights go to data/esm/hf; src.data.build.embed_protein_sources refuses any snapshot but its pinned revisions.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

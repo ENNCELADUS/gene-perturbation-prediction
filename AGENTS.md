@@ -115,7 +115,7 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them. Its
   lines are the 226 and the built single-cell extras (`configs/benchmarks/extra_single_cell_lines_26Q1.json`), each read
   from `<paths.basal_raw_umi>/<ModelID>.h5ad`; an existing root grows by the lines it lacks, in the recorded space. The
-  extras' h5ad are built from public deposits by `src/data/prepare/build_extra_single_cell_sources.py`.
+  extras' h5ad are built from public deposits by `src/data/build/build_extra_single_cell_sources.py`.
 - **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
   the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the

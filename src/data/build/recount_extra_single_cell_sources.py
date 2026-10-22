@@ -13,9 +13,9 @@ source builder then reads like a deposit. The dumped FASTQ are deleted; a
 library whose ``kb/<library>/done.json`` exists is skipped, and an interrupted
 library's partial output is removed before it is counted again.
 
-uv run python -m src.data.prepare.recount_extra_single_cell_sources \
+uv run python -m src.data.build.recount_extra_single_cell_sources \
     --spec configs/data/extra_single_cell_sources_26Q1.json --wave 2 index
-uv run python -m src.data.prepare.recount_extra_single_cell_sources \
+uv run python -m src.data.build.recount_extra_single_cell_sources \
     --spec configs/data/extra_single_cell_sources_26Q1.json --wave 2 count \
     [--sources gse142750_recount] [--kb kb] [--fasterq-dump fasterq-dump]
 """  # noqa: E501

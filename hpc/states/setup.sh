@@ -2,7 +2,7 @@
 # Build the cell-state environment on the H20: .venv-states with cNMF, starCAT and scvi-tools, then check that they
 # import and that CUDA works through its torch.
 #
-# src.data.prepare.state_programs runs here (consensus NMF per training line, the recurrent-program reference and
+# src.experiments.states.programs runs here (consensus NMF per training line, the recurrent-program reference and
 # its usages, scVI and its latents; PIE stage-one design §3.5, Task 8) and exchanges files only with the project
 # environment, which drives it through STATES_PYTHON (hpc/run.sh cell-states). Pinned: cnmf 1.7.1, starcatpy 1.0.10,
 # scvi-tools 1.4.2, torch 2.10.0 from the PyTorch cu128 index as in .venv-pie (cu128 wheels run on driver 550 by
@@ -40,5 +40,5 @@ torch.cuda.synchronize()
 assert torch.isfinite(a @ a).all(), "non-finite result on cuda:0"
 print("float32 matmul ran on", torch.cuda.get_device_name(0))
 EOF
-.venv-states/bin/python -c "import src.data.prepare.state_programs"
+.venv-states/bin/python -c "import src.experiments.states.programs"
 echo "STATES_PYTHON=$(pwd)/.venv-states/bin/python"

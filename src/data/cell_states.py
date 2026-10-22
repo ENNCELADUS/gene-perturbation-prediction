@@ -8,7 +8,7 @@ a line: soft memberships ``q_ik`` summing to one over the vocabulary's states.
 - ``cycle``: a Gaussian mixture on each cell's S and G2/M program scores
   (absolute), its components named non-cycling, S and G2/M.
 - ``programs``: recurrent programs from consensus NMF per training line
-  (``src.data.prepare.state_programs``, ``.venv-states``); a cell's memberships
+  (``src.experiments.states.programs``, ``.venv-states``); a cell's memberships
   are its non-negative usages of the recurrent programs and the background
   program, cycle usages dropped, normalised to one (``program_memberships``).
 - Mixtures (``fit_mixture``): a Gaussian mixture with full covariances on a

@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from src.context_prior.reference import load_reference
-from src.data.prepare.build_context_reference import (
+from src.data.build.build_context_reference import (
     closest_paralogs,
     driver_status,
     parse_corum,

@@ -16,8 +16,8 @@ import pytest
 from scipy import sparse
 from scipy.io import mmwrite
 
-from src.data.prepare.build_extra_single_cell_lines import MAP_COLUMNS
-from src.data.prepare.build_extra_single_cell_sources import (
+from src.data.build.build_extra_single_cell_lines import MAP_COLUMNS
+from src.data.build.build_extra_single_cell_sources import (
     Library,
     _identify,
     assign_pool,
@@ -485,7 +485,7 @@ def test_table_and_labels_skip_comment_header_lines(tmp_path):
 
 
 def test_loom_reader_and_gzip_unpack(tmp_path):
-    from src.data.prepare.build_extra_single_cell_sources import _unpack
+    from src.data.build.build_extra_single_cell_sources import _unpack
 
     rng = np.random.default_rng(2)
     counts = _counts(rng, 5)
@@ -622,7 +622,7 @@ def test_r_written_label_table_keeps_its_row_names_as_cell_ids(tmp_path):
 
 
 def test_lognorm_counts_recover_integers_and_refuse_other_values():
-    from src.data.prepare.build_extra_single_cell_sources import lognorm_counts
+    from src.data.build.build_extra_single_cell_sources import lognorm_counts
 
     rng = np.random.default_rng(4)
     counts = rng.poisson(2.0, size=(6, 30)).astype(np.int64)
@@ -791,7 +791,7 @@ def test_tenx_bam_reader_counts_one_umi_per_representative_read(tmp_path):
 
 
 def test_downloads_list_the_recount_reference_once(tmp_path):
-    from src.data.prepare.build_extra_single_cell_sources import downloads
+    from src.data.build.build_extra_single_cell_sources import downloads
 
     spec = {
         "raw_root": str(tmp_path / "raw"),

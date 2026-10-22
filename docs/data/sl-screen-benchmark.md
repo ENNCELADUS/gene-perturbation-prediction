@@ -168,7 +168,7 @@ wget -U Mozilla/5.0 -O $R/ito_2021/41588_2021_967_MOESM2_ESM.xlsx "https://stati
 for t in s2_suppst2 s4_suppst4 s6_suppst6; do wget -U Mozilla/5.0 -O $R/klingbeil_2024/cd-23-1529_supplementary_table_$t.xlsx "https://pmc-oa-opendata.s3.amazonaws.com/PMC11609825.1/cd-23-1529_supplementary_table_$t.xlsx"; done
 wget -U Mozilla/5.0 -O $R/harle_2025/13059_2025_3737_MOESM1_ESM.xlsx "https://static-content.springer.com/esm/art%3A10.1186%2Fs13059-025-03737-w/MediaObjects/13059_2025_3737_MOESM1_ESM.xlsx"
 wget -O $R/hgnc/hgnc_complete_set.txt "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
-uv run python -m src.data.prepare.build_sl_screen_benchmark \
+uv run python -m src.data.build.build_sl_screen_benchmark \
     --raw data/sl_screens/raw \
     --lines configs/benchmarks/sl_screen_lines.csv \
     --split configs/benchmarks/cell_line_geneeffect_226_split.json \

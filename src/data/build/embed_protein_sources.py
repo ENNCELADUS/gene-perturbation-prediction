@@ -1,7 +1,7 @@
 """Protein gene sources for the stage-one gene encoder (ladder design §4.4): ESM C 600M
 and ESM3-open over the reviewed human UniProt sequences behind PIE's ``esm2`` source.
 
-``python -m src.data.prepare.embed_protein_sources --steps STEPS --out DIR ...`` runs
+``python -m src.data.build.embed_protein_sources --steps STEPS --out DIR ...`` runs
 these steps in order, each skipped when its output exists, so rerunning resumes:
 
 - ``proteins`` (``.venv-pie``, CPU): PIE's own UniProt code

@@ -16,7 +16,7 @@ The table lists every single-cell line's split, patient, lineage and expression
 source. The three input files stay as this split's provenance; nothing else reads
 them for a fit.
 
-uv run python -m src.data.prepare.build_cell_line_geneeffect_split \
+uv run python -m src.data.build.build_cell_line_geneeffect_split \
     --split-226 configs/benchmarks/cell_line_geneeffect_226_split.json \
     --single-cell configs/benchmarks/extra_single_cell_lines_26Q1.json \
     --bulk configs/benchmarks/extra_bulk_lines_26Q1.json \

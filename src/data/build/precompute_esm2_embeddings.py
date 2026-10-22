@@ -1,6 +1,6 @@
 """Fetch UniProt sequences for a supplied gene universe and embed with ESM2.
 
-Run with ``python -m src.data.prepare.precompute_esm2_embeddings``.
+Run with ``python -m src.data.build.precompute_esm2_embeddings``.
 Use explicit benchmark, sequence-cache and output paths; see ``--help``.
 """
 

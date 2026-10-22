@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from src.data.extra_lines import SCHEMA_VERSION, load_extra_lines
-from src.data.prepare.build_extra_bulk_lines import build_extra_lines
+from src.data.build.build_extra_bulk_lines import build_extra_lines
 from src.data.splits import FixedSplit
 
 SPLIT = FixedSplit(train=("T1",), val=("V1",), test=("S1",))

@@ -104,8 +104,8 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them. Its
   lines are the split's (the 226 and the built single-cell extras), each read from `<paths.basal_raw_umi>/<ModelID>.h5ad`;
   an existing root grows by the lines it lacks, in the recorded space (the split path is not a preparation setting). The
-  extras' h5ad are built from public deposits by `src/data/prepare/build_extra_single_cell_sources.py`, after
-  `src/data/prepare/recount_extra_single_cell_sources.py` re-counts the SRA reads of deposits without raw counts.
+  extras' h5ad are built from public deposits by `src/data/build/build_extra_single_cell_sources.py`, after
+  `src/data/build/recount_extra_single_cell_sources.py` re-counts the SRA reads of deposits without raw counts.
 - **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`) fits on the split's 377
   labelled training lines, as do the gene means, selective genes, residual SD and context PCA. STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
@@ -124,7 +124,7 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
 - `configs/benchmarks/cell_line_geneeffect_split.json` (the **final split**, [card](docs/data/cell-line-geneeffect-split.md)) is
   the sole membership authority: 379 single-cell training lines (the 226's 171, PC9 and HeLa unlabelled, then the 208
   single-cell extras), 27 validation, 28 test (A549 since 2026-10-11), 713 labelled and 576 unlabelled bulk-only lines
-  that join the prior's training side through bulk RNA, and 12 excluded. `src/data/prepare/build_cell_line_geneeffect_split.py`
+  that join the prior's training side through bulk RNA, and 12 excluded. `src/data/build/build_cell_line_geneeffect_split.py`
   builds it from `cell_line_geneeffect_226_split.json`, `extra_single_cell_lines_26Q1.json` and `extra_bulk_lines_26Q1.json`,
   which no fit reads; its table (`.csv`) gives each line's lineage and patient. `src/data/splits.py:assert_fit_eligible`
   guards every fit. Only split, config, provenance files and the context prior's reference tables are tracked data.
