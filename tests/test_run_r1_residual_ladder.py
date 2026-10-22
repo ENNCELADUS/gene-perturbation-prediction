@@ -368,7 +368,7 @@ def _synthetic_inputs():
 
 
 def test_baselines_run_on_synthetic_inputs(tmp_path: Path) -> None:
-    from src.experiments.baselines import run_baselines
+    from src.experiments.joint.baselines import run_baselines
 
     inputs = _synthetic_inputs()
     result = run_baselines({}, split="val", out_dir=tmp_path / "val", inputs=inputs)
@@ -399,7 +399,7 @@ def test_baselines_add_the_prior_controls_with_a_prior(tmp_path: Path) -> None:
 
     from src.baselines.prior_controls import PRIOR, PRIOR_PLUS_TX1_RIDGE
     from src.data.prior_offsets import PriorOffsets
-    from src.experiments.baselines import run_baselines
+    from src.experiments.joint.baselines import run_baselines
 
     inputs = _synthetic_inputs()
     lines = (*inputs.split.supervised_train, *inputs.split.val)

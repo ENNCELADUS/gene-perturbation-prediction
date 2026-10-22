@@ -1,7 +1,9 @@
-"""Joint GeneEffect training in a run directory, and checkpoint evaluation."""
+"""Train the joint GeneEffect model into a run directory (resumes from ``last.pt``),
+as one process or under ``accelerate launch``."""
 
 from __future__ import annotations
 
+import argparse
 from collections.abc import Mapping
 from dataclasses import asdict
 import json
@@ -9,31 +11,13 @@ from pathlib import Path
 import random
 from typing import TYPE_CHECKING, Any
 
-from src.experiments.config import PRECISION, validate_config
+from src.experiments.joint.config import load_config, mixed_precision, validate_config
 from src.data.io import write_json
 from src.experiments.run_dir import git_revision
 
 
-def mixed_precision() -> str:
-    """bf16 on CUDA, where every joint run goes; fp32 on the CPU (the tests)."""
-    import torch
-
-    return PRECISION if torch.cuda.is_available() else "no"
-
-
 if TYPE_CHECKING:
     from src.data.prepared import PreparedInputs
-    from src.eval.accuracy import EvalResult
-    from src.model.joint import GeneEffectE2EModel
-
-
-def restore_model(
-    saved: Mapping[str, Any], inputs: PreparedInputs
-) -> GeneEffectE2EModel:
-    """Rebuild a checkpoint's joint model; ``inputs`` use its saved preprocessing."""
-    from src.model.initialization import restore_joint_model
-
-    return restore_joint_model(saved, inputs)
 
 
 def run_training(
@@ -54,7 +38,7 @@ def run_training(
     from accelerate import Accelerator
     import yaml
 
-    from src.model.initialization import build_joint_model
+    from src.model.initialization import build_joint_model, restore_joint_model
     from src.training.checkpoint import load_checkpoint
     from src.training.trainer import fit, training_diagnostic_lines
 
@@ -101,7 +85,7 @@ def run_training(
     model = (
         build_joint_model(config, inputs)
         if saved is None
-        else restore_model(saved, inputs)
+        else restore_joint_model(saved, inputs)
     )
     state = fit(model, inputs, config, run_dir, accelerator, restored=saved)
     if accelerator.is_main_process:
@@ -111,44 +95,14 @@ def run_training(
     return best
 
 
-def evaluate_checkpoint(
-    checkpoint: Path,
-    *,
-    split: str,
-    inputs: PreparedInputs | None = None,
-) -> EvalResult:
-    """Score a checkpoint on one split with its saved preprocessing; never fits.
-
-    ``inputs`` replaces ``load_inputs`` for synthetic tests.
-    """
-    from accelerate import Accelerator
-
-    from src.eval.accuracy import evaluate_model
-    from src.training.checkpoint import load_checkpoint
-
-    saved = load_checkpoint(Path(checkpoint))
-    config = saved["config"]
-    if inputs is None:
-        from src.data.prepared import load_inputs
-
-        inputs = load_inputs(
-            config, preprocessing=saved["preprocessing"], include_test=split == "test"
-        )
-    # The same precision as training-time validation, so the numbers agree.
-    accelerator = Accelerator(mixed_precision=mixed_precision())
-    if accelerator.num_processes > 1:
-        raise ValueError(
-            "evaluate_checkpoint runs in one process: only rank zero holds the tables"
-        )
-    model = restore_model(saved, inputs).to(accelerator.device)
-    return evaluate_model(model, inputs, config, split=split, accelerator=accelerator)
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--run-dir", type=Path, required=True)
+    args = parser.parse_args(argv)
+    print(run_training(load_config(args.config), args.run_dir), flush=True)
+    return 0
 
 
-def export_evaluation(result: EvalResult, out_dir: Path) -> None:
-    """Write predictions.parquet, metrics.json, per_line.csv and per_gene.csv."""
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    result.predictions.to_parquet(out_dir / "predictions.parquet", index=False)
-    result.per_line.to_csv(out_dir / "per_line.csv", index=False)
-    result.per_gene.to_csv(out_dir / "per_gene.csv", index=False)
-    write_json(out_dir / "metrics.json", result.metrics)
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,4 +1,6 @@
-"""Joint GeneEffect configuration: every key explicit, unknown keys rejected."""
+"""Strict config schemas: every key explicit, unknown keys rejected. Each track's
+loader lives with its track; this module holds what they share and the loaders of the
+tracks not yet moved."""
 
 from collections.abc import Mapping
 from pathlib import Path
@@ -6,48 +8,8 @@ from typing import Any
 
 import yaml
 
-_GROUPS = {
-    "seeds": "train collator projection",
-    "train": (
-        "max_epochs patience dependency_batch_size state_learning_rate "
-        "adapter_learning_rate head_learning_rate weight_decay "
-        "objective state_mode warmup_epochs genes_per_block"
-    ),
-    "comparison": (
-        "epochs hidden learning_rate state_learning_rate batch_size shuffles bootstrap"
-    ),
-    "features": (
-        "cells_per_context variable_gene_min_observations variable_gene_percentile "
-        "selective_min_lines selective_max_fraction residual_sd_floor_percentile"
-    ),
-    "model": (
-        "cell_sentence_len esm2_adapter_hidden head_blocks factor_rank "
-        "context_components dropout"
-    ),
-    "preparation": (
-        "response_max_cells_per_gene response_sampling_seed tx1_batch_size "
-        "tx1_max_length var_ensembl_col"
-    ),
-    "paths": (
-        "split gene_effect basal_raw_umi tx1_model_dir tx1_cache esm2_embeddings "
-        "state_checkpoint state_model_dir perturbseq_sources prior"
-    ),
-}
-_TOP_LEVEL = "output_root prepared_root"
-_HEAD_BLOCKS = "use_delta_proj use_s"
-#: The joint model trains, validates and extracts features in bf16 on CUDA.
-PRECISION = "bf16"
-OBJECTIVES = (
-    "huber",
-    "standardized_mse",
-    "pearson_blocks",
-    "line_ranking",
-    "dependency_classification",
-)
-STATE_MODES = ("frozen", "trainable")
 
-
-def _require_keys(value: Any, expected: set[str], name: str) -> None:
+def require_keys(value: Any, expected: set[str], name: str) -> None:
     if not isinstance(value, Mapping):
         raise ValueError(f"{name} must be a mapping")
     missing, unknown = expected - value.keys(), value.keys() - expected
@@ -57,24 +19,9 @@ def _require_keys(value: Any, expected: set[str], name: str) -> None:
         )
 
 
-def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Reject missing and unknown keys and unknown choices; values as written."""
-    _require_keys(config, {*_GROUPS, *_TOP_LEVEL.split()}, "config")
-    for name, keys in _GROUPS.items():
-        _require_keys(config[name], set(keys.split()), name)
-    _require_keys(
-        config["model"]["head_blocks"], set(_HEAD_BLOCKS.split()), "model.head_blocks"
-    )
-    for key, choices in (("objective", OBJECTIVES), ("state_mode", STATE_MODES)):
-        if config["train"][key] not in choices:
-            raise ValueError(f"train.{key} must be one of {choices}")
-    return dict(config)
-
-
-def load_config(path: Path) -> dict[str, Any]:
-    """Load and validate a YAML config; relative paths resolve from the repo root."""
+def read_yaml(path: Path) -> Any:
     with Path(path).open() as handle:
-        return validate_config(yaml.safe_load(handle))
+        return yaml.safe_load(handle)
 
 
 _PRIOR_GROUPS = {
@@ -93,9 +40,9 @@ GENE_BLOCKS = ("own_expression", "partners", "data_selected")
 def validate_prior_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Keys of a linear-context-prior experiment config; experiments and block
     sets are named by the config, their shape is checked."""
-    _require_keys(config, {*_PRIOR_GROUPS, *_PRIOR_TOP_LEVEL.split()}, "config")
+    require_keys(config, {*_PRIOR_GROUPS, *_PRIOR_TOP_LEVEL.split()}, "config")
     for name, keys in _PRIOR_GROUPS.items():
-        _require_keys(config[name], set(keys.split()), name)
+        require_keys(config[name], set(keys.split()), name)
     for name, blocks in config["block_sets"].items():
         if (
             not blocks
@@ -106,14 +53,14 @@ def validate_prior_config(config: Mapping[str, Any]) -> dict[str, Any]:
                 f"block set {name}: expression_components first, then gene-level blocks"
             )
     for name, experiment in config["experiments"].items():
-        _require_keys(experiment, set(_EXPERIMENT_KEYS.split()), f"experiments.{name}")
+        require_keys(experiment, set(_EXPERIMENT_KEYS.split()), f"experiments.{name}")
         unknown = set(experiment["block_sets"]) - set(config["block_sets"])
         if unknown:
             raise ValueError(
                 f"experiments.{name}: unknown block sets {sorted(unknown)}"
             )
     reference = config["reference"]
-    _require_keys(reference, set(_REFERENCE_KEYS.split()), "reference")
+    require_keys(reference, set(_REFERENCE_KEYS.split()), "reference")
     if reference["experiment"] not in config["experiments"]:
         raise ValueError("reference must name an experiment")
     if reference["block_set"] not in config["block_sets"]:
@@ -131,8 +78,7 @@ def validate_prior_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 def load_prior_config(path: Path) -> dict[str, Any]:
     """Load and validate a prior YAML config; paths resolve from the repo root."""
-    with Path(path).open() as handle:
-        return validate_prior_config(yaml.safe_load(handle))
+    return validate_prior_config(read_yaml(path))
 
 
 _STACK_TOP_LEVEL = (
@@ -145,8 +91,8 @@ _STACK_STATISTICS = ("mean", "detected", "variance")
 def validate_stack_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Keys of a single-cell statistics stack config: the prior run whose export
     it stacks on, the penalty grids, and arms naming the statistics they read."""
-    _require_keys(config, set(_STACK_TOP_LEVEL.split()), "config")
-    _require_keys(config["penalties"], set(_STACK_PENALTIES.split()), "penalties")
+    require_keys(config, set(_STACK_TOP_LEVEL.split()), "config")
+    require_keys(config["penalties"], set(_STACK_PENALTIES.split()), "penalties")
     if not all(p > 0 for p in config["penalties"]["own"]):
         raise ValueError("penalties.own must be positive (.inf: pooled weights only)")
     if not all(0 < p < float("inf") for p in config["penalties"]["selected"]):
@@ -168,8 +114,7 @@ def validate_stack_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 def load_stack_config(path: Path) -> dict[str, Any]:
     """Load and validate a single-cell statistics stack YAML config."""
-    with Path(path).open() as handle:
-        return validate_stack_config(yaml.safe_load(handle))
+    return validate_stack_config(read_yaml(path))
 
 
 _NOISE_GROUPS = {
@@ -186,9 +131,9 @@ _NOISE_TOP_LEVEL = "seed output_root prior_run bootstrap_repeats"
 def validate_noise_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Keys of a noise-diagnosis config: the prior run it reads, and one group per
     measurement; the shapes of the grids are checked."""
-    _require_keys(config, {*_NOISE_GROUPS, *_NOISE_TOP_LEVEL.split()}, "config")
+    require_keys(config, {*_NOISE_GROUPS, *_NOISE_TOP_LEVEL.split()}, "config")
     for name, keys in _NOISE_GROUPS.items():
-        _require_keys(config[name], set(keys.split()), name)
+        require_keys(config[name], set(keys.split()), name)
     if not all(isinstance(n, int) and n > 0 for n in config["cell_sampling"]["cells"]):
         raise ValueError("cell_sampling.cells must be positive integers")
     if not all(0 < f < 1 for f in config["learning_curve"]["fractions"]):
@@ -212,8 +157,7 @@ def validate_noise_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 def load_noise_config(path: Path) -> dict[str, Any]:
     """Load and validate a noise-diagnosis YAML config."""
-    with Path(path).open() as handle:
-        return validate_noise_config(yaml.safe_load(handle))
+    return validate_noise_config(read_yaml(path))
 
 
 _LADDER_GROUPS = {
@@ -229,9 +173,9 @@ def validate_ladder_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Keys of the stage-one inputs config: the default prior's config (split,
     labels, bulk RNA, lineage drop), the noise diagnosis's (programs, clusters),
     the ladder root, and the frozen PIE and Tx1 settings."""
-    _require_keys(config, {*_LADDER_GROUPS, *_LADDER_TOP_LEVEL.split()}, "config")
+    require_keys(config, {*_LADDER_GROUPS, *_LADDER_TOP_LEVEL.split()}, "config")
     for name, keys in _LADDER_GROUPS.items():
-        _require_keys(config[name], set(keys.split()), name)
+        require_keys(config[name], set(keys.split()), name)
     if not (isinstance(config["frame"]["folds"], int) and config["frame"]["folds"] > 1):
         raise ValueError("frame.folds must be an integer above 1")
     for key in ("pilot_genes", "components", "lines_per_batch"):
@@ -243,8 +187,7 @@ def validate_ladder_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 def load_ladder_config(path: Path) -> dict[str, Any]:
     """Load and validate a stage-one inputs YAML config."""
-    with Path(path).open() as handle:
-        return validate_ladder_config(yaml.safe_load(handle))
+    return validate_ladder_config(read_yaml(path))
 
 
 # --- the stage-one model (PIE stage-one design §3.3, §4; protocol §16) -------------
@@ -396,9 +339,7 @@ def _validate_stage_one_model(
             "model.context: the multi-encoder's context encoder, else null"
         )
     if model["context"] is not None:
-        _require_keys(
-            model["context"], set(_STAGE_ONE_CONTEXT.split()), "model.context"
-        )
+        require_keys(model["context"], set(_STAGE_ONE_CONTEXT.split()), "model.context")
         for key in _STAGE_ONE_CONTEXT.split():
             _positive_int(model["context"][key], f"model.context.{key}")
     if arm == "hybrid" and data["input"] not in STAGE_ONE_DELTAS:
@@ -407,7 +348,7 @@ def _validate_stage_one_model(
         raise ValueError("model.trunk: the direct readout's trunk, else null")
     if model["trunk"] is not None:
         trunk = model["trunk"]
-        _require_keys(trunk, set(_STAGE_ONE_TRUNK.split()), "model.trunk")
+        require_keys(trunk, set(_STAGE_ONE_TRUNK.split()), "model.trunk")
         for key in _STAGE_ONE_TRUNK.split():
             if key not in ("dropout", "warm_start", "n_processor_layers"):
                 _positive_int(trunk[key], f"model.trunk.{key}")
@@ -425,7 +366,7 @@ def _validate_stage_one_model(
 
 def _validate_stage_one_train(config: Mapping[str, Any]) -> None:
     for name, keys in _STAGE_ONE_GROUPS.items():
-        _require_keys(config[name], set(keys.split()), name)
+        require_keys(config[name], set(keys.split()), name)
     _validate_stage_one_data(config["data"])
     _validate_stage_one_model(config["model"], config["data"])
     train = config["train"]
@@ -458,7 +399,7 @@ def _validate_stage_one_report(config: Mapping[str, Any]) -> None:
             raise ValueError(
                 f"rows[{index}].kind must be one of {tuple(_STAGE_ONE_ROWS)}"
             )
-        _require_keys(row, set(_STAGE_ONE_ROWS[row["kind"]].split()), f"rows[{index}]")
+        require_keys(row, set(_STAGE_ONE_ROWS[row["kind"]].split()), f"rows[{index}]")
         if row["kind"] == "dh_ridge" and not row["penalty"] > 0:
             raise ValueError(f"rows[{index}].penalty must be positive")
         names.append(row["name"])
@@ -475,7 +416,7 @@ def validate_stage_one_config(config: Mapping[str, Any]) -> dict[str, Any]:
     (``report``); each kind's groups and choices are checked."""
     if not isinstance(config, Mapping) or config.get("kind") not in STAGE_ONE_KINDS:
         raise ValueError(f"kind must be one of {STAGE_ONE_KINDS}")
-    _require_keys(config, set(_STAGE_ONE_TOP_LEVEL[config["kind"]].split()), "config")
+    require_keys(config, set(_STAGE_ONE_TOP_LEVEL[config["kind"]].split()), "config")
     if not (isinstance(config["task"], str) and config["task"]):
         raise ValueError("task must name the stage (the run directory's parent)")
     if config["kind"] != "report":
@@ -491,8 +432,7 @@ def validate_stage_one_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 def load_stage_one_config(path: Path) -> dict[str, Any]:
     """Load and validate a stage-one YAML config."""
-    with Path(path).open() as handle:
-        return validate_stage_one_config(yaml.safe_load(handle))
+    return validate_stage_one_config(read_yaml(path))
 
 
 _STATES_GROUPS = {
@@ -525,9 +465,9 @@ def validate_states_config(config: Mapping[str, Any]) -> dict[str, Any]:
     ladder config whose inputs it reads, the vocabulary fits, the projection
     roles, the state inputs and their controls, the reference tables, the frozen
     PIE's state pass and the report."""
-    _require_keys(config, {*_STATES_GROUPS, *_STATES_TOP_LEVEL.split()}, "config")
+    require_keys(config, {*_STATES_GROUPS, *_STATES_TOP_LEVEL.split()}, "config")
     for name, keys in _STATES_GROUPS.items():
-        _require_keys(config[name], set(keys.split()), name)
+        require_keys(config[name], set(keys.split()), name)
     _positive_integers(
         config, "fit", "cells_per_line cycle_states mixture_inits components"
     )
@@ -581,5 +521,4 @@ def validate_states_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 def load_states_config(path: Path) -> dict[str, Any]:
     """Load and validate a state-telemetry YAML config."""
-    with Path(path).open() as handle:
-        return validate_states_config(yaml.safe_load(handle))
+    return validate_states_config(read_yaml(path))

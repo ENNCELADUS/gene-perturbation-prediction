@@ -18,7 +18,7 @@ import pytest
 import torch
 from torch import nn
 
-from src.experiments import response_comparison as rc
+from src.experiments.joint import response_comparison as rc
 
 
 class LinearMockStateModel(nn.Module):

@@ -864,7 +864,7 @@ it without changing any model input.
   (`outputs/context_prior/default_prior_final_split_20261012/export`). The winner on
   validation then runs with frozen and with trainable STATE. The reading rule is that of §9.3:
   the highest validation selective Spearman at `best.pt`; within the 27-line paired bootstrap
-  interval (`uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val`) the simpler
+  interval (`uv run python -m src.experiments.joint.compare_runs RUN_A RUN_B --split val`) the simpler
   wins, a single-term loss before a two-term one and STATE absent before frozen before
   trainable. Test is reported for every run and never used to choose.
 - **Scope.** A correction result is single-gene dependency evidence on held-out lines; it

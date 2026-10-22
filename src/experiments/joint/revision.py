@@ -1,6 +1,6 @@
 """One revision run: training, validation and test with baselines, then summary.md.
 
-``python -m src.experiments.revision CONFIG [--run-id ID] [--gpus 0,1,2,3]`` writes
+``hpc/run.sh revision CONFIG [--run-id ID] [--gpus 0,1,2,3]`` writes
 ``<output_root>/<run id>/{train/, evaluation/{val,test}/, baselines/{val,test}/,
 logs/, revision.json, summary.md}``. Every step is skipped when its output exists, so
 rerunning with the same run id resumes. There is no response comparison and no
@@ -30,7 +30,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-from src.experiments.all import (
+from src.experiments.joint.all import (
     BASELINE_NAMES,
     PRIOR_CONTROLS,
     Job,
@@ -44,7 +44,7 @@ from src.experiments.all import (
 )
 from src.data.io import read_json
 from src.experiments.run_dir import git_revision, number
-from src.experiments.config import load_config
+from src.experiments.joint.config import load_config
 
 JOINT_NAME = "Joint model"
 TX1_RIDGE = "context_pca_ridge[tx1]"
@@ -92,7 +92,7 @@ def train_joint(
     start: Callable = start_process,
 ) -> None:
     """Joint training on every chosen GPU, or in this process without GPUs."""
-    from src.experiments.geneeffect import run_training
+    from src.experiments.joint.train import run_training
 
     train = run / "train"
     if (train / "done.json").is_file():
@@ -107,8 +107,8 @@ def train_joint(
 
 def _evaluate(config: dict, run: Path, split: str) -> None:
     """Score ``train/best.pt`` and fit and score the baselines on ``split``."""
-    from src.experiments.baselines import run_baselines
-    from src.experiments.geneeffect import evaluate_checkpoint, export_evaluation
+    from src.experiments.joint.baselines import run_baselines
+    from src.experiments.joint.evaluate import evaluate_checkpoint, export_evaluation
 
     title = SPLITS[split].lower()
     evaluation = run / "evaluation" / split

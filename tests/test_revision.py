@@ -15,8 +15,8 @@ import pandas as pd
 import pytest
 import torch
 
-from src.experiments import all as pipeline
-from src.experiments import revision
+from src.experiments.joint import all as pipeline
+from src.experiments.joint import revision
 
 SELECTIVE = ["G1", "G2"]
 CONFIG = {
@@ -364,9 +364,9 @@ def test_finished_steps_start_nothing_and_summary_is_rewritten(
     def refuse(*args, **kwargs):
         raise AssertionError("a finished step ran again")
 
-    monkeypatch.setattr("src.experiments.geneeffect.run_training", refuse)
-    monkeypatch.setattr("src.experiments.geneeffect.evaluate_checkpoint", refuse)
-    monkeypatch.setattr("src.experiments.baselines.run_baselines", refuse)
+    monkeypatch.setattr("src.experiments.joint.train.run_training", refuse)
+    monkeypatch.setattr("src.experiments.joint.evaluate.evaluate_checkpoint", refuse)
+    monkeypatch.setattr("src.experiments.joint.baselines.run_baselines", refuse)
     monkeypatch.setattr(revision, "start_process", refuse)
     assert revision.run_revision(Path("c.yaml"), run_id="done") == run
     assert prepared == [config]
@@ -413,10 +413,12 @@ def test_unfinished_run_trains_then_evaluates_val_then_test(
         for name, content in outputs["baselines", split].items():
             (out_dir / name).write_bytes(content)
 
-    monkeypatch.setattr("src.experiments.geneeffect.run_training", fake_training)
-    monkeypatch.setattr("src.experiments.geneeffect.evaluate_checkpoint", fake_evaluate)
-    monkeypatch.setattr("src.experiments.geneeffect.export_evaluation", fake_export)
-    monkeypatch.setattr("src.experiments.baselines.run_baselines", fake_baselines)
+    monkeypatch.setattr("src.experiments.joint.train.run_training", fake_training)
+    monkeypatch.setattr(
+        "src.experiments.joint.evaluate.evaluate_checkpoint", fake_evaluate
+    )
+    monkeypatch.setattr("src.experiments.joint.evaluate.export_evaluation", fake_export)
+    monkeypatch.setattr("src.experiments.joint.baselines.run_baselines", fake_baselines)
     assert revision.run_revision(Path("c.yaml"), run_id="fresh") == run
     assert calls == [
         ("train", run / "train"),
@@ -470,7 +472,7 @@ def test_training_uses_every_chosen_gpu(tmp_path, monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("a GPU run trained in the orchestrating process")
 
-    monkeypatch.setattr("src.experiments.geneeffect.run_training", refuse)
+    monkeypatch.setattr("src.experiments.joint.train.run_training", refuse)
     run = tmp_path / "run"
     revision.train_joint(Path("c.yaml"), CONFIG, run, ("1", "3"), start=launch)
     ((argv, gpus, log),) = started
@@ -480,7 +482,7 @@ def test_training_uses_every_chosen_gpu(tmp_path, monkeypatch):
     assert "--multi_gpu" in argv
     assert argv[-6:] == (
         "--module",
-        "src.train",
+        "src.experiments.joint.train",
         "--config",
         "c.yaml",
         "--run-dir",
@@ -504,7 +506,7 @@ def test_cpu_training_runs_in_process_and_finished_training_is_skipped(
 ):
     calls = []
     monkeypatch.setattr(
-        "src.experiments.geneeffect.run_training",
+        "src.experiments.joint.train.run_training",
         lambda config, train: calls.append(train),
     )
     run = tmp_path / "run"
@@ -516,7 +518,7 @@ def test_cpu_training_runs_in_process_and_finished_training_is_skipped(
 
 
 def test_compare_runs_bootstraps_a_minus_b(finished, bootstrap):
-    from src.experiments.compare_runs import compare
+    from src.experiments.joint.compare_runs import compare
 
     result = compare(finished, finished, "val")
     assert result == {"difference": 0.02, "interval": [-0.01, 0.05]}
@@ -525,7 +527,7 @@ def test_compare_runs_bootstraps_a_minus_b(finished, bootstrap):
 
 
 def test_compare_runs_prints_a_minus_b(finished, bootstrap, capsys):
-    from src.experiments.compare_runs import main
+    from src.experiments.joint.compare_runs import main
 
     assert main([str(finished), str(finished), "--split", "test"]) == 0
     assert capsys.readouterr().out == "run minus run, test: 0.0200 [-0.0100, 0.0500]\n"

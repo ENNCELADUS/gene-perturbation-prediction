@@ -65,7 +65,8 @@ from src.context_prior.ridge import shared_ridge
 from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.data.io import write_json, write_text
 from src.experiments.run_dir import bind, interval, number
-from src.experiments.config import load_config, load_noise_config
+from src.experiments.joint.config import load_config
+from src.experiments.config import load_noise_config
 from src.eval.accuracy import BOOTSTRAP_SEED, gain, long_frame, score
 from src.experiments.context_prior import (
     SCORED,

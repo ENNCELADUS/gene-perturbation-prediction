@@ -45,7 +45,7 @@ Every GPU step of `all` uses every visible GPU, or the ids given by `--gpus 0,1,
 first, training on all (`accelerate`, one process each), then one trained comparison job per GPU at a time. Unfinished
 training resumes only on its starting GPU count. Size batches from measured throughput; never shrink one silently after an
 OOM. Stop `all` with SIGINT or SIGTERM (it terminates its subprocess groups); after a SIGKILL, check for orphaned
-`src.train` / `response_comparison` processes before relaunching.
+`src.experiments.joint.train_cli` / `response_comparison` processes before relaunching.
 
 ## Launch and report
 

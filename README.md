@@ -91,7 +91,7 @@ The generalization axis is the **cell line**. Predictors that learn only from SL
 
 - **Expression space.** Tx1 reads raw UMI counts. Every other expression quantity is `log1p(x·T/library size)` sliced to STATE's 2,000 highly variable genes, with library size over all genes and `T` the median library size of the Jurkat and HepG2 non-targeting cells, computed at preparation and recorded.
 - **Joint GeneEffect training.** STATE, initialised from its released Replogle checkpoint, reads log-normalised basal cells through its own basal encoder and is driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed only the context of the five-block residual head. STATE, the adapter and the head train together with GeneEffect Huber regression over the 170 labeled training lines; every fourth update also fits response distributions on all conditions of four anchor lines.
-- **Validation and testing.** Every epoch logs fixed-model `val_*` GeneEffect metrics over the 27 validation lines, the only validation split, and `train_eval_*` diagnostics over a fixed 27-line subset of the training lines (recorded in `run.json`). Early stopping and `best.pt` use only minimum `val_geneeffect_loss`. Use `src.evaluate --split train` for checkpoint diagnostics; test is evaluated only explicitly. Feature ablations use the five `model.head_blocks` flags; removing response from the readout requires disabling both `use_delta_proj` and `use_s`.
+- **Validation and testing.** Every epoch logs fixed-model `val_*` GeneEffect metrics over the 27 validation lines, the only validation split, and `train_eval_*` diagnostics over a fixed 27-line subset of the training lines (recorded in `run.json`). Early stopping and `best.pt` use only minimum `val_geneeffect_loss`. Use `src.experiments.joint.evaluate --split train` for checkpoint diagnostics; test is evaluated only explicitly. Feature ablations use the five `model.head_blocks` flags; removing response from the readout requires disabling both `use_delta_proj` and `use_s`.
 - **Response-model comparison.** Six arms, leave one response anchor out: no change, global mean effect, the released STATE checkpoint, STATE as in the joint model, an MLP on log HVG cells and an MLP on Tx1 cell embeddings.
 - **Separate SL proposal.** A lightweight head would rank candidate partners B of a gene A lost in the line, scoring B by how selectively its predicted dependency strengthens where A is lost, trained on experimental SL-database labels. It requires its own out-of-fold fitting and evaluation and is not implemented.
 
@@ -150,7 +150,7 @@ hpc/run.sh all configs/geneeffect_joint.yaml [--run-id <id>] [--gpus 0,1,2,3]
 hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt
 
 # Standalone evaluation of a checkpoint on validation (or train, for diagnostics)
-uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
+uv run python -m src.experiments.joint.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
 
 > Raw `*.h5ad`, `*.csv`, checkpoints, and large artifacts are gitignored. The pipeline requires Perturb-seq and DepMap data you supply locally.
@@ -163,7 +163,7 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
 - `src/eval/`: common validation/test scoring and metrics.
 - `src/baselines/`: residual controls fitted on training lines.
 - `src/experiments/`: preparation, the response-model comparison, the readout head, baselines and the `all` run; `historical/` retains completed probes and the SL benchmark builder.
-- `src/train.py`, `src/evaluate.py`: thin module entry points.
+- `src/experiments/joint/train_cli.py`, `src/experiments/joint/evaluate.py`: thin module entry points.
 - `hpc/`: launcher and [operator guide](hpc/README.md).
 - `configs/`: current joint config, fixed benchmark membership and small input provenance.
 - `outputs/`: ignored generated runs; `results/`: tracked reports and small evidence.

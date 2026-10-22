@@ -24,14 +24,22 @@ with open(os.environ["ARG_LOG"], "a") as handle:
 @pytest.mark.parametrize(
     "command, expected",
     [
-        (["all", "a b.yaml"], ["-m", "src.experiments.all", "a b.yaml"]),
+        (["all", "a b.yaml"], ["-m", "src.experiments.joint.all", "a b.yaml"]),
         (
             ["all", "a b.yaml", "--run-id", "run x"],
-            ["-m", "src.experiments.all", "a b.yaml", "--run-id", "run x"],
+            ["-m", "src.experiments.joint.all", "a b.yaml", "--run-id", "run x"],
         ),
         (
             ["all", "a b.yaml", "--run-id", "r", "--gpus", "1,3"],
-            ["-m", "src.experiments.all", "a b.yaml", "--run-id", "r", "--gpus", "1,3"],
+            [
+                "-m",
+                "src.experiments.joint.all",
+                "a b.yaml",
+                "--run-id",
+                "r",
+                "--gpus",
+                "1,3",
+            ],
         ),
         (
             ["prior", "a b.yaml", "--run-id", "r"],
@@ -53,7 +61,7 @@ with open(os.environ["ARG_LOG"], "a") as handle:
             ["test", "checkpoint x.pt"],
             [
                 "-m",
-                "src.evaluate",
+                "src.experiments.joint.evaluate",
                 "--checkpoint",
                 "checkpoint x.pt",
                 "--split",

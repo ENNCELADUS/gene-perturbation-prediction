@@ -15,7 +15,7 @@ import yaml
 
 from src.baselines.tx1_gmm import Tx1GMMRidge
 from src.data.splits import FixedSplit
-from src.experiments import tx1_gmm_ridge as experiment
+from src.experiments.joint import tx1_gmm_ridge as experiment
 
 
 def synthetic_inputs():
@@ -170,23 +170,23 @@ def test_inference_rejects_wrong_width_and_permuted_feature_axis():
 
 
 def test_failed_export_is_retryable_without_changing_fit_status(tmp_path, monkeypatch):
-    from src.experiments import geneeffect
+    from src.experiments.joint import evaluate
 
     inputs = synthetic_inputs()
     model = Tx1GMMRidge.fit(inputs, n_components=2)
     (tmp_path / "run.json").write_text(json.dumps({"fitting": {"status": "completed"}}))
-    export = geneeffect.export_evaluation
+    export = evaluate.export_evaluation
 
     def fail(*args, **kwargs):
         raise OSError("simulated export failure")
 
-    monkeypatch.setattr(geneeffect, "export_evaluation", fail)
+    monkeypatch.setattr(evaluate, "export_evaluation", fail)
     with pytest.raises(OSError, match="simulated"):
         experiment._export(model, inputs, tmp_path, "val")
     record = json.loads((tmp_path / "run.json").read_text())
     assert record["fitting"]["status"] == "completed"
     assert record["evaluation"]["status"] == "failed"
-    monkeypatch.setattr(geneeffect, "export_evaluation", export)
+    monkeypatch.setattr(evaluate, "export_evaluation", export)
     experiment._export(model, inputs, tmp_path, "val")
     assert (
         json.loads((tmp_path / "run.json").read_text())["evaluation"]["status"]

@@ -26,7 +26,7 @@ pytest.importorskip("accelerate")
 pytest.importorskip("state.tx.models.state_transition")
 
 import test_prepare  # noqa: E402
-from src.experiments import all as pipeline  # noqa: E402
+from src.experiments.joint import all as pipeline  # noqa: E402
 from src.model.state import build_state  # noqa: E402
 
 VOCABULARY = ("GA", "GC", "non-targeting")
@@ -114,7 +114,7 @@ def cpu(monkeypatch):
 def finished(tmp_path_factory):
     """One complete run with spies on every route to the test split."""
     from src.data import prepared
-    from src.experiments import baselines, geneeffect, response_comparison
+    from src.experiments.joint import baselines, evaluate, response_comparison
 
     calls = {"evaluate": [], "baselines": [], "load_inputs": []}
     with pytest.MonkeyPatch.context() as patch:
@@ -130,9 +130,9 @@ def finished(tmp_path_factory):
             return wrapped
 
         patch.setattr(
-            geneeffect,
+            evaluate,
             "evaluate_checkpoint",
-            spy("evaluate", geneeffect.evaluate_checkpoint),
+            spy("evaluate", evaluate.evaluate_checkpoint),
         )
         patch.setattr(
             baselines, "run_baselines", spy("baselines", baselines.run_baselines)
@@ -209,7 +209,7 @@ def test_all_never_touches_test_split(finished):
 
 
 def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
-    from src.experiments import response_comparison
+    from src.experiments.joint import response_comparison
     from src.training import trainer
 
     config_path = make_world(tmp_path, monkeypatch, max_epochs=2)
@@ -260,7 +260,7 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
     # A finished run only rewrites its summary.
     monkeypatch.setattr(trainer, "fit", refuse)
     monkeypatch.setattr(response_comparison, "_run_trained", refuse)
-    monkeypatch.setattr("src.experiments.readout.extract_cache", refuse)
+    monkeypatch.setattr("src.experiments.joint.readout.extract_cache", refuse)
     pipeline.run_all(config_path, run_id="resume")
 
     # The run directory refuses a different config instead of mixing experiments.
@@ -314,7 +314,7 @@ TWELVE_JOBS = [
 @pytest.fixture
 def fake_comparison(monkeypatch):
     """Twelve pending trained jobs; summarise and in-process training refuse."""
-    from src.experiments import geneeffect, response_comparison
+    from src.experiments.joint import response_comparison, train
 
     monkeypatch.setattr(pipeline, "POLL_SECONDS", 0)
     monkeypatch.setattr(
@@ -332,16 +332,14 @@ def fake_comparison(monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("a GPU run trained in the orchestrating process")
 
-    monkeypatch.setattr(geneeffect, "run_training", refuse)
+    monkeypatch.setattr(train, "run_training", refuse)
     return summarised
 
 
 def _plan(tmp_path, gpus, polls=lambda step: 1):
     launcher = FakeLauncher(polls)
     run = tmp_path / "run"
-    pipeline.comparison_and_training(
-        Path("c.yaml"), {}, run, gpus, start=launcher
-    )
+    pipeline.comparison_and_training(Path("c.yaml"), {}, run, gpus, start=launcher)
     return run, launcher
 
 
@@ -354,7 +352,7 @@ def test_every_gpu_step_uses_every_chosen_gpu(tmp_path, fake_comparison):
     assert steps[:2] == ["comparison_untrained", "train"]
     untrained, train = launcher.started[0], launcher.started[1]
     assert untrained[2] == ("0",)
-    assert untrained[1][1:3] == ("-m", "src.experiments.response_comparison")
+    assert untrained[1][1:3] == ("-m", "src.experiments.joint.response_comparison")
     assert untrained[1][-1] == "--untrained"
     assert train[2] == ("0", "1", "2", "3")
     argv = train[1]
@@ -363,7 +361,7 @@ def test_every_gpu_step_uses_every_chosen_gpu(tmp_path, fake_comparison):
     assert "--multi_gpu" in argv
     assert argv[-6:] == (
         "--module",
-        "src.train",
+        "src.experiments.joint.train",
         "--config",
         "c.yaml",
         "--run-dir",
@@ -473,7 +471,7 @@ def test_sigterm_terminates_child_process_groups(tmp_path):
     group_file = tmp_path / "group"
     script = f"""
 from pathlib import Path
-from src.experiments import all as pipeline
+from src.experiments.joint import all as pipeline
 pipeline.POLL_SECONDS = 0.05
 child = pipeline.Job("sleeper", ("sh", "-c", "sleep 60 & echo $$ > {group_file}; wait"))
 with pipeline.sigterm_raises():
