@@ -21,7 +21,7 @@ per GPU, skipping configs of another kind and runs whose ``row.json`` exists.
 
 ``report CONFIG [--device cuda]`` (``hpc/run.sh stage-one-report``) scores the rows
 a report config lists, trained and untrained (the base; the default prior refitted
-on the frame, ``src.experiments.stage_one_prior``; a per-gene ridge on the
+on the frame, ``src.experiments.stage_one.prior_reference``; a per-gene ridge on the
 line-centred decoder-feature delta, solved in its dual on the device), on
 validation and test and out of fold over the single-cell training lines, with
 the listed contrasts' 95% paired line-bootstrap intervals: ``results.md`` and
@@ -123,7 +123,7 @@ def load_setup(ladder_config_path: str | Path) -> Setup:
     from src.data.splits import load_geneeffect_split
     from src.experiments.joint.config import load_config
     from src.experiments.prior.config import load_prior_config
-    from src.experiments.config import load_ladder_config
+    from src.experiments.stage_one.config import load_ladder_config
 
     ladder_config = load_ladder_config(Path(ladder_config_path))
     prior = load_prior_config(Path(ladder_config["prior_config"]))
@@ -515,7 +515,7 @@ def warm_start_trunk(
 
 
 def run(config_path: Path, run_id: str | None, fold: int | None, device: str) -> Path:
-    from src.experiments.config import load_stage_one_config
+    from src.experiments.stage_one.config import load_stage_one_config
     from src.training.stage_one_trainer import TrainingData, fit, load_strict, predict
 
     config = load_stage_one_config(config_path)
@@ -669,7 +669,7 @@ def wide_scores(
 def queue(configs: Sequence[Path], gpus: Sequence[str], folds: Sequence[str]) -> int:
     """Every training config x fold without a ``row.json``, one process per GPU;
     returns the number of runs that failed."""
-    from src.experiments.config import load_stage_one_config
+    from src.experiments.stage_one.config import load_stage_one_config
 
     jobs = []
     for path in configs:
@@ -899,7 +899,7 @@ def _row_predictions(
 ) -> dict[str, pd.DataFrame | None]:
     """A report row's predictions (scoring units) on ``val``, ``test`` and, out of
     fold, ``oof`` (the single-cell training lines); None where a run is missing."""
-    from src.experiments.config import load_stage_one_config
+    from src.experiments.stage_one.config import load_stage_one_config
 
     ladder = setup.ladder
     val, test = ladder.role_lines("val"), ladder.role_lines("test")
@@ -1005,7 +1005,7 @@ def _contrast(
 
 
 def report(config_path: Path, device: str) -> Path:
-    from src.experiments.config import load_stage_one_config
+    from src.experiments.stage_one.config import load_stage_one_config
 
     config = load_stage_one_config(config_path)
     if config["kind"] != "report":

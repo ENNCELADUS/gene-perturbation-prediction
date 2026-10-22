@@ -59,7 +59,7 @@ scores a report config's rows into outputs/stage_one/<task>/<config stem>/
 (results.md); `stage-one-prior` writes the prior reference the report and the
 components reader read.
 `cell-states` runs the state telemetry of a configs/stage_one/states config
-(src.experiments.state_telemetry): `fit` writes the fit samples and plan, runs
+(src.experiments.states.state_telemetry): `fit` writes the fit samples and plan, runs
 src.experiments.states.programs in STATES_PYTHON (default .venv-states/bin/python,
 built by hpc/states/setup.sh) for the cNMF programs and scVI, then fits the
 mixtures; `project`, `inputs` and `report` follow. `pie-precompute` on the same
@@ -98,14 +98,14 @@ case "$command" in
   prior-noise) exec "$python_bin" -m src.experiments.prior.noise_diagnosis "$@" ;;
   pie-reproduce)
     pie_environment
-    exec "$repo_root/.venv-pie/bin/python" -m src.experiments.pie_reproduction "$@" ;;
-  ladder-inputs) exec "$python_bin" -m src.experiments.ladder_inputs "$@" ;;
+    exec "$repo_root/.venv-pie/bin/python" -m src.experiments.stage_one.pie_reproduction "$@" ;;
+  ladder-inputs) exec "$python_bin" -m src.experiments.stage_one.ladder_inputs "$@" ;;
   cell-states)
     export STATES_PYTHON=${STATES_PYTHON:-"$repo_root/.venv-states/bin/python"}
-    exec "$python_bin" -m src.experiments.state_telemetry "$@" ;;
+    exec "$python_bin" -m src.experiments.states.state_telemetry "$@" ;;
   pie-precompute)
     pie_environment
-    exec "$repo_root/.venv-pie/bin/python" -m src.experiments.pie_precompute "$@" ;;
+    exec "$repo_root/.venv-pie/bin/python" -m src.experiments.stage_one.pie_precompute "$@" ;;
   stage-one)
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.stage_one run "$@" ;;
@@ -115,7 +115,7 @@ case "$command" in
   stage-one-report)
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.stage_one report "$@" ;;
-  stage-one-prior) exec "$python_bin" -m src.experiments.stage_one_prior "$@" ;;
+  stage-one-prior) exec "$python_bin" -m src.experiments.stage_one.prior_reference "$@" ;;
   gene-sources)
     step=$1; shift
     case "$step" in

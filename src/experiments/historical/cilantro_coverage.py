@@ -18,7 +18,7 @@ covered and both have a Gene2vec embedding; per line, the covered genes and, for
 stage-one lines, the covered genes with a 26Q1 GeneEffect label. It reports; the reader
 decides.
 
-``python -m src.experiments.cilantro_coverage --out outputs/cilantro_coverage``
+``python -m src.experiments.historical.cilantro_coverage --out OUT``
 """
 
 from __future__ import annotations

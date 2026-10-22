@@ -1,7 +1,7 @@
 """The default prior refitted on the stage-one frame (PIE stage-one design Task 3:
 the like-for-like linear reference), in the project environment.
 
-``python -m src.experiments.stage_one_prior CONFIG --run-id ID``
+``python -m src.experiments.stage_one.prior_reference CONFIG --run-id ID``
 (``hpc/run.sh stage-one-prior``; a ``kind: prior_reference`` config) fits the
 default prior's reference row (the ladder config's ``prior_config``: 128
 expression components at their penalty, then the data-selected genes at the gene
@@ -51,7 +51,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     from src.eval.accuracy import fold_accuracy, wide_accuracy
     from src.experiments.prior.config import load_prior_config
     from src.experiments.prior.base import stages
-    from src.experiments.stage_one import load_setup
+    from src.experiments.stage_one.run import load_setup
 
     run_dir = Path(config["output_root"]) / config["task"] / run_id
     (run_dir / "components").mkdir(parents=True, exist_ok=True)
@@ -171,7 +171,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("config", type=Path)
     parser.add_argument("--run-id", required=True)
     args = parser.parse_args(argv)
-    from src.experiments.config import load_stage_one_config
+    from src.experiments.stage_one.config import load_stage_one_config
 
     config = load_stage_one_config(args.config)
     if config["kind"] != "prior_reference":

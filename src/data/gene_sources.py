@@ -6,9 +6,8 @@ GeneEffect gene axis.
 - ``esmc_600m`` and ``esm3_open``: the ``.npz`` files of
   ``src.data.build.embed_protein_sources`` (``symbols``, ``vectors``, ``accessions``);
 - ``gene2vec``: Cilantro's Gene2vec matrix (Ensembl ID -> 128-d vector), reached from a
-  symbol through Geneformer's gc30M symbol -> Ensembl dictionary, as
-  ``src.experiments.cilantro_coverage`` reaches it; its keys that are not Ensembl IDs
-  are never reached.
+  symbol through Geneformer's gc30M symbol -> Ensembl dictionary, as the historical
+  Cilantro coverage reaches it; its keys that are not Ensembl IDs are never reached.
 
 The axis is upper-case DepMap symbols (``src.data.depmap``). A source key matches a gene
 case-insensitively; a source with two keys equal up to case is refused. A gene without a

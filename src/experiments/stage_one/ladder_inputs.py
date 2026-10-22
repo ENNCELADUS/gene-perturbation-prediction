@@ -1,7 +1,7 @@
 """Stage-one inputs (PIE stage-one design §5 Task 2) under ``ladder_root``.
 
-``python -m src.experiments.ladder_inputs CONFIG --steps lines,cells,mean,summaries``
-(``hpc/run.sh ladder-inputs``), and ``--steps tx1 [--shard I/N]`` on a GPU. Steps,
+``hpc/run.sh ladder-inputs CONFIG --steps lines,cells,mean,summaries``, and
+``--steps tx1 [--shard I/N]`` on a GPU. Steps,
 each skipping the outputs that exist, so rerunning resumes:
 
 - ``lines``: the **frame** of 981 labelled lines every arm trains on (the split's
@@ -98,7 +98,7 @@ class Setup:
 def load_setup(config: Mapping[str, Any]) -> Setup:
     from src.experiments.joint.config import load_config
     from src.experiments.prior.config import load_noise_config, load_prior_config
-    from src.experiments.config import validate_ladder_config
+    from src.experiments.stage_one.config import validate_ladder_config
 
     validate_ladder_config(config)
     prior = load_prior_config(Path(config["prior_config"]))
@@ -747,7 +747,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     unknown = [s for s in steps if s not in STEPS]
     if unknown:
         parser.error(f"unknown steps {unknown}; choose from {STEPS}")
-    from src.experiments.config import load_ladder_config
+    from src.experiments.stage_one.config import load_ladder_config
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"

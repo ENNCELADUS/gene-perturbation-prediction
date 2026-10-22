@@ -17,7 +17,7 @@ import yaml
 
 from src.data.splits import FixedSplit
 from src.eval.metrics import calibration_slope
-from src.experiments.config import validate_stage_one_config
+from src.experiments.stage_one.config import validate_stage_one_config
 from src.model.stage_one import (
     CilantroTail,
     DeltaFiLM,

@@ -1,8 +1,8 @@
 """PIE reproduction: PIE's released checkpoints, run through the vendored code on
 PIE's own data, splits and sources, against the metrics PIE released with them.
 
-``python -m src.experiments.pie_reproduction --run-id ID [--device cuda] [--steps
-fetch,download,evaluate,compare]`` (``hpc/run.sh pie-reproduce``, in ``.venv-pie``)
+``hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps
+fetch,download,evaluate,compare]`` (in ``.venv-pie``)
 covers ``PIE_replogle_xdataset`` on Replogle ``test_seen`` and ``test_unseen`` and the
 four ``PIE_replogle_wdataset`` folds on their ``unseen_ctx`` test splits. Steps, each
 skipped when its outputs exist, so rerunning with the same id resumes:
