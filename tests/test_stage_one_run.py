@@ -457,7 +457,7 @@ def _check_prior_out_of_fold(setup, prior_dir: Path, root: Path) -> None:
     from src.experiments.prior.base import stages
 
     ladder = setup.ladder
-    prior = load_prior_config(Path(setup.ladder_config["prior_config"]))
+    prior = load_prior_config(Path(setup.config["prior_config"]))
     reference = prior["reference"]
     expression = reader.mean_channel(ladder).astype(np.float64)
     kept = [m for m in ladder.frame if ladder.folds[m] != 0]
@@ -611,7 +611,7 @@ def test_gene_sources_are_centred_on_their_panel_mean(world, centre):
     listed = resident.token_present["gene_text"].numpy()
     assert np.allclose(tokens[~listed], 0.0)
     shift = mean if centre else 0.0
-    text = Path(setup.ladder_config["paths"]["gene_text"])
+    text = Path(setup.config["paths"]["gene_text"])
     expected, _ = reader.text_on_axis(text, resident_axis(setup))
     assert np.allclose(tokens[listed], expected[listed] - shift, atol=1e-5)
 

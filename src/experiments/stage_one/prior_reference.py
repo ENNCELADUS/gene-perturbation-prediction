@@ -49,9 +49,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     from src.context_prior.reference import load_reference
     from src.context_prior.views import expression_components, fit_expression_components
     from src.eval.accuracy import fold_accuracy, wide_accuracy
-    from src.experiments.prior.config import load_prior_config
     from src.experiments.prior.base import stages
-    from src.experiments.stage_one.run import load_setup
+    from src.experiments.stage_one.setup import load_setup
 
     run_dir = Path(config["output_root"]) / config["task"] / run_id
     (run_dir / "components").mkdir(parents=True, exist_ok=True)
@@ -61,7 +60,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         return run_dir
     setup = load_setup(config["ladder_config"])
     ladder = setup.ladder
-    prior = load_prior_config(Path(setup.ladder_config["prior_config"]))
+    prior = setup.prior
     reference = prior["reference"]
     frame = ladder.frame
     # The labels' guard: every frame line must be a fit-eligible training line.

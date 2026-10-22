@@ -166,10 +166,9 @@ class Telemetry:
 
     @cached_property
     def setup(self) -> Any:
-        from src.experiments.stage_one.config import load_ladder_config
-        from src.experiments.stage_one.ladder_inputs import load_setup
+        from src.experiments.stage_one.setup import load_setup
 
-        return load_setup(load_ladder_config(absolute(self.config["ladder_config"])))
+        return load_setup(absolute(self.config["ladder_config"]))
 
     @property
     def ladder_root(self) -> Path:

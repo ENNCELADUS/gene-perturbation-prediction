@@ -39,7 +39,6 @@ import subprocess
 import sys
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -49,9 +48,9 @@ import torch
 
 from src.context_prior.targets import Definitions
 from src.data import ladder_reader as reader
-from src.data.splits import FixedSplit
 from src.data.io import read_json, write_json, write_text
 from src.experiments.run_dir import assert_bound, bind, interval, locked, number
+from src.experiments.stage_one.setup import Setup, load_setup
 
 log = logging.getLogger(__name__)
 
@@ -74,72 +73,6 @@ REPORTED = (
 
 
 # --- setup -------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Setup:
-    """The ladder and the labels and split it was built from."""
-
-    ladder_config: Mapping[str, Any]
-    ladder: reader.Ladder
-    split: FixedSplit
-    bulk_labelled: tuple[str, ...]
-    #: Lines outside the split sharing a patient with a held-out line.
-    excluded: tuple[str, ...]
-    gene_effect: pd.DataFrame
-    #: The GeneEffect matrix the labels were read from.
-    label_source: Path
-
-    @property
-    def definitions(self) -> Definitions:
-        """The protocol's definitions (377-line mean, residual SD, gene sets), as
-        ``genes.parquet`` records them."""
-        genes = self.ladder.genes
-        axis = [str(g) for g in genes.index]
-        return Definitions(
-            genes=tuple(axis),
-            gene_means=genes["mu_g"].astype(float),
-            selective=tuple(g for g, s in zip(axis, genes["selective"]) if s),
-            variable=tuple(g for g, v in zip(axis, genes["variable"]) if v),
-            residual_scale=genes["sigma_g"].astype(float),
-        )
-
-    def truth(self, lines: Sequence[str]) -> pd.DataFrame:
-        return reader.scoring_truth(self.ladder, self.gene_effect, lines)
-
-    def targets(self, fold: int | None) -> reader.Targets:
-        return reader.training_targets(
-            self.ladder,
-            self.gene_effect,
-            self.split,
-            self.bulk_labelled,
-            exclude_fold=fold,
-        )
-
-
-def load_setup(ladder_config_path: str | Path) -> Setup:
-    from src.data.depmap import read_depmap_matrix
-    from src.data.extra_lines import load_bulk_lines
-    from src.data.splits import load_geneeffect_split
-    from src.experiments.joint.config import load_config
-    from src.experiments.prior.config import load_prior_config
-    from src.experiments.stage_one.config import load_ladder_config
-
-    ladder_config = load_ladder_config(Path(ladder_config_path))
-    prior = load_prior_config(Path(ladder_config["prior_config"]))
-    joint = load_config(Path(prior["joint_config"]))
-    split_path = Path(joint["paths"]["split"])
-    split = load_geneeffect_split(split_path)
-    bulk = load_bulk_lines(split_path, split)
-    return Setup(
-        ladder_config=ladder_config,
-        ladder=reader.read_ladder(Path(ladder_config["ladder_root"])),
-        split=split,
-        bulk_labelled=tuple(bulk.labelled),
-        excluded=tuple(bulk.excluded),
-        gene_effect=read_depmap_matrix(Path(joint["paths"]["gene_effect"])),
-        label_source=Path(joint["paths"]["gene_effect"]),
-    )
 
 
 def run_directory(config: Mapping[str, Any], run_id: str, fold: int | None) -> Path:
@@ -380,7 +313,7 @@ class Resident:
     def _token_sources(self, setup, axis):
         """The token axis's gene sources: ``gene_text`` from PIE's source dir (the
         tokens span genes outside the GeneEffect axis); every other source masked."""
-        path = Path(setup.ladder_config["paths"]["gene_text"])
+        path = Path(setup.config["paths"]["gene_text"])
         vectors, present = {}, {}
         for name, dim in self.source_dims.items():
             if name == "gene_text":
@@ -805,7 +738,7 @@ def ridge_fingerprint(setup: Setup, ladder_config: str | Path) -> dict[str, Any]
     ladder = setup.ladder
     return {
         "ladder_config": str(Path(ladder_config).resolve()),
-        "ladder": dict(setup.ladder_config),
+        "ladder": dict(setup.config),
         "labels": stat(setup.label_source),
         "lines": {
             m: [str(ladder.lines.at[m, "role"]), int(ladder.lines.at[m, "fold"])]
