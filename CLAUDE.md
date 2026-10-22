@@ -65,7 +65,7 @@ GPU step uses every visible GPU, or those `--gpus` lists: untrained comparison a
 trained comparison job per GPU at a time (`revision` has only the training step). Direct worker invocation is debug-only; runner
 details are in `hpc/README.md`.
 
-- **Local Mac has no GPU, no Tx1 weights, no raw data.** Preparation, training and evaluation run on the H20 container
+- **Local Mac has no GPU, no model weights, no raw data.** Preparation, training and evaluation run on the H20 container
   (`hpc-execution` skill), without a scheduler. Tests use synthetic fixtures and skip silently when gitignored data or
   `accelerate` is missing — an "it imports" check proves nothing about an asset-dependent path.
 - A global `rtk` hook rewrites Bash output: `ruff check .` prints `[]`, foreground pytest shows fake collection errors. Use
