@@ -1,11 +1,6 @@
-"""Controls built on the linear context prior.
-
-``context_prior`` is the prior export alone. ``context_prior+context_pca_ridge[tx1]``
-adds the Tx1 context-PCA ridge of the control ladder (mean and variance of the
-line's Tx1 cell embeddings, standardised on the training lines, 8 principal
-components, a ridge per gene at alpha 1) fitted on what the prior leaves on the
-labelled training lines: the linear special case of the head on the same target.
-"""
+"""Controls built on the linear context prior: the prior export alone, and the prior
+plus the control ladder's Tx1 context-PCA ridge fitted on what the prior leaves on the
+labelled training lines (the linear special case of the head on the same target)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
-"""model / head."""
+"""The GeneEffect heads (protocol §4): the joint model's nested low-rank head and the
+flat MLP the readout fits, both reading explicit coverage masks."""
 
 from __future__ import annotations
 
@@ -11,21 +12,11 @@ from torch import nn
 
 @dataclass(frozen=True)
 class GeneEffectFeatureDims:
-    """Per-block feature widths (``docs/03-geneeffect-protocol.md`` §4).
-
-    Attributes:
-        delta_proj: ``Delta_{g,c}`` projected 4000 -> this width by a fixed
-            seeded random projection (computed upstream; this module only
-            consumes the result).
-        s: Six distribution statistics and unprojected interpretables, with
-            the own-gene HVG-index shift as the last channel.
-        q_sc: ``[mean expr, fraction expressing, expr variance]`` of gene
-            ``g`` in line ``c``, from basal single cells.
-        e_g: ESM2 protein embedding width.
-        z_c: Line-context width: the number of train-fit principal
-            components of the moment-pooled Tx1 basal context (mean +
-            variance of the 2560-d embedding), ``model.context_components``.
-    """
+    """Per-block feature widths: ``delta_proj`` is ``Delta_{g,c}`` after the fixed
+    4000 -> width projection; ``s`` six response statistics, the own-gene HVG-index
+    shift last; ``q_sc`` the gene's ``[mean expr, fraction expressing, expr variance]``
+    in the line's basal cells; ``e_g`` the ESM2 width; ``z_c`` the number of train-fit
+    context PCA components (``model.context_components``)."""
 
     delta_proj: int = 256
     s: int = 6
@@ -77,46 +68,17 @@ def _mlp(width: int, hidden: int, n_hidden_layers: int, out: int) -> nn.Sequenti
 
 
 class GeneEffectMLP(nn.Module):
-    """MLP predicting ``delta_hat(g, c)`` from up to five feature blocks.
+    """Flat MLP ``delta_hat_{g,c} = h_delta(Delta_proj, s, q_sc, e_g, z_c)``.
 
-    ``delta_hat_{g,c} = h_delta(Delta_proj, s, q_sc, e_g, z_c)``
-    (``docs/03-geneeffect-protocol.md`` §4). STATE's two blocks are gated by
-    :class:`GeneEffectBlockConfig`; a disabled block's tensor argument to
-    :meth:`forward` must be ``None`` and contributes nothing to the input
-    width or the parameter count.
-
-    Coverage is never signalled by a silently zero-filled value channel.
-    Three partial-coverage conditions each get an explicit boolean mask
-    input, concatenated into the net's input alongside the (zeroed-where-
-    missing) values so the two are never confused:
-
-    - ``q_sc_mask``: whether ``q_sc`` (mean expr / fraction expressing /
-      expr variance) is available for this ``(g, c)``.
-    - ``hvg_panel_mask``: whether gene ``g`` is in the 2000-gene HVG panel.
-      Required whenever ``use_s`` is enabled (own-gene shift is only
-      defined for panel genes).
-    - ``own_gene_shift_mask``: whether the own-gene HVG-index shift value
-      (the **last** channel of ``s``) is itself available. Required
-      whenever ``use_s`` is enabled; kept distinct from
-      ``hvg_panel_mask`` because a panel gene can still lack a computable
-      shift (e.g. too few cells) even when panel membership holds.
-
-    There is no cell-line-ID (or any line-identifying) input anywhere: the
-    only per-line signal is ``z_c``, a continuous basal-population
-    embedding defined for any line, never a per-line lookup table.
-
-    Attributes:
-        dims: Configured per-block feature widths.
-        blocks: Configured per-block enable flags.
-        input_width: Total net input width (enabled block widths + their
-            mask-bit channels).
+    A block :class:`GeneEffectBlockConfig` disables takes ``None`` and adds no input
+    width. Coverage is never a silent zero: ``q_sc_mask``, ``hvg_panel_mask`` and
+    ``own_gene_shift_mask`` (a panel gene can still lack a shift) enter as input bits
+    beside the zeroed values. The only per-line input is ``z_c``.
     """
 
-    #: Number of explicit coverage-mask channels contributed by the ``s``
-    #: block when enabled: hvg_panel_mask, own_gene_shift_mask.
+    #: Mask channels the ``s`` block adds: hvg_panel_mask, own_gene_shift_mask.
     _S_BLOCK_MASK_BITS: int = 2
-    #: Number of explicit coverage-mask channels contributed by the
-    #: ``q_sc`` block when enabled: q_sc_mask.
+    #: Mask channels the ``q_sc`` block adds: q_sc_mask.
     _Q_SC_BLOCK_MASK_BITS: int = 1
 
     def __init__(
@@ -126,20 +88,6 @@ class GeneEffectMLP(nn.Module):
         hidden: int = 256,
         n_hidden_layers: int = 2,
     ) -> None:
-        """Initialize the head.
-
-        Args:
-            dims: Per-block feature widths, see :class:`GeneEffectFeatureDims`.
-            blocks: Per-block enable flags, see :class:`GeneEffectBlockConfig`.
-            hidden: Hidden width of every layer of the MLP trunk.
-            n_hidden_layers: Number of ``Linear -> LayerNorm -> GELU``
-                hidden layers before the final scalar projection. Must be
-                >= 1.
-
-        Raises:
-            ValueError: If ``hidden`` or ``n_hidden_layers`` is
-                non-positive (``dims``/``blocks`` validate themselves).
-        """
         super().__init__()
         if hidden <= 0:
             raise ValueError(f"hidden must be positive, got {hidden}")
@@ -149,7 +97,6 @@ class GeneEffectMLP(nn.Module):
         self.dims = dims
         self.blocks = blocks
         self.hidden = int(hidden)
-
         width = 0
         if blocks.use_delta_proj:
             width += dims.delta_proj
@@ -170,7 +117,6 @@ class GeneEffectMLP(nn.Module):
 def _check_block(
     name: str, enabled: bool, value: torch.Tensor | None, expected_width: int
 ) -> torch.Tensor | None:
-    """Validate one block tensor against its enable flag and width."""
     if not enabled:
         if value is not None:
             raise ValueError(
@@ -194,7 +140,6 @@ def _check_block(
 def _check_mask(
     name: str, required: bool, value: torch.Tensor | None, batch: int
 ) -> torch.Tensor | None:
-    """Validate one boolean coverage-mask tensor."""
     if not required:
         if value is not None:
             raise ValueError(
@@ -224,38 +169,14 @@ def masked_blocks(
     hvg_panel_mask: torch.Tensor | None = None,
     own_gene_shift_mask: torch.Tensor | None = None,
 ) -> dict[str, torch.Tensor]:
-    """Validated, masked input of each enabled block, in block order.
+    """``{block name: [batch, width]}`` of each enabled block, in block order.
 
-    Every block argument is keyword-only. A block's tensor must be ``None``
-    iff that block is disabled in ``blocks`` (enforced, not just ignored, so a
-    disabled block provably cannot influence the forward pass). Wherever a
-    coverage mask is ``False``, the corresponding value channel(s) are zeroed
-    **here** -- callers are not required to pre-zero them -- but the mask bit
-    itself is always concatenated as an explicit feature, so a masked-missing
-    value is never indistinguishable from a genuine zero.
-
-    Args:
-        dims: Per-block feature widths.
-        blocks: Per-block enable flags.
-        delta_proj: ``[batch, dims.delta_proj]`` if ``blocks.use_delta_proj``,
-            else ``None``.
-        s: ``[batch, dims.s]`` if ``blocks.use_s``, else ``None``. The last
-            column is the own-gene HVG-index shift.
-        q_sc: ``[batch, dims.q_sc]``.
-        e_g: ``[batch, dims.e_g]``.
-        z_c: ``[batch, dims.z_c]``.
-        q_sc_mask: ``[batch]`` bool/0-1.
-        hvg_panel_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_s``.
-        own_gene_shift_mask: ``[batch]`` bool/0-1, required iff ``blocks.use_s``.
-
-    Returns:
-        ``{block name: [batch, width]}``; ``s`` and ``q_sc`` carry their
-        mask-bit channels.
-
-    Raises:
-        ValueError: On a block/mask presence mismatch with ``blocks``, a wrong
-            tensor shape, or no tensor provided at all (batch size cannot be
-            inferred).
+    A block's ``[batch, dims.<block>]`` tensor, and its ``[batch]`` masks, must be
+    ``None`` exactly when ``blocks`` disables it, so a disabled block cannot reach the
+    forward pass. Where ``own_gene_shift_mask`` or ``q_sc_mask`` is ``False``, ``s``'s
+    last column (the own-gene shift) or ``q_sc`` is zeroed here; every mask bit is
+    appended, so a missing value is never a genuine zero. Raises ``ValueError`` on a
+    presence mismatch, a wrong shape or no tensor at all.
     """
     provided = [t for t in (delta_proj, s, q_sc, e_g, z_c) if t is not None]
     if not provided:
@@ -333,31 +254,14 @@ CONTEXT_HIDDEN = 128
 class GeneEffectNestedHead(nn.Module):
     """Nested low-rank head: a gene x context product plus a per-row correction.
 
-    ``head(g, c) = <G(g), C(z_c)> / sqrt(rank) + h(q_sc, s, delta_proj, e_g)``,
-    in units of the per-gene training residual SD.
-
-    - ``G(g)`` is a free per-gene embedding plus, when ``e_g`` is enabled, a
-      linear map of the ESM2 embedding.
-    - ``C(z) = W z + SwiGLU(z)`` reads only the line context ``z_c`` (the
-      eigen-scaled context PCA scores). ``W`` and the SwiGLU branch's output
-      layer start at zero, so the head predicts zero before the first update (its
-      gradient reaches ``W`` first through ``G``).
-    - ``h`` encodes each enabled per-(g, c) block with ``Linear -> LayerNorm``,
-      concatenates them, applies dropout and a SwiGLU layer whose output is
-      zero-initialised. It never sees ``z_c``; with no such block enabled it is
-      absent and contributes zero.
-
-    The free embedding is indexed by gene position in ``inputs.genes``; there
-    is no per-line lookup: the only per-line signal is ``z_c``.
-
-    Attributes:
-        gene_embedding: Free ``[n_genes, factor_rank]`` gene factors.
-        gene_projection: ``Linear(e_g -> factor_rank)``, or ``None`` when
-            ``e_g`` is disabled.
-        context_linear: The linear part ``W`` of ``C``.
-        context_residual: The residual SwiGLU branch of ``C``.
-        encoders: One ``Linear -> LayerNorm`` per enabled block of ``h``.
-        correction: ``Dropout -> SwiGLU -> 1``, or ``None`` without ``h`` blocks.
+    ``head(g, c) = <G(g), C(z_c)> / sqrt(rank) + h(q_sc, s, delta_proj, e_g)``, in
+    units of the per-gene training residual SD. ``G(g)`` is a free embedding of the
+    gene's position in ``inputs.genes`` plus a linear map of ``e_g``. ``C(z) = W z +
+    SwiGLU(z)`` reads only the eigen-scaled context PCA scores; ``W`` and the SwiGLU
+    output layers start at zero (``W``'s gradient arrives first through ``G``). ``h``
+    encodes each enabled per-(g, c) block (``Linear -> LayerNorm``), then ``Dropout
+    -> SwiGLU -> 1``; it never sees ``z_c`` and is ``None`` without such a block.
+    There is no per-line lookup: the only per-line signal is ``z_c``.
     """
 
     def __init__(
@@ -369,21 +273,6 @@ class GeneEffectNestedHead(nn.Module):
         factor_rank: int,
         dropout: float,
     ) -> None:
-        """Initialize the head.
-
-        Args:
-            dims: Per-block feature widths; ``dims.z_c`` is the number of
-                context PCA components.
-            blocks: Whether STATE's blocks feed the correction.
-            n_genes: Rows of the free gene embedding (``len(inputs.genes)``).
-            factor_rank: Width of the gene and context factors.
-            dropout: Dropout on ``h``'s concatenated encodings and in ``C``'s
-                residual hidden layer.
-
-        Raises:
-            ValueError: If ``n_genes`` or ``factor_rank`` is non-positive,
-                or ``dropout`` is outside ``[0, 1)``.
-        """
         super().__init__()
         if n_genes < 1:
             raise ValueError(f"n_genes must be positive, got {n_genes}")
@@ -395,7 +284,6 @@ class GeneEffectNestedHead(nn.Module):
         self.blocks = blocks
         self.n_genes = int(n_genes)
         self.factor_rank = int(factor_rank)
-
         self.gene_embedding = nn.Embedding(self.n_genes, self.factor_rank)
         nn.init.normal_(self.gene_embedding.weight, std=0.02)
         self.gene_projection = nn.Linear(dims.e_g, self.factor_rank)
@@ -407,7 +295,6 @@ class GeneEffectNestedHead(nn.Module):
         self.context_residual = SwiGLU(
             dims.z_c, CONTEXT_HIDDEN, self.factor_rank, dropout
         )
-
         inputs = {
             "delta_proj": dims.delta_proj,
             "s": dims.s + GeneEffectMLP._S_BLOCK_MASK_BITS,
@@ -436,21 +323,8 @@ class GeneEffectNestedHead(nn.Module):
     def forward(
         self, *, gene_index: torch.Tensor, **blocks: torch.Tensor | None
     ) -> torch.Tensor:
-        """Predict ``delta_hat`` for a batch of ``(gene, context)`` rows.
-
-        Args:
-            gene_index: ``[batch]`` integer position of each row's gene in
-                ``inputs.genes``.
-            **blocks: Block tensors and coverage masks, validated and masked
-                exactly as :func:`masked_blocks`.
-
-        Returns:
-            ``delta_hat`` in residual-SD units, shape ``[batch]``.
-
-        Raises:
-            ValueError: As :func:`masked_blocks`, or when ``gene_index`` is not
-                an integer ``[batch]`` tensor.
-        """
+        """``delta_hat`` in residual-SD units, ``[batch]``; ``gene_index`` is each row's
+        integer position in ``inputs.genes``, the blocks as :func:`masked_blocks`."""
         parts = masked_blocks(self.dims, self.blocks, **blocks)
         context = parts["z_c"]
         batch = context.shape[0]

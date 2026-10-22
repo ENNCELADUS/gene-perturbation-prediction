@@ -1,4 +1,4 @@
-"""model / perturbation."""
+"""Fixed per-gene ESM2 vectors mapped to STATE perturbation vectors by an adapter."""
 
 from __future__ import annotations
 import numpy as np
@@ -8,17 +8,8 @@ from src.data.embeddings import Esm2EmbeddingTable
 
 
 class PertAdapter(nn.Module):
-    """Map an ESM2 gene embedding to a STATE raw pert vector.
-
-    The output enters the trainable STATE perturbation encoder in its raw
-    ``pert_dim`` space. The MLP's ``net`` parameter names stay stable across
-    ordinary joint checkpoints.
-
-    Args:
-        esm_dim: Dimensionality of the input ESM2 embedding.
-        hidden: Hidden layer width.
-        pert_dim: Output dimensionality matching the STATE pert vector size.
-    """
+    """ESM2 embedding ``(B, esm_dim)`` -> STATE's raw ``(B, pert_dim)`` pert vector,
+    which enters STATE's perturbation encoder; ``net`` keeps the checkpoint keys."""
 
     def __init__(self, esm_dim: int, hidden: int, pert_dim: int) -> None:
         super().__init__()
@@ -29,19 +20,12 @@ class PertAdapter(nn.Module):
         )
 
     def forward(self, esm: torch.Tensor) -> torch.Tensor:
-        """Map ESM2 embeddings to raw pert vectors.
-
-        Args:
-            esm: Input tensor of shape ``(B, esm_dim)``.
-
-        Returns:
-            Raw pert vector tensor of shape ``(B, pert_dim)``.
-        """
         return self.net(esm)
 
 
 class Esm2PerturbationAdapter(nn.Module):
-    """Map fixed per-gene ESM-2 vectors to STATE perturbation vectors."""
+    """Fixed per-gene ESM-2 vectors -> STATE perturbation vectors, one adapter call
+    for a batch of gene symbols (case-insensitive)."""
 
     def __init__(
         self,
@@ -64,18 +48,10 @@ class Esm2PerturbationAdapter(nn.Module):
         )
         self.adapter = PertAdapter(table.dim, int(adapter_hidden), int(pert_dim))
 
-    def forward(self, gene: str) -> torch.Tensor:
-        return self.forward_many([gene])[0]
-
     def forward_many(self, genes: list[str] | tuple[str, ...]) -> torch.Tensor:
-        """Map multiple genes through one adapter call."""
         indices = torch.as_tensor(
             [self._gene_to_index[str(gene).upper()] for gene in genes],
             dtype=torch.long,
             device=self.esm_matrix.device,
         )
         return self.adapter(self.esm_matrix.index_select(0, indices))
-
-    def has_embedding(self, gene: str) -> bool:
-        """Return whether the adapter contains an ESM-2 vector for ``gene``."""
-        return str(gene).upper() in self._gene_to_index

@@ -1,17 +1,14 @@
-"""eval / metrics."""
+"""Per-unit correlations (NaN, never 0, where undefined), the paired line bootstrap of
+the selective Spearman, and the calibration slope."""
 
 from __future__ import annotations
 
-import logging
 import math
 from typing import Sequence
 
 import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, spearmanr
-
-_LOGGER = logging.getLogger(__name__)
-
 
 MIN_OBSERVATIONS = 3
 
@@ -28,28 +25,11 @@ def unit_pearson(truth: np.ndarray, pred: np.ndarray) -> float:
 
 
 def unit_spearman(truth: np.ndarray, pred: np.ndarray) -> float:
-    """Spearman rho for one unit's (truth, pred) pairs, or NaN if undefined.
-
-    Rows where either value is NaN are dropped first. The remaining pair is
-    undefined (returns NaN without calling ``scipy.stats.spearmanr``) if
-    fewer than :data:`MIN_OBSERVATIONS` usable pairs remain, or if the truth
-    or prediction vector is constant. Checking constancy ourselves before
-    calling ``spearmanr`` avoids SciPy's ``ConstantInputWarning`` path,
-    whose NaN output would otherwise be indistinguishable from a genuine
-    "too few observations" NaN.
-
-    Args:
-        truth: Raw (possibly NaN-containing) truth values for one unit.
-        pred: Raw (possibly NaN-containing) prediction values for one unit,
-            aligned with ``truth``.
-
-    Returns:
-        Spearman rank correlation (average-rank ties, as
-        ``scipy.stats.spearmanr``), or NaN if the unit is undefined.
-    """
+    """Spearman rho (average-rank ties) over one unit's finite pairs; NaN with fewer
+    than :data:`MIN_OBSERVATIONS` pairs or a constant side, decided here rather than
+    by SciPy's constant-input path."""
     finite = np.isfinite(truth) & np.isfinite(pred)
-    truth = truth[finite]
-    pred = pred[finite]
+    truth, pred = truth[finite], pred[finite]
     if truth.size < MIN_OBSERVATIONS:
         return float("nan")
     if np.all(truth == truth[0]) or np.all(pred == pred[0]):
@@ -57,70 +37,23 @@ def unit_spearman(truth: np.ndarray, pred: np.ndarray) -> float:
     return float(spearmanr(truth, pred).statistic)
 
 
-def _spearman_by_unit(
-    frame: pd.DataFrame, *, unit_col: str, truth_col: str, pred_col: str
-) -> pd.Series:
-    """Compute :func:`unit_spearman` within each group of ``unit_col``.
-
-    Args:
-        frame: Long-form predictions frame.
-        unit_col: Column to group by (``model_id`` or ``gene_symbol``).
-        truth_col: Column holding the true values.
-        pred_col: Column holding the predicted values.
-
-    Returns:
-        A ``float`` Series indexed by ``unit_col``, with one entry per
-        distinct value of ``unit_col`` present in ``frame`` (NaN where
-        undefined; never dropped from the index).
-
-    Raises:
-        KeyError: If ``unit_col``, ``truth_col``, or ``pred_col`` is not a
-            column of ``frame``.
-    """
-    required = {unit_col, truth_col, pred_col}
-    missing = required - set(frame.columns)
-    if missing:
-        raise KeyError(f"frame is missing required column(s): {sorted(missing)}")
-
-    values: dict[object, float] = {}
-    for unit, group in frame.groupby(unit_col, sort=False):
-        truth = group[truth_col].to_numpy(dtype=float)
-        pred = group[pred_col].to_numpy(dtype=float)
-        values[unit] = unit_spearman(truth, pred)
-
-    series = pd.Series(values, dtype=float, name="spearman")
-    series.index.name = unit_col
-    return series
-
-
 def per_gene_spearman(
     frame: pd.DataFrame, *, truth_col: str, pred_col: str
 ) -> pd.Series:
-    """Spearman across lines within each gene. Index=gene_symbol.
-
-    This is the honest complementary axis introduced by R1: for one gene,
-    it correlates predicted vs. true GeneEffect across cell lines, which is
-    invariant to subtracting any per-gene constant (Fact 1 in the module
-    docstring) and undefined for a context-blind (per-gene-constant)
-    predictor (Fact 2).
-
-    Args:
-        frame: Long-form predictions frame with at least ``gene_symbol``,
-            ``truth_col``, and ``pred_col`` columns.
-        truth_col: Column holding the true GeneEffect values.
-        pred_col: Column holding the predicted GeneEffect values.
-
-    Returns:
-        A ``float`` Series indexed by ``gene_symbol``, one entry per gene
-        present in ``frame``. A gene yields NaN if it has fewer than
-        :data:`MIN_OBSERVATIONS` usable (finite truth, finite pred) lines,
-        or a constant truth or prediction vector across lines -- notably
-        including a context-blind predictor, whose prediction is constant
-        across lines by construction.
-    """
-    return _spearman_by_unit(
-        frame, unit_col="gene_symbol", truth_col=truth_col, pred_col=pred_col
-    )
+    """:func:`unit_spearman` across lines within each gene, indexed by
+    ``gene_symbol`` with every gene of ``frame`` kept: invariant to any per-gene
+    constant shift, and NaN for a context-blind (per-gene-constant) prediction."""
+    missing = {"gene_symbol", truth_col, pred_col} - set(frame.columns)
+    if missing:
+        raise KeyError(f"frame is missing required column(s): {sorted(missing)}")
+    values: dict[object, float] = {}
+    for unit, group in frame.groupby("gene_symbol", sort=False):
+        truth = group[truth_col].to_numpy(dtype=float)
+        pred = group[pred_col].to_numpy(dtype=float)
+        values[unit] = unit_spearman(truth, pred)
+    series = pd.Series(values, dtype=float, name="spearman")
+    series.index.name = "gene_symbol"
+    return series
 
 
 # Elements of a bootstrap chunk (genes x lines x repeats); bounds peak memory.
@@ -284,8 +217,6 @@ def calibration_slope(predicted: np.ndarray, measured: np.ndarray) -> float:
     """
     predicted = np.asarray(predicted, dtype=np.float64)
     measured = np.asarray(measured, dtype=np.float64)
-    if predicted.shape != measured.shape or predicted.ndim != 2:
-        raise ValueError("predicted and measured must be lines x genes of one shape")
     valid = np.isfinite(predicted) & np.isfinite(measured)
     count = valid.sum(axis=0)
     with np.errstate(invalid="ignore", divide="ignore"):

@@ -24,7 +24,7 @@ class FixedSparseProjection:
 
     Components follow the Achlioptas distribution at density ``1/sqrt(4000)``,
     generated once from the seed; :meth:`transform` is a plain matrix multiply so
-    gradients reach its input. Device copies are cached across calls.
+    gradients reach its input.
     """
 
     def __init__(self, seed: int = PROJECTION_SEED) -> None:

@@ -1,8 +1,5 @@
-"""The learning-rate schedule shared by the joint and stage-one trainers.
-
-Lifted out of ``src.training.trainer``, which imports accelerate, so the stage-one
-runs in ``.venv-pie`` (no accelerate) use the same schedule.
-"""
+"""The learning-rate schedule shared by the joint and stage-one trainers, apart from
+``src.training.trainer`` (which imports accelerate) so ``.venv-pie`` can import it."""
 
 from collections.abc import Mapping
 import math
