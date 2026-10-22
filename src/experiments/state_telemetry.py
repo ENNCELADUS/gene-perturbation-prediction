@@ -61,6 +61,7 @@ import numpy as np
 import pandas as pd
 
 from src.data import cell_states as cs
+from src.data.io import write_json, write_npz, write_parquet
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,28 +80,6 @@ DELTAS: Final[tuple[str, ...]] = ("dH", "dE", "own_h", "own_dp")
 def _absolute(path: str | Path) -> Path:
     path = Path(path)
     return path if path.is_absolute() else REPO_ROOT / path
-
-
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, allow_nan=True) + "\n")
-    os.replace(temporary, path)
-
-
-def _write_parquet(path: Path, frame: pd.DataFrame) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    frame.to_parquet(temporary)
-    os.replace(temporary, path)
-
-
-def _save_npz(path: Path, **arrays: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with temporary.open("wb") as handle:
-        np.savez(handle, **arrays)
-    os.replace(temporary, path)
 
 
 def _load_npz(path: Path) -> dict[str, np.ndarray]:
@@ -351,7 +330,7 @@ def open_manifest(t: Telemetry) -> dict[str, Any]:
             )
         return manifest
     manifest = {"settings": current, "steps": {}}
-    _write_json(path, manifest)
+    write_json(path, manifest, keep_nan=True)
     return manifest
 
 
@@ -362,7 +341,7 @@ def record_step(t: Telemetry, step: str, payload: Mapping[str, Any]) -> None:
         **payload,
         "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
-    _write_json(path, manifest)
+    write_json(path, manifest, keep_nan=True)
 
 
 # --- per-cell representations -------------------------------------------------------
@@ -442,7 +421,7 @@ def write_samples(t: Telemetry) -> None:
             s_score=cycle[:, 0],
             g2m_score=cycle[:, 1],
         )
-        _write_parquet(path, sample)
+        write_parquet(path, sample)
 
 
 def _by_line(sample: pd.DataFrame) -> Iterator[tuple[str, np.ndarray]]:
@@ -468,7 +447,7 @@ def write_plan(t: Telemetry) -> dict[str, Any]:
         "second": {m: str(p) for m, p in t.second_sources.items()},
         "samples": {str(s): str(t.layout.sample(s)) for s in t.seeds},
     }
-    _write_json(t.layout.plan, plan)
+    write_json(t.layout.plan, plan, keep_nan=True)
     return plan
 
 
@@ -548,7 +527,7 @@ def fit_vocabularies(t: Telemetry, seed: int) -> dict[str, Any]:
             features, int(fit["cycle_states"]), seed=seed, inits=inits
         )
         labels = cs.cycle_labels(params["means"])
-        _save_npz(path, **params, centred=False, states=np.asarray(labels))
+        write_npz(path, **params, centred=False, states=np.asarray(labels))
         written.append(cs.CYCLE)
     for family, (representation, centred) in cs.MIXTURE_FAMILIES.items():
         todo = [
@@ -566,7 +545,7 @@ def fit_vocabularies(t: Telemetry, seed: int) -> dict[str, Any]:
             features = (features - extra["pca_mean"]) @ extra["pca_components"].T
         for k in todo:
             params = cs.fit_mixture(features, k, seed=seed, inits=inits)
-            _save_npz(
+            write_npz(
                 t.layout.mixture(seed, f"{family}_k{k}"),
                 **params,
                 **extra,
@@ -676,11 +655,7 @@ def second_cells(t: Telemetry, model_id: str) -> None:
         model_id=model_id,
         var_ensembl_col=t.preparation["var_ensembl_col"],
     )
-    symbols = (
-        source.var[symbol_column(source.var)]
-        .astype(str)
-        .tolist()
-    )
+    symbols = source.var[symbol_column(source.var)].astype(str).tolist()
     scores, _ = program_scores(
         source.X, symbols, noise["genes"], cycle, float(noise["target_sum"])
     )
@@ -694,7 +669,7 @@ def second_cells(t: Telemetry, model_id: str) -> None:
     qc = np.column_stack(
         [cell_qc(source.X, symbols), scores, np.full(source.n_obs, np.nan)]
     ).astype(np.float32)
-    _save_npz(
+    write_npz(
         path, cell_ids=np.asarray(source.obs_names, dtype=str), qc=qc, hvg=hvg.cells
     )
 
@@ -708,14 +683,14 @@ def step_project(t: Telemetry) -> dict[str, Any]:
             with np.load(path) as payload:
                 if set(payload.files) == keys:
                     continue
-        _save_npz(path, **project_line(t, model_id))
+        write_npz(path, **project_line(t, model_id))
         done += 1
     second = 0
     for model_id in t.second_sources:
         if t.layout.memberships(model_id, True).is_file():
             continue
         second_cells(t, model_id)
-        _save_npz(
+        write_npz(
             t.layout.memberships(model_id, True), **project_line(t, model_id, True)
         )
         second += 1
@@ -741,11 +716,7 @@ def line_cells(t: Telemetry, model_id: str) -> tuple[cs.LineCells, Any, list[str
         model_id=model_id,
         var_ensembl_col=t.preparation["var_ensembl_col"],
     )
-    symbols = (
-        source.var[symbol_column(source.var)]
-        .astype(str)
-        .tolist()
-    )
+    symbols = source.var[symbol_column(source.var)].astype(str).tolist()
     cells = cs.per_cell_log_cp10k(
         source.X,
         symbols,
@@ -881,8 +852,8 @@ def assemble_sets(t: Telemetry) -> dict[str, Any]:
             )
         index = pd.Index(names, name="context")
         inputs = pd.DataFrame(np.vstack(rows), index=index, columns=t.panel)
-        _write_parquet(t.layout.state_set(set_name) / "inputs.parquet", inputs)
-        _write_parquet(
+        write_parquet(t.layout.state_set(set_name) / "inputs.parquet", inputs)
+        write_parquet(
             t.layout.state_set(set_name) / "masses.parquet",
             pd.DataFrame(table, index=index),
         )
@@ -895,7 +866,7 @@ def step_inputs(t: Telemetry) -> dict[str, Any]:
     for model_id in t.projected:
         if t.layout.line(model_id).is_file():
             continue
-        _save_npz(t.layout.line(model_id), **line_inputs(t, model_id))
+        write_npz(t.layout.line(model_id), **line_inputs(t, model_id))
         done += 1
     contexts = assemble_sets(t)
     return {
@@ -1378,7 +1349,7 @@ def step_report(t: Telemetry) -> dict[str, Any]:
     report["determinism"] = determinism_section(t)
     for set_name in cs.state_sets(t.config):
         report["pie_gap"][set_name] = gap_section(t, set_name)
-    _write_json(out_dir / "report.json", report)
+    write_json(out_dir / "report.json", report, keep_nan=True)
     (out_dir / "results.md").write_text(results_markdown(t, report))
     return {"output": str(out_dir)}
 

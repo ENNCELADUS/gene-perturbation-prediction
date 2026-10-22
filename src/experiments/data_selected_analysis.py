@@ -47,7 +47,7 @@ from src.experiments.context_prior import (
     prior_inputs,
     stages,
 )
-from src.experiments.run_dir import jsonable as _jsonable
+from src.data.io import jsonable as _jsonable
 
 #: Feature counts the ablation keeps or strips.
 TOP = (10, 50, 200, 1000)

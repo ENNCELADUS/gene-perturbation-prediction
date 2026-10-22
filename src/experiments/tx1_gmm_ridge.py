@@ -80,7 +80,8 @@ def fit_baseline(config_path: Path, out_dir: Path) -> Path:
     from src.baselines.tx1_gmm import Tx1GMMRidge
     from src.data.prepared import load_inputs
     from src.experiments.config import load_config
-    from src.experiments.geneeffect import _revision, _set_status, _write_json
+    from src.data.io import write_json as _write_json
+    from src.experiments.geneeffect import _revision, _set_status
 
     config = load_config(config_path)
     out_dir = Path(out_dir)

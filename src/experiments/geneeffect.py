@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import asdict
 import json
-import os
 from pathlib import Path
 import random
 import subprocess
 from typing import TYPE_CHECKING, Any
 
 from src.experiments.config import PRECISION, validate_config
+from src.data.io import write_json
 
 
 def mixed_precision() -> str:
@@ -27,12 +27,6 @@ if TYPE_CHECKING:
     from src.model.geneeffect import GeneEffectE2EModel
 
 
-def _write_json(path: Path, value) -> None:
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
-    os.replace(temporary, path)
-
-
 def _revision() -> str | None:
     try:
         return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
@@ -44,7 +38,7 @@ def _set_status(run_dir: Path, status_key: str, status: str, **details) -> None:
     path = run_dir / "run.json"
     record = json.loads(path.read_text()) if path.exists() else {}
     record[status_key] = {"status": status, **details}
-    _write_json(path, record)
+    write_json(path, record)
 
 
 def restore_model(
@@ -94,7 +88,7 @@ def run_training(
         (run_dir / "config.yaml").write_text(
             yaml.safe_dump(dict(config), sort_keys=False)
         )
-        _write_json(
+        write_json(
             run_dir / "run.json",
             {
                 "revision": _revision(),
@@ -117,7 +111,7 @@ def run_training(
         path = run_dir / "run.json"
         record = json.loads(path.read_text()) if path.exists() else {}
         record["training_diagnostic_lines"] = list(training_diagnostic_lines(inputs))
-        _write_json(path, record)
+        write_json(path, record)
     model = (
         build_joint_model(config, inputs)
         if saved is None
@@ -125,7 +119,7 @@ def run_training(
     )
     state = fit(model, inputs, config, run_dir, accelerator, restored=saved)
     if accelerator.is_main_process:
-        _write_json(run_dir / "done.json", asdict(state))
+        write_json(run_dir / "done.json", asdict(state))
     if accelerator.num_processes > 1:
         torch.distributed.barrier()  # every rank returns once done.json exists
     return best
@@ -171,4 +165,4 @@ def export_evaluation(result: EvalResult, out_dir: Path) -> None:
     result.predictions.to_parquet(out_dir / "predictions.parquet", index=False)
     result.per_line.to_csv(out_dir / "per_line.csv", index=False)
     result.per_gene.to_csv(out_dir / "per_gene.csv", index=False)
-    _write_json(out_dir / "metrics.json", result.metrics)
+    write_json(out_dir / "metrics.json", result.metrics)

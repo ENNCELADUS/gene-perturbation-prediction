@@ -52,6 +52,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from src.data.io import replace_with, write_json, write_npz
 
 log = logging.getLogger(__name__)
 
@@ -186,24 +187,6 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _atomic_json(path: Path, record: dict[str, Any]) -> None:
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
-    os.replace(tmp, path)
-
-
-def _atomic_tsv(path: Path, frame: pd.DataFrame) -> None:
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    frame.to_csv(tmp, sep="\t", index=False)
-    os.replace(tmp, path)
-
-
-def _atomic_npz(path: Path, **arrays: np.ndarray) -> None:
-    tmp = path.with_name(f".{path.stem}.{os.getpid()}.tmp.npz")
-    np.savez(tmp, **arrays)
-    os.replace(tmp, path)
-
-
 def read_proteins(out: Path) -> pd.DataFrame:
     table = pd.read_csv(out / PROTEINS, sep="\t", dtype=str, keep_default_na=False)
     if list(table.columns) != ["symbol", "uniprot_accession", "sequence"]:
@@ -241,8 +224,8 @@ def proteins(pie_sources: Path, out: Path) -> None:
     ours = uniprot.proteins_sha256(table)
     pie_sha = meta["provenance"]["proteins_sha256"]
     missing = sorted(set(keys) - set(table["symbol"]))
-    _atomic_tsv(out / PROTEINS, table)
-    _atomic_json(
+    replace_with(out / PROTEINS, lambda t: table.to_csv(t, sep="\t", index=False))
+    write_json(
         out / "proteins.json",
         {
             "created": _now(),
@@ -262,6 +245,7 @@ def proteins(pie_sources: Path, out: Path) -> None:
             "pie_proteins_sha256": pie_sha,
             "proteins_sha256_equals_pie": ours == pie_sha,
         },
+        sort_keys=True,
     )
     log.info(
         "proteins: %d of %d esm2 keys; table sha256 %s PIE's",
@@ -314,7 +298,7 @@ def afdb(afdb_dir: Path, out: Path) -> None:
         os.replace(part, dest)
     if dest.stat().st_size != total:
         raise OSError(f"{dest}: {dest.stat().st_size} bytes, the server has {total}")
-    _atomic_json(
+    write_json(
         out / "afdb.json",
         {
             "created": _now(),
@@ -324,6 +308,7 @@ def afdb(afdb_dir: Path, out: Path) -> None:
             "bytes": total,
             "headers": headers,
         },
+        sort_keys=True,
     )
 
 
@@ -424,7 +409,7 @@ def structures(out: Path, afdb_path: Path) -> pd.DataFrame:
                 structure_status(accession, sequence, members, chain_sequence)
             )
     frame = table[["symbol", "uniprot_accession"]].assign(status=status)
-    _atomic_tsv(path, frame)
+    replace_with(path, lambda t: frame.to_csv(t, sep="\t", index=False))
     log.info("structures: %s", frame["status"].value_counts().to_dict())
     return frame
 
@@ -468,7 +453,7 @@ def embed(pin: ModelPin, out: Path, device: str, chunk: int) -> None:
                     raise ValueError(
                         f"{pin.name}: non-finite embeddings in chunk {start}"
                     )
-                _atomic_npz(
+                write_npz(
                     chunk_dir / f"{start:06d}.npz",
                     symbols=rows["symbol"].to_numpy(dtype=str),
                     vectors=block,
@@ -487,7 +472,7 @@ def embed(pin: ModelPin, out: Path, device: str, chunk: int) -> None:
     if symbols != table["symbol"].tolist():
         raise ValueError(f"{pin.name}: chunks do not follow {PROTEINS}")
     vectors = np.concatenate(blocks).astype(np.float32)
-    _atomic_npz(
+    write_npz(
         out / f"{pin.name}.npz",
         symbols=np.asarray(symbols, dtype=str),
         accessions=table["uniprot_accession"].to_numpy(dtype=str),
@@ -524,7 +509,7 @@ def embed(pin: ModelPin, out: Path, device: str, chunk: int) -> None:
             "otherwise the protein has no entry",
             "status": {str(k): int(v) for k, v in counts.items()},
         }
-    _atomic_json(out / f"{pin.name}.json", record)
+    write_json(out / f"{pin.name}.json", record, sort_keys=True)
 
 
 # --- CLI ------------------------------------------------------------------------------

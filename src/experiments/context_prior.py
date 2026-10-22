@@ -42,12 +42,13 @@ from src.data.depmap import read_depmap_matrix, read_models
 from src.data.extra_lines import load_bulk_lines
 from src.data.splits import FixedSplit, load_geneeffect_split
 from src.eval.geneeffect import gain, score
-from src.experiments.all import _number, _read_json
+from src.data.io import read_json as _read_json
+from src.data.io import write_json as _write_json
+from src.data.io import write_text as _write_text
+from src.experiments.all import _number
 from src.experiments.config import load_config, load_prior_config
 from src.experiments.run_dir import bind as _bind
 from src.experiments.run_dir import locked as _locked
-from src.experiments.run_dir import write_json as _write_json
-from src.experiments.run_dir import write_text as _write_text
 
 SCORED = ("val", "test")
 

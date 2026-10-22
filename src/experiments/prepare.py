@@ -34,6 +34,7 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
 from typing import Any, Final
+from src.data.io import write_json
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -202,12 +203,6 @@ def preparation_settings(config: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
-    os.replace(temporary, path)
-
-
 def _prepare_lines(
     config: Mapping[str, Any],
     root: Path,
@@ -285,7 +280,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
                 target_sum=float(manifest["expression_space"]["target_sum"]),
             )
         if manifest.get("lines") != list(sources):
-            _write_json(manifest_path, {**manifest, "lines": list(sources)})
+            write_json(manifest_path, {**manifest, "lines": list(sources)})
         return manifest_path
 
     import numpy as np
@@ -394,7 +389,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
         "settings": produced_by,
         "lines": list(sources),
     }
-    _write_json(manifest_path, manifest)
+    write_json(manifest_path, manifest)
     return manifest_path
 
 
@@ -463,7 +458,7 @@ def prepare_pseudobulk(config: Mapping[str, Any], genes: Sequence[str]) -> Path:
     temporary = root / "pseudobulk.parquet.tmp"
     frame.to_parquet(temporary)
     os.replace(temporary, root / "pseudobulk.parquet")
-    _write_json(
+    write_json(
         manifest_path,
         {"transform": TRANSFORM, "genes": list(genes), "lines": list(frame.index)},
     )
@@ -588,7 +583,7 @@ def prepare_noise_inputs(
     frame.to_parquet(temporary)
     os.replace(temporary, root / "subsamples.parquet")
     scoring = {str(gene).upper() for gene in genes}
-    _write_json(
+    write_json(
         manifest_path,
         {
             "settings": settings,
@@ -658,7 +653,7 @@ def prepare_second_source(
     temporary = root / "pseudobulk.parquet.tmp"
     frame.to_parquet(temporary)
     os.replace(temporary, root / "pseudobulk.parquet")
-    _write_json(manifest_path, {"settings": settings, "lines": list(frame.index)})
+    write_json(manifest_path, {"settings": settings, "lines": list(frame.index)})
     return manifest_path
 
 

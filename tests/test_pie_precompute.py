@@ -14,6 +14,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+
+from src.data.io import write_npy, write_npz
 import pandas as pd
 import pytest
 
@@ -98,11 +100,11 @@ def test_assemble_centres_each_gene_on_the_frame(tmp_path):
         }
         if i == 0:  # a pilot gene: full change kept, projected at assembly
             full = rng.normal(size=(3, p))
-            pp._save_npy(out.full_dir / f"{gene}.npy", full)
+            write_npy(out.full_dir / f"{gene}.npy", full)
             expected_dE = (full - basis["mean"]) @ basis["components"].T
         else:
             shard["dE"] = rng.normal(size=(3, 2))
-        pp._save_npz(out.genes_dir / f"{gene}.npz", **shard)
+        write_npz(out.genes_dir / f"{gene}.npz", **shard)
         shards[gene] = shard
     pp.assemble(out, tables)
     frame = [0, 1]  # L1 and L2 are frame lines, L3 a test line
@@ -369,18 +371,18 @@ def test_reference_pass_refuses_other_lines(tmp_path):
     tables = _tables()
     path = out.pie / "reference.npz"
     latent = np.zeros((3, 4), dtype=np.float32)
-    pp._save_npz(
+    write_npz(
         path, lines=np.asarray(["L1", "L2", "L9"]), latent=latent, features=latent
     )
     with pytest.raises(ValueError, match="other lines"):
         pp.reference_pass(out, None, tables)
-    pp._save_npz(path, lines=np.asarray(list(LINES)), latent=latent, features=latent)
+    write_npz(path, lines=np.asarray(list(LINES)), latent=latent, features=latent)
     assert set(pp.reference_pass(out, None, tables)) == {"latent", "features"}
-    pp._save_npz(
+    write_npz(
         path, latent=latent, features=latent
     )  # written before lines were recorded
     assert pp.reference_pass(out, None, tables)["latent"].shape == (3, 4)
-    pp._save_npz(path, latent=latent[:2], features=latent[:2])
+    write_npz(path, latent=latent[:2], features=latent[:2])
     with pytest.raises(ValueError, match="other lines"):
         pp.reference_pass(out, None, tables)
 
@@ -505,7 +507,7 @@ def test_assembly_refuses_a_line_pass_from_other_state_inputs(tmp_path):
     layout = pp.state_layout(out)
     for model_id, fingerprint in (("L1", "stale"), ("L3", states.fingerprints["L3"])):
         k = states.owners.count(model_id)
-        pp._save_npz(
+        write_npz(
             layout.line("set", model_id),
             contexts=np.asarray([c for c in states.contexts if c.startswith(model_id)]),
             genes=np.asarray(genes),

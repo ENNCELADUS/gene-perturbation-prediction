@@ -29,6 +29,7 @@ from src.data.esm2_provenance import (
     SCHEMA_VERSION as PROVENANCE_SCHEMA_VERSION,
     build_embedding_artifact_record,
 )
+from src.data.io import write_text
 
 logger = logging.getLogger("precompute_esm2")
 UNIPROT_URL = "https://rest.uniprot.org/uniprotkb/search"
@@ -44,16 +45,6 @@ class UniProtSequenceRecord(NamedTuple):
     isoform_identifier: str
     isoform_policy: str
     sequence: str
-
-
-def _atomic_write_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_text(text, encoding="utf-8")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def symbols_from_csv(csv_path: Path, symbol_columns: tuple[str, ...]) -> list[str]:
@@ -217,7 +208,7 @@ def load_or_fetch_sequences(
         return records
 
     def write_cache() -> None:
-        _atomic_write_text(
+        write_text(
             cache,
             json.dumps(
                 {
@@ -490,7 +481,7 @@ def write_embedding_with_provenance(
         "schema_version": UNIPROT_MAPPING_SCHEMA,
         "records": mapping_records,
     }
-    _atomic_write_text(
+    write_text(
         mapping_json_output,
         json.dumps(mapping_payload, indent=2, sort_keys=True) + "\n",
     )
@@ -499,7 +490,7 @@ def write_embedding_with_provenance(
     writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames, lineterminator="\n")
     writer.writeheader()
     writer.writerows(mapping_records)
-    _atomic_write_text(mapping_csv_output, csv_buffer.getvalue())
+    write_text(mapping_csv_output, csv_buffer.getvalue())
     manifest: dict[str, object] = {
         "schema_version": PROVENANCE_SCHEMA_VERSION,
         "requested_model_id": requested_model_id,
@@ -514,9 +505,7 @@ def write_embedding_with_provenance(
         },
         "embedding_artifact": artifact,
     }
-    _atomic_write_text(
-        provenance_output, json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-    )
+    write_text(provenance_output, json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return manifest
 
 
