@@ -51,6 +51,7 @@ import pandas as pd
 from src.data.io import write_json, write_parquet
 from src.experiments import run_dir
 from src.experiments.run_dir import record_step, shard
+from src.experiments.stage_one.setup import Setup, load_setup
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,43 +72,6 @@ QC_COLUMNS: Final[tuple[str, ...]] = (
 
 
 # --- configuration ------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Setup:
-    """The ladder config and the configs it names, loaded once."""
-
-    config: Mapping[str, Any]
-    prior: Mapping[str, Any]
-    joint: Mapping[str, Any]
-    noise: Mapping[str, Any]
-
-    @property
-    def root(self) -> Path:
-        return Path(self.config["ladder_root"])
-
-    @property
-    def prepared(self) -> Path:
-        return Path(self.joint["prepared_root"])
-
-    @property
-    def seed(self) -> int:
-        return int(self.config["seed"])
-
-
-def load_setup(config: Mapping[str, Any]) -> Setup:
-    from src.experiments.joint.config import load_config
-    from src.experiments.prior.config import load_noise_config, load_prior_config
-    from src.experiments.stage_one.config import validate_ladder_config
-
-    validate_ladder_config(config)
-    prior = load_prior_config(Path(config["prior_config"]))
-    return Setup(
-        config=config,
-        prior=prior,
-        joint=load_config(Path(prior["joint_config"])),
-        noise=load_noise_config(Path(config["noise_config"])),
-    )
 
 
 def settings(setup: Setup) -> dict[str, Any]:
