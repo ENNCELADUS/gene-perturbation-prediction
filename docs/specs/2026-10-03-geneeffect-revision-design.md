@@ -1,6 +1,6 @@
 # Design: SL-aligned selection, a factorised head and three STATE settings for the joint GeneEffect model
 
-**Status:** design, 2026-10-03, agreed in conversation (grill session). Follows the
+**Status:** agreed 2026-10-03. Follows the
 [GeneEffect protocol rules](../03-geneeffect-protocol.md#11-rules). Builds on the
 [expression-space design](2026-10-02-expression-space-and-all-pipeline-design.md) and the `all` run
 `all_20261002T174946Z`. Replaces only the joint model's head, objective, selection and STATE
@@ -46,9 +46,8 @@ treatment; preparation, splits, baselines and the response comparison are unchan
 
 ## 3. Staging
 
-All runs use the four H20s of the container on port 30734, one run at a time, seed 0. One config is
-one experiment: train, select `best.pt` on validation, then score it once on test. There is no
-multi-seed stage.
+All runs use the four H20s of the container on port 30734, one run at a time, seed 0; one config is
+one experiment (train, select `best.pt` on validation, score it once on test).
 
 1. **Objective screen.** STATE setting (a) under objectives (1), (2), (3). The winner is the highest
    `val_selective_spearman` at its `best.pt`.
@@ -73,9 +72,8 @@ difference to the Tx1 ridge.
 
 ## 5. Documents
 
-`docs/03-geneeffect-protocol.md` §4–§6 (head, objective, selection, metrics) and `CLAUDE.md`
-(the `best.pt` rule) change with the code. Results go to `results/geneeffect_revision/` after
-the runs.
+`docs/03-geneeffect-protocol.md` §4–§6 (head, objective, selection, metrics) and §9.3 (the `revision` run), and
+`CLAUDE.md` (the `best.pt` rule), carry this design.
 
 ## 6. Claim boundaries
 

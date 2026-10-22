@@ -6,7 +6,7 @@
 [protocol §15](../03-geneeffect-protocol.md#15-stage-one-inputs) and the build record in
 [`results/ladder_inputs/`](../../results/ladder_inputs/README.md). The stage-one model (protocol §16) reads them
 through `src/data/ladder_reader.py`, which refuses a `pie/index.json` whose lines or genes are not `lines.parquet`'s
-and the decode panel in order; no model has been trained on them yet.
+and the decode panel in order.
 
 ## Role
 
@@ -24,7 +24,7 @@ is refused), the expression space of each channel and each step's counts.
 | `gene_text`, `string_space`, PIE's `context_text` | `arcinstitute/PIE_sources` at `cb1aaa4e` | H20 and Mac |
 | Protein sequences | reviewed human UniProtKB, release 2026_03, the accessions behind PIE's `esm2` (19,202 of its 19,203 genes) | H20 |
 | ESM C 600M, ESM3-open | `EvolutionaryScale/esmc-600m-2024-12` at `e4d83bc`, `EvolutionaryScale/esm3-sm-open-v1` at `47f0545`, through hf-mirror; run in an existing `esm` 3.2.1 environment on the H20 (`ESM_PYTHON`) | H20 |
-| Structures | AlphaFold DB v6 human proteome (`UP000005640_9606_HUMAN_v6.tar`, `ftp.ebi.ac.uk`, SHA-256 `1de6f3d7df03…`) | H20 |
+| Structures | AlphaFold DB v6 human proteome (`UP000005640_9606_HUMAN_v6.tar`, `ftp.ebi.ac.uk`) | H20 |
 | Gene2vec | Cilantro's `gene2vec_embs.pt`, mapped through Geneformer's `gene_name_id_dict_gc30M.pkl` | H20 |
 | Cellosaurus | release 56.0 (PIE's pin) through PIE's client; embedded with `text-embedding-3-large` | Mac (the H20 cannot reach Cellosaurus or OpenAI) |
 | Frozen PIE | `PIE_replogle_xdataset` `best_auprc.ckpt` at `f6da9607` | H20 |
@@ -41,7 +41,7 @@ is refused), the expression space of each channel and each step's counts.
 | `gene_sources/` | `gene_text`, `esmc_600m`, `esm3_open`, `string_space`, `gene2vec` on the gene axis; `coverage.json`; `protein/` (sequences, raw ESM tables, structure status) | see below |
 | `context_text/` | PIE `context_text` source keyed by ModelID; `context_text_provenance.json` beside it | 1,108 lines with text (42 reused from PIE, 1,066 embedded) |
 | `pie/` | frozen-PIE re-score, reference pass, per-gene shards, basis, assembled deltas, `run.json` | see the results record |
-| `states/` (with `states/pie/`) | Task 8's cell-state vocabularies, state inputs and the frozen PIE on them ([card](cell-states.md)) | not yet built |
+| `states/` (with `states/pie/`) | Task 8's cell-state vocabularies, state inputs and the frozen PIE on them ([card](cell-states.md)) | see its card |
 
 Gene-source coverage of the 17,787 genes (selective share in brackets): `gene_text` 17,607 (0.988), ESM C 17,708
 (0.993), ESM3-open 17,449 (0.978), `string_space` 17,503 (0.983), Gene2vec 15,922 (0.901). ESM3-open reads a

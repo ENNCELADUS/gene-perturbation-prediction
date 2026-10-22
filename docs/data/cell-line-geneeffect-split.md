@@ -49,8 +49,8 @@ uv run python -m src.data.builders.build_cell_line_geneeffect_split \
     --out configs/benchmarks/cell_line_geneeffect_split.json
 ```
 
-The file records the path and SHA-256 of each input; a test checks that the tracked file is what the builder writes
-from the tracked inputs. Rebuild it whenever an input changes.
+A test checks that the tracked file is what the builder writes from the tracked inputs. Rebuild it whenever an input
+changes.
 
 ## History
 

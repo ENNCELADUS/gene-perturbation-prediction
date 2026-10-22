@@ -1,7 +1,6 @@
 # Horlbeck 2018 K562 CRISPRi genetic-interaction map
 
-**Status:** acquired, checksum-verified, normalized, and coverage-audited on
-2026-07-22.
+**Status:** acquired, normalized, and coverage-audited on 2026-07-22.
 
 ## Role
 
@@ -14,14 +13,10 @@ multi-cell-line mechanism.
 - Paper: Horlbeck et al., *Cell* 2018, [doi:10.1016/j.cell.2018.06.010](https://doi.org/10.1016/j.cell.2018.06.010).
 - Author-deposited data: Mendeley Data version 1,
   [doi:10.17632/rdzk59n6j4.1](https://doi.org/10.17632/rdzk59n6j4.1), CC BY 4.0.
-- Mendeley file: `GI_map_treeview.zip`, file ID
-  `5542388b-e895-4f29-af07-bfe2eecd0655`, 9,280,985 bytes.
-- Published and locally verified SHA-256:
-  `d389b3ebdd2c88f86cc446f272f3ff6526df635d666cd17d67440bf10c0f9115`.
+- Mendeley file: `GI_map_treeview.zip`, file ID `5542388b-e895-4f29-af07-bfe2eecd0655`.
 - Local raw archive:
   `data/sl_dependency_v0/raw/horlbeck_2018/GI_map_treeview.zip`.
-- Extracted K562 matrix: `K562_gene.cdt`, SHA-256
-  `e3f7c4caa860cda8daec94be56e6900d9737781499e5357eaf7b5f18e7534c19`.
+- Extracted K562 matrix: `K562_gene.cdt`.
 
 The paper describes a 472-gene library design with 111,628 unique combinations.
 The author-deposited, post-QC K562 gene-level matrix contains 448 genes and
@@ -53,9 +48,7 @@ negative rule matches the Horlbeck K562 usage in later SL benchmarking.
 ## Symbol normalization
 
 The 2018 matrix includes legacy symbols. Coverage uses a frozen HGNC complete-set
-download from 2026-07-22, SHA-256
-`25042e23a296bfa046bf7bc65ee110139cc03a9a55fb7f15ab34b19226cf6417`.
-Resolution order is exact symbol, unique case-insensitive match, then a unique
+download from 2026-07-22. Resolution order is exact symbol, unique case-insensitive match, then a unique
 approved HGNC previous/alias-symbol mapping. Ambiguous or unresolved mappings
 remain uncovered; they are not manually forced.
 
@@ -67,13 +60,6 @@ The primary coverage definition requires both genes to:
    cells, matching the exp05 `min_cells_per_gene`; and
 2. occur in the frozen exp05 pool manifest
    `k562_pool_depmap_fixed_seed42.csv`.
-
-Input hashes are:
-
-- Replogle condition table:
-  `76f8f055549c17a466d13f8c81d7788a8d8ae08eac0817703d4848c653d63397`;
-- exp05 fixed pool manifest:
-  `c33dbe6cbdd78d0e590a9810eab8a47f74b1a7d1ff3d9872ceca26d65cd3d6ef`.
 
 Under that definition, 408 of 448 Horlbeck genes are covered, yielding 83,028
 of 100,128 pairs with both genes covered (82.92%). If the DepMap-label-qualified
@@ -91,16 +77,8 @@ archive and runs from the repository root:
 uv run python archive/2026-09-05-inactive-routes/scripts/prepare_horlbeck_2018.py
 ```
 
-Generated, gitignored artifacts are:
-
-- `data/sl_dependency_v0/processed/horlbeck_2018/k562_gene_pairs.csv`, SHA-256
-  `8cc5d6eba748b5284126f2f13bd8e8eccf3bdeea11a9d3bfa7571e5ce40f12ad`;
-- `data/sl_dependency_v0/processed/horlbeck_2018/k562_gene_coverage.csv`,
-  SHA-256
-  `ce54ebe8631ffb47027f600db83c24252f29f3fd7afbc1ad67b026cc925e241a`;
-- `data/sl_dependency_v0/processed/horlbeck_2018/coverage_summary.json`,
-  SHA-256
-  `95044a3607093be4d41e3dda9f69d57faa35d8eb60f917bd331b685bb0075e92`.
+Generated, gitignored artifacts, under `data/sl_dependency_v0/processed/horlbeck_2018/`: `k562_gene_pairs.csv`,
+`k562_gene_coverage.csv` and `coverage_summary.json`.
 
 The pair table contains the frozen `gi_score`, strong-SL flag, canonical symbols,
 cell counts, and both broad observed-response and strict exp05 coverage flags.

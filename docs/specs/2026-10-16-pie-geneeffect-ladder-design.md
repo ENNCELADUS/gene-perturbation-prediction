@@ -1,18 +1,15 @@
 # Design: a PIE-based stage-one GeneEffect model, its architecture stage and the cell-distribution ladder
 
-**Status:** agreed 2026-10-16 (two grill sessions after the review of the noise diagnosis; checked by a Codex
-alignment review and an Opus review). Task 1 done 2026-10-16 ([record](../../results/pie_reproduction/README.md): the
-released checkpoints reproduce to rounding); Task 2 done 2026-10-17
-([record](../../results/ladder_inputs/README.md)); Task 3's shared stack built 2026-10-17 (plan Wave 1A, §3.3 "As
-built"; protocol §16), not yet run. Revised 2026-10-16 after Task 1: PIE's DepMap
-source is masked in every pass (§3.2) and Task 4's GeneEffect profile is masked by fold, not by line. Revised
-2026-10-16 in the Task 2 grill: the frame is 981 lines (§4.1), a line
-with cells always reads its cells (pseudo-bulk from per-cell CP10K, §4.3), and every arm reads the Cellosaurus text
-as PIE does (no text-off rows). Revised 2026-10-17 (a brainstorm after a literature survey of learned cell states, kept
-in the local notes as "Learned cell states for GeneEffect", and a Codex review of the draft): cell states read through
-the frozen PIE (§3.5, Tasks 8 and 9). Evidence it
-starts from: the [noise diagnosis](2026-10-12-noise-diagnosis-design.md) (its §6 lists the open corrections) and its records
-([noise diagnosis](../../results/noise_diagnosis_seed0/README.md), [learning curve](../../results/noise_lines_seed0/README.md)).
+**Status:** agreed 2026-10-16, after the review of the noise diagnosis. Task 1 done 2026-10-16
+([record](../../results/pie_reproduction/README.md): the released checkpoints reproduce to rounding); later tasks'
+state is in the [plan](2026-10-17-pie-stage-one-plan.md). Revisions: 2026-10-16 after Task 1, PIE's DepMap source
+masked in every pass (§3.2) and Task 4's GeneEffect profile masked by fold, not by line; 2026-10-16 for Task 2, the
+981-line frame (§4.1), a line with cells always read through its cells (pseudo-bulk from per-cell CP10K, §4.3), and
+the Cellosaurus text read by every arm as PIE does (no text-off rows); 2026-10-17, after a literature survey of
+learned cell states (local notes, "Learned cell states for GeneEffect"), cell states read through the frozen PIE
+(§3.5, Tasks 8 and 9). Evidence it starts from: the [noise diagnosis](2026-10-12-noise-diagnosis-design.md) (its §6
+lists the open corrections) and its records ([noise diagnosis](../../results/noise_diagnosis_seed0/README.md),
+[learning curve](../../results/noise_lines_seed0/README.md)).
 PIE: Arc Institute's "Perturbation is Everything" (bioRxiv, 5 October 2026), code
 [ArcInstitute/pie](https://github.com/ArcInstitute/pie), data and checkpoints in the Hugging Face
 [PIE collection](https://huggingface.co/collections/arcinstitute/pie). Cilantro-SL: Hua, Haber and Ma 2026, official code
@@ -61,9 +58,6 @@ Task 8 runs as soon as Task 2's inputs exist; Task 9 runs beside Task 5. People 
 vocabularies Task 9 precomputes, and read Task 9's frozen-state pilot before its fine-tuned and end-to-end options are
 built.
 
-Embedding the Cellosaurus text (Task 2) sends public Cellosaurus records to OpenAI's embedding API and needs the
-user's key; it runs on the Mac (the H20 cannot reach OpenAI), with the key asked for when Task 2 runs.
-
 ## 3. The model
 
 ### 3.1 PIE as published
@@ -94,11 +88,11 @@ expression never reaches the latents: it enters only as each decoded gene's own 
   g's GeneEffect pattern across lines, which the base and the prior already hold, not the simulated knockdown in line
   c. GeneEffect from other lines enters stage one only through Task 4's fold-masked profile. PIE saw this source for
   about 97% of its training perturbations, so masking moves its input; the pilot measures what it costs PIE.
-- **Context.** For line `c`: PIE's control-mean evidence on one decode panel shared by every line: for a line with
-  cells, its definition (the mean over cells of `log1p` CP10K); for a bulk-only line, the bulk profile rescaled to
-  PIE's CP10K scale (a bulk profile has no cells to average logs over); (the protocol's GeneEffect genes with a `gene_text` entry), a gene the line's
-  source does not list taking the training-line mean, as the prior fills it (PIE's frozen evidence encoder blanks a
-  whole row on any NaN); and the line's Cellosaurus text where a record exists.
+- **Context.** For line `c`: PIE's control-mean evidence on one decode panel shared by every line (the protocol's
+  GeneEffect genes with a `gene_text` entry): for a line with cells, its definition (the mean over cells of `log1p`
+  CP10K); for a bulk-only line, the bulk profile rescaled to PIE's CP10K scale (a bulk profile has no cells to average
+  logs over); a gene the line's source does not list taking the training-line mean, as the prior fills it (PIE's
+  frozen evidence encoder blanks a whole row on any NaN); and the line's Cellosaurus text where a record exists.
 - **Knockdown of g.** The perturbation tokens of gene g; same-perturbation evidence from g's responses in the
   checkpoint's training data; same-context evidence empty (no responses in our lines).
 - **No perturbation.** The same context inputs with every perturbation source and every response-evidence block
@@ -268,10 +262,9 @@ are paired views of a line for stability telemetry, never extra lines.
   RNA included, and the 604 bulk-only labelled lines the default prior fits (lymphoid and myeloid bulk-only lines
   dropped, as it drops them). The prior's own 947 labelled lines hold 343 of the 377. It validates on
   the split's 27 lines and scores its 28 test lines once. Cell channels exist only on the 377 single-cell lines and
-  are absent on bulk-only lines, so arms differ only in their channels and the default prior, trained on the same
-  labelled lines, is a like-for-like bar. (The first grill chose a 377-line frame; the architecture grill moved to
-  this one, because a frame of 377 lines starts near 0.17, the learning curve's value at that size, against the
-  prior's 0.2045, and a per-gene base cannot change selective Spearman.)
+  are absent on bulk-only lines, so arms differ only in their channels. (A 377-line frame, chosen first, was dropped:
+  it starts near 0.17, the learning curve's value at that size, against the prior's 0.2045, and a per-gene base
+  cannot change selective Spearman.)
 - **Base and target.** `m_g` is the gene's mean measured GeneEffect over the 981 frame lines (single-cell training
   lines admitted by `assert_fit_eligible`, bulk-only labelled lines from `load_bulk_lines`, which refuses any overlap
   with validation and test; lymphoid and myeloid bulk-only lines dropped). The target is `GeneEffect(c, g) − m_g`; the loss is MSE in units of the 377-line residual SD
@@ -345,8 +338,7 @@ The gene encoder projects these and sums them; a gene without an entry has that 
 | `string_space` | interaction network | 19,699 | PIE_sources (STRING v12) |
 | Gene2vec | co-expression | ~24,000 | the matrix Cilantro's stage one reads; its best gene prior (Fig. 2C) |
 
-PIE's `depmap_gene_effect` is never a gene-encoder source and is masked in the frozen PIE (§3.2); the fold-masked
-training-side profile of Task 4 is the only GeneEffect-derived input.
+PIE's `depmap_gene_effect` is never a gene-encoder source (§3.2).
 
 ## 5. Tasks
 
@@ -373,7 +365,8 @@ manifest recording the expression space:
   timed on a sample first);
 - the gene sources of §4.4 aligned to the GeneEffect gene axis, with coverage per source;
 - Cellosaurus 56.0 records fetched on the Mac for every line with an RRID, rendered with PIE's template and embedded
-  with `text-embedding-3-large` on the Mac (the user's key), as PIE's `context_text`;
+  with OpenAI's `text-embedding-3-large` on the Mac (the user's key; the H20 cannot reach OpenAI), as PIE's
+  `context_text`;
 - PIE's evidence inputs: its datasets' responses for same-perturbation evidence (the DepMap source masked, §3.2);
 - the frozen PIE's deltas and own-gene slots for every line × labelled gene: the 981 frame lines (bulk-only lines
   through their bulk profile) and the 55 held-out lines, about 1,036 × 17,900 = 18.5M pairs (about 17 hours on
@@ -627,8 +620,7 @@ actually respond that way.
 | `src/model/pie_differentiable.py` | new | Task 9's differentiable frozen-PIE path (no inference mode, membership-independent caches only) |
 | `configs/stage_one/states/` | new | one config per Task 9 run |
 
-cNMF, starCAT and scvi-tools run where their dependencies resolve (the project environment or a separate one, as PIE's
-`.venv-pie`); their outputs are files the stage-one environment reads.
+The cNMF, starCAT and scvi-tools outputs are files the stage-one environment reads.
 
 `data` and `model` import neither `training` nor `experiments`. Configs are strict. Checkpoints record the split
 membership and load strictly, the vendored PIE included.

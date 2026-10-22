@@ -1,7 +1,6 @@
 # Design: one expression space, STATE on its own basal path, and a single automatic run
 
-**Status:** design, 2026-10-02, agreed in conversation; awaiting review of this written form.
-Follows the [GeneEffect protocol rules](../03-geneeffect-protocol.md#11-rules). Supersedes the response wiring of
+**Status:** agreed 2026-10-02. Follows the [GeneEffect protocol rules](../03-geneeffect-protocol.md#11-rules). Supersedes the response wiring of
 the joint training design (`2026-09-06-modular-joint-training-design.md`) and the
 readout objective plan (`2026-09-10-readout-objective-and-selection-design.md`)'s ordering of
 response-model work after readout work. Both were removed from the tree; `git show 1694f5c:docs/specs/<name>`.
@@ -12,10 +11,10 @@ Evidence it builds on: [response-pathway diagnostics](../../results/p1_response_
 1. **STATE was fed the wrong numbers.** The released STATE ST-HVG-Replogle checkpoint was trained
    on arc-state `preprocess_train` output: `sc.pp.normalize_total` over the whole library (target
    = median library size), `log1p`, then the 2,000-gene HVG slice (`X_hvg`). The formal pipeline
-   slices raw UMI counts to the HVG panel and never normalises
-   (`src/data/response.py:_align_to_checkpoint_order`, `src/data/prepared.py:_open_lines`). The
+   sliced raw UMI counts to the HVG panel and never normalised
+   (`src/data/response.py:_align_to_checkpoint_order`, `src/data/prepared.py:_open_lines`, since rewritten). The
    decoder's log-space output was scored against count-space targets, and the head's expression
-   shift subtracted raw basal counts from log-space predictions. The log-space correction exists
+   shift subtracted raw basal counts from log-space predictions. The log-space correction existed
    only inside the diagnostic harnesses, with an HVG-panel proxy for library size.
 2. **STATE's basal input was a random layer.** The joint model replaced STATE's 2000→328 basal
    encoder with a new 2560→328 layer on Tx1 embeddings, trained at STATE's 1e-6. In log space this
@@ -131,7 +130,7 @@ a rerun resumes:
 out of the deleted fixed-backbone head harness).
 
 **Keep untouched:** the readout head (`src/{model,training,eval,data}/readout*.py`,
-`src/experiments/joint/readout/compare.py`), `src/eval/metrics.py`, `src/data/{splits,split_build,gene_splits,residual_target,geneeffect,embeddings,esm2_provenance,gene_order}.py`,
+`src/experiments/joint/readout/compare.py`), `src/eval/metrics.py`, `src/data/{splits,split_build,residual_target,geneeffect,embeddings,esm2_provenance,gene_order}.py`,
 the one-off raw-input builders under `src/data/builders/`, `src/experiments/historical/`, the GMM
 ridge baseline, every file under `results/`, and earlier specs.
 
@@ -154,23 +153,18 @@ zero-initialised MLP arms returning exactly no-change; zero-key checkpoint loads
 
 ## 9. Documents
 
-- Blueprint: high-level task description only; its model equations, learning rates, metric table
-  and result tables move to the protocol.
-- Protocol: new §3.4 expression space; §4–§5 for the new wiring, rates and single validation split;
-  §9 replaced by the comparison and the `all` run; §8 stays as the diagnostics record.
-- `docs/figures/geneeffect_architecture.svg`: STATE's basal input becomes log HVG expression; Tx1 goes to
-  the head.
-- `AGENTS.md`, `CLAUDE.md`, `hpc/README.md`: new commands, deleted diagnostics, updated
-  silent-failure list.
-- Tahoe-x1 literature note: lines 37–38 report Fig. 5 separability values as perturbation-prediction
-  numbers; replace with Fig. 6 values.
+Blueprint reduced to the task description (its model equations, learning rates, metric and result tables move to
+the protocol); protocol §3.4 expression space, §4–§5 the new wiring, rates and single validation split, §9 the
+comparison and the `all` run, §8 kept as the diagnostics record; `docs/figures/geneeffect_architecture.svg` (log HVG
+into STATE, Tx1 to the head); `AGENTS.md`, `CLAUDE.md`, `hpc/README.md` (commands, deleted diagnostics,
+silent-failure list); the Tahoe-x1 literature note's lines 37–38 (Fig. 5 separability values reported as
+perturbation-prediction numbers) replaced by Fig. 6 values.
 
 ## 10. Execution
 
 Branch `refactor/expression-space-all-pipeline` → behaviour suite and Ruff green locally → Codex
 review of the wave, findings adjudicated → merge to `main`, push → pull on H20 port 30838 (4 GPUs) →
-`hpc/run.sh all` in the background. First report once preparation has written `T` and the STATE
-sanity line; the chain then runs to `summary.md`.
+`hpc/run.sh all` in the background.
 
 ## 11. Claim boundaries
 

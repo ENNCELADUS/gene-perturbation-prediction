@@ -16,8 +16,7 @@ then it was the only split, used by the final run of the historical staged GeneE
 | New single-cell atlas | 125 | 27 | 27 |
 | Total membership | 171 | 27 | 28 |
 
-It fixes the validation and test lines of the final split. The 47 original contexts are fixed in
-train except A549 (`ACH-000681`), fixed in test since 2026-10-11 because all three screens of
+The 47 original contexts are fixed in train except A549 (`ACH-000681`), fixed in test since 2026-10-11 because all three screens of
 the SL benchmark test it ([SL protocol](../04-sl-ranking-protocol.md)); the split was rebuilt in
 place, and the earlier 172/27/27 version, with A549 in train, is in git history. The 179 new
 contexts retain the deterministic patient-grouped MILP partition; no PatientID crosses split
@@ -36,22 +35,18 @@ semantic. **Resolved 2026-08-18:** the 152 `kinker_sccle` lines were published a
 pooling; [result](../../results/exp13_stage0/README.md)). Raw UMI counts from
 SCP542 now back all 152 lines — protocol §6, branch 1. Membership is unchanged.
 
-Before 2026-10-12 this split JSON was the sole membership authority; the final split is now.
-Fit residual targets, normalization,
-feature transforms and all model parameters on train only; validation selects the
-checkpoint by minimum GeneEffect Huber loss and test remains one-shot. GeneEffect
-is single-gene dependency, not SL.
-The two unlabeled train members are excluded from every supervised residual, context
-model and nearest-label donor fit; they remain part of the requested train membership.
-The split authority declares exactly these two IDs in `unlabeled_train`; any other
-missing train label, or any missing validation/test label, is a hard runtime error.
+Fitting and selection follow the [protocol rules](../03-geneeffect-protocol.md#11-rules). GeneEffect is single-gene
+dependency, not SL. The two unlabeled train members are excluded from every supervised residual, context model and
+nearest-label donor fit; they remain part of the requested train membership. The split declares exactly these two
+IDs in `unlabeled_train`; any other missing train label, or any missing validation/test label, is a hard runtime
+error.
 
 ## Artifacts
 
 - `configs/benchmarks/cell_line_geneeffect_226_split.json`: the 226 split, an input of the final split.
 - `configs/benchmarks/cell_line_geneeffect_226_split.csv`: row-level cohort, patient,
   source semantics and label availability.
-- `configs/benchmarks/cell_line_geneeffect_226_split_audit.json`: counts and pinned hashes.
+- `configs/benchmarks/cell_line_geneeffect_226_split_audit.json`: counts.
 - `src/data/builders/build_cell_line_geneeffect_226_split.py`: reproducible builder.
 - HPC: `data/sl_dependency_v0/processed/cell_line_geneeffect_226/benchmark_split_v1/`.
 

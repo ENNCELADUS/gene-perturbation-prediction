@@ -14,7 +14,6 @@ Local path:
 `data/sl_dependency_v0/raw/replogle/K562_gwps_normalized_singlecell_01.h5ad`
 
 - Source: Replogle/Nadig processed K562 GWPS single-cell h5ad.
-- Size: 65830941948 bytes.
 - Downloaded on 2026-06-17.
 
 ## AnnData Shape and Fields
