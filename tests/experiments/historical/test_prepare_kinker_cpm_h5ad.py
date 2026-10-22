@@ -1,3 +1,5 @@
+"""The historical Kinker CPM h5ad builder: its raw-count blocker and input checks."""
+
 from __future__ import annotations
 
 import argparse

@@ -38,7 +38,6 @@ def line_cells(t: Telemetry, model_id: str) -> tuple[cs.LineCells, Any, list[str
 def _check_identity(
     model_id: str, name: str, values: np.ndarray, line: np.ndarray
 ) -> None:
-    """Fail closed when a set's states do not add up to the line's PIE input."""
     difference = float(np.max(np.abs(values - line)))
     if not difference <= IDENTITY_TOLERANCE:
         raise ValueError(

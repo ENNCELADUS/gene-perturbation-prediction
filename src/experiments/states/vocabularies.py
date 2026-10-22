@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 import numpy as np
@@ -58,11 +58,6 @@ def representations(
     return out
 
 
-def _features(representation: Mapping[str, Any], name: str, seed: int) -> np.ndarray:
-    value = representation[name]
-    return value[seed] if name == "scvi" else value
-
-
 def write_samples(t: Telemetry) -> None:
     if all(t.layout.sample(seed).is_file() for seed in t.seeds):
         return
@@ -105,8 +100,8 @@ def _by_line(sample: pd.DataFrame) -> Iterator[tuple[str, np.ndarray]]:
 
 
 def write_plan(t: Telemetry) -> dict[str, Any]:
-    """Everything ``state_programs`` reads, as files: it exchanges nothing else
-    with this environment."""
+    """Everything ``programs`` reads, as files: it exchanges nothing else with
+    this environment."""
     hvg_order = list(t.recorded["hvg_order"])
     plan = {
         "root": str(t.layout.root),
@@ -288,7 +283,7 @@ def project_line(
             if name not in rep:
                 continue
             params = load_mixture(t, seed, vocabulary)
-            features = _features(rep, name, seed)
+            features = rep[name][seed] if name == "scvi" else rep[name]
             centre = features.mean(axis=0) if bool(params["centred"]) else None
             out[key] = cs.project(params, features, centre)
     return {k: v.astype(np.float32) for k, v in out.items()}
@@ -307,8 +302,8 @@ def read_memberships(
 
 
 def second_cells(t: Telemetry, model_id: str) -> None:
-    """A second deposit's per-cell QC and cycle scores and HVG cells, as Task 2
-    computes them for the primary deposit (no doublet score)."""
+    """A second deposit's per-cell QC and cycle scores and HVG cells, computed as
+    for the primary deposit (no doublet score)."""
     path = t.layout.second_cells(model_id)
     if path.is_file():
         return

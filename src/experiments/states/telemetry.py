@@ -94,8 +94,6 @@ def latent_path(layout: Layout, seed: int, model_id: str, second: bool) -> Path:
 
 @dataclass
 class Telemetry:
-    """The states config, the ladder setup and tables it reads."""
-
     config: Mapping[str, Any]
     name: str
     #: Frozen fits and per-line summaries read more than once in a run.

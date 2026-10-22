@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-"""Audit Tahoe-DMSO versus CCLE-bulk basal source confounding."""
+"""Historical audit of basal-source confounding: Tahoe-DMSO pseudobulk against
+DepMap/CCLE bulk expression on the paired lines."""
 
 from __future__ import annotations
 

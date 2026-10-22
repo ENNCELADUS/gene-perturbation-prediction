@@ -434,7 +434,6 @@ def gap_section(t: Telemetry, set_name: str) -> dict[str, Any] | None:
     owner = contexts["model_id"].to_numpy()
     is_whole = contexts["state"].to_numpy() == cs.WHOLE
     mass = np.nan_to_num(contexts["mass"].to_numpy(dtype=np.float64))
-    # Rows of each line's whole context, and the lines x contexts mixing matrix.
     whole_rows = np.asarray([np.flatnonzero((owner == m) & is_whole)[0] for m in lines])
     mixing = np.zeros((len(lines), len(contexts)))
     for i, model_id in enumerate(lines):

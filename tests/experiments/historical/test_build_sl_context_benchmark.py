@@ -1,3 +1,5 @@
+"""The historical SL context-screen builder's selection, split and evidence checks."""
+
 from __future__ import annotations
 
 import json
@@ -5,21 +7,19 @@ import json
 import pandas as pd
 import pytest
 
-from src.experiments.historical import (
-    build_sl_context_benchmark as benchmark_builder,
-)
 from src.experiments.historical.build_sl_context_benchmark import (
     apply_context_split,
     audit_positive_losses,
     context_statistics,
     finalise_benchmark,
+    screen_manifest,
     select_atomic_rows,
     validate_split_evidence,
 )
 
 
 def test_generated_manifest_does_not_encode_claim_policy() -> None:
-    manifest = benchmark_builder.screen_manifest(
+    manifest = screen_manifest(
         min_class_count=10,
         selection_stats={},
         pre_split_stats={},
