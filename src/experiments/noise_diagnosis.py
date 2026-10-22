@@ -66,7 +66,7 @@ from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.data.io import write_json, write_text
 from src.experiments.run_dir import bind, interval, number
 from src.experiments.config import load_config, load_noise_config
-from src.eval.geneeffect import BOOTSTRAP_SEED, gain, long_frame, score
+from src.eval.accuracy import BOOTSTRAP_SEED, gain, long_frame, score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,
@@ -410,7 +410,7 @@ def _accuracy(
     """Line-specific and whole-prediction metrics of ``predictions`` (residual-SD
     units) on ``lines``, over the entries ``covered`` marks when given; and the
     per-line sums of the pooled within-gene R² over the selective genes."""
-    from src.eval.geneeffect import aggregate_geneeffect
+    from src.eval.accuracy import aggregate_geneeffect
 
     base = diagnosis.base
     lines = list(lines)

@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import torch
 
-from src.eval.geneeffect import EvalResult, aggregate_geneeffect
+from src.eval.accuracy import EvalResult, aggregate_geneeffect
 from src.model.normalization import BlockStandardizer
 from src.model.readout import make_readout
 

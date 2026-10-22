@@ -14,7 +14,7 @@ from torch import nn
 
 from src.data.embeddings import Esm2EmbeddingTable
 from src.model.features import FixedSparseProjection
-from src.model.geneeffect import GeneEffectE2EModel
+from src.model.joint import GeneEffectE2EModel
 from src.model.head import (
     GeneEffectBlockConfig,
     GeneEffectFeatureDims,

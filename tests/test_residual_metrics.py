@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.eval.geneeffect import aggregate_geneeffect
+from src.eval.accuracy import aggregate_geneeffect
 from src.eval.metrics import (
     paired_line_bootstrap,
     per_gene_spearman,

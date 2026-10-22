@@ -235,7 +235,7 @@ directory refuses another config.
 
 ```bash
 A=configs/stage_one/architecture
-.venv-pie/bin/python -c "import src.eval.geneeffect, src.eval.metrics, src.context_prior.targets"   # import check
+.venv-pie/bin/python -c "import src.eval.accuracy, src.eval.metrics, src.context_prior.targets"   # import check
 hpc/run.sh stage-one-prior $A/prior_reference.yaml --run-id prior_reference_seed0        # CPU; components_reader needs it
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one $A/film_dH.yaml [--fold K]                    # one run, 1 GPU
 setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3 --folds main,0,1,2,3,4 $A/*.yaml \

@@ -418,7 +418,7 @@ def test_startup_standardizer_sees_exactly_the_enabled_blocks(prepared, setting)
 
 
 def test_model_without_state_never_calls_state(prepared, monkeypatch):
-    import src.model.geneeffect as geneeffect
+    import src.model.joint as geneeffect
     calls = []
     real = geneeffect.predict_bags
 

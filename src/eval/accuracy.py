@@ -21,7 +21,7 @@ from sklearn.metrics import average_precision_score
 from torch.nn import functional as F
 
 from src.data.datasets import DependencyDataset
-from src.data.geneeffect import DEPENDENCY_THRESHOLD
+from src.data.labels import DEPENDENCY_THRESHOLD
 from src.data.prepared import PreparedInputs
 from src.eval.metrics import unit_pearson, unit_spearman, paired_line_bootstrap
 

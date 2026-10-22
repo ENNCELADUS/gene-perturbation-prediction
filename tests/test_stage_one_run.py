@@ -301,7 +301,7 @@ def test_a_run_trains_selects_on_validation_and_scores_test_once(world):
     assert row["scores"]["val"]["lines"] == len(VAL)
     setup = _setup(world)
     base = reader.base_prediction(setup.ladder, setup.ladder.genes["m_g"], list(VAL))
-    from src.eval.geneeffect import wide_accuracy
+    from src.eval.accuracy import wide_accuracy
 
     expected = wide_accuracy(base, setup.truth(list(VAL)), setup.definitions)
     first = row["history"][0]
@@ -428,7 +428,7 @@ def test_prior_reference_components_reader_and_report(world):
     assert base_oof["selective_spearman"] is None
     assert sum(f["lines"] for f in base_oof["per_fold"].values()) == len(TRAIN)
     # A contrast's Spearman covers the genes defined on both sides.
-    from src.eval.geneeffect import defined_genes
+    from src.eval.accuracy import defined_genes
 
     val, selective = list(VAL), list(setup.definitions.selective)
     truth = setup.truth(val)

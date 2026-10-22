@@ -41,7 +41,7 @@ from src.context_prior.views import fit_expression_components
 from src.data.depmap import read_depmap_matrix, read_models
 from src.data.extra_lines import load_bulk_lines
 from src.data.splits import FixedSplit, load_geneeffect_split
-from src.eval.geneeffect import gain, score
+from src.eval.accuracy import gain, score
 from src.data.io import read_json, write_json, write_text
 from src.experiments.config import load_config, load_prior_config
 from src.experiments.run_dir import bind, locked, number

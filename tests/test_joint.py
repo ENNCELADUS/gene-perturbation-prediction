@@ -26,7 +26,7 @@ from src.data.datasets import DependencyDataset  # noqa: E402
 from src.data.prepared import PreparedInputs, PreparedLine  # noqa: E402
 from src.data.q_sc import QScFeatures  # noqa: E402
 from src.data.splits import FixedSplit  # noqa: E402
-from src.eval.geneeffect import aggregate_geneeffect, evaluate_model  # noqa: E402
+from src.eval.accuracy import aggregate_geneeffect, evaluate_model  # noqa: E402
 from src.experiments import geneeffect  # noqa: E402
 from src.experiments.config import load_config, validate_config  # noqa: E402
 from src.model.initialization import (  # noqa: E402
@@ -695,7 +695,7 @@ def _rank_zero_metrics_worker(rank, port, config, out_dir):
 
     from accelerate import Accelerator
 
-    from src.eval import geneeffect as evaluation
+    from src.eval import accuracy as evaluation
 
     os.environ.update(
         ACCELERATE_USE_CPU="true",

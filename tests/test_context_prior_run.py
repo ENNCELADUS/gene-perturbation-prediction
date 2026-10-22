@@ -18,7 +18,7 @@ from src.context_prior.reference import Reference
 from src.context_prior.space import quantile_reference
 from src.context_prior.targets import Definitions
 from src.data.splits import FixedSplit
-from src.eval.geneeffect import METRICS, long_frame
+from src.eval.accuracy import METRICS, long_frame
 from src.experiments import context_prior as run
 from src.data.io import jsonable, read_json
 from src.experiments.run_dir import bind, locked

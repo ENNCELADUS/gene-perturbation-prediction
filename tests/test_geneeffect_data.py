@@ -1,28 +1,26 @@
-"""Strict Exp13 GeneEffect data-contract tests."""
+"""GeneEffect labels: parsing, coverage and the training-line fits."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.data.geneeffect import (
-    Exp13Split,
+from src.data.labels import (
     fit_residual_scale,
     fit_selective_genes,
-    load_exp13_split,
     load_geneeffect_long,
     parse_gene_symbol,
 )
 from src.data.prepared import load_inputs
+from src.data.splits import FixedSplit
 from tests.test_joint_data import make_prepared_fixture
 
 
-def _split() -> Exp13Split:
-    return Exp13Split(
+def _split() -> FixedSplit:
+    return FixedSplit(
         train=("T1", "T2", "T3", "T4", "T5", "ACH-000779", "ACH-001086"),
         val=("V1", "V2", "V3"),
         test=("E1", "E2", "E3"),
@@ -53,20 +51,6 @@ def _labels() -> pd.DataFrame:
         )
     rows.append({"model_id": "T1", "gene_symbol": "SPARSE", "gene_effect": 1.0})
     return pd.DataFrame(rows)
-
-
-def test_load_tracked_split_and_reject_membership_overlap(tmp_path: Path) -> None:
-    tracked = Path("configs/benchmarks/cell_line_geneeffect_226_split.json")
-    split = load_exp13_split(tracked)
-    assert len(split.all_model_ids) == 226
-    assert len(split.supervised_train) == 169
-
-    payload = json.loads(tracked.read_text())
-    payload["test"][0] = payload["train"][0]
-    path = tmp_path / "split.json"
-    path.write_text(json.dumps(payload))
-    with pytest.raises(ValueError, match="overlaps"):
-        load_exp13_split(path)
 
 
 def test_geneeffect_symbol_parsing_and_duplicate_rejection(tmp_path: Path) -> None:

@@ -16,7 +16,7 @@ import pytest
 
 import src.baselines.residual as residual_ladder
 from src.baselines.residual import COPY_PRIOR, GENE_MEAN
-from src.data.residual_target import fit_gene_means
+from src.data.labels import fit_gene_means
 from src.data.splits import FixedSplit
 
 _BASE_GENES = [f"G{i}" for i in range(12)]

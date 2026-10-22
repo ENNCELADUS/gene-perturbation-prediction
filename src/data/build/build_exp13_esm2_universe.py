@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from src.data.geneeffect import Exp13Split
+from src.data.splits import FixedSplit
 from src.data.io import write_text
 
 COVERAGE_THRESHOLDS = {"train": 5, "val": 3, "test": 3}
@@ -45,7 +45,7 @@ def _unique_symbols(symbols: Sequence[object], label: str) -> tuple[str, ...]:
 
 
 def build_coverage_universe(
-    labels: pd.DataFrame, split: Exp13Split
+    labels: pd.DataFrame, split: FixedSplit
 ) -> CoverageUniverse:
     """Return coverage-qualified scored candidates and an explicit drop report."""
     required = {"model_id", "gene_symbol", "gene_effect"}

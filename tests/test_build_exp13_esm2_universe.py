@@ -2,7 +2,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from src.data.geneeffect import Exp13Split
+from src.data.splits import FixedSplit
 from src.data.build.build_exp13_esm2_universe import (
     build_coverage_universe,
     build_embedding_union,
@@ -12,8 +12,8 @@ from src.data.build.build_exp13_esm2_universe import (
 )
 
 
-def _split() -> Exp13Split:
-    return Exp13Split(
+def _split() -> FixedSplit:
+    return FixedSplit(
         train=("T1", "T2", "T3", "T4", "T5"),
         val=("V1", "V2", "V3"),
         test=("E1", "E2", "E3"),

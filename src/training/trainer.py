@@ -21,7 +21,7 @@ import torch
 
 from src.data.datasets import DependencyDataset
 from src.data.prepared import PreparedInputs
-from src.eval.geneeffect import evaluate_model
+from src.eval.accuracy import evaluate_model
 from src.model.losses import geneeffect_loss
 from src.model.normalization import fit_startup_standardizer
 from src.training.checkpoint import (
