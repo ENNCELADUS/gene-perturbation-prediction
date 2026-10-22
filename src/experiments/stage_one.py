@@ -122,7 +122,8 @@ def load_setup(ladder_config_path: str | Path) -> Setup:
     from src.data.extra_lines import load_bulk_lines
     from src.data.splits import load_geneeffect_split
     from src.experiments.joint.config import load_config
-    from src.experiments.config import load_ladder_config, load_prior_config
+    from src.experiments.prior.config import load_prior_config
+    from src.experiments.config import load_ladder_config
 
     ladder_config = load_ladder_config(Path(ladder_config_path))
     prior = load_prior_config(Path(ladder_config["prior_config"]))

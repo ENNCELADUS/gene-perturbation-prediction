@@ -38,7 +38,7 @@ uv run python -m src.experiments.joint.train --config configs/geneeffect_joint.y
 uv run python -m src.experiments.joint.evaluate --checkpoint <best.pt> --split val
 uv run python -m src.experiments.joint.baselines --config configs/geneeffect_joint.yaml --split val --out-dir <dir>
 uv run python -m src.experiments.joint.readout --help
-uv run python -m src.experiments.prior_export configs/context_prior/default_prior.yaml --run-id <id>
+uv run python -m src.experiments.prior.prior_export configs/context_prior/default_prior.yaml --run-id <id>
 uv run python -m src.experiments.joint.compare_runs <run A> <run B> --split val
 ```
 

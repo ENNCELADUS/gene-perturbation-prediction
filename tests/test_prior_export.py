@@ -9,9 +9,9 @@ import pytest
 import yaml
 
 from src.context_prior.folds import training_side_folds
-from src.experiments import context_prior as run
-from src.experiments import prior_export as export
-from src.experiments.config import validate_prior_config
+from src.experiments.prior import base as prior_base
+from src.experiments.prior import prior_export as export
+from src.experiments.prior.config import validate_prior_config
 from tests.test_context_prior_run import synthetic_base, tiny_config
 
 
@@ -38,7 +38,7 @@ def test_training_side_folds_follow_patients():
 def test_validation_and_test_rows_are_the_reference_row(tmp_path):
     base = synthetic_base(selected_config(tmp_path))
     predictions = export.export_predictions(base)
-    reference = run.reference_predictions(base)
+    reference = prior_base.reference_predictions(base)
     for split in ("val", "test"):
         np.testing.assert_allclose(predictions[split], reference[split])
     assert list(predictions["train"].index) == list(base.bridge.single_cell_train)

@@ -97,11 +97,8 @@ class Setup:
 
 def load_setup(config: Mapping[str, Any]) -> Setup:
     from src.experiments.joint.config import load_config
-    from src.experiments.config import (
-        load_noise_config,
-        load_prior_config,
-        validate_ladder_config,
-    )
+    from src.experiments.prior.config import load_noise_config, load_prior_config
+    from src.experiments.config import validate_ladder_config
 
     validate_ladder_config(config)
     prior = load_prior_config(Path(config["prior_config"]))

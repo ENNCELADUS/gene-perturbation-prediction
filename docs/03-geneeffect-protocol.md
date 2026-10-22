@@ -671,7 +671,7 @@ scoring. Lines outside the 226 enter the training side under the rules of §11 a
 [data card](data/extra-bulk-lines-26q1.md).
 
 `hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]` runs a minimal experiment runner
-(`src/experiments/context_prior.py`). The config names the paths, the training side (the
+(`src/experiments/prior/context_prior.py`). The config names the paths, the training side (the
 lineages dropped from the extra lines), the prior (component count, folds, bootstrap repeats,
 data-selected genes), the penalty grids, the **block sets** (each starts with the expression
 components and adds gene-level blocks: own expression, partner group, data-selected genes), the
@@ -722,7 +722,7 @@ stages fit, while the scale-free score barely separates components penalties on 
 Gains are measured against the reference row the config pins; nothing is chosen, kept, dropped,
 passed or failed in code. Which setting, block set or bulk-only cohort to use is decided by
 reading the table. `hpc/run.sh prior-selected CONFIG --run-id ID`
-(`src/experiments/data_selected_analysis.py`) fits the reference row, which must end with the
+(`src/experiments/prior/data_selected_analysis.py`) fits the reference row, which must end with the
 data-selected genes, and writes `data_selected/` into the run directory: per feature, how often
 and how heavily it is selected, whether it is a partner of its target and how much of its variance
 lineage and the expression components explain (`features.csv`); per selective gene, its
@@ -730,7 +730,7 @@ validation and test Spearman with and without the stage (`targets.csv`); and the
 stage's weights masked to its top 10, 50, 200 and 1,000 features or without them
 (`ablation.json`, `summary.md`). The masking does not refit, so correlated features share credit.
 
-`hpc/run.sh prior-export CONFIG --run-id ID` (`src/experiments/prior_export.py`) writes the
+`hpc/run.sh prior-export CONFIG --run-id ID` (`src/experiments/prior/prior_export.py`) writes the
 config's reference row into `outputs/context_prior/<run_id>/export/` for the single-cell
 correction (§12): `prior.npz` (lines × genes in residual-SD units, the line and gene order, the
 residual SD it was fitted with) and `prior.json` (run id, reference row, units, lines per split,
@@ -875,7 +875,7 @@ it without changing any model input.
 The first test of whether single-cell resolution adds to pseudo-bulk (blueprint §5, Task 2): a linear
 stack of per-gene statistics of a line's basal cells on the default prior's out-of-fold export, run on
 CPU before any distributional model. `configs/context_prior/single_cell_stack.yaml`, run with
-`hpc/run.sh prior-stack CONFIG --run-id <id>` (`src/experiments/single_cell_stack.py`), writes
+`hpc/run.sh prior-stack CONFIG --run-id <id>` (`src/experiments/prior/single_cell_stack.py`), writes
 `outputs/context_prior/<id>/single_cell_stack/` (`rows/<arm>.json`, `facts.json`, `results.md`).
 
 - **Statistics.** The `q_sc` summaries preparation caches for every line (§3.4 space, over all of a
@@ -922,7 +922,7 @@ The [noise-diagnosis design](specs/2026-10-12-noise-diagnosis-design.md) (agreed
 limits the default prior (§10) before any single-cell model with noise handling of its own is built: per-cell sampling,
 the number of training lines, the deposit a line's cells come from, and cell-state heterogeneity.
 `configs/context_prior/noise_diagnosis.yaml`, run with `hpc/run.sh prior-noise CONFIG --run-id <id> [--sections A,B]`
-(`src/experiments/noise_diagnosis.py`), reads the prior run named by `prior_run` (its bound config and export) and writes
+(`src/experiments/prior/noise_diagnosis.py`), reads the prior run named by `prior_run` (its bound config and export) and writes
 `outputs/context_prior/<id>/noise/<section>.json`, skipping a section whose file exists, then `results.md`. Every score is
 on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing is chosen in code.
 

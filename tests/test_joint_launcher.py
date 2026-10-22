@@ -43,13 +43,13 @@ with open(os.environ["ARG_LOG"], "a") as handle:
         ),
         (
             ["prior", "a b.yaml", "--run-id", "r"],
-            ["-m", "src.experiments.context_prior", "a b.yaml", "--run-id", "r"],
+            ["-m", "src.experiments.prior.context_prior", "a b.yaml", "--run-id", "r"],
         ),
         (
             ["prior-noise", "a b.yaml", "--run-id", "r", "--sections", "cell_states"],
             [
                 "-m",
-                "src.experiments.noise_diagnosis",
+                "src.experiments.prior.noise_diagnosis",
                 "a b.yaml",
                 "--run-id",
                 "r",

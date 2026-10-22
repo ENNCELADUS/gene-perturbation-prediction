@@ -91,11 +91,11 @@ pie_environment() {
 case "$command" in
   all) exec "$python_bin" -m src.experiments.joint.all "$@" ;;
   revision) exec "$python_bin" -m src.experiments.joint.revision "$@" ;;
-  prior) exec "$python_bin" -m src.experiments.context_prior "$@" ;;
-  prior-selected) exec "$python_bin" -m src.experiments.data_selected_analysis "$@" ;;
-  prior-export) exec "$python_bin" -m src.experiments.prior_export "$@" ;;
-  prior-stack) exec "$python_bin" -m src.experiments.single_cell_stack "$@" ;;
-  prior-noise) exec "$python_bin" -m src.experiments.noise_diagnosis "$@" ;;
+  prior) exec "$python_bin" -m src.experiments.prior.context_prior "$@" ;;
+  prior-selected) exec "$python_bin" -m src.experiments.prior.data_selected_analysis "$@" ;;
+  prior-export) exec "$python_bin" -m src.experiments.prior.prior_export "$@" ;;
+  prior-stack) exec "$python_bin" -m src.experiments.prior.single_cell_stack "$@" ;;
+  prior-noise) exec "$python_bin" -m src.experiments.prior.noise_diagnosis "$@" ;;
   pie-reproduce)
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.pie_reproduction "$@" ;;

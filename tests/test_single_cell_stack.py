@@ -17,8 +17,8 @@ from src.context_prior.single_cell import (
     normalize_statistics,
     stack_predictions,
 )
-from src.experiments import single_cell_stack as stack
-from src.experiments.config import validate_stack_config
+from src.experiments.prior import single_cell_stack as stack
+from src.experiments.prior.config import validate_stack_config
 from tests.test_context_prior_run import TARGETS, synthetic_base, tiny_config
 
 CONFIG = yaml.safe_load(

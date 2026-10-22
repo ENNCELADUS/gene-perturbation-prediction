@@ -1,7 +1,7 @@
 """Single-cell statistics stacked on the default prior: does a line's basal
 single-cell distribution add to what its pseudo-bulk already gives the prior?
 
-``python -m src.experiments.single_cell_stack CONFIG --run-id ID`` reads the prior
+``python -m src.experiments.prior.single_cell_stack CONFIG --run-id ID`` reads the prior
 run named by ``prior_run`` (its bound config and its ``export/``), fits each arm's
 two-stage ridge (``src.context_prior.single_cell``) on what the export leaves on the
 single-cell training lines (out of fold, so the stack learns at the prior's
@@ -37,9 +37,9 @@ from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.data.io import write_json, write_text
 from src.experiments.run_dir import bind, number
 from src.experiments.joint.config import load_config
-from src.experiments.config import load_stack_config
+from src.experiments.prior.config import load_stack_config
 from src.eval.accuracy import gain, score
-from src.experiments.context_prior import (
+from src.experiments.prior.base import (
     SCORED,
     RunBase,
     load_base,

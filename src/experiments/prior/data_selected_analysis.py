@@ -1,6 +1,6 @@
 """What the data-selected stage of the reference prior carries.
 
-``python -m src.experiments.data_selected_analysis CONFIG --run-id ID`` fits the
+``python -m src.experiments.prior.data_selected_analysis CONFIG --run-id ID`` fits the
 config's reference row (it must include data-selected genes) on the labelled
 training lines as the runner does, and writes ``data_selected/`` into the run
 directory:
@@ -35,9 +35,9 @@ from src.context_prior.ridge import SelectedFit
 from src.eval.accuracy import aggregate_geneeffect
 from src.data.io import write_json, write_text
 from src.experiments.run_dir import bind, number
-from src.experiments.config import load_prior_config
+from src.experiments.prior.config import load_prior_config
 from src.eval.accuracy import gain, long_frame, score
-from src.experiments.context_prior import (
+from src.experiments.prior.base import (
     SCORED,
     RunBase,
     build,
