@@ -29,7 +29,6 @@ uv run python -m src.data.prepare.build_extra_single_cell_lines build \
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import urllib.parse
@@ -331,10 +330,6 @@ def cellosaurus_entry(accession: str) -> dict[str, Any] | None:
     return entries[0] if entries else None
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -383,9 +378,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     payload = {
         **payload,
-        "inputs": {
-            k: {"path": str(p), "sha256": _sha256(p)} for k, p in inputs.items()
-        },
+        "inputs": {k: {"path": str(p)} for k, p in inputs.items()},
     }
     args.out.write_text(json.dumps(payload, indent=2) + "\n")
     print(

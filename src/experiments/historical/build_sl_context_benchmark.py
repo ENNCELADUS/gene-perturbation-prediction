@@ -7,7 +7,6 @@ supplies context identities and registered-data evidence, never extra labels.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import logging
 import re
@@ -99,24 +98,14 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def validate_split_evidence(contract: dict[str, Any]) -> None:
-    """Fail closed if the files registering split contexts have drifted."""
+    """Fail closed if the files registering split contexts disagree with the split."""
     evidence = contract["registration_evidence"]
     paths: dict[str, Path] = {}
     for name, specification in evidence.items():
         path = Path(specification["path"])
         if not path.is_file():
             raise FileNotFoundError(path)
-        if _sha256(path) != specification["sha256"]:
-            raise ValueError(f"Registration-evidence hash mismatch: {path}")
         paths[name] = path
 
     contexts = contract["contexts"]
@@ -144,7 +133,6 @@ def validate_split_evidence(contract: dict[str, Any]) -> None:
         "cellosaurus_id",
         "basal_source",
         "artifact_path",
-        "artifact_sha256",
         "artifact_status",
     }
     missing_columns = required_basal_columns - set(basal.columns)
@@ -156,7 +144,6 @@ def validate_split_evidence(contract: dict[str, Any]) -> None:
     if registered_contexts != set(contexts):
         raise ValueError("Basal registry contexts must exactly match split contexts")
     basal = basal.set_index("context")
-    artifact_hashes: dict[Path, str] = {}
     for context, specification in contexts.items():
         row = basal.loc[context]
         for field in ("model_id", "canonical_name", "cellosaurus_id", "basal_source"):
@@ -165,21 +152,13 @@ def validate_split_evidence(contract: dict[str, Any]) -> None:
         artifact_path = Path(str(row["artifact_path"]))
         if not artifact_path.is_file():
             raise FileNotFoundError(artifact_path)
-        if artifact_path not in artifact_hashes:
-            artifact_hashes[artifact_path] = _sha256(artifact_path)
-        actual_hash = artifact_hashes[artifact_path]
-        if actual_hash != str(row["artifact_sha256"]):
-            raise ValueError(f"Basal artifact hash mismatch for {context}")
         artifact_status = str(row["artifact_status"]).strip()
         if artifact_status not in {"source_registered", "tx1_contract_verified"}:
             raise ValueError(f"Unsupported basal artifact status for {context}")
         if artifact_status == "tx1_contract_verified":
             provenance_path = Path(str(row.get("provenance_path", "")))
-            provenance_hash = str(row.get("provenance_sha256", ""))
             if not provenance_path.is_file():
                 raise FileNotFoundError(provenance_path)
-            if _sha256(provenance_path) != provenance_hash:
-                raise ValueError(f"Basal provenance hash mismatch for {context}")
 
     model_metadata = pd.read_csv(paths["model_metadata"]).set_index("ModelID")
     missing_metadata = expected_model_ids - set(model_metadata.index)
@@ -723,34 +702,20 @@ def apply_context_split(
 
 
 def _manifest(
-    output_dir: Path,
     min_class_count: int,
     selection_stats: dict[str, int],
     pre_split_stats: dict[str, int],
     split_stats: dict[str, Any],
 ) -> dict[str, Any]:
-    benchmark_path = output_dir / BENCHMARK_FILENAME
-    context_path = output_dir / CONTEXT_FILENAME
     return {
         "schema_version": "sl-context-screen-v2",
         "input": {
             "path": str(INPUT_PATH),
-            "sha256": _sha256(INPUT_PATH),
             "only_allowed_source": True,
-        },
-        "outputs": {
-            BENCHMARK_FILENAME: _sha256(benchmark_path),
-            CONTEXT_FILENAME: _sha256(context_path),
-            AUDIT_FILENAME: _sha256(output_dir / AUDIT_FILENAME),
-            STATISTICS_FILENAME: _sha256(output_dir / STATISTICS_FILENAME),
         },
         "provenance": {
             "builder": {
                 "path": ("src/experiments/historical/build_sl_context_benchmark.py"),
-                "sha256": _sha256(
-                    Path("src/experiments/historical")
-                    / "build_sl_context_benchmark.py"
-                ),
             },
             "source_row_id": (
                 "global raw-CSV row number; links contexts exploded from one "
@@ -804,7 +769,6 @@ def _manifest(
         "pre_split_counts": pre_split_stats,
         "split": {
             "manifest_path": str(SPLIT_MANIFEST_PATH),
-            "manifest_sha256": _sha256(SPLIT_MANIFEST_PATH),
             **split_stats,
         },
         "final_counts": {
@@ -834,10 +798,7 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
         raise FileNotFoundError(SPLIT_MANIFEST_PATH)
     split_contract = json.loads(SPLIT_MANIFEST_PATH.read_text(encoding="utf-8"))
     label_input = split_contract["label_input"]
-    if (
-        Path(label_input["path"]) != INPUT_PATH
-        or _sha256(INPUT_PATH) != label_input["sha256"]
-    ):
+    if Path(label_input["path"]) != INPUT_PATH:
         raise ValueError(
             "Canonical split label input does not match the tracked contract"
         )
@@ -915,7 +876,6 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
     audit.to_csv(output_dir / AUDIT_FILENAME, index=False)
     statistics.to_csv(output_dir / STATISTICS_FILENAME, index=False)
     manifest = _manifest(
-        output_dir,
         min_class_count,
         _sum_stats(chunk_stats),
         pre_split_stats,

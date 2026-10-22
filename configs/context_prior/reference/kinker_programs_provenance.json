@@ -5,9 +5,5 @@
   "citation": "Kinker GS et al. 2020 Nat Genet 52:1208-1218, doi:10.1038/s41588-020-00726-6",
   "programs": 12,
   "rows": 533,
-  "source_sha256": "a965a12260dd6bb91f996c915044b0cec79d4c8cb4b44bff2671ea2b63fe61a6",
-  "source_sha256_of": "the downloaded supplementary xlsx (41588_2020_726_MOESM3_ESM.xlsx)",
-  "tsv_sha256": "6db18a7117a25098e9c12ce15ba09272fd7fb7f058163fc1ef29ab0fa4bf1181",
-  "tsv_sha256_of": "kinker_programs.tsv beside this file",
   "note": "Derived from CCLE cell-line pools, some of them lines of this project (validation and test lines among them); used only to name states in Task 8's identity report, never as a model input."
 }

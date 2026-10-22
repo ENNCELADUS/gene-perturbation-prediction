@@ -20,7 +20,6 @@ uv run python -m src.data.prepare.build_sl_screen_benchmark \
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 from collections.abc import Callable, Collection
@@ -77,10 +76,6 @@ ROW_COLUMNS = (
     "stratum",
     "line_reason",
 )
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _sorted_pair(a: str, b: str) -> tuple[str, str]:
@@ -550,12 +545,9 @@ def build(
         },
         "lines": sides.to_dict(orient="records"),
         "inputs": {
+            **{name: {"path": str(path)} for name, path in paths.items()},
             **{
-                name: {"path": str(path), "sha256": _sha256(path)}
-                for name, path in paths.items()
-            },
-            **{
-                name: {"path": str(path), "sha256": _sha256(path)}
+                name: {"path": str(path)}
                 for name, path in (
                     ("lines", lines_path),
                     ("split", split_path),

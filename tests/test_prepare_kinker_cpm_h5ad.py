@@ -4,7 +4,6 @@ import argparse
 import gzip
 import json
 import pickle
-import hashlib
 from pathlib import Path
 
 import pandas as pd
@@ -54,10 +53,6 @@ def test_build_marks_kinker_cpm_as_sensitivity_only(tmp_path: Path) -> None:
     vocab.write_text(json.dumps({"ENSG00000000003": 3, "ENSG00000000005": 4}))
     hvg = tmp_path / "var_dims.pkl"
     hvg.write_bytes(pickle.dumps({"gene_names": ["TSPAN6", "MISSING"]}))
-    upstream_sha = tmp_path / "sha256.txt"
-    upstream_sha.write_text(
-        f"{hashlib.sha256(matrix.read_bytes()).hexdigest()}  {matrix.name}\n"
-    )
     output = tmp_path / "output"
 
     qc = build(
@@ -68,7 +63,6 @@ def test_build_marks_kinker_cpm_as_sensitivity_only(tmp_path: Path) -> None:
             gene_metadata=gene_metadata,
             vocab_json=vocab,
             hvg_var_dims=hvg,
-            upstream_sha256=upstream_sha,
             output_dir=output,
             expected_lines=2,
             expected_selected_cells=2,
@@ -137,10 +131,6 @@ def test_build_rejects_selected_cell_absent_from_matrix(tmp_path: Path) -> None:
     vocab.write_text(json.dumps({"ENSG00000000003": 3}))
     hvg = tmp_path / "var_dims.pkl"
     hvg.write_bytes(pickle.dumps({"gene_names": ["TSPAN6"]}))
-    upstream_sha = tmp_path / "sha256.txt"
-    upstream_sha.write_text(
-        f"{hashlib.sha256(matrix.read_bytes()).hexdigest()}  {matrix.name}\n"
-    )
 
     import pytest
 
@@ -153,7 +143,6 @@ def test_build_rejects_selected_cell_absent_from_matrix(tmp_path: Path) -> None:
                 gene_metadata=metadata,
                 vocab_json=vocab,
                 hvg_var_dims=hvg,
-                upstream_sha256=upstream_sha,
                 output_dir=tmp_path / "output",
                 expected_lines=1,
                 expected_selected_cells=1,

@@ -95,21 +95,17 @@
   },
   "registration_evidence": {
     "basal_registry": {
-      "path": "configs/benchmarks/context_screen_v2_basal_registry.json",
-      "sha256": "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47"
+      "path": "configs/benchmarks/context_screen_v2_basal_registry.json"
     },
     "gene_effect": {
-      "path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
-      "sha256": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e"
+      "path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv"
     },
     "model_metadata": {
-      "path": "data/sl_dependency_v0/raw/depmap/Model.csv",
-      "sha256": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8"
+      "path": "data/sl_dependency_v0/raw/depmap/Model.csv"
     }
   },
   "label_input": {
-    "path": "data/SL_Benchmark_Formal/sl_integrated_pairs.csv",
-    "sha256": "6dd7a6a4b2837d409af46eaba3ae5a69b4a2d62d988617a917b063eb6ec9e81a"
+    "path": "data/SL_Benchmark_Formal/sl_integrated_pairs.csv"
   },
   "pinned_train_contexts": [
     "JURKAT",

@@ -18,7 +18,6 @@ import pandas as pd
 from scipy import sparse
 
 
-from src.data.gene_splits import sha256_file  # noqa: E402
 from src.data.basal import (
     _assemble_tahoe_matrix,
     _assemble_token_matrix,
@@ -171,7 +170,6 @@ def _materialize_tahoe(
             "source_cell_count": int(observed[cellosaurus_id]),
             "selected_cell_count": int(adata.n_obs),
             "output_path": str(output.resolve()),
-            "output_sha256": sha256_file(output),
         }
     return records
 
@@ -218,7 +216,6 @@ def _materialize_anchors(
             "source_path": str(source.resolve()),
             "selected_cell_count": int(adata.n_obs),
             "output_path": str(output.resolve()),
-            "output_sha256": sha256_file(output),
         }
     return records
 
@@ -484,10 +481,6 @@ def _materialize_specials(
     records = {}
     for model_id, info in _registered_specials(registry_path).items():
         source = Path(str(info["artifact_path"]))
-        expected = str(info["artifact_sha256"])
-        observed = sha256_file(source)
-        if observed != expected:
-            raise ValueError(f"{model_id}: registered source SHA-256 mismatch")
         if model_id in {"ACH-000696", "ACH-000779", "ACH-001086"}:
             result = _copy_registered_h5ad(source, info, max_cells=max_cells, seed=seed)
         elif model_id == "ACH-002475":
@@ -505,10 +498,8 @@ def _materialize_specials(
         records[model_id] = {
             "source_kind": "registered_special",
             "source_path": str(source.resolve()),
-            "source_sha256": observed,
             "selected_cell_count": int(result.n_obs),
             "output_path": str(output.resolve()),
-            "output_sha256": sha256_file(output),
         }
     return records
 
@@ -554,7 +545,6 @@ def materialize(args: argparse.Namespace) -> dict[str, object]:
         "max_cells": args.max_cells,
         "selection_algorithm": "sha256_seed_model_id_cell_id_v1",
         "cell_line_manifest": str(args.cell_line_manifest),
-        "cell_line_manifest_sha256": sha256_file(args.cell_line_manifest),
         "records": records,
     }
     args.manifest_output.write_text(

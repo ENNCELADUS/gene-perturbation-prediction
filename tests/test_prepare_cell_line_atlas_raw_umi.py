@@ -125,8 +125,6 @@ def test_run_writes_atomic_audited_h5ad_bundle(tmp_path: Path) -> None:
     assert summary["n_lines"] == 2
     assert summary["n_cells"] == 2
     assert (output / "provenance" / "config_snapshot.json").exists()
-    input_hashes = json.loads((output / "provenance" / "input_sha256.json").read_text())
-    assert str(tmp_path / "manifest.csv") in input_hashes
     breast = ad.read_h5ad(output / "h5ad" / "ACH-000001.h5ad")
     assert sparse.issparse(breast.X)
     assert breast.obs["source_cell_id"].tolist() == ["b2"]

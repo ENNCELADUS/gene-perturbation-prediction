@@ -26,7 +26,6 @@ uv run python -m src.data.prepare.build_cell_line_geneeffect_split \
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 
@@ -106,10 +105,6 @@ def build_split(
     return payload, rows.reset_index(drop=True)
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -132,10 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         "single_cell": args.single_cell,
         "bulk": args.bulk,
     }
-    payload["inputs"] = {
-        name: {"path": str(path), "sha256": _sha256(path)}
-        for name, path in inputs.items()
-    }
+    payload["inputs"] = {name: {"path": str(path)} for name, path in inputs.items()}
     args.out.write_text(json.dumps(payload, indent=2) + "\n")
     table.to_csv(args.out.with_suffix(".csv"), index=False)
     print(

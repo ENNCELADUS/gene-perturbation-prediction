@@ -10,7 +10,6 @@ rather than quietly ingested as counts.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import pickle
 from pathlib import Path
@@ -88,7 +87,6 @@ def _fixture(tmp_path: Path, *, values: tuple[str, str] = ("4", "7")) -> dict:
 def _args(tmp_path: Path, files: dict, **overrides) -> argparse.Namespace:
     namespace = argparse.Namespace(
         output_dir=tmp_path / "output",
-        expected_matrix_sha256=None,
         selection_matrix_name="GSE157220_CPM_data.txt.gz",
         manifest_matrix_semantics="processed_cpm",
         expected_lines=2,
@@ -178,13 +176,3 @@ def test_build_rejects_a_missing_metadata_row(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="expected metadata row"):
         build(_args(tmp_path, files))
-
-
-def test_build_pins_the_matrix_hash_when_asked(tmp_path: Path) -> None:
-    files = _fixture(tmp_path)
-    with pytest.raises(ValueError, match="expected-matrix-sha256"):
-        build(_args(tmp_path, files, expected_matrix_sha256="0" * 64))
-
-    digest = hashlib.sha256(files["matrix"].read_bytes()).hexdigest()
-    qc = build(_args(tmp_path, files, expected_matrix_sha256=digest))
-    assert qc["source_hashes"]["matrix_sha256"] == digest

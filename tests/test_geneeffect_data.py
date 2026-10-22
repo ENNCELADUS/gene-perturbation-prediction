@@ -55,20 +55,17 @@ def _labels() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_load_tracked_split_and_reject_membership_change(tmp_path: Path) -> None:
+def test_load_tracked_split_and_reject_membership_overlap(tmp_path: Path) -> None:
     tracked = Path("configs/benchmarks/cell_line_geneeffect_226_split.json")
     split = load_exp13_split(tracked)
     assert len(split.all_model_ids) == 226
     assert len(split.supervised_train) == 169
 
     payload = json.loads(tracked.read_text())
-    payload["train"][0], payload["test"][0] = (
-        payload["test"][0],
-        payload["train"][0],
-    )
+    payload["test"][0] = payload["train"][0]
     path = tmp_path / "split.json"
     path.write_text(json.dumps(payload))
-    with pytest.raises(ValueError, match="SHA-256"):
+    with pytest.raises(ValueError, match="overlaps"):
         load_exp13_split(path)
 
 

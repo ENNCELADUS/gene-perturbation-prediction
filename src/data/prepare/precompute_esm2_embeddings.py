@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import io
 import json
 import logging
@@ -17,7 +16,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import NamedTuple
 import uuid
 
 import numpy as np
@@ -29,8 +28,6 @@ from src.data.embeddings import Esm2EmbeddingTable, require_complete_esm_coverag
 from src.data.esm2_provenance import (
     SCHEMA_VERSION as PROVENANCE_SCHEMA_VERSION,
     build_embedding_artifact_record,
-    sequence_sha256_by_symbol,
-    sha256_file,
 )
 
 logger = logging.getLogger("precompute_esm2")
@@ -48,10 +45,6 @@ class UniProtSequenceRecord(NamedTuple):
     isoform_policy: str
     sequence: str
 
-    @property
-    def sequence_sha256(self) -> str:
-        return hashlib.sha256(self.sequence.encode("utf-8")).hexdigest()
-
 
 def _atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -61,72 +54,6 @@ def _atomic_write_text(path: Path, text: str) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-def _canonical_json_value(value: Any) -> Any:
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, dict):
-        return {
-            str(key): _canonical_json_value(item)
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
-        }
-    if isinstance(value, (list, tuple)):
-        return [_canonical_json_value(item) for item in value]
-    return str(value)
-
-
-def hash_model_state(model: object) -> str:
-    """Hash sorted parameter/buffer names, dtypes, shapes, and exact bytes."""
-    digest = hashlib.sha256()
-    state = model.state_dict()
-    for name in sorted(state):
-        tensor = state[name].detach().cpu().contiguous()
-        metadata = json.dumps(
-            {
-                "name": name,
-                "dtype": str(tensor.dtype),
-                "shape": list(tensor.shape),
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        digest.update(len(metadata).to_bytes(8, "big"))
-        digest.update(metadata)
-        raw = tensor.view(torch.uint8).numpy().tobytes(order="C")
-        digest.update(len(raw).to_bytes(8, "big"))
-        digest.update(raw)
-    return digest.hexdigest()
-
-
-def hash_tokenizer_vocabulary_config(tokenizer: object) -> str:
-    """Hash the loaded tokenizer vocabulary and effective configuration."""
-    payload = {
-        "class": f"{type(tokenizer).__module__}.{type(tokenizer).__qualname__}",
-        "vocabulary": tokenizer.get_vocab(),
-        "init_kwargs": getattr(tokenizer, "init_kwargs", {}),
-        "special_tokens_map": getattr(tokenizer, "special_tokens_map", {}),
-        "model_max_length": getattr(tokenizer, "model_max_length", None),
-    }
-    encoded = json.dumps(
-        _canonical_json_value(payload),
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def hash_model_config(model: object) -> str:
-    """Hash the effective configuration of the loaded model instance."""
-    config = model.config.to_dict()
-    encoded = json.dumps(
-        _canonical_json_value(config),
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def symbols_from_csv(csv_path: Path, symbol_columns: tuple[str, ...]) -> list[str]:
@@ -267,8 +194,6 @@ def load_or_fetch_sequences(
                     or record.isoform_identifier != record.primary_accession
                 ):
                     raise ValueError(f"unsupported UniProt isoform record for {symbol}")
-                if record.sequence_sha256 != raw.get("sequence_sha256"):
-                    raise ValueError(f"cached sequence SHA-256 mismatch for {symbol}")
                 records[str(symbol)] = record
         elif isinstance(payload, dict) and all(
             isinstance(value, str) for value in payload.values()
@@ -298,10 +223,7 @@ def load_or_fetch_sequences(
                 {
                     "schema_version": SEQUENCE_CACHE_SCHEMA,
                     "records": {
-                        symbol: {
-                            **record._asdict(),
-                            "sequence_sha256": record.sequence_sha256,
-                        }
+                        symbol: record._asdict()
                         for symbol, record in sorted(records.items())
                     },
                 },
@@ -455,7 +377,7 @@ def embed_sequences(
     Returns:
         ``(vectors, resolved, runtime_identity)`` where ``vectors`` has shape
         ``(n_gene, hidden_size)``, ``resolved`` is a boolean array, and the
-        identity record hashes the actual loaded model and tokenizer.
+        identity record names the loaded model and tokenizer classes.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     from_pretrained_kwargs = {
@@ -469,13 +391,8 @@ def embed_sequences(
     model = EsmModel.from_pretrained(model_name, **from_pretrained_kwargs)
     runtime_identity = {
         "model_class": f"{type(model).__module__}.{type(model).__qualname__}",
-        "model_state_sha256": hash_model_state(model),
-        "model_config_sha256": hash_model_config(model),
         "tokenizer_class": (
             f"{type(tokenizer).__module__}.{type(tokenizer).__qualname__}"
-        ),
-        "tokenizer_vocabulary_config_sha256": (
-            hash_tokenizer_vocabulary_config(tokenizer)
         ),
     }
     model = model.to(device).eval()
@@ -519,7 +436,7 @@ def write_embedding_with_provenance(
     requested_model_id: str,
     runtime_identity: dict[str, str],
 ) -> dict[str, object]:
-    """Atomically publish an embedding table and its authenticated sidecar."""
+    """Atomically publish an embedding table and its provenance sidecar."""
     outputs = (output, provenance_output, mapping_json_output, mapping_csv_output)
     if len({path.resolve() for path in outputs}) != len(outputs):
         raise ValueError("embedding, provenance, and mapping outputs must be distinct")
@@ -567,9 +484,6 @@ def write_embedding_with_provenance(
                     record.isoform_identifier if record is not None else None
                 ),
                 "isoform_policy": record.isoform_policy if record is not None else None,
-                "sequence_sha256": (
-                    record.sequence_sha256 if record is not None else None
-                ),
             }
         )
     mapping_payload = {
@@ -589,28 +503,14 @@ def write_embedding_with_provenance(
     manifest: dict[str, object] = {
         "schema_version": PROVENANCE_SCHEMA_VERSION,
         "requested_model_id": requested_model_id,
-        "loaded_model": {
-            "class": runtime_identity["model_class"],
-            "state_sha256": runtime_identity["model_state_sha256"],
-            "config_sha256": runtime_identity["model_config_sha256"],
-        },
-        "tokenizer": {
-            "class": runtime_identity["tokenizer_class"],
-            "vocabulary_config_sha256": runtime_identity[
-                "tokenizer_vocabulary_config_sha256"
-            ],
-        },
+        "loaded_model": {"class": runtime_identity["model_class"]},
+        "tokenizer": {"class": runtime_identity["tokenizer_class"]},
         "sequence_source": {
             "benchmark_csv_path": str(benchmark_csv),
-            "benchmark_csv_sha256": sha256_file(benchmark_csv),
             "symbol_columns": list(symbol_columns),
             "sequence_cache_path": str(sequence_cache),
-            "sequence_cache_sha256": sha256_file(sequence_cache),
-            "sequence_sha256_by_symbol": sequence_sha256_by_symbol(symbols, sequences),
             "uniprot_mapping_json_path": str(mapping_json_output),
-            "uniprot_mapping_json_sha256": sha256_file(mapping_json_output),
             "uniprot_mapping_csv_path": str(mapping_csv_output),
-            "uniprot_mapping_csv_sha256": sha256_file(mapping_csv_output),
         },
         "embedding_artifact": artifact,
     }

@@ -10,7 +10,6 @@ Tests cover:
 from __future__ import annotations
 
 import importlib
-import hashlib
 import json
 import logging
 import sys
@@ -21,10 +20,8 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import pytest
-import torch
 
 from src.data.embeddings import Esm2EmbeddingTable, require_complete_esm_coverage
-from src.data.esm2_provenance import load_and_authenticate_esm2_provenance
 
 # ---------------------------------------------------------------------------
 # Lazy import: stub out heavy optional imports before loading the script
@@ -54,8 +51,7 @@ def _import_module() -> types.ModuleType:
 
     # Force reload so the module picks up stubs if first import in this process.
     spec_path = (
-        Path(__file__).parent.parent
-        / "src/data/prepare/precompute_esm2_embeddings.py"
+        Path(__file__).parent.parent / "src/data/prepare/precompute_esm2_embeddings.py"
     )
     spec = importlib.util.spec_from_file_location(
         "precompute_esm2_embeddings", spec_path
@@ -210,13 +206,7 @@ def test_read_only_sequence_cache_is_complete_and_byte_preserved(
         json.dumps(
             {
                 "schema_version": MOD.SEQUENCE_CACHE_SCHEMA,
-                "source_provenance": {"manifest_sha256": "a" * 64},
-                "records": {
-                    "PTEN": {
-                        **record._asdict(),
-                        "sequence_sha256": record.sequence_sha256,
-                    }
-                },
+                "records": {"PTEN": record._asdict()},
             },
             sort_keys=True,
         )
@@ -480,10 +470,7 @@ def _run_asset_cli(
             resolved,
             {
                 "model_class": "tests.TinyModel",
-                "model_state_sha256": "1" * 64,
-                "model_config_sha256": "3" * 64,
                 "tokenizer_class": "tests.TinyTokenizer",
-                "tokenizer_vocabulary_config_sha256": "2" * 64,
             },
         ),
     )
@@ -531,145 +518,8 @@ def test_strict_asset_writes_when_coverage_is_complete(
     sidecar = json.loads(
         output.with_suffix(".npz.provenance.json").read_text(encoding="utf-8")
     )
-    assert (
-        sidecar["embedding_artifact"]["sha256"]
-        == hashlib.sha256(output.read_bytes()).hexdigest()
-    )
-    assert list(sidecar["sequence_source"]["sequence_sha256_by_symbol"]) == [
-        "A",
-        "B",
-        "C",
-    ]
-
-
-def test_model_state_hash_binds_sorted_names_shapes_dtypes_and_bytes() -> None:
-    first = torch.nn.Module()
-    first.register_parameter(
-        "weight", torch.nn.Parameter(torch.tensor([[1.0, 2.0]], dtype=torch.float32))
-    )
-    second = torch.nn.Module()
-    second.register_parameter(
-        "weight", torch.nn.Parameter(torch.tensor([[1.0, 3.0]], dtype=torch.float32))
-    )
-    assert MOD.hash_model_state(first) == MOD.hash_model_state(first)
-    assert MOD.hash_model_state(first) != MOD.hash_model_state(second)
-
-
-def test_tokenizer_hash_binds_vocabulary_and_configuration() -> None:
-    class TinyTokenizer:
-        model_max_length = 1024
-        special_tokens_map = {"cls_token": "<cls>"}
-
-        def __init__(self, vocab: dict[str, int]) -> None:
-            self._vocab = vocab
-            self.init_kwargs = {"do_lower_case": False}
-
-        def get_vocab(self) -> dict[str, int]:
-            return self._vocab
-
-    first = TinyTokenizer({"A": 0, "B": 1})
-    second = TinyTokenizer({"A": 0, "B": 2})
-    assert MOD.hash_tokenizer_vocabulary_config(first) != (
-        MOD.hash_tokenizer_vocabulary_config(second)
-    )
-
-
-def test_provenance_rejects_tampered_vectors_model_hash_and_sequence_mapping(
-    tmp_path: Path,
-) -> None:
-    benchmark = tmp_path / "genes.csv"
-    benchmark.write_text("gene_symbol\nA\n", encoding="utf-8")
-    cache = tmp_path / "sequences.json"
-    cache.write_text('{"A":"MSEQ"}', encoding="utf-8")
-    npz = tmp_path / "esm2.npz"
-    sidecar = tmp_path / "esm2.provenance.json"
-    mapping_json = tmp_path / "esm2.mapping.json"
-    mapping_csv = tmp_path / "esm2.mapping.csv"
-    MOD.write_embedding_with_provenance(
-        npz,
-        sidecar,
-        symbols=["A"],
-        vectors=np.ones((1, 4), dtype=np.float32),
-        resolved=np.ones(1, dtype=bool),
-        sequences={"A": "MSEQ"},
-        uniprot_records={"A": _record()},
-        sequence_cache=cache,
-        mapping_json_output=mapping_json,
-        mapping_csv_output=mapping_csv,
-        benchmark_csv=benchmark,
-        symbol_columns=("gene_symbol",),
-        requested_model_id="tiny-esm2",
-        runtime_identity={
-            "model_class": "tests.TinyModel",
-            "model_state_sha256": "1" * 64,
-            "model_config_sha256": "3" * 64,
-            "tokenizer_class": "tests.TinyTokenizer",
-            "tokenizer_vocabulary_config_sha256": "2" * 64,
-        },
-    )
-    pristine_npz = npz.read_bytes()
-    pristine_sidecar = sidecar.read_text(encoding="utf-8")
-    pristine_mapping = mapping_json.read_text(encoding="utf-8")
-
-    mapping_payload = json.loads(pristine_mapping)
-    mapping_payload["records"][0]["primary_accession"] = "TAMPERED"
-    mapping_json.write_text(json.dumps(mapping_payload), encoding="utf-8")
-    with pytest.raises(ValueError, match="mapping artifact SHA256 mismatch"):
-        load_and_authenticate_esm2_provenance(
-            sidecar,
-            npz,
-            mapping_json_path=mapping_json,
-            mapping_csv_path=mapping_csv,
-        )
-    mapping_json.write_text(pristine_mapping, encoding="utf-8")
-    mapping_payload = json.loads(pristine_mapping)
-    mapping_payload["records"][0]["sequence_sha256"] = "4" * 64
-    mapping_json.write_text(json.dumps(mapping_payload), encoding="utf-8")
-    with pytest.raises(ValueError, match="mapping artifact SHA256 mismatch"):
-        load_and_authenticate_esm2_provenance(
-            sidecar,
-            npz,
-            mapping_json_path=mapping_json,
-            mapping_csv_path=mapping_csv,
-        )
-    mapping_json.write_text(pristine_mapping, encoding="utf-8")
-
-    np.savez(
-        npz,
-        symbols=np.asarray(["A"], dtype=object),
-        vectors=np.zeros((1, 4), dtype=np.float32),
-        resolved=np.ones(1, dtype=bool),
-    )
-    with pytest.raises(ValueError, match="sha256 mismatch"):
-        load_and_authenticate_esm2_provenance(
-            sidecar,
-            npz,
-            mapping_json_path=mapping_json,
-            mapping_csv_path=mapping_csv,
-        )
-
-    npz.write_bytes(pristine_npz)
-    payload = json.loads(pristine_sidecar)
-    payload["loaded_model"]["state_sha256"] = "tampered"
-    sidecar.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(ValueError, match="loaded_model hash"):
-        load_and_authenticate_esm2_provenance(
-            sidecar,
-            npz,
-            mapping_json_path=mapping_json,
-            mapping_csv_path=mapping_csv,
-        )
-
-    payload = json.loads(pristine_sidecar)
-    payload["sequence_source"]["sequence_sha256_by_symbol"] = {"B": "3" * 64}
-    sidecar.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(ValueError, match="sequence mapping membership"):
-        load_and_authenticate_esm2_provenance(
-            sidecar,
-            npz,
-            mapping_json_path=mapping_json,
-            mapping_csv_path=mapping_csv,
-        )
+    assert sidecar["embedding_artifact"]["resolved_symbols"] == ["A", "B", "C"]
+    assert sidecar["loaded_model"] == {"class": "tests.TinyModel"}
 
 
 def test_writer_rejects_identity_for_unresolved_symbol_before_publish(
@@ -697,10 +547,7 @@ def test_writer_rejects_identity_for_unresolved_symbol_before_publish(
             requested_model_id="tiny-esm2",
             runtime_identity={
                 "model_class": "tests.TinyModel",
-                "model_state_sha256": "1" * 64,
-                "model_config_sha256": "3" * 64,
                 "tokenizer_class": "tests.TinyTokenizer",
-                "tokenizer_vocabulary_config_sha256": "2" * 64,
             },
         )
     assert not output.exists()

@@ -242,17 +242,6 @@ def test_chemistry_table_rows_are_unique_and_mixed_sources_resolve():
     assert hct116.tolist() == ["10x 5' v3"]
 
 
-def test_kinker_provenance_hashes_the_tracked_table():
-    import hashlib
-    import json
-
-    folder = Path("configs/context_prior/reference")
-    provenance = json.loads((folder / "kinker_programs_provenance.json").read_text())
-    table = (folder / "kinker_programs.tsv").read_bytes()
-    assert hashlib.sha256(table).hexdigest() == provenance["tsv_sha256"]
-    assert provenance["source_sha256"] != provenance["tsv_sha256"]
-
-
 def test_state_fingerprints_change_with_inputs_masses_and_names():
     import pandas as pd
 

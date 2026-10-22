@@ -43,15 +43,6 @@
     },
     "train_genes_with_at_least_5_finite": 18288
   },
-  "input_sha256": {
-    "atlas_manifest": "12ac575e1deea1e8343fa05c04b4bd590c39534d004a682a1d0ba297055b8a37",
-    "basal_registry": "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47",
-    "builder_script": "198988220f1803df4b35e51dee992bfdc3a010734b201e51de4468f224de0a19",
-    "depmap_model": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8",
-    "geneeffect": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e",
-    "phase_a_manifest": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297",
-    "selection_audit": "7b1ebf963f4897972439e2c337a0bac7d25f40d9f27adf64a9de1b04496a719b"
-  },
   "optimizer_for_179_partition": {
     "deterministic_tie_break_seed": 20260816,
     "method": "scipy.optimize.milp",
@@ -62,20 +53,9 @@
   "original_contexts_test": [
     "ACH-000681"
   ],
-  "output_sha256": {
-    "csv": "0aff7c3183f10979a36e21736b30a269e8bb9f0c9cd37ad000a34fd500cbee4d",
-    "json": "8a264acfa63bf8c2c07d302e1adb5c4ce17edb19dd902f59ef6fd9b6e5434521"
-  },
   "patient_group_cross_split": 0,
   "schema_version": "cell-line-geneeffect-226-split-audit-v2",
   "selection_provenance": {
-    "evidence_sha256": {
-      "context_basal_registry": "19354c54faf15f325de1199ed668117d43e7531b6553c73ae3a224124e5c4f47",
-      "depmap_gene_effect": "e610a4cefb13a82b5b256b47eb08b63ff14843f8dbd0fb164bc0a32688e5b89e",
-      "depmap_model": "ea4e0b2a3bc806f81df62689a5ae75f1a100135727a3d7b8a4c7ccc8815183f8",
-      "kinker_pool_composition": "7f71f3d7223a9d92ed51c810fafc0e150dd5be0b362e0e3f49f973b949ee62b0",
-      "phase_a_manifest": "8656a91e5588e66b33e66774aa6c17f7238e94fc1125649e5ac7eed540d4e297"
-    },
     "excluded_model_ids": 47,
     "gene_effect_model_ids": 1208,
     "multi_model_patient_groups": {

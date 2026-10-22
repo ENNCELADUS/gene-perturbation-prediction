@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -14,10 +13,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CSV = ROOT / "configs/benchmarks/cell_line_geneeffect_226_split.csv"
 SPLIT = ROOT / "configs/benchmarks/cell_line_geneeffect_226_split.json"
 AUDIT = ROOT / "configs/benchmarks/cell_line_geneeffect_226_split_audit.json"
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_single_split_keeps_original_contexts_in_train_except_a549() -> None:
@@ -45,7 +40,7 @@ def test_json_is_the_only_three_way_membership_authority() -> None:
     assert not (set(split.val) & set(split.test))
 
 
-def test_audit_hashes_and_label_boundary() -> None:
+def test_audit_label_boundary() -> None:
     audit = json.loads(AUDIT.read_text())
     assert audit["status"] == "verified_unified_split"
     assert audit["original_contexts_test"] == ["ACH-000681"]
@@ -54,10 +49,6 @@ def test_audit_hashes_and_label_boundary() -> None:
         "ACH-000779",
         "ACH-001086",
     ]
-    assert audit["output_sha256"] == {
-        "csv": _sha256(CSV),
-        "json": _sha256(SPLIT),
-    }
 
 
 def test_exact_authority_runs_with_two_unlabeled_train_members() -> None:

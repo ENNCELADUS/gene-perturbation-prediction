@@ -26,20 +26,6 @@ EXPECTED_SOURCE_SEMANTICS = {
     "ccla_omix005191": "raw_umi_counts",
     "kinker_sccle": "processed_cpm",
 }
-EXPECTED_179_MANIFEST_SHA256 = (
-    "12ac575e1deea1e8343fa05c04b4bd590c39534d004a682a1d0ba297055b8a37"
-)
-EXPECTED_179_SELECTION_AUDIT_SHA256 = (
-    "7b1ebf963f4897972439e2c337a0bac7d25f40d9f27adf64a9de1b04496a719b"
-)
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _require_manifest(frame: pd.DataFrame, expected_lines: int) -> pd.DataFrame:

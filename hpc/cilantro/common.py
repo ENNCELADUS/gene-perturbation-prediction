@@ -8,7 +8,6 @@ docs/specs/2026-10-08-cilantro-sl-reproduction-design.md.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import random
@@ -110,14 +109,6 @@ def seed_everything(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def pandarallel_over_pipes() -> None:

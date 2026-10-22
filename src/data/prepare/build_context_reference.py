@@ -19,7 +19,6 @@ the fetched gene tables and their provenance.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import io
 import json
 import subprocess
@@ -197,10 +196,6 @@ def training_msi(text: str, blocked: Collection[str]) -> pd.Series:
     return msi
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def gene_tables() -> dict[str, tuple[pd.DataFrame, str]]:
     """The fetched gene-level tables; no split enters them."""
     pairs = pd.concat(parse_paralogs(fetch(paralog_url(c))) for c in CHROMOSOMES)
@@ -277,11 +272,7 @@ def main(argv=None) -> int:
         }
     for name, (frame, source) in tables.items():
         frame.to_csv(out / name, sep="\t", index=False)
-        provenance["files"][name] = {
-            "source": source,
-            "rows": len(frame),
-            "sha256": _sha256(out / name),
-        }
+        provenance["files"][name] = {"source": source, "rows": len(frame)}
         print(name, len(frame))
     (out / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
     return 0
