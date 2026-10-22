@@ -1,26 +1,5 @@
 """Gene sources of the stage-one gene encoder (ladder design §4.4), aligned to the
-GeneEffect gene axis.
-
-- ``gene_text`` and ``string_space``: PIE_sources dense source dirs (``meta.json`` with
-  the keys, ``embeddings.npy`` in the meta's dtype), read with numpy;
-- ``esmc_600m`` and ``esm3_open``: the ``.npz`` files of
-  ``src.data.builders.embed_protein_sources`` (``symbols``, ``vectors``,
-  ``accessions``);
-- ``gene2vec``: Cilantro's Gene2vec matrix (Ensembl ID -> 128-d vector), reached from a
-  symbol through Geneformer's gc30M symbol -> Ensembl dictionary, as the historical
-  Cilantro coverage reaches it; its keys that are not Ensembl IDs are never reached.
-
-The axis is upper-case DepMap symbols (``src.data.depmap``). A source key matches a gene
-case-insensitively; a source with two keys equal up to case is refused. A gene without a
-key has the source masked: a NaN row and ``present`` false. Nothing is projected or
-filled here.
-
-``python -m src.data.gene_sources --genes <ladder>/genes.parquet --pie-sources DIR
---protein DIR --gene2vec FILE --gene-names FILE --out DIR`` writes
-``<out>/<source>.npz`` (``axis``, ``vectors``, ``present``) and ``<out>/coverage.json``,
-the axis being the index of the ladder's ``genes.parquet`` and the selective genes its
-``selective`` column.
-"""
+GeneEffect gene axis."""
 
 from __future__ import annotations
 
@@ -134,9 +113,7 @@ def align(table: SourceTable, axis: Sequence[str]) -> AlignedSource:
     return AlignedSource(name=table.name, axis=axis, vectors=vectors, present=present)
 
 
-def coverage(
-    source: AlignedSource, selective: Sequence[str] | None = None
-) -> dict[str, float | int]:
+def coverage(source: AlignedSource, selective: Sequence[str]) -> dict[str, float | int]:
     """Genes covered: a count, and shares of the axis and of the selective genes."""
     covered = int(source.present.sum())
     record: dict[str, float | int] = {
@@ -144,14 +121,13 @@ def coverage(
         "covered": covered,
         "share_of_axis": covered / len(source.axis),
     }
-    if selective is not None:
-        on_axis = dict(zip(source.axis, source.present))
-        missing = sorted(set(selective) - set(on_axis))
-        if missing:
-            raise ValueError(f"selective genes off the axis: {missing[:10]}")
-        hit = sum(bool(on_axis[gene]) for gene in selective)
-        record["selective_covered"] = hit
-        record["share_of_selective"] = hit / len(selective)
+    on_axis = dict(zip(source.axis, source.present))
+    missing = sorted(set(selective) - set(on_axis))
+    if missing:
+        raise ValueError(f"selective genes off the axis: {missing[:10]}")
+    hit = sum(bool(on_axis[gene]) for gene in selective)
+    record["selective_covered"] = hit
+    record["share_of_selective"] = hit / len(selective)
     return record
 
 
@@ -200,17 +176,14 @@ def write_sources(
     out: Path,
     aligned: Mapping[str, AlignedSource],
     paths: SourcePaths,
-    selective: Sequence[str] | None = None,
+    selective: Sequence[str],
 ) -> dict:
     """``<out>/<source>.npz`` per source and ``<out>/coverage.json``."""
-    axes = {source.axis for source in aligned.values()}
-    if len(axes) != 1:
-        raise ValueError("the sources are not on one gene axis")
     out.mkdir(parents=True, exist_ok=True)
     inputs = paths.inputs()
     record: dict = {
-        "axis": len(axes.pop()),
-        "selective": None if selective is None else len(selective),
+        "axis": len(next(iter(aligned.values())).axis),
+        "selective": len(selective),
         "sources": {},
     }
     for name, source in aligned.items():

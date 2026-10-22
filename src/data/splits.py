@@ -1,4 +1,5 @@
-"""data / splits."""
+"""The fixed train/validation/test split of cell lines and the guard that keeps
+held-out and unlabelled lines out of every fit."""
 
 from __future__ import annotations
 from collections.abc import Mapping
@@ -9,14 +10,8 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class FixedSplit:
-    """A fixed train/val/test line partition for ``outer="fixed"``.
-
-    Attributes:
-        train: Lines mu_hat/mu_bar and every context method are fit on.
-        val: Lines evaluated as the "val" slice (may be empty).
-        test: Lines evaluated as the "test" slice (may be empty).
-        unlabeled_train: Declared train members without GeneEffect supervision.
-    """
+    """A train/val/test line partition (val and test may be empty);
+    ``unlabeled_train`` are train members without GeneEffect supervision."""
 
     train: tuple[str, ...]
     val: tuple[str, ...]
@@ -38,17 +33,6 @@ _SPLIT_KEYS: tuple[str, ...] = ("train", "val", "test")
 #: adds the single-cell extras to the 226's training lines and lists the bulk-only
 #: training-side lines (``src.data.extra_lines.load_bulk_lines``).
 SPLIT_SCHEMA_VERSION = "cell-line-geneeffect-split-v1"
-
-
-__all__ = [
-    "SPLIT_SCHEMA_VERSION",
-    "FixedSplit",
-    "assert_fit_eligible",
-    "assert_same_membership",
-    "load_geneeffect_split",
-    "membership",
-    "validate_fixed_split",
-]
 
 
 def validate_fixed_split(split: FixedSplit) -> None:
@@ -77,16 +61,9 @@ def validate_fixed_split(split: FixedSplit) -> None:
 
 
 def load_geneeffect_split(path: Path) -> FixedSplit:
-    """Load a split JSON (the final split, or the 226 split it is built from) into
-    a :class:`FixedSplit`; other keys of the file are left to their own loaders.
-
-    Validate string-list fields, disjoint train/validation/test membership,
-    and train-only membership of the explicitly unlabeled lines.
-
-    Raises:
-        ValueError: ``path`` is not a JSON object, is missing a required key,
-            or a key's value is not a list of strings.
-    """
+    """A split JSON (the final split, or the 226 split it is built from) as a
+    validated :class:`FixedSplit`; other keys of the file are left to their own
+    loaders."""
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"split JSON {path} must be a JSON object")
@@ -117,22 +94,8 @@ def load_geneeffect_split(path: Path) -> FixedSplit:
 
 
 def assert_fit_eligible(model_id: str, split: FixedSplit) -> None:
-    """Hard guard: raise unless ``model_id`` may enter a fitting/training path.
-
-    A line is admissible only if it is a *labeled* train member: present in
-    ``split.train`` and absent from ``split.unlabeled_train``. ``val``/
-    ``test`` lines (and any id outside ``split.train`` entirely) are
-    inference-only.
-
-    Args:
-        model_id: The candidate line's ACH model id.
-        split: The loaded split, the membership authority.
-
-    Raises:
-        ValueError: ``model_id`` is a declared ``unlabeled_train`` member, or
-            is not a member of ``split.train`` at all (a ``val``/``test`` or
-            unknown id).
-    """
+    """Raise unless ``model_id`` is a labelled training line (in ``split.train``,
+    not in ``split.unlabeled_train``): every other line is inference-only."""
     if model_id in split.unlabeled_train:
         raise ValueError(
             f"{model_id!r} is an unlabeled_train member (no GeneEffect label "

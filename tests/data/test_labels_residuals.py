@@ -18,12 +18,7 @@ def _labels(rows: list[dict[str, object]]) -> pd.DataFrame:
 
 
 def test_gene_mean_is_fit_from_train_lines_only_not_the_full_dataset() -> None:
-    """The leakage property: mu_hat_g must never see a held-out line's label.
-
-    GENE1's held-out lines (L4, L5) carry values two orders of magnitude
-    larger than the train lines. If the held-out labels leaked into the
-    mean, gene_mean would move far off the train-only mean. It must not.
-    """
+    """Held-out lines L4 and L5 carry values that would move a leaked mean far off."""
     labels = _labels(
         [
             {"model_id": "L1", "gene_symbol": "GENE1", "gene_effect": 10.0},
@@ -43,8 +38,7 @@ def test_gene_mean_is_fit_from_train_lines_only_not_the_full_dataset() -> None:
     assert gene_mean["GENE1"] == hand_train_mean
     assert gene_mean["GENE1"] != hand_all_mean
 
-    # build_residual_targets must apply this same train-fit mean to the
-    # held-out rows too, not a mean recomputed over all lines.
+    # Held-out rows are centred on the same train-fit mean.
     targets = build_residual_targets(labels, train_lines)
     assert targets.gene_mean["GENE1"] == hand_train_mean
     held_out_row = targets.long.loc[targets.long["model_id"] == "L4"].iloc[0]

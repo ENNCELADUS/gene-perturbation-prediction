@@ -1,8 +1,4 @@
-"""Opening a prepared root: train-only fitting, restore, and test exposure.
-
-``make_prepared_fixture`` writes a small prepared root in the current layout
-directly (no raw sources); other tests reuse it.
-"""
+"""Opening a prepared root: train-only fitting, restore, and test exposure."""
 
 from __future__ import annotations
 

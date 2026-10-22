@@ -83,8 +83,6 @@ class FeatureBatch:
     def to(
         self, device: torch.device | str, *, non_blocking: bool = False
     ) -> FeatureBatch:
-        """Move tensor fields while preserving row identifiers."""
-
         def move(value: torch.Tensor | None) -> torch.Tensor | None:
             if value is None:
                 return None

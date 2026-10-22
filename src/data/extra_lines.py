@@ -134,14 +134,3 @@ def load_extra_single_cell_lines(path: Path, split: FixedSplit) -> ExtraSingleCe
         },
     )
     return lines
-
-
-__all__ = [
-    "SCHEMA_VERSION",
-    "SINGLE_CELL_SCHEMA_VERSION",
-    "ExtraLines",
-    "ExtraSingleCellLines",
-    "load_bulk_lines",
-    "load_extra_lines",
-    "load_extra_single_cell_lines",
-]

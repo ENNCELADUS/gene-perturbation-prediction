@@ -17,15 +17,15 @@ from src.data.prior_offsets import (
     checked_prior,
     read_prior_offsets,
 )
-from tests.fixtures.joint import (  # noqa: F401
+from tests.fixtures.joint import (
     GENES,
     TRAIN,
     VAL,
     make_config,
     make_inputs,
+    with_prior,
 )
 from tests.fixtures.prepared import make_prepared_fixture
-from tests.fixtures.joint import with_prior
 
 
 def write_export(path, lines, genes, scale, *, run_id="prior_run", value=0.5):

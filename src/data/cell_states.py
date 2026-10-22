@@ -1,36 +1,6 @@
-"""Cell-state vocabularies, memberships and state inputs (PIE stage-one design
-§3.5, Task 8).
-
-A **vocabulary** is fitted on the single-cell training lines only, each line
-weighing equally (``fit_sample``), then frozen and **projected** on every cell of
-a line: soft memberships ``q_ik`` summing to one over the vocabulary's states.
-
-- ``cycle``: a Gaussian mixture on each cell's S and G2/M program scores
-  (absolute), its components named non-cycling, S and G2/M.
-- ``programs``: recurrent programs from consensus NMF per training line
-  (``src.experiments.states.programs``, ``.venv-states``); a cell's memberships
-  are its non-negative usages of the recurrent programs and the background
-  program, cycle usages dropped, normalised to one (``program_memberships``).
-- Mixtures (``fit_mixture``): a Gaussian mixture with full covariances on a
-  per-cell representation, line-centred (each line's mean over all of its cells
-  subtracted) or absolute: scVI's latent, the HVG cells' and the Tx1-3B
-  embeddings' leading principal components, or the QC columns (log UMI, genes
-  detected, mitochondrial fraction) standardised.
-
-For line c with per-cell PIE input ``u_i = log1p(CP10K_i)`` on the decode panel
-(``per_cell_log_cp10k``: Task 2's gene order, whole-library denominator and
-unlisted-gene fill), a state's mass is ``pi_k = sum_i q_ik / n`` and its input
-``x_k = sum_i q_ik u_i / sum_i q_ik``, so ``sum_k pi_k x_k`` is the line's PIE
-input exactly. A state whose effective cell count ``(sum q)^2 / sum q^2`` is
-below a floor is merged into its nearest state (by input), its membership column
-added, so mass and weighted expression are kept (``merge_small``). Controls:
-memberships permuted across a line's cells (``permute_memberships``), which keeps
-every state's mass, effective count and overlap and the line input; a
-cycling-score-weighted whole-line input (``cycling_weights``).
-
-Context names (``context_name``) are ``<ModelID>|<set>|<state>``; the frozen PIE
-reads a context's Cellosaurus text through its owner, the ModelID.
-"""
+"""Cell-state vocabularies (PIE stage-one design §3.5): fitted on the single-cell
+training lines, then projected on a line's cells as soft memberships whose
+mass-weighted state inputs reproduce the line's PIE input exactly."""
 
 from __future__ import annotations
 
@@ -80,9 +50,6 @@ QC_FEATURES: Final[tuple[int, ...]] = (0, 1, 2)  # log UMI, genes, mito fraction
 CYCLE_FEATURES: Final[tuple[int, ...]] = (4, 5)  # S and G2/M scores
 #: Program usages of a cell with no usage at all go to the background program.
 BACKGROUND: Final[str] = "background"
-
-
-# --- names --------------------------------------------------------------------
 
 
 def context_name(model_id: str, set_name: str, state: str) -> str:
@@ -146,9 +113,6 @@ def state_sets(config: Mapping[str, Any]) -> list[str]:
 
 def base_vocabulary(set_name: str) -> str:
     return set_name.split("__perm")[0]
-
-
-# --- the fit sample -------------------------------------------------------------
 
 
 def fit_sample(
@@ -233,9 +197,6 @@ def set_fingerprints(inputs: pd.DataFrame, masses: pd.DataFrame) -> dict[str, st
             [names[i] for i in rows], values[rows], mass[rows]
         )
     return out
-
-
-# --- mixtures ---------------------------------------------------------------------
 
 
 def fit_pca(features: np.ndarray, components: int, seed: int) -> dict[str, np.ndarray]:
@@ -354,9 +315,6 @@ def program_memberships(usages: np.ndarray, kinds: Sequence[str]) -> np.ndarray:
     out[has] = kept[has] / total[has, None]
     out[~has, background] = 1.0
     return out
-
-
-# --- state inputs -----------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -523,41 +481,3 @@ def cycling_weights(probability: np.ndarray, floor: float) -> np.ndarray:
 
 def masses(q: np.ndarray) -> np.ndarray:
     return np.asarray(q, dtype=np.float64).mean(axis=0)
-
-
-__all__ = [
-    "BACKGROUND",
-    "CYCLE",
-    "CYCLING_SET",
-    "LineCells",
-    "MIXTURE_FAMILIES",
-    "PROGRAMS",
-    "StateInputs",
-    "WHOLE",
-    "base_vocabulary",
-    "context_name",
-    "context_owner",
-    "cycle_labels",
-    "cycling_probability",
-    "cycling_weights",
-    "effective_count",
-    "family",
-    "fit_mixture",
-    "fit_pca",
-    "fit_sample",
-    "masses",
-    "membership_key",
-    "merge_small",
-    "mixture_features",
-    "mixture_responsibilities",
-    "per_cell_log_cp10k",
-    "permute_memberships",
-    "permuted_set",
-    "program_memberships",
-    "project",
-    "resolve_chemistry",
-    "set_fingerprints",
-    "state_fingerprint",
-    "state_sets",
-    "vocabularies",
-]

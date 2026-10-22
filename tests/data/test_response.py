@@ -17,13 +17,14 @@ from src.data.response import (
     XatlasOrionSource,
     control_library_sizes,
     load_response_sources,
+    open_response_targets,
     read_response_part,
     response_bags,
     response_cells,
     response_part,
     write_response_part,
+    write_response_targets,
 )
-from src.data.response import open_response_targets, write_response_targets
 
 LABELS = ["non-targeting"] * 3 + ["kif11", "KIF11", "TP53", "TP53"]
 SYMBOLS = ["H1", "H2", "OTHER"]

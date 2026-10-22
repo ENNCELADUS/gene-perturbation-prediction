@@ -1,29 +1,7 @@
-"""Per-line cell inputs of the stage-one ladder, from a line's raw basal cells.
-
-Every quantity reads all of a line's cells. Source symbols are matched to a gene
-list upper-cased (DepMap's symbols are upper-case; a source that spells
-``C1orf112`` lists ``C1ORF112``); columns sharing a symbol are summed. Library
-sizes are each cell's UMI total over every gene of its source.
-
-- **PIE's input** is PIE's control mean: each cell normalised to 10^4 UMI
-  (CP10K), ``log1p``, then the mean over cells (``pie.process.normalize`` and
-  ``pie.prep.labels.pseudobulk_h5ad``).
-- **Pseudo-bulk** is ``log1p`` of the mean over cells of each cell's CP10K: PIE's
-  per-cell normalisation, then the log of the mean (not a mean of logs, which
-  moves with a gene's variance and dropout).
-- **Per-gene spread** is each gene's detected fraction and SD of ``log1p`` CP10K
-  over cells, beside what depth alone predicts: detection
-  ``mean_i(1 - exp(-mu_g L_i / 10^4))`` with ``mu_g`` the gene's mean CP10K, and
-  the SD of one Poisson replicate of the line's cells at ``lambda_ig = mu_g L_i /
-  10^4``.
-- **Per-cell QC**: log UMI, genes detected, mitochondrial (``MT-``) and ribosomal
-  (``RPS``/``RPL``) fractions.
-- **HVG cells**: STATE's HVGs in the prepared space ``log1p(x T / L)``; the
-  shuffled cells permute each HVG's values across the line's cells
-  independently, keeping every gene's within-line distribution and destroying
-  co-expression within cells. The mean as one cell is ``log1p`` of the line's
-  mean normalised HVG profile.
-"""
+"""Per-line cell inputs of the stage-one ladder (PIE's input, pseudo-bulk, per-gene
+spread, per-cell QC, HVG cells), each over every raw basal cell of the line. Pseudo-bulk
+is ``log1p`` of the mean CP10K, not a mean of logs, which moves with a gene's variance
+and dropout."""
 
 from __future__ import annotations
 
@@ -228,20 +206,3 @@ def symbol_key(genes: Sequence[str], keys: Sequence[str]) -> dict[str, str]:
     for key in keys:
         by_upper.setdefault(str(key).upper(), []).append(str(key))
     return {g: by_upper[g][0] for g in genes if len(by_upper.get(g, ())) == 1}
-
-
-__all__ = [
-    "PIE_TARGET_SUM",
-    "QC_COLUMNS",
-    "GeneSummaries",
-    "HvgCells",
-    "bulk_to_pie_input",
-    "cell_qc",
-    "gene_summaries",
-    "hvg_cells",
-    "line_rng",
-    "shuffle_counts",
-    "shuffle_within_columns",
-    "symbol_key",
-    "upper_symbols",
-]

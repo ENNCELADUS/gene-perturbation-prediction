@@ -1,11 +1,6 @@
-"""The linear context prior's exported predictions, as the joint model reads them.
-
-An export (``hpc/run.sh prior-export``) holds per-line residual predictions in
-residual-SD units. The joint model adds ``value x residual SD`` to its head's output,
-so the export must be on the same gene order and residual SD; ``checked_prior``
-refuses one that is not, and ``check_prior_identity`` refuses a checkpoint trained
-on another export.
-"""
+"""The linear context prior's export (``hpc/run.sh prior-export``) as the joint model
+reads it: per-line residual predictions in residual-SD units, which must share the
+model's gene order and residual SD."""
 
 from __future__ import annotations
 

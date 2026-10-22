@@ -1,17 +1,7 @@
-"""Prepared joint-training inputs: per-line arrays, response targets, manifest.
-
-Layout under ``config["prepared_root"]``:
-
-- ``prepared_inputs.json`` (written last): ``expression_space``,
-  ``common_gene_panel``, ``hvg_order``, ``response_anchors``;
-- ``lines/<ModelID>.npz``: ``controls_tx1``, ``basal_hvg``, ``q_sc_values``,
-  ``q_sc_available``;
-- ``response/``: log-space response targets (``src.data.response``);
-- ``common_gene_panel.csv``, ``embedding_union.{csv,json}``.
-
-Every expression quantity is in STATE's space: whole-library normalize_total
-to ``target_sum``, then log1p. Only Tx1 embeddings come from raw counts.
-"""
+"""Prepared joint-training inputs (``lines/<ModelID>.npz``, ``response/`` and the
+``prepared_inputs.json`` manifest, written last), opened with train-only fitting or a
+checkpoint's restored state. Expression is in STATE's log space; only Tx1 embeddings
+come from raw counts."""
 
 from __future__ import annotations
 
@@ -68,12 +58,8 @@ class PreparedLine:
 
 @dataclass(frozen=True)
 class PreparedInputs:
-    """Fixed labels, train-fit preprocessing, feature orders and prepared arrays.
-
-    Every expression quantity is in STATE's space: whole-library normalize_total
-    to ``target_sum``, then log1p. Only Tx1 embeddings come from raw counts.
-    ``prior`` is the linear context prior export the head stacks on, or None.
-    """
+    """Fixed labels, train-fit preprocessing, feature orders and prepared arrays;
+    ``prior`` is the linear context prior export the head stacks on, or None."""
 
     split: FixedSplit
     labels: pd.DataFrame
@@ -125,9 +111,6 @@ class PreparedInputs:
             "prior": None if self.prior is None else dict(self.prior.identity),
             "split": membership(self.split),
         }
-
-
-# --- one basal line --------------------------------------------------------------
 
 
 def select_context_cells(
@@ -210,9 +193,6 @@ def read_prepared_line(path: Path, genes: tuple[str, ...]) -> PreparedLine:
                 available=payload["q_sc_available"],
             ),
         )
-
-
-# --- opening the prepared root ---------------------------------------------------
 
 
 def read_manifest(root: Path) -> dict[str, Any]:
@@ -404,17 +384,3 @@ def load_inputs(
         target_sum=target_sum,
         prior=prior,
     )
-
-
-__all__ = [
-    "EXPRESSION_TRANSFORM",
-    "PREPARED_METADATA_FILENAME",
-    "PreparedInputs",
-    "PreparedLine",
-    "load_inputs",
-    "prepare_line",
-    "read_manifest",
-    "read_prepared_line",
-    "select_context_cells",
-    "write_prepared_line",
-]
