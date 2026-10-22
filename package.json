@@ -1,8 +1,0 @@
-{
-  "scripts": {
-    "slides:pdf": "marp -I docs/presentation --pdf --allow-local-files --output docs/presentation"
-  },
-  "devDependencies": {
-    "@marp-team/marp-cli": "^4.4.0"
-  }
-}

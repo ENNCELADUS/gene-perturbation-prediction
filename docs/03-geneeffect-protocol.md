@@ -140,7 +140,7 @@ $$
 
 ## 4. Model
 
-![](../figures/geneeffect_architecture.svg)
+![](figures/geneeffect_architecture.svg)
 
 *Figure 1. (a) Frozen Tx1-3B encodes the sampled basal cells of line $c$ from raw counts into
 cell embeddings that are moment-pooled into a context embedding; frozen ESM-2 encodes gene $g$.
@@ -230,7 +230,7 @@ are masked, never zero-filled.
 
 ## 5. Training and selection
 
-![](../figures/geneeffect_training_protocol.svg)
+![](figures/geneeffect_training_protocol.svg)
 
 *Figure 2. Training protocol. Preparation fits the gene means, the selective genes and the
 per-gene residual SD on training lines once; Tx1-3B and ESM-2 stay frozen throughout. The
@@ -834,8 +834,7 @@ specific to this task.
 
 The [context-generalization design](specs/2026-10-04-context-generalization-design.md) (§5.2, §7.2,
 §7.3, §8.2 and its 2026-10-07 amendments) stacks the nested head of §4 on the default linear
-context prior of §10. The [wave-one plan](specs/2026-10-07-single-cell-correction-plan.md) builds
-it without changing any model input.
+context prior of §10. Wave one builds it without changing any model input.
 
 - **The prior export.** `paths.prior` in a joint config names a `prior-export` directory (§10),
   or is null. `load_inputs` reads it and refuses one whose gene order or residual SD differs from
@@ -898,8 +897,7 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
   prior alone and, for the other arms, over `mean` at the same penalties, with 95% paired line-bootstrap
   intervals. Single-cell resolution adds information in this linear form when `single_cell` or
   `distribution` beats `mean` on validation by an interval above zero; distributional models
-  (state views, partner fractions, STATE's response; the
-  [second-wave plan](specs/2026-10-07-single-cell-correction-second-wave-plan.md)) then start from the
+  (state views, partner fractions, STATE's response; a second wave, never built) then start from the
   statistic that carries it. Nothing is chosen in code.
 - **Result (2026-10-11, [record](../results/single_cell_stack_seed0/README.md)).** Two runs (the first grid, then
   selected penalties to 10,000 because every best row sat at 100). No single-cell arm beats `mean` on validation by an
@@ -991,8 +989,7 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
 
 ## 15. Stage-one inputs
 
-Task 2 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) (plan
-[2026-10-16](specs/2026-10-16-pie-ladder-inputs-plan.md)) writes the fixed inputs every stage-one arm reads under
+Task 2 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) writes the fixed inputs every stage-one arm reads under
 `data/geneeffect_joint/v2/ladder/` (`configs/stage_one/ladder_inputs.yaml`, which names the default prior's config for
 the split, labels, bulk RNA and dropped lineages and the noise diagnosis's for programs and clusters).
 `hpc/run.sh ladder-inputs CONFIG --steps lines,cells,mean,summaries` (`src/experiments/stage_one/ladder_inputs.py`, project

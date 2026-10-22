@@ -1,4 +1,4 @@
-# The stage-one inputs (PIE stage-one design §5 Task 2; plan docs/specs/2026-10-16-pie-ladder-inputs-plan.md):
+# The stage-one inputs (PIE stage-one design §5 Task 2):
 # the frame, the mean channel and PIE's input, the cell channels, the summaries, Tx1 embeddings of every cell and the
 # frozen PIE's deltas. The default prior's config gives the split, labels, bulk RNA and dropped lineages; the noise
 # diagnosis's gives the programs and cluster settings of the summaries.
