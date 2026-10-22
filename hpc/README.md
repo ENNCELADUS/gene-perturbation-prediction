@@ -241,6 +241,10 @@ CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one $A/film_dH.yaml [--fold K]          
 setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3 --folds main,0,1,2,3,4 $A/*.yaml \
   > outputs/launches/stage_one_3a.log 2>&1 < /dev/null &                                 # skips prior_reference and report_3a
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one-report $A/report_3a.yaml                      # results.md; the dH ridge on 1 GPU
+P=configs/stage_one/prior_input   # protocol §16's prior input; listing a GPU twice runs two jobs on it
+setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3,0,1,2,3 --folds main,0,1,2,3,4 $P/*.yaml \
+  > outputs/launches/stage_one_prior_input.log 2>&1 < /dev/null &
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one-report $P/report_prior_input.yaml
 ```
 
 Each run holds its delta on the GPU in bf16 (ΔH is 28 GB, ΔE 19 GB), copied by gene chunk from the memory-mapped

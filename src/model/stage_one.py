@@ -221,11 +221,12 @@ class PairBatch:
     text_present: Tensor | None = None  # (lines,)
     evidence: Tensor | None = None  # (genes, lines): own value, PIE's input
     evidence_have: Tensor | None = None  # (genes, lines): listed by the source
+    prior: Tensor | None = None  # (genes, lines): the prior's prediction, z units
 
     @property
     def shape(self) -> tuple[int, int]:
         genes = next(iter(self.gene_vectors.values())).shape[0]
-        for lines_tensor in (self.delta, self.own, self.evidence):
+        for lines_tensor in (self.delta, self.own, self.evidence, self.prior):
             if lines_tensor is not None:
                 return genes, lines_tensor.shape[1]
         for lines_tensor in (self.line, self.token_values, self.before):
@@ -242,9 +243,11 @@ class DeltaFiLM(nn.Module):
     (on the full decode panel): ``E(after) - E(before)`` beside its value
     at the frame-mean states, ``E(shift_g) - E(0)``), a line-level input
     (``components``, ``lineage``, ``text``), ``own_x`` (the gene's own expression
-    beside its frame mean) or ``none`` (a learned constant). Own-gene slots, when
-    given, are appended to a delta as ``[slot centred ; frame mean]``. The FiLM
-    condition is the gene encoder, plus the context encoder when one is given.
+    beside its frame mean), ``none`` (a learned constant) or ``prior`` (the prior's
+    prediction alone). Own-gene slots, when given, are appended to a delta as
+    ``[slot centred ; frame mean]``; with ``prior`` set, the prior's prediction is
+    appended last. The FiLM condition is the gene encoder, plus the context encoder
+    when one is given.
     """
 
     def __init__(
@@ -257,10 +260,12 @@ class DeltaFiLM(nn.Module):
         context: ContextEncoder | None,
         context_width: int,
         state: StateEncoder | None,
+        prior: bool = False,
         hidden: int = HIDDEN,
     ) -> None:
         super().__init__()
         self.input = input
+        self.prior = prior or input == "prior"
         self.gene_encoder = gene_encoder
         self.context = context
         self.state = state
@@ -268,6 +273,9 @@ class DeltaFiLM(nn.Module):
         width = {"own_x": 2 * input_dim}.get(input, input_dim)
         if input in ("dH", "dL", "dE", "dE_full"):
             width = 2 * input_dim + 2 * own_dim
+        if input == "prior":
+            width = 0
+        width += int(self.prior)
         if input == "none":
             self.constant = nn.Parameter(torch.zeros(hidden))
             self.inflow = None
@@ -293,10 +301,14 @@ class DeltaFiLM(nn.Module):
             parts = [change - mean.unsqueeze(1), _per_gene(mean, lines)]
         elif self.input == "own_x":
             parts = [batch.own, _per_gene(batch.own_mean, lines)]
+        elif self.input == "prior":
+            parts = []
         else:  # a line-level input
             return batch.line.float().unsqueeze(0).expand(genes, -1, -1)
         if self.input != "own_x" and batch.own is not None:
             parts += [batch.own, _per_gene(batch.own_mean, lines)]
+        if self.prior:
+            parts.append(batch.prior.unsqueeze(-1))
         return torch.cat([part.float() for part in parts], dim=-1)
 
     def condition(self, batch: PairBatch) -> Tensor:
@@ -460,6 +472,7 @@ def build_model(config: Mapping[str, object], dims: InputDims) -> nn.Module:
         context=context,
         context_width=context_width,
         state=state,
+        prior=data["prior_run"] is not None and kind != "components",
         hidden=int(model["hidden"]),
     )
     if arm == "hybrid":

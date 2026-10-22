@@ -271,6 +271,7 @@ class Resident:
         self.tokens = self.text = self.evidence = None
         self.width, self.own_width, self.variance_kept = 0, 0, None
         self.line_classes: list[str] | None = None
+        self.prior = None
         slots = list(data["own_slots"]) + (["own_x"] if kind == "own_x" else [])
         if kind in reader.PIE_ARRAYS or kind == "dE_full" or slots:
             index = reader.check_pie_index(ladder)
@@ -334,6 +335,10 @@ class Resident:
             line = self._line_input(setup, data, kind, fold, targets)
             self.line = torch.tensor(line, device=device)
             self.width = line.shape[1]
+        if data["prior_run"] is not None and kind != "components":
+            self.prior = torch.from_numpy(prior_feature(setup, data, targets.m_g)).to(
+                device
+            )
         text, text_present = reader.context_text(ladder)
         self.text_dim = text.shape[1]
         if arm != "film":
@@ -445,7 +450,37 @@ class Resident:
         if self.evidence is not None:
             batch.evidence = self.evidence[0][genes][:, lines]
             batch.evidence_have = self.evidence[1][genes][:, lines]
+        if self.prior is not None:
+            # Never permuted: the permuted control keeps the line's own prior.
+            batch.prior = self.prior[genes][:, lines]
         return batch
+
+
+def prior_feature(setup: Setup, data: Mapping[str, Any], m_g: pd.Series) -> np.ndarray:
+    """The prior reference's prediction minus the run's base, in z units (panel
+    genes x ladder lines): frame lines out of fold, validation and test lines from
+    the fit on the whole frame. A fold run's training lines read predictions whose
+    fits saw the held-out fold's labels, so its out-of-fold telemetry is slightly
+    optimistic; validation and test are unaffected."""
+    ladder = setup.ladder
+    run_dir = finished_prior(data["prior_run"], data["ladder_config"])
+    if run_dir is None:
+        raise FileNotFoundError(f"{data['prior_run']} has no row.json")
+    predictions = pd.concat(
+        [
+            pd.read_parquet(run_dir / f"predictions_{name}.parquet")
+            for name in ("oof", "val", "test")
+        ],
+        verify_integrity=True,
+    )
+    predictions.index = [str(m) for m in predictions.index]
+    missing = sorted(set(ladder.line_ids) - set(predictions.index))
+    if missing:
+        raise ValueError(f"the prior predicts no {missing[:5]}")
+    panel = list(ladder.panel)
+    base = reader.base_prediction(ladder, m_g, ladder.line_ids).loc[:, panel]
+    values = predictions.loc[ladder.line_ids, panel] - base
+    return values.to_numpy(np.float32).T.copy()
 
 
 # --- one run -------------------------------------------------------------------------

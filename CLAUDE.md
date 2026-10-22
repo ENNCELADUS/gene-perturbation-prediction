@@ -114,7 +114,9 @@ per-line 0.215; best arm `film_dE_selective` 0.177); of PIE's deltas ΔE carries
 permuted and no-Δ controls), ΔH no more than a per-gene ridge on it. Task 8's state telemetry ran on 2026-10-22
 ([record](results/state_telemetry_seed0/README.md)): deposit explains much of every vocabulary's state masses, and
 the frozen PIE's state gap (mixing states against reading the mixed input) is at most 0.019 of the whole-line ΔE's
-across-line spread, close to the permuted control's; which vocabularies Task 9 precomputes is for people to choose.
+across-line spread, close to the permuted control's. Decided 2026-10-22 (plan): FiLM next reads the prior's
+prediction as an input, alone, beside ΔE and beside permuted ΔE (`configs/stage_one/prior_input/`, protocol §16),
+before the rest of Wave 2; Task 9 precomputes five vocabularies.
 The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.

@@ -149,7 +149,7 @@ def _profile_model(width: int = 5, components: int = 5) -> DeltaFiLM:
     torch.manual_seed(0)
     dims = InputDims(gene_sources={"gene_text": 6}, delta=components, own=0, text=3)
     config = {
-        "data": {"input": "dE"},
+        "data": {"input": "dE", "prior_run": None},
         "model": {
             "arm": "film",
             "gene_width": 8,

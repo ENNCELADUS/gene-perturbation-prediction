@@ -635,3 +635,67 @@ def test_the_full_stream_raises_the_open_file_limit_its_maps_need(monkeypatch):
     monkeypatch.setattr(reader.resource, "getrlimit", lambda _: (1024, 4_096))
     with pytest.raises(OSError, match="hard limit is 4096"):
         reader.open_file_limit(5_347)
+
+
+def test_film_reads_the_priors_prediction_as_a_pair_feature(world):
+    """The prior-input rows read the prior reference's prediction minus the base,
+    frame lines out of fold; the permuted control keeps each line's own prior."""
+    from src.experiments.stage_one_prior import run as prior_run
+
+    root = world[0]
+    config = yaml.safe_load((CONFIGS / "prior_reference.yaml").read_text())
+    config.update(
+        output_root=str(root / "outputs"), ladder_config=str(root / "ladder.yaml")
+    )
+    prior_dir = str(prior_run(config, "prior_input_seed0"))
+    setup = _setup(world)
+    ladder = setup.ladder
+    targets = setup.targets(None)
+    data = {"prior_run": prior_dir, "ladder_config": str(root / "ladder.yaml")}
+    feature = stage_one.prior_feature(setup, data, targets.m_g)
+    val = ladder.role_lines("val")[0]
+    written = pd.read_parquet(Path(prior_dir) / "predictions_val.parquet").loc[val]
+    base = reader.base_prediction(ladder, targets.m_g, [val]).loc[val]
+    column = ladder.line_ids.index(val)
+    expected = (written - base).loc[list(ladder.panel)].to_numpy()
+    assert np.allclose(feature[:, column], expected, atol=1e-5)
+
+    names = ("film_prior", "film_prior_dE", "permuted_film_prior_dE")
+    paths = {
+        name: _config(root, f"../prior_input/{name}", prior_run=prior_dir)
+        for name in names
+    }
+    permuted = stage_one.Resident(
+        setup,
+        load_stage_one_config(paths["permuted_film_prior_dE"]),
+        None,
+        targets,
+        torch.device("cpu"),
+        ladder.panel,
+    )
+    batch = permuted.batch(torch.arange(3), torch.arange(5))
+    assert torch.equal(batch.prior, torch.from_numpy(feature[:3, :5]))
+    torch.manual_seed(0)
+    for name in names:
+        row = json.loads(
+            (stage_one.run(paths[name], None, None, "cpu") / "row.json").read_text()
+        )
+        assert np.isfinite(row["scores"]["val"]["within_gene_r2"])
+    for path in (CONFIGS.parent / "prior_input").glob("*.yaml"):
+        load_stage_one_config(path)
+
+
+@pytest.mark.parametrize(
+    "edit, message",
+    [
+        ({"input": "prior", "prior_run": None}, "required for input prior"),
+        ({"input": "lineage", "prior_run": "somewhere"}, "for components, prior"),
+    ],
+)
+def test_the_prior_run_is_required_or_refused_by_input(tmp_path, edit, message):
+    config = yaml.safe_load((CONFIGS / "lineage_only.yaml").read_text())
+    config["data"].update(edit)
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(config))
+    with pytest.raises(ValueError, match=message):
+        load_stage_one_config(path)
