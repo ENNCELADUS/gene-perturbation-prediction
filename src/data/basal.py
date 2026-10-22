@@ -1,10 +1,5 @@
-"""Raw-count helpers and memory-bounded readers of Perturb-seq sources.
-
-The readers return raw non-negative UMI counts: whole-library totals and
-counts in a given gene order, reduced one row chunk (or one parquet shard) at
-a time so a full-transcriptome matrix is never held. Expression-space
-transforms happen in ``src.data.expression``, never here.
-"""
+"""Raw-count helpers and memory-bounded readers of Perturb-seq sources: raw UMI
+counts, one row chunk (or parquet shard) at a time; no expression-space transform."""
 
 from __future__ import annotations
 
@@ -47,9 +42,6 @@ XATLAS_GENE_METADATA_TOKEN_COL: Final[str] = "gene_token_id"
 #: Rows per backed read; one huge fancy index over a dense unchunked HDF5
 #: dataset can spin for tens of minutes before reading a byte.
 _MATERIALIZE_CHUNK_ROWS: Final[int] = 2000
-
-
-# --- raw-count helpers -------------------------------------------------------
 
 
 def require_raw_counts(matrix: object, label: str) -> None:
@@ -131,9 +123,6 @@ def assert_tx1_input_contract(adata: ad.AnnData) -> None:
         )
 
 
-# --- backed h5ad reads ---------------------------------------------------------
-
-
 def require_ensembl_source(
     var: pd.DataFrame, var_ensembl_col: str, h5ad_path: Path
 ) -> None:
@@ -198,9 +187,6 @@ def materialize_rows(
     if sparse.issparse(stacked):
         return stacked.tocsr()[inverse, :]
     return np.asarray(stacked)[inverse]
-
-
-# --- X-Atlas-Orion parquet shards ----------------------------------------------
 
 
 class _XatlasCell(NamedTuple):

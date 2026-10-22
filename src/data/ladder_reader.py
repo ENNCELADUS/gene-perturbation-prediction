@@ -1,25 +1,6 @@
 """Readers of the stage-one inputs (``data/geneeffect_joint/v2/ladder/``, protocol
-§15) for the stage-one model, and their GPU-resident form.
-
-numpy, pandas and torch only (never ``pie``), so ``.venv-pie`` and the project
-environment both read them. The tables are read as ``ladder_inputs.read_genes`` and
-``read_lines`` read them (``data`` never imports ``experiments``); every array is
-checked against ``lines.parquet`` and the decode panel before use:
-
-- ``check_pie_index`` fails closed unless ``pie/index.json`` lists the lines of
-  ``lines.parquet`` and the panel of ``genes.parquet`` in their order;
-- ``open_delta`` memory-maps one gene-major delta (genes x lines x width, centred
-  within each gene on the frame lines); ``resident`` copies it to a device by gene
-  chunk, in bf16, so the fp32 file is never held in host memory whole;
-- ``profile_states``: the before-state ``(x_c - x_frame) C^T`` of every line and each
-  gene's shift ``frame_mean_dE[g] + mu_dp C^T``, so the after-state of a pair is
-  ``before[c] + dE[g, c] + shift[g]`` (the profile delta stores only coordinates of
-  the predicted change on the basis; ``dE`` is centred within gene);
-- ``training_targets``: ``(GeneEffect - m_g) / sigma_g`` of training lines only,
-  ``m_g`` refitted on the lines kept when a fold is excluded;
-- ``scoring_truth``: ``(GeneEffect - mu_g) / sigma_g``, what every prediction is
-  scored against (protocol §6).
-"""
+§15) and their GPU-resident form, each array checked against ``lines.parquet`` and the
+decode panel; numpy, pandas and torch only, so ``.venv-pie`` reads them too."""
 
 from __future__ import annotations
 
@@ -79,9 +60,6 @@ def read_ladder(root: Path) -> Ladder:
     if not lines.index.is_unique or not genes.index.is_unique:
         raise ValueError(f"{root}: duplicate lines or genes")
     return Ladder(root=root, lines=lines, genes=genes)
-
-
-# --- the frozen PIE's arrays ------------------------------------------------------
 
 
 def check_pie_index(ladder: Ladder) -> dict[str, Any]:
@@ -303,9 +281,6 @@ class FullStream:
         return block.to(self.dtype)
 
 
-# --- tables -------------------------------------------------------------------------
-
-
 def _on_lines(ladder: Ladder, frame: pd.DataFrame, name: str) -> pd.DataFrame:
     if [str(m) for m in frame.index] != ladder.line_ids:
         raise ValueError(f"{name}: its rows are not lines.parquet's lines in order")
@@ -404,9 +379,6 @@ def line_tokens(ladder: Ladder) -> LineTokens:
     values[:, columns, 2] = channel.to_numpy(dtype=np.float32)
     values[:, columns, 3] = 1.0
     return LineTokens(axis=axis, values=values, present=values[..., [1, 3]].any(axis=2))
-
-
-# --- labels ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,4 @@
-"""Cell-state vocabularies and state inputs (``src.data.cell_states``): the state
-inputs reproduce PIE's input, the controls keep what they must, fits refuse
-held-out lines, projection is deterministic."""
+"""Cell-state vocabularies and state inputs (``src.data.cell_states``)."""
 
 from __future__ import annotations
 

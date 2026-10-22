@@ -200,12 +200,11 @@ def load_geneeffect_long(path: Path, split: FixedSplit) -> pd.DataFrame:
     if infinite.any():
         raise ValueError(f"GeneEffect contains {int(infinite.sum())} infinite values")
     numeric.columns = symbols
-    long = (
+    return (
         numeric.rename_axis("model_id")
         .reset_index()
         .melt(id_vars="model_id", var_name="gene_symbol", value_name="gene_effect")
     )
-    return long
 
 
 logger = logging.getLogger(__name__)
@@ -234,14 +233,12 @@ class ResidualTargets:
 
 
 def _validate_labels_schema(labels: pd.DataFrame) -> None:
-    """Raise ValueError if ``labels`` is missing any required column."""
     missing = [c for c in _REQUIRED_LABEL_COLUMNS if c not in labels.columns]
     if missing:
         raise ValueError(f"labels is missing required columns: {missing}")
 
 
 def _validate_train_lines(labels: pd.DataFrame, train_lines: Sequence[str]) -> None:
-    """Raise ValueError on empty, duplicate, or unknown train_lines."""
     if len(train_lines) == 0:
         raise ValueError("train_lines must not be empty")
     seen: set[str] = set()
@@ -266,30 +263,9 @@ def fit_gene_means(
     *,
     min_lines: int = 3,
 ) -> pd.Series:
-    """Estimate mu_hat_g from train lines only.
-
-    Computes the mean of ``gene_effect`` (skipping NaN) over rows whose
-    ``model_id`` is in ``train_lines``, grouped by ``gene_symbol``. Genes with
-    fewer than ``min_lines`` non-NaN train observations are dropped from the
-    result rather than kept with a noisy mean or zero-filled.
-
-    Args:
-        labels: Long-form DataFrame with columns model_id, gene_symbol,
-            gene_effect.
-        train_lines: Model IDs to fit the per-gene mean over. Must be
-            non-empty, duplicate-free, and a subset of labels["model_id"].
-        min_lines: Minimum number of non-NaN train observations a gene needs
-            to be retained. Genes below this threshold are dropped with a
-            logged warning naming the count.
-
-    Returns:
-        Series of mu_hat_g indexed by gene_symbol (name "gene_mean"),
-        containing only genes that met ``min_lines``.
-
-    Raises:
-        ValueError: If labels lacks required columns, or train_lines is
-            empty, contains duplicates, or contains a model_id absent from
-            labels.
+    """``mu_hat_g``: the NaN-skipping mean ``gene_effect`` over ``train_lines``
+    (non-empty, unique, all in ``labels``), sorted by gene. A gene with fewer than
+    ``min_lines`` non-NaN training rows is dropped (with a warning), never zero-filled.
     """
     _validate_labels_schema(labels)
     _validate_train_lines(labels, train_lines)
@@ -297,10 +273,7 @@ def fit_gene_means(
     train_rows = labels[labels["model_id"].isin(set(train_lines))]
     all_genes = pd.Index(sorted(labels["gene_symbol"].unique()), name="gene_symbol")
     grouped = train_rows.groupby("gene_symbol")["gene_effect"]
-    # Reindex over every gene seen anywhere in labels (not just genes with at
-    # least one train row) so genes absent from train_lines entirely — or
-    # present only with NaN gene_effect there — are also counted as dropped
-    # rather than silently omitted from the warning.
+    # Every gene of labels, so one without a non-NaN training row counts as dropped.
     counts = grouped.count().reindex(all_genes, fill_value=0)
     means = grouped.mean().reindex(all_genes)
 
@@ -324,29 +297,9 @@ def build_residual_targets(
     labels: pd.DataFrame,
     train_lines: Sequence[str],
 ) -> ResidualTargets:
-    """Attach a train-fit gene_mean and residual to every row, train and held-out alike.
-
-    ``gene_mean`` is fit via :func:`fit_gene_means` using only ``train_lines``
-    (with its default ``min_lines``), then broadcast onto every row of
-    ``labels``, including rows whose model_id is not in ``train_lines``. This
-    is the leakage-safe construction: a held-out line's own labels never
-    participate in estimating the mean subtracted from it.
-
-    Rows whose gene was dropped by the ``min_lines`` filter are removed from
-    the returned ``long`` entirely (their count is logged). Rows with NaN
-    gene_effect are retained with NaN residual — they are not filled.
-
-    Args:
-        labels: Long-form DataFrame with columns model_id, gene_symbol,
-            gene_effect.
-        train_lines: Model IDs to fit the per-gene mean over. See
-            :func:`fit_gene_means` for validation rules.
-
-    Returns:
-        A ResidualTargets bundle whose ``long`` frame has columns model_id,
-        gene_symbol, gene_effect, gene_mean, residual.
-    """
-    _validate_labels_schema(labels)
+    """Every row, train and held-out alike, centred on the :func:`fit_gene_means` fit
+    over ``train_lines`` only. Rows of a dropped gene are removed (with a warning);
+    a NaN ``gene_effect`` keeps a NaN residual."""
     gene_mean = fit_gene_means(labels, train_lines)
 
     n_rows_before = len(labels)
@@ -376,10 +329,3 @@ def build_residual_targets(
         n_genes=long["gene_symbol"].nunique(),
         n_lines=long["model_id"].nunique(),
     )
-
-
-__all__ = [
-    "ResidualTargets",
-    "fit_gene_means",
-    "build_residual_targets",
-]

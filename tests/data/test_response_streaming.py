@@ -14,9 +14,6 @@ from src.data.response import prefetched, read_xatlas_response_cells
 from tests.fixtures.xatlas import CAPPED, naive_xatlas_cells, write_xatlas
 
 
-# --- prefetched -----------------------------------------------------------
-
-
 def test_prefetched_keeps_order_and_bounds_reads_ahead() -> None:
     lock = threading.Lock()
     running, peak = 0, 0
@@ -33,9 +30,6 @@ def test_prefetched_keeps_order_and_bounds_reads_ahead() -> None:
 
     assert list(prefetched(read, range(9), threads=3)) == [i * 10 for i in range(9)]
     assert 1 < peak <= 3
-
-
-# --- read_xatlas_response_cells -------------------------------------------
 
 
 def _read(source: dict, caps: dict, seed: int):

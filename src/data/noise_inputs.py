@@ -1,19 +1,7 @@
-"""Per-line inputs of the noise diagnosis, computed from a line's raw basal cells.
-
-- **Cell draws.** A line's cells are ranked by ``sha256(ModelID|cell)`` (the order
-  of :func:`src.data.prepared.select_context_cells`); half A takes the even ranks,
-  half B the odd ones, and the ``n``-cell draw the first ``n``, so draws nest. A
-  draw needing at least as many cells as the line has is not made.
-- **Program scores.** Per cell, the mean log-normalised expression
-  (``log1p(x * T / L_cell)``, the prepared space) over a program's member genes,
-  minus the cell's mean over every gene of the scoring set. The scoring set is the
-  pseudo-bulk's genes (DepMap's protein-coding symbols), one set for every line;
-  a member outside it is not part of the program here. A gene the source does not
-  list counts as an unexpressed gene: some builders drop each line's zero-count
-  genes, and scoring over each source's own list would move identical cells by
-  build policy. The share of the scoring set and of each program the source lists
-  is reported beside the scores.
-"""
+"""Per-line inputs of the noise diagnosis from a line's raw basal cells: nested cell
+draws, and program scores (a cell's mean ``log1p(x T / L)`` over a program's members
+minus its mean over the scoring set). An unlisted gene scores as unexpressed: some
+builders drop a line's zero-count genes, and identical cells must not move with that."""
 
 from __future__ import annotations
 

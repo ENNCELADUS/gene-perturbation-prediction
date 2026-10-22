@@ -1,11 +1,6 @@
-"""Tx1-3B basal embedding cache: ``<ModelID>/{embeddings,hvg}.npy, obs.parquet``.
-
-The on-disk format is fixed so cached lines are never re-encoded. Tx1 reads
-raw UMI counts; ``hvg.npy`` holds raw counts in STATE's HVG order and exists
-only as part of that format (prepared inputs recompute log-space HVG
-expression from the raw source). The Tx1-3B forward pass is injected as an
-``EncoderFn`` so encoding is testable without a GPU.
-"""
+"""Tx1-3B basal embedding cache, ``<ModelID>/{embeddings,hvg}.npy, obs.parquet``: a
+fixed on-disk format, so cached lines are never re-encoded (``hvg.npy``, raw counts in
+STATE's HVG order, is kept only as part of it)."""
 
 from __future__ import annotations
 
@@ -170,16 +165,3 @@ def encode_lines(
         write_line_cache(cache_dir, model_id, encoder(adata), hvg.toarray(), adata.obs)
         encoded.append(model_id)
     return encoded
-
-
-__all__ = [
-    "EMBEDDING_WIDTH",
-    "EncoderFn",
-    "encode_lines",
-    "load_hvg_gene_order",
-    "load_line_cache",
-    "missing_lines",
-    "read_basal_source",
-    "tx1_cell_indices",
-    "write_line_cache",
-]

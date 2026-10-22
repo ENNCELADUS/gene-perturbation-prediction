@@ -1,8 +1,4 @@
-"""Tests for src.data.splits -- the 226-line GeneEffect fit/train guard.
-
-The guard's authority is the ``cell_line_geneeffect_226_split`` JSON
-(``train``/``val``/``test``/``unlabeled_train``), not the Phase-A role column.
-"""
+"""The split loader and the fit guard of ``src.data.splits``."""
 
 from __future__ import annotations
 
@@ -22,16 +18,12 @@ _SPLIT = FixedSplit(
 )
 
 
-# --- assert_fit_eligible: the hard guard -------------------------------------
-
-
 def test_assert_fit_eligible_accepts_labeled_train_member() -> None:
     assert_fit_eligible("ACH-TRAIN-1", _SPLIT)  # must not raise
 
 
 def test_assert_fit_eligible_rejects_unlabeled_train_member() -> None:
-    """PC9/HeLa are train members but have no GeneEffect label -- excluded
-    from every supervised fit (``docs/03-geneeffect-protocol.md`` §2)."""
+    """PC9 and HeLa are train members without a GeneEffect label."""
     with pytest.raises(ValueError, match="unlabeled_train"):
         assert_fit_eligible("ACH-PC9", _SPLIT)
 
@@ -51,9 +43,6 @@ def test_assert_fit_eligible_rejects_test_line_leakage() -> None:
 def test_assert_fit_eligible_rejects_unknown_line() -> None:
     with pytest.raises(ValueError, match="not a labeled train member"):
         assert_fit_eligible("ACH-NOT-IN-SPLIT", _SPLIT)
-
-
-# --- load_geneeffect_split: shape validation -----------------------------
 
 
 def _write_split(path: Path, payload: dict[str, object]) -> Path:
@@ -90,9 +79,7 @@ def test_load_geneeffect_split_defaults_unlabeled_train_to_empty(
 
 
 def test_load_geneeffect_split_against_the_real_tracked_file() -> None:
-    """The actual tracked split file must load and satisfy the documented shape
-    (171 train / 27 val / 28 test, PC9 + HeLa unlabeled) --
-    ``docs/03-geneeffect-protocol.md`` §2."""
+    """The tracked 226 split has its documented shape (protocol §2)."""
     split_path = (
         REPO_ROOT / "configs" / "benchmarks" / "cell_line_geneeffect_226_split.json"
     )

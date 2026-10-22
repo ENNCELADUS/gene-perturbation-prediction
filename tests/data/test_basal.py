@@ -1,4 +1,4 @@
-"""Raw-count helpers and readers in ``src.data.basal``."""
+"""Raw-count helpers in ``src.data.basal`` and the response readers built on them."""
 
 from __future__ import annotations
 
@@ -12,21 +12,20 @@ import pytest
 from scipy import sparse
 from scipy.sparse import csr_matrix
 
+from src.data.basal import (
+    align_columns,
+    assert_tx1_input_contract,
+    materialize_rows,
+    require_raw_counts,
+    symbol_column,
+)
 from src.data.response import (
     cap_indices_by_group,
     group_candidate_indices_by_label,
     perturbseq_control_library_sizes,
     read_perturbseq_response_cells,
+    read_xatlas_response_cells,
 )
-
-from src.data.basal import (
-    materialize_rows,
-    align_columns,
-    assert_tx1_input_contract,
-    require_raw_counts,
-    symbol_column,
-)
-from src.data.response import read_xatlas_response_cells
 
 
 def _perturbseq_h5ad(path: Path, labels: list[str], *, ensembl_index=False) -> Path:

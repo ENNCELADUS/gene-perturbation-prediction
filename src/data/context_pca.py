@@ -1,12 +1,5 @@
-"""Train-fit principal components of the Tx1 line context ``z_c``.
-
-``z_c`` (per-dimension mean and population variance of a line's Tx1 cell
-embeddings) is z-scored per dimension and projected on its leading principal
-components, all fitted on the labelled training lines. Every score is divided by
-one constant, the first component's score SD over those lines, so component one
-has unit variance and the tail keeps its smaller scale (eigen-scaled, not
-whitened). Numpy only: preparation workers import this module without torch.
-"""
+"""Train-fit, eigen-scaled principal components of the Tx1 line context ``z_c``
+(numpy only: preparation workers import this module without torch)."""
 
 from __future__ import annotations
 
@@ -95,12 +88,9 @@ class ContextPCA:
 
 
 def fit_context_pca(contexts: np.ndarray, n_components: int) -> ContextPCA:
-    """Fit on ``[n_lines, width]`` training-line contexts.
-
-    Raises:
-        ValueError: If ``n_components`` is not positive or exceeds the rank of
-            the z-scored training contexts.
-    """
+    """Fit on ``[n_lines, width]`` training-line contexts, z-scored per dimension;
+    every score is divided by the first component's score SD (not whitened).
+    ``n_components`` may not exceed the rank of the z-scored contexts."""
     contexts = np.asarray(contexts, dtype=np.float64)
     if contexts.ndim != 2 or contexts.shape[0] < 2:
         raise ValueError("context PCA needs a [n_lines >= 2, width] array")
@@ -127,6 +117,3 @@ def fit_context_pca(contexts: np.ndarray, n_components: int) -> ContextPCA:
     components *= signs[:, None]
     score_scale = float(singular[0] / np.sqrt(contexts.shape[0]))
     return ContextPCA(mean, scale, components, score_scale)
-
-
-__all__ = ["ContextPCA", "fit_context_pca", "pooled_context"]

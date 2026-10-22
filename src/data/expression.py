@@ -1,7 +1,5 @@
-"""STATE's expression space: whole-library normalize_total, then log1p.
-
-This reproduces arc-state's ``preprocess_train``.
-"""
+"""STATE's expression space, as arc-state's ``preprocess_train``: whole-library
+normalize_total, then log1p."""
 
 import numpy as np
 from scipy import sparse

@@ -1,4 +1,4 @@
-"""data / embeddings."""
+"""Precomputed ESM2 gene embeddings keyed by upper-case symbol."""
 
 from __future__ import annotations
 
@@ -33,15 +33,8 @@ def require_complete_esm_coverage(
 
 
 def load_esm2_embeddings(npz: Path) -> Esm2EmbeddingTable:
-    """Load a precomputed ESM2 ``.npz``; drop unresolved genes.
-
-    Args:
-        npz: Path to the ``.npz`` file with keys ``symbols``, ``vectors``,
-            and ``resolved``.
-
-    Returns:
-        An :class:`Esm2EmbeddingTable` containing only resolved genes.
-    """
+    """A precomputed ESM2 ``.npz`` (``symbols``, ``vectors``, ``resolved``) without
+    its unresolved genes."""
     with np.load(npz, allow_pickle=True) as payload:
         symbols = np.asarray(payload["symbols"], dtype=object)
         vectors = np.asarray(payload["vectors"], dtype=np.float32)
