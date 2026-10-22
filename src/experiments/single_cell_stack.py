@@ -37,7 +37,7 @@ from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.data.io import write_json, write_text
 from src.experiments.run_dir import bind, number
 from src.experiments.config import load_config, load_stack_config
-from src.eval.geneeffect import gain, score
+from src.eval.accuracy import gain, score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,

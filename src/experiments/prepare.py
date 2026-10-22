@@ -286,7 +286,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     import numpy as np
 
     from src.data.expression import median_library_size
-    from src.data.geneeffect import load_geneeffect_long
+    from src.data.labels import load_geneeffect_long
     from src.data.build.build_exp13_esm2_universe import (
         build_coverage_universe,
         restrict_coverage_universe_to_copy_prior,

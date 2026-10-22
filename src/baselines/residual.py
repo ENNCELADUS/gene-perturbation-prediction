@@ -10,7 +10,7 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
-from src.data.residual_target import ResidualTargets, fit_gene_means
+from src.data.labels import ResidualTargets, fit_gene_means
 from src.data.splits import FixedSplit, assert_fit_eligible
 
 _LOGGER = logging.getLogger(__name__)

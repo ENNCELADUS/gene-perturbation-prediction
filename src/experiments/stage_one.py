@@ -660,7 +660,7 @@ def wide_scores(
     definitions: Definitions,
     panel: Sequence[str],
 ) -> dict[str, Any]:
-    from src.eval.geneeffect import wide_accuracy
+    from src.eval.accuracy import wide_accuracy
 
     return wide_accuracy(prediction, truth, definitions, panel=panel)
 
@@ -849,7 +849,7 @@ def split_scores(
 ) -> dict[str, Any]:
     """A row's scores on one split; out of fold, the rank metrics are scored within
     each fold and averaged (``fold_accuracy``), since each fold's base differs."""
-    from src.eval.geneeffect import fold_accuracy
+    from src.eval.accuracy import fold_accuracy
 
     ladder = setup.ladder
     if split == "oof":
@@ -963,7 +963,7 @@ def _contrast(
     there), so the two macro means cover the same genes; within-gene R² is defined
     for every gene and covers them all."""
     from src.context_prior.noise import line_sums, r2_gain
-    from src.eval.geneeffect import (
+    from src.eval.accuracy import (
         BOOTSTRAP_SEED,
         defined_genes,
         gain,

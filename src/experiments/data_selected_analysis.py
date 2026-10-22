@@ -32,11 +32,11 @@ import pandas as pd
 from src.context_prior.gene_features import partner_index
 from src.context_prior.prior import PriorSpec, fit_prior, total
 from src.context_prior.ridge import SelectedFit
-from src.eval.geneeffect import aggregate_geneeffect
+from src.eval.accuracy import aggregate_geneeffect
 from src.data.io import write_json, write_text
 from src.experiments.run_dir import bind, number
 from src.experiments.config import load_prior_config
-from src.eval.geneeffect import gain, long_frame, score
+from src.eval.accuracy import gain, long_frame, score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,

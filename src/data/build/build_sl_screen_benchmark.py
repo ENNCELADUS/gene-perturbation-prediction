@@ -33,7 +33,7 @@ from src.data.extra_lines import (
     load_extra_lines,
     load_extra_single_cell_lines,
 )
-from src.data.geneeffect import parse_gene_symbol
+from src.data.labels import parse_gene_symbol
 from src.data.splits import FixedSplit, load_geneeffect_split
 
 #: Published tables under ``--raw``, as fetched (docs/data/sl-screen-benchmark.md).

@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 from torch.nn import functional as F
 
-from src.data.geneeffect import DEPENDENCY_THRESHOLD
+from src.data.labels import DEPENDENCY_THRESHOLD
 
 # Rows a selective gene needs in a batch before its Pearson term counts.
 MIN_PEARSON_ROWS = 3

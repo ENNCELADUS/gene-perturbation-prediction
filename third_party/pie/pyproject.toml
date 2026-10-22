@@ -57,7 +57,7 @@ dev = [
     "ruff==0.15.20",
 ]
 # Added for the stage-one GeneEffect runs (not PIE's): the project scorer
-# (src/eval/geneeffect.py) reads scikit-learn's average precision.
+# (src/eval/accuracy.py) reads scikit-learn's average precision.
 geneeffect = [
     "scikit-learn>=1.7,<2",
 ]

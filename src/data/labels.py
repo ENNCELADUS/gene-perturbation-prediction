@@ -1,58 +1,29 @@
-"""data / geneeffect."""
+"""DepMap GeneEffect labels by ModelID and what the training lines fit from them:
+gene means and residual targets, variable and selective genes, the residual SD.
+
+A held-out line's label never enters its own centring: ``fit_gene_means`` sees only
+training lines, and every row (held out or not) is centred on that fit."""
 
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
+
+import logging
 import numpy as np
 import pandas as pd
 
-SPLIT_COUNTS: Final = {"train": 171, "val": 27, "test": 28}
+from src.data.splits import FixedSplit
 
 
 DEPENDENCY_THRESHOLD: Final = -0.5
 
 
-UNLABELED_TRAIN: Final = ("ACH-000779", "ACH-001086")
-
-
-SPLIT_SCHEMA_VERSION: Final = "cell-line-geneeffect-226-split-v2"
-
-
 _GENE_EFFECT_COLUMN_RE: Final = re.compile(r"^(?P<symbol>\S+) \((?P<entrez>\d+)\)$")
-
-
-@dataclass(frozen=True)
-class Exp13Split:
-    """The fixed split authority, keyed only by DepMap ModelID."""
-
-    train: tuple[str, ...]
-    val: tuple[str, ...]
-    test: tuple[str, ...]
-    unlabeled_train: tuple[str, ...]
-
-    @property
-    def all_model_ids(self) -> tuple[str, ...]:
-        return self.train + self.val + self.test
-
-    @property
-    def supervised_train(self) -> tuple[str, ...]:
-        excluded = set(self.unlabeled_train)
-        return tuple(model_id for model_id in self.train if model_id not in excluded)
-
-    def to_manifest(self) -> dict[str, object]:
-        return {
-            "counts": {name: len(getattr(self, name)) for name in SPLIT_COUNTS},
-            "train": list(self.train),
-            "val": list(self.val),
-            "test": list(self.test),
-            "unlabeled_train": list(self.unlabeled_train),
-        }
 
 
 def fit_variable_gene_membership(
@@ -176,40 +147,6 @@ def _unique_strings(values: Sequence[object], label: str) -> tuple[str, ...]:
     return result
 
 
-def load_exp13_split(path: Path) -> Exp13Split:
-    """Load and strictly validate the tracked 171/27/28 split authority."""
-    payload = json.loads(Path(path).read_text())
-    if payload.get("schema_version") != SPLIT_SCHEMA_VERSION:
-        raise ValueError(f"split schema_version must be {SPLIT_SCHEMA_VERSION!r}")
-    required = {"train", "val", "test", "unlabeled_train"}
-    missing = sorted(required - set(payload))
-    if missing:
-        raise ValueError(f"split is missing keys: {missing}")
-    groups = {
-        name: _unique_strings(payload[name], f"split {name}") for name in required
-    }
-    for name, expected in SPLIT_COUNTS.items():
-        if len(groups[name]) != expected:
-            raise ValueError(
-                f"split {name} has {len(groups[name])} ModelIDs; expected {expected}"
-            )
-    membership = groups["train"] + groups["val"] + groups["test"]
-    if len(set(membership)) != sum(SPLIT_COUNTS.values()):
-        raise ValueError("ModelID membership overlaps across train/val/test")
-    if groups["unlabeled_train"] != UNLABELED_TRAIN:
-        raise ValueError(
-            "unlabeled_train must be exactly PC9 ACH-000779 and HeLa ACH-001086"
-        )
-    if not set(groups["unlabeled_train"]).issubset(groups["train"]):
-        raise ValueError("unlabeled_train contains a non-train ModelID")
-    return Exp13Split(
-        train=groups["train"],
-        val=groups["val"],
-        test=groups["test"],
-        unlabeled_train=groups["unlabeled_train"],
-    )
-
-
 def parse_gene_symbol(column: object) -> str:
     """Parse and normalize DepMap's ``SYMBOL (EntrezID)`` header."""
     text = str(column).strip()
@@ -219,7 +156,7 @@ def parse_gene_symbol(column: object) -> str:
     return match.group("symbol").upper()
 
 
-def load_geneeffect_long(path: Path, split: Exp13Split) -> pd.DataFrame:
+def load_geneeffect_long(path: Path, split: FixedSplit) -> pd.DataFrame:
     """Load CRISPRGeneEffect.csv into canonical ModelID/symbol long form."""
     wide = pd.read_csv(path, index_col=0)
     wide.index = wide.index.astype(str)
@@ -270,3 +207,180 @@ def load_geneeffect_long(path: Path, split: Exp13Split) -> pd.DataFrame:
         .melt(id_vars="model_id", var_name="gene_symbol", value_name="gene_effect")
     )
     return long
+
+
+logger = logging.getLogger(__name__)
+
+_REQUIRED_LABEL_COLUMNS = ("model_id", "gene_symbol", "gene_effect")
+
+
+@dataclass(frozen=True)
+class ResidualTargets:
+    """Long-form residual targets plus the train-fit gene means used to build them.
+
+    Attributes:
+        long: One row per surviving (model_id, gene_symbol) observation, with
+            columns model_id, gene_symbol, gene_effect, gene_mean, residual.
+        gene_mean: Train-fit ``mu_hat_g``, indexed by gene_symbol.
+        train_lines: The train line IDs used to fit ``gene_mean``, as given.
+        n_genes: Number of distinct genes present in ``long``.
+        n_lines: Number of distinct model_id values present in ``long``.
+    """
+
+    long: pd.DataFrame
+    gene_mean: pd.Series
+    train_lines: tuple[str, ...]
+    n_genes: int
+    n_lines: int
+
+
+def _validate_labels_schema(labels: pd.DataFrame) -> None:
+    """Raise ValueError if ``labels`` is missing any required column."""
+    missing = [c for c in _REQUIRED_LABEL_COLUMNS if c not in labels.columns]
+    if missing:
+        raise ValueError(f"labels is missing required columns: {missing}")
+
+
+def _validate_train_lines(labels: pd.DataFrame, train_lines: Sequence[str]) -> None:
+    """Raise ValueError on empty, duplicate, or unknown train_lines."""
+    if len(train_lines) == 0:
+        raise ValueError("train_lines must not be empty")
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for line in train_lines:
+        if line in seen:
+            duplicates.add(line)
+        seen.add(line)
+    if duplicates:
+        raise ValueError(f"train_lines contains duplicates: {sorted(duplicates)}")
+    known_lines = set(labels["model_id"])
+    unknown = sorted(set(train_lines) - known_lines)
+    if unknown:
+        raise ValueError(
+            f"train_lines contains model_id(s) absent from labels: {unknown}"
+        )
+
+
+def fit_gene_means(
+    labels: pd.DataFrame,
+    train_lines: Sequence[str],
+    *,
+    min_lines: int = 3,
+) -> pd.Series:
+    """Estimate mu_hat_g from train lines only.
+
+    Computes the mean of ``gene_effect`` (skipping NaN) over rows whose
+    ``model_id`` is in ``train_lines``, grouped by ``gene_symbol``. Genes with
+    fewer than ``min_lines`` non-NaN train observations are dropped from the
+    result rather than kept with a noisy mean or zero-filled.
+
+    Args:
+        labels: Long-form DataFrame with columns model_id, gene_symbol,
+            gene_effect.
+        train_lines: Model IDs to fit the per-gene mean over. Must be
+            non-empty, duplicate-free, and a subset of labels["model_id"].
+        min_lines: Minimum number of non-NaN train observations a gene needs
+            to be retained. Genes below this threshold are dropped with a
+            logged warning naming the count.
+
+    Returns:
+        Series of mu_hat_g indexed by gene_symbol (name "gene_mean"),
+        containing only genes that met ``min_lines``.
+
+    Raises:
+        ValueError: If labels lacks required columns, or train_lines is
+            empty, contains duplicates, or contains a model_id absent from
+            labels.
+    """
+    _validate_labels_schema(labels)
+    _validate_train_lines(labels, train_lines)
+
+    train_rows = labels[labels["model_id"].isin(set(train_lines))]
+    all_genes = pd.Index(sorted(labels["gene_symbol"].unique()), name="gene_symbol")
+    grouped = train_rows.groupby("gene_symbol")["gene_effect"]
+    # Reindex over every gene seen anywhere in labels (not just genes with at
+    # least one train row) so genes absent from train_lines entirely — or
+    # present only with NaN gene_effect there — are also counted as dropped
+    # rather than silently omitted from the warning.
+    counts = grouped.count().reindex(all_genes, fill_value=0)
+    means = grouped.mean().reindex(all_genes)
+
+    keep_mask = counts >= min_lines
+    n_dropped = int((~keep_mask).sum())
+    if n_dropped:
+        logger.warning(
+            "fit_gene_means: dropping %d gene(s) with fewer than min_lines=%d "
+            "non-NaN train observations",
+            n_dropped,
+            min_lines,
+        )
+
+    gene_mean = means[keep_mask].sort_index()
+    gene_mean.name = "gene_mean"
+    gene_mean.index.name = "gene_symbol"
+    return gene_mean
+
+
+def build_residual_targets(
+    labels: pd.DataFrame,
+    train_lines: Sequence[str],
+) -> ResidualTargets:
+    """Attach a train-fit gene_mean and residual to every row, train and held-out alike.
+
+    ``gene_mean`` is fit via :func:`fit_gene_means` using only ``train_lines``
+    (with its default ``min_lines``), then broadcast onto every row of
+    ``labels``, including rows whose model_id is not in ``train_lines``. This
+    is the leakage-safe construction: a held-out line's own labels never
+    participate in estimating the mean subtracted from it.
+
+    Rows whose gene was dropped by the ``min_lines`` filter are removed from
+    the returned ``long`` entirely (their count is logged). Rows with NaN
+    gene_effect are retained with NaN residual — they are not filled.
+
+    Args:
+        labels: Long-form DataFrame with columns model_id, gene_symbol,
+            gene_effect.
+        train_lines: Model IDs to fit the per-gene mean over. See
+            :func:`fit_gene_means` for validation rules.
+
+    Returns:
+        A ResidualTargets bundle whose ``long`` frame has columns model_id,
+        gene_symbol, gene_effect, gene_mean, residual.
+    """
+    _validate_labels_schema(labels)
+    gene_mean = fit_gene_means(labels, train_lines)
+
+    n_rows_before = len(labels)
+    long = labels.merge(
+        gene_mean.rename("gene_mean"),
+        left_on="gene_symbol",
+        right_index=True,
+        how="inner",
+    )
+    n_dropped_rows = n_rows_before - len(long)
+    if n_dropped_rows:
+        logger.warning(
+            "build_residual_targets: dropped %d row(s) whose gene did not "
+            "survive the min_lines filter",
+            n_dropped_rows,
+        )
+
+    long = long.copy()
+    long["residual"] = long["gene_effect"] - long["gene_mean"]
+    long = long[["model_id", "gene_symbol", "gene_effect", "gene_mean", "residual"]]
+    long = long.reset_index(drop=True)
+
+    return ResidualTargets(
+        long=long,
+        gene_mean=gene_mean,
+        train_lines=tuple(train_lines),
+        n_genes=long["gene_symbol"].nunique(),
+        n_lines=long["model_id"].nunique(),
+    )
+
+
+__all__ = [
+    "ResidualTargets",
+    "fit_gene_means",
+    "build_residual_targets",
+]

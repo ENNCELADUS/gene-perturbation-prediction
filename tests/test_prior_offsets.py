@@ -146,7 +146,7 @@ def test_dataset_rows_carry_the_offset_in_residual_units():
 def test_training_loss_and_evaluation_score_the_stack(tmp_path):
     from accelerate import Accelerator
 
-    from src.eval.geneeffect import evaluate_model
+    from src.eval.accuracy import evaluate_model
     from src.model.initialization import build_joint_model
     from src.model.losses import geneeffect_loss
     from src.model.normalization import fit_startup_standardizer

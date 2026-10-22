@@ -7,7 +7,7 @@ from pathlib import Path
 
 def evaluate_model(model, inputs, *, split):
     import pandas as pd
-    from src.eval.geneeffect import EvalResult, aggregate_geneeffect
+    from src.eval.accuracy import EvalResult, aggregate_geneeffect
 
     if split not in {"train", "val", "test"}:
         raise ValueError("split must be train, val or test")

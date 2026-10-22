@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.data.residual_target import (
+from src.data.labels import (
     ResidualTargets,
     build_residual_targets,
     fit_gene_means,

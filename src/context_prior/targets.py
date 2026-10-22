@@ -7,12 +7,12 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from src.data.geneeffect import (
+from src.data.labels import (
     fit_residual_scale,
     fit_selective_genes,
     fit_variable_gene_membership,
 )
-from src.data.residual_target import fit_gene_means
+from src.data.labels import fit_gene_means
 from src.data.splits import FixedSplit, assert_fit_eligible
 
 

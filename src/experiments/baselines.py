@@ -25,7 +25,7 @@ def run_baselines(config, *, split, out_dir, inputs=None):
     ladder. ``inputs`` replaces ``load_inputs`` (synthetic tests)."""
     import numpy as np
     from src.baselines.residual import run_r1_ladder
-    from src.eval.geneeffect import aggregate_geneeffect
+    from src.eval.accuracy import aggregate_geneeffect
     from src.data.splits import FixedSplit
 
     if split not in {"val", "test"}:

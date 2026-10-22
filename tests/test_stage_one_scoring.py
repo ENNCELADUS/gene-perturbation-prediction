@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from src.context_prior.targets import Definitions
-from src.eval.geneeffect import (
+from src.eval.accuracy import (
     defined_genes,
     fold_accuracy,
     gain,

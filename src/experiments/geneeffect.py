@@ -23,8 +23,8 @@ def mixed_precision() -> str:
 
 if TYPE_CHECKING:
     from src.data.prepared import PreparedInputs
-    from src.eval.geneeffect import EvalResult
-    from src.model.geneeffect import GeneEffectE2EModel
+    from src.eval.accuracy import EvalResult
+    from src.model.joint import GeneEffectE2EModel
 
 
 def restore_model(
@@ -123,7 +123,7 @@ def evaluate_checkpoint(
     """
     from accelerate import Accelerator
 
-    from src.eval.geneeffect import evaluate_model
+    from src.eval.accuracy import evaluate_model
     from src.training.checkpoint import load_checkpoint
 
     saved = load_checkpoint(Path(checkpoint))

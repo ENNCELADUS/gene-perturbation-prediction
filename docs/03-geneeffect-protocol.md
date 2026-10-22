@@ -321,7 +321,7 @@ $$
 Residuals are in scoring units (centred on $\mu_g$, divided by $\sigma_g$), so the gene mean, which a context-blind
 model already knows, is removed: in each line the metric asks which genes that line needs more or less than usual.
 It is `val_line_spearman`, the stage-one selector (§16, adopted 2026-10-21); contrasts resample lines in a paired
-bootstrap over the lines defined on both sides (`src/eval/geneeffect.py` `line_spearmans`, `line_spearman_gain`).
+bootstrap over the lines defined on both sides (`src/eval/accuracy.py` `line_spearmans`, `line_spearman_gain`).
 Out of fold it is pooled over every line, since each line is compared with its own truth.
 
 **Why this metric.** Stage two is scored one held-out line at a time (blueprint §3.7, Task B: AUPRC over the line's
@@ -1082,7 +1082,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   0.073 for `film_dH`).
   The 180 GeneEffect genes outside the decode panel predict the base.
 - **Scoring.** The scorer receives `(m_g − μ_g) / σ_g + z` and re-centres on the §6 377-line mean `μ_g`
-  (`src/eval/geneeffect.py` `wide_accuracy`): the per-line residual Spearman over the 4,323 selective genes (§6, the
+  (`src/eval/accuracy.py` `wide_accuracy`): the per-line residual Spearman over the 4,323 selective genes (§6, the
   selector); selective Spearman (4,323 genes) and, beside it, over the 4,269 in the panel; within-gene R² pooled over the selective genes (§14); AUPR lift, residual Pearson, per-line absolute Pearson,
   RMSE; the calibration slope (`src/eval/metrics.py`: the measured residual on the predicted, pooled over the selective
   genes with each gene's own offset removed; undefined for a prediction constant within every gene).
