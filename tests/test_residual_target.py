@@ -10,7 +10,6 @@ from src.data.residual_target import (
     ResidualTargets,
     build_residual_targets,
     fit_gene_means,
-    to_matrix,
 )
 
 
@@ -177,31 +176,3 @@ def test_build_residual_targets_returns_expected_dataclass_shape() -> None:
     assert targets.gene_mean.name == "gene_mean"
 
 
-def test_to_matrix_orientation_and_sorted_axes() -> None:
-    labels = _labels(
-        [
-            {"model_id": "L2", "gene_symbol": "GENE_B", "gene_effect": 4.0},
-            {"model_id": "L1", "gene_symbol": "GENE_B", "gene_effect": 3.0},
-            {"model_id": "L2", "gene_symbol": "GENE_A", "gene_effect": 2.0},
-            {"model_id": "L1", "gene_symbol": "GENE_A", "gene_effect": 1.0},
-        ]
-    )
-    matrix = to_matrix(labels, "gene_effect")
-
-    assert matrix.index.tolist() == ["GENE_A", "GENE_B"]
-    assert matrix.columns.tolist() == ["L1", "L2"]
-    assert matrix.loc["GENE_A", "L1"] == 1.0
-    assert matrix.loc["GENE_A", "L2"] == 2.0
-    assert matrix.loc["GENE_B", "L1"] == 3.0
-    assert matrix.loc["GENE_B", "L2"] == 4.0
-
-
-def test_to_matrix_raises_on_duplicate_gene_line_pair() -> None:
-    labels = _labels(
-        [
-            {"model_id": "L1", "gene_symbol": "GENE_A", "gene_effect": 1.0},
-            {"model_id": "L1", "gene_symbol": "GENE_A", "gene_effect": 999.0},
-        ]
-    )
-    with pytest.raises(ValueError, match="duplicate"):
-        to_matrix(labels, "gene_effect")

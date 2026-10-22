@@ -138,19 +138,6 @@ def symbols_from_csv(csv_path: Path, symbol_columns: tuple[str, ...]) -> list[st
     return sorted(symbols)
 
 
-def universe_symbols(benchmark_csv: Path) -> list[str]:
-    """Return sorted upper-case gene symbols from both columns of the benchmark CSV.
-
-    Args:
-        benchmark_csv: Path to the SL benchmark CSV with ``gene_a_symbol``
-            and ``gene_b_symbol`` columns.
-
-    Returns:
-        Sorted list of unique upper-case gene symbols.
-    """
-    return symbols_from_csv(benchmark_csv, ("gene_a_symbol", "gene_b_symbol"))
-
-
 def fetch_sequence(
     symbol: str, identifier: str | None = None
 ) -> UniProtSequenceRecord | None:

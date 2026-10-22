@@ -44,6 +44,12 @@ def test_per_cell_inputs_average_to_pies_input():
         )
 
 
+def _states(q, cells, labels, minimum):
+    """A line's states after merging the small ones, as the telemetry builds them."""
+    q, labels, merged = cs.merge_small(q, cells, labels, minimum)
+    return cs.state_inputs(q, cells, labels, merged)
+
+
 def test_state_masses_times_inputs_reproduce_the_line_input_after_merging():
     cells, pie_input = _line()
     rng = np.random.default_rng(2)
@@ -53,14 +59,14 @@ def test_state_masses_times_inputs_reproduce_the_line_input_after_merging():
     q[0, 3] = 0.6  # a state of effective count near one
     q[0, :3] = 0.4 / 3
     assert cs.effective_count(q)[3] < 10
-    state = cs.state_masses_and_inputs(q, cells, ["a", "b", "c", "rare"], 10.0)
+    state = _states(q, cells, ["a", "b", "c", "rare"], 10.0)
     assert "rare" not in state.labels
     assert any("rare" in merged for merged in state.merged)
     assert np.isclose(state.mass.sum(), 1.0)
     assert (state.effective >= 10).all()
     assert np.allclose(state.mass @ state.inputs, pie_input, atol=1e-6)
     assert np.allclose(state.inputs[:, 10:], 0.7)  # unlisted genes keep the fill
-    one = cs.state_masses_and_inputs(q, cells, ["a", "b", "c", "rare"], 1e9)
+    one = _states(q, cells, ["a", "b", "c", "rare"], 1e9)
     assert len(one.labels) == 1 and np.allclose(one.inputs[0], pie_input, atol=1e-6)
 
 
@@ -72,7 +78,7 @@ def test_permuted_memberships_keep_mass_effective_count_and_line_input():
     assert np.allclose(permuted.sum(axis=0), q.sum(axis=0))
     assert np.allclose(cs.effective_count(permuted), cs.effective_count(q))
     assert np.allclose(permuted.T @ permuted, q.T @ q)  # overlap kept
-    state = cs.state_masses_and_inputs(permuted, cells, ["a", "b", "c"], 1.0)
+    state = _states(permuted, cells, ["a", "b", "c"], 1.0)
     assert np.allclose(state.mass @ state.inputs, pie_input, atol=1e-6)
     again = cs.permute_memberships(q, "ACH-1", "hvg_k4", 0)
     assert np.array_equal(again, permuted)

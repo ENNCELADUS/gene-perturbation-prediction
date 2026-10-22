@@ -198,46 +198,8 @@ def build_residual_targets(
     )
 
 
-def to_matrix(labels: pd.DataFrame, value_col: str) -> pd.DataFrame:
-    """Pivot a long-form frame to wide, genes x lines.
-
-    Args:
-        labels: Long-form DataFrame containing at least model_id,
-            gene_symbol, and ``value_col``.
-        value_col: Name of the column to place in the matrix cells.
-
-    Returns:
-        DataFrame indexed by gene_symbol (sorted) with columns model_id
-        (sorted), containing ``value_col`` values.
-
-    Raises:
-        ValueError: If ``labels`` contains duplicate (gene_symbol, model_id)
-            pairs, or is missing model_id, gene_symbol, or ``value_col``.
-    """
-    required = {"model_id", "gene_symbol", value_col}
-    missing = sorted(required - set(labels.columns))
-    if missing:
-        raise ValueError(f"labels is missing required columns: {missing}")
-
-    key = labels[["gene_symbol", "model_id"]]
-    duplicated = key.duplicated(keep=False)
-    if duplicated.any():
-        dup_pairs = key[duplicated].drop_duplicates().itertuples(index=False, name=None)
-        raise ValueError(
-            f"labels contains duplicate (gene_symbol, model_id) pairs: "
-            f"{sorted(dup_pairs)[:10]}"
-        )
-
-    matrix = labels.pivot(index="gene_symbol", columns="model_id", values=value_col)
-    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
-    matrix.columns.name = "model_id"
-    matrix.index.name = "gene_symbol"
-    return matrix
-
-
 __all__ = [
     "ResidualTargets",
     "fit_gene_means",
     "build_residual_targets",
-    "to_matrix",
 ]

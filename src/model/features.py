@@ -17,14 +17,6 @@ HVG_WIDTH = 2_000
 DELTA_WIDTH = 2 * HVG_WIDTH
 PROJECTION_WIDTH = 256
 PROJECTION_SEED = 0
-SUMMARY_FIELDS = (
-    "energy_distance",
-    "mean_predicted_population_variance",
-    "fraction_cells_beyond_basal_p95",
-    "mean_shift_l2",
-    "mean_cosine",
-    "own_gene_mean_shift",
-)
 
 
 class FixedSparseProjection:

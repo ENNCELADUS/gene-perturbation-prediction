@@ -17,53 +17,11 @@ from src.model.head import (
     SwiGLU,
     masked_blocks,
 )
-from src.eval.metrics import macro_per_gene_spearman
 
 
 def test_formal_feature_dimension_defaults() -> None:
     dims = GeneEffectFeatureDims()
     assert dims == GeneEffectFeatureDims(delta_proj=256, s=6, q_sc=3, e_g=1280, z_c=128)
-
-
-def test_macro_per_gene_spearman_perfect_correlation() -> None:
-    n_genes, n_contexts = 5, 6
-    target = torch.randn(n_genes, n_contexts) + torch.linspace(
-        -2, 2, n_contexts
-    ).unsqueeze(0)
-    pred = target.clone()
-    result = macro_per_gene_spearman(pred, target)
-    assert result.n_undefined == 0
-    assert result.n_scored == n_genes
-    assert result.macro == pytest.approx(1.0, abs=1e-6)
-    assert isinstance(result.per_gene, pd.Series)
-
-
-def test_macro_per_gene_spearman_undefined_for_constant_prediction() -> None:
-    """A context-blind predictor (same value for every context, e.g. a raw
-    gene-mean baseline) is undefined on this axis -- never scored as 0."""
-    n_genes, n_contexts = 5, 6
-    target = torch.randn(n_genes, n_contexts) + torch.linspace(
-        -2, 2, n_contexts
-    ).unsqueeze(0)
-    pred = torch.zeros(n_genes, n_contexts)
-    result = macro_per_gene_spearman(pred, target)
-    assert result.n_scored == 0
-    assert result.n_undefined == n_genes
-    assert math.isnan(result.macro)
-    assert result.per_gene.isna().all()
-
-
-def test_macro_per_gene_spearman_uses_gene_ids_as_index() -> None:
-    pred = torch.randn(3, 5)
-    target = torch.randn(3, 5) + torch.linspace(-1, 1, 5).unsqueeze(0)
-    gene_ids = ["TP53", "EGFR", "MYC"]
-    result = macro_per_gene_spearman(pred, target, gene_ids=gene_ids)
-    assert sorted(result.per_gene.index) == sorted(gene_ids)
-
-
-def test_macro_per_gene_spearman_rejects_wrong_length_gene_ids() -> None:
-    with pytest.raises(ValueError):
-        macro_per_gene_spearman(torch.randn(3, 4), torch.randn(3, 4), gene_ids=["A"])
 
 
 N_GENES = 4
