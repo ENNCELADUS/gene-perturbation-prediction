@@ -22,16 +22,11 @@ import torch
 from transformers import EsmModel, EsmTokenizer
 
 from src.data.embeddings import Esm2EmbeddingTable, require_complete_esm_coverage
-from src.data.esm2_provenance import (
-    SCHEMA_VERSION as PROVENANCE_SCHEMA_VERSION,
-)
-from src.data.esm2_provenance import (
-    build_embedding_artifact_record,
-)
 from src.data.io import write_text
 
 logger = logging.getLogger("precompute_esm2")
 UNIPROT_URL = "https://rest.uniprot.org/uniprotkb/search"
+PROVENANCE_SCHEMA_VERSION = "esm2-embedding-provenance-v1"
 SEQUENCE_CACHE_SCHEMA = "uniprot-sequence-cache-v2"
 UNIPROT_MAPPING_SCHEMA = "esm2-uniprot-mapping-v1"
 ISOFORM_POLICY = "canonical_reviewed_top_hit"
@@ -440,6 +435,48 @@ def write_embedding_with_provenance(
     }
     write_text(provenance_output, json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return manifest
+
+
+def build_embedding_artifact_record(path: str | Path) -> dict[str, object]:
+    """Describe the arrays stored in an ESM-2 NPZ."""
+    path = Path(path)
+    try:
+        with np.load(path, allow_pickle=True) as payload:
+            if set(payload.files) != {"symbols", "vectors", "resolved"}:
+                raise ValueError("ESM2 NPZ must contain symbols, vectors, and resolved")
+            raw_symbols = payload["symbols"]
+            vectors = payload["vectors"]
+            resolved = payload["resolved"]
+    except Exception as exc:
+        raise ValueError(f"invalid ESM2 NPZ {path}: {exc}") from exc
+    if raw_symbols.ndim != 1:
+        raise ValueError("ESM2 symbols must be one-dimensional")
+    symbols = tuple(str(value) for value in raw_symbols.tolist())
+    if any(not symbol or symbol != symbol.upper() for symbol in symbols):
+        raise ValueError("ESM2 symbols must be nonempty uppercase strings")
+    if len(set(symbols)) != len(symbols):
+        raise ValueError("ESM2 symbols must be unique")
+    if vectors.ndim != 2 or vectors.shape[0] != len(symbols):
+        raise ValueError("ESM2 vectors must be rows aligned to symbols")
+    if resolved.dtype != np.dtype(bool) or resolved.shape != (len(symbols),):
+        raise ValueError("ESM2 resolved must be a bool vector aligned to symbols")
+    if not np.isfinite(vectors).all():
+        raise ValueError("ESM2 vectors must be finite")
+    resolved_symbols = [
+        symbol
+        for symbol, is_resolved in zip(symbols, resolved, strict=True)
+        if bool(is_resolved)
+    ]
+    return {
+        "path": str(path),
+        "symbols": list(symbols),
+        "row_count": len(symbols),
+        "vector_width": int(vectors.shape[1]),
+        "vectors_dtype": vectors.dtype.str,
+        "resolved_dtype": resolved.dtype.str,
+        "resolved_count": int(resolved.sum()),
+        "resolved_symbols": resolved_symbols,
+    }
 
 
 def main() -> None:
