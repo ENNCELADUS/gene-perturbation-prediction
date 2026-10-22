@@ -1,6 +1,6 @@
 """One automatic run: preparation through validation evaluation, then summary.md.
 
-``python -m src.experiments.all CONFIG [--run-id ID] [--gpus 0,1,2,3]`` writes
+``python -m src.experiments.joint.all CONFIG [--run-id ID] [--gpus 0,1,2,3]`` writes
 ``<output_root>/<run id>/{comparison/, train/, evaluation/val/, baselines/val/,
 readout/, logs/, summary.md}``. Every step is skipped when its output exists, so
 rerunning with the same run id resumes. The test split is never evaluated here.
@@ -33,7 +33,7 @@ import time
 
 from src.data.io import read_json
 from src.experiments.run_dir import number
-from src.experiments.config import PRECISION, load_config
+from src.experiments.joint.config import PRECISION, load_config
 
 LINE_NAMES = {
     "ACH-000551": "K562",
@@ -221,7 +221,7 @@ def comparison_argv(config_path: Path, run: Path, *mode: str) -> tuple[str, ...]
     return (
         sys.executable,
         "-m",
-        "src.experiments.response_comparison",
+        "src.experiments.joint.response_comparison",
         "--config",
         str(config_path),
         "--out-dir",
@@ -249,7 +249,7 @@ def training_argv(config_path: Path, run: Path, processes: int) -> tuple[str, ..
     return (
         *launch,
         "--module",
-        "src.train",
+        "src.experiments.joint.train",
         "--config",
         str(config_path),
         "--run-dir",
@@ -288,8 +288,8 @@ def comparison_and_training(
     training on all of them, then one trained comparison job per GPU at a time.
     Without GPUs every step runs in this process on the CPU, in the same order.
     """
-    from src.experiments import response_comparison
-    from src.experiments.geneeffect import run_training
+    from src.experiments.joint import response_comparison
+    from src.experiments.joint.train import run_training
 
     comparison, train, logs = run / "comparison", run / "train", run / "logs"
     compared = (comparison / "verdicts.json").is_file()
@@ -335,9 +335,9 @@ def comparison_and_training(
 
 
 def _validation(config: dict, run: Path, device: str) -> None:
-    from src.experiments.baselines import run_baselines
-    from src.experiments.geneeffect import evaluate_checkpoint, export_evaluation
-    from src.experiments.readout import run_readout
+    from src.experiments.joint.baselines import run_baselines
+    from src.experiments.joint.evaluate import evaluate_checkpoint, export_evaluation
+    from src.experiments.joint.readout import run_readout
 
     best = run / "train" / "best.pt"
     evaluation = run / "evaluation" / "val"
@@ -390,7 +390,7 @@ def _interval(pooled: dict) -> str:
 def _comparison_section(comparison: Path) -> list[str]:
     import pandas as pd
 
-    from src.experiments.response_comparison import VERDICTS
+    from src.experiments.joint.response_comparison import VERDICTS
 
     table = pd.read_csv(comparison / "comparison.csv")
     verdicts = read_json(comparison / "verdicts.json")

@@ -121,11 +121,8 @@ def load_setup(ladder_config_path: str | Path) -> Setup:
     from src.data.depmap import read_depmap_matrix
     from src.data.extra_lines import load_bulk_lines
     from src.data.splits import load_geneeffect_split
-    from src.experiments.config import (
-        load_config,
-        load_ladder_config,
-        load_prior_config,
-    )
+    from src.experiments.joint.config import load_config
+    from src.experiments.config import load_ladder_config, load_prior_config
 
     ladder_config = load_ladder_config(Path(ladder_config_path))
     prior = load_prior_config(Path(ladder_config["prior_config"]))

@@ -43,7 +43,8 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
     ``load_inputs`` (synthetic tests)."""
     from src.data.datasets import DependencyDataset
     from src.data.readout_cache import write_feature_cache
-    from src.experiments.geneeffect import mixed_precision, restore_model
+    from src.experiments.joint.config import mixed_precision
+    from src.model.initialization import restore_joint_model
     from src.experiments.run_dir import git_revision
     from src.training.checkpoint import load_checkpoint
 
@@ -55,7 +56,7 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
         inputs = load_inputs(
             saved["config"], preprocessing=saved["preprocessing"], include_test=False
         )
-    model = restore_model(saved, inputs).to(device)
+    model = restore_joint_model(saved, inputs).to(device)
     datasets = {
         split: DependencyDataset(inputs, split, device=device)
         for split in ("train", "val")

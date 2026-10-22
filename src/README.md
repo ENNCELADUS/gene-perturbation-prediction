@@ -21,25 +21,25 @@ construction uses `model.initialization` for the released STATE weights or a sav
 checkpoint's architecture; Tx1 loader and encoder construction live in `model.tx1`.
 
 The standard route is one command, `hpc/run.sh all CONFIG`, which runs
-`src.experiments.all`: preparation, the untrained response-model comparison arms,
+`src.experiments.joint.all`: preparation, the untrained response-model comparison arms,
 joint training on every chosen GPU, the trained comparison arms one job per GPU, then
 validation evaluation, baselines and the readout head, then `summary.md`. [The HPC guide](../hpc/README.md) lists launch commands. One variant of the
 GeneEffect revision runs through `hpc/run.sh revision CONFIG`, which runs
-`src.experiments.revision`: training, validation then test evaluation with baselines for one config, then
+`src.experiments.joint.revision`: training, validation then test evaluation with baselines for one config, then
 `summary.md` and `revision.json`, without the response comparison or the readout head. The steps are
 also modules:
 
 ```bash
-uv run python -m src.experiments.all configs/geneeffect_joint.yaml --run-id <id> [--gpus 0,1]
-uv run python -m src.experiments.revision configs/revision/frozen_huber.yaml --run-id <id> [--gpus 0,1]
+uv run python -m src.experiments.joint.all configs/geneeffect_joint.yaml --run-id <id> [--gpus 0,1]
+uv run python -m src.experiments.joint.revision configs/revision/frozen_huber.yaml --run-id <id> [--gpus 0,1]
 uv run python -m src.experiments.prepare configs/geneeffect_joint.yaml
-uv run python -m src.experiments.response_comparison --config configs/geneeffect_joint.yaml --out-dir <dir>
-uv run python -m src.train --config configs/geneeffect_joint.yaml --run-dir <dir>
-uv run python -m src.evaluate --checkpoint <best.pt> --split val
-uv run python -m src.experiments.baselines --config configs/geneeffect_joint.yaml --split val --out-dir <dir>
-uv run python -m src.experiments.readout --help
+uv run python -m src.experiments.joint.response_comparison --config configs/geneeffect_joint.yaml --out-dir <dir>
+uv run python -m src.experiments.joint.train --config configs/geneeffect_joint.yaml --run-dir <dir>
+uv run python -m src.experiments.joint.evaluate --checkpoint <best.pt> --split val
+uv run python -m src.experiments.joint.baselines --config configs/geneeffect_joint.yaml --split val --out-dir <dir>
+uv run python -m src.experiments.joint.readout --help
 uv run python -m src.experiments.prior_export configs/context_prior/default_prior.yaml --run-id <id>
-uv run python -m src.experiments.compare_runs <run A> <run B> --split val
+uv run python -m src.experiments.joint.compare_runs <run A> <run B> --split val
 ```
 
 Preparation writes fixed inputs once, in STATE's log expression space (Tx1 alone reads

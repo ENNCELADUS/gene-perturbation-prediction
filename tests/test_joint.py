@@ -27,8 +27,8 @@ from src.data.prepared import PreparedInputs, PreparedLine  # noqa: E402
 from src.data.q_sc import QScFeatures  # noqa: E402
 from src.data.splits import FixedSplit  # noqa: E402
 from src.eval.accuracy import aggregate_geneeffect, evaluate_model  # noqa: E402
-from src.experiments import geneeffect  # noqa: E402
-from src.experiments.config import load_config, validate_config  # noqa: E402
+from src.experiments.joint import train as geneeffect  # noqa: E402
+from src.experiments.joint.config import load_config, validate_config  # noqa: E402
 from src.model.initialization import (  # noqa: E402
     build_joint_model,
     warm_start_state_dict,
@@ -439,7 +439,7 @@ def test_cpu_single_process_training_writes_best_last_and_done(
 ):
     import yaml
 
-    from src import evaluate, train
+    from src.experiments.joint import evaluate, train
 
     config = make_config(tmp_path)
     inputs = make_inputs()

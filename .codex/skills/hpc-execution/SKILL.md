@@ -87,7 +87,7 @@ comparison jobs one per GPU at a time. Rerunning with the same run id resumes an
 finished steps, and refuses a changed config; unfinished training resumes only on the GPU
 count it started on. Subprocess logs are under `outputs/geneeffect_joint/<id>/logs/`.
 SIGINT or SIGTERM to `all` terminates its subprocesses; after a SIGKILL, check for orphaned
-`src.train`/`response_comparison` processes before relaunching.
+`src.experiments.joint.train_cli`/`response_comparison` processes before relaunching.
 
 Preparation is the only step that reads raw data; training opens caches and never
 rebuilds them. Testing is explicit, restores fitted preprocessing from the checkpoint and

@@ -8,8 +8,8 @@ pytest.importorskip("accelerate")
 pytest.importorskip("state.tx.models.state_transition")
 
 import test_joint  # noqa: E402
-from src.experiments import readout  # noqa: E402
-from src.experiments.geneeffect import run_training  # noqa: E402
+from src.experiments.joint import readout  # noqa: E402
+from src.experiments.joint.train import run_training  # noqa: E402
 
 
 @pytest.fixture

@@ -56,8 +56,8 @@ hpc/run.sh prior-noise CONFIG --run-id ID [--sections A,B]  # noise diagnosis ag
 hpc/run.sh pie-reproduce --run-id ID                        # PIE's released checkpoints re-scored by the vendored PIE in .venv-pie (hpc/pie/setup.sh), 1 GPU
 hpc/run.sh stage-one CONFIG [--fold K]                      # one stage-one run (configs/stage_one/), .venv-pie, 1 GPU; stage-one-queue --gpus ... CONFIG... runs many
 hpc/run.sh stage-one-report CONFIG                          # a stage-one report (results.md); stage-one-prior CONFIG --run-id ID: the frame-refitted prior, CPU
-uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
-uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
+uv run python -m src.experiments.joint.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
+uv run python -m src.experiments.joint.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
 `all` and `revision` skip every step whose output exists, so rerunning with the same run id resumes (training from `train/last.pt`). Every
@@ -106,7 +106,7 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   an existing root grows by the lines it lacks, in the recorded space (the split path is not a preparation setting). The
   extras' h5ad are built from public deposits by `src/data/build/build_extra_single_cell_sources.py`, after
   `src/data/build/recount_extra_single_cell_sources.py` re-counts the SRA reads of deposits without raw counts.
-- **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`) fits on the split's 377
+- **Training** (`src/experiments/joint/train.py:run_training` → `src/training/trainer.py`) fits on the split's 377
   labelled training lines, as do the gene means, selective genes, residual SD and context PCA. STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
   the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the
@@ -116,10 +116,10 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   has 0). `train.state_mode` freezes STATE at the released weights or trains it; no STATE is `head_blocks` `use_delta_proj` and
   `use_s` both false, which skips STATE and the adapter. Warmup then cosine learning rate. `best.pt` and early stopping use
   **only** `val_selective_spearman` (higher wins), over the selective genes fitted on training lines.
-- **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing (gene means, variable and
+- **Evaluation** (`src/experiments/joint/train.py:evaluate_checkpoint`) restores fitted preprocessing (gene means, variable and
   selective genes, residual SD, context PCA) from the checkpoint;
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
-  `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
+  `src/experiments/joint/all.py` chains every step and writes `summary.md`; `src/experiments/joint/revision.py` chains training, validation and test
   evaluation and baselines for one config.
 - `configs/benchmarks/cell_line_geneeffect_split.json` (the **final split**, [card](docs/data/cell-line-geneeffect-split.md)) is
   the sole membership authority: 379 single-cell training lines (the 226's 171, PC9 and HeLa unlabelled, then the 208

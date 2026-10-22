@@ -57,7 +57,7 @@ def evaluate_model(model, inputs, *, split):
 
 
 def _export(model, inputs, run_dir, split):
-    from src.experiments.geneeffect import export_evaluation
+    from src.experiments.joint.evaluate import export_evaluation
     from src.experiments.run_dir import set_status
 
     set_status(run_dir, "evaluation", "running", split=split)
@@ -80,7 +80,7 @@ def fit_baseline(config_path: Path, out_dir: Path) -> Path:
     import sklearn
     from src.baselines.tx1_gmm import Tx1GMMRidge
     from src.data.prepared import load_inputs
-    from src.experiments.config import load_config
+    from src.experiments.joint.config import load_config
     from src.data.io import write_json as write_json
     from src.experiments.run_dir import git_revision, set_status
 

@@ -89,8 +89,8 @@ pie_environment() {
   export HF_HUB_DOWNLOAD_TIMEOUT=${HF_HUB_DOWNLOAD_TIMEOUT:-60} HF_HUB_ETAG_TIMEOUT=${HF_HUB_ETAG_TIMEOUT:-60}
 }
 case "$command" in
-  all) exec "$python_bin" -m src.experiments.all "$@" ;;
-  revision) exec "$python_bin" -m src.experiments.revision "$@" ;;
+  all) exec "$python_bin" -m src.experiments.joint.all "$@" ;;
+  revision) exec "$python_bin" -m src.experiments.joint.revision "$@" ;;
   prior) exec "$python_bin" -m src.experiments.context_prior "$@" ;;
   prior-selected) exec "$python_bin" -m src.experiments.data_selected_analysis "$@" ;;
   prior-export) exec "$python_bin" -m src.experiments.prior_export "$@" ;;
@@ -127,5 +127,5 @@ case "$command" in
       align) exec "$python_bin" -m src.data.gene_sources "$@" ;;
       *) usage >&2; exit 2 ;;
     esac ;;
-  test) checkpoint=$1; shift; exec "$python_bin" -m src.evaluate --checkpoint "$checkpoint" --split test "$@" ;;
+  test) checkpoint=$1; shift; exec "$python_bin" -m src.experiments.joint.evaluate --checkpoint "$checkpoint" --split test "$@" ;;
 esac

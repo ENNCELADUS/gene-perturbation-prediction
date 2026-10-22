@@ -118,7 +118,7 @@ def main(argv=None):
     parser.add_argument("--split", choices=("val", "test"), required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     args = parser.parse_args(argv)
-    from src.experiments.config import load_config
+    from src.experiments.joint.config import load_config
 
     run_baselines(load_config(args.config), split=args.split, out_dir=args.out_dir)
     return 0

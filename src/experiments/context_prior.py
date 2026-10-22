@@ -43,7 +43,8 @@ from src.data.extra_lines import load_bulk_lines
 from src.data.splits import FixedSplit, load_geneeffect_split
 from src.eval.accuracy import gain, score
 from src.data.io import read_json, write_json, write_text
-from src.experiments.config import load_config, load_prior_config
+from src.experiments.joint.config import load_config
+from src.experiments.config import load_prior_config
 from src.experiments.run_dir import bind, locked, number
 
 SCORED = ("val", "test")

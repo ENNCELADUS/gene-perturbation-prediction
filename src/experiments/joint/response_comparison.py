@@ -41,7 +41,7 @@ from torch import nn
 
 from src.data.embeddings import Esm2EmbeddingTable
 from src.data.prepared import load_inputs, read_manifest
-from src.experiments.config import load_config
+from src.experiments.joint.config import load_config
 from src.model.perturbation import Esm2PerturbationAdapter
 from src.model.response import predict_bags
 from src.model.response_mlp import ResponseMLP

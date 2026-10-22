@@ -13,7 +13,7 @@ hpc/run.sh prior configs/context_prior/bridge_remedies.yaml [--run-id <id>] [--e
 hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_final_split_20261012
 hpc/run.sh prior-stack configs/context_prior/single_cell_stack.yaml --run-id <id>
 hpc/run.sh revision configs/correction/huber_no_state.yaml --run-id correction_huber_no_state_seed0
-uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
+uv run python -m src.experiments.joint.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/best.pt --split val
 ```
 
 `all` runs the whole pipeline in one command and prints its run id first (default
@@ -89,7 +89,7 @@ correction: the model predicts the prior export's offset plus the head, validati
 before the first update (epoch −1, the prior alone, eligible for `best.pt`), the baselines add
 the prior alone and the prior plus the Tx1 context-PCA ridge, `summary.md` bootstraps the stack
 against each of them as well, and every summary carries a per-lineage table read from the split
-table next to the split file. `uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val`
+table next to the split file. `uv run python -m src.experiments.joint.compare_runs RUN_A RUN_B --split val`
 prints the paired line bootstrap of selective Spearman between two finished runs (A minus B).
 
 The run directory is `<output_root>/<run_id>/{train/, evaluation/{val,test}/,
@@ -104,7 +104,7 @@ training with validation selection, then test.
 
 `all` never evaluates the test split; `revision` scores its own `best.pt` on test.
 `hpc/run.sh test CHECKPOINT` scores any other checkpoint on test and restores the checkpoint's fitted preprocessing, weights and ESM2 vectors without
-optimizer steps. Standalone evaluation (`test`, or `src.evaluate --split val|train`)
+optimizer steps. Standalone evaluation (`test`, or `src.experiments.joint.evaluate --split val|train`)
 writes `evaluation/<checkpoint-name>/<split>/` beside the checkpoint, holding
 `predictions.parquet`, `metrics.json`, `per_line.csv` and `per_gene.csv`; per-gene details cover
 the union of the train-derived variable and selective genes with boolean `variable` and
@@ -432,8 +432,8 @@ The frozen settings and comparison boundaries are in the
 design (`docs/specs/2026-09-07-tx1-gmm-ridge-design.md`, removed; `git show 1694f5c:<path>`).
 
 ```bash
-uv run python -m src.experiments.tx1_gmm_ridge fit --config configs/geneeffect_joint.yaml --out-dir outputs/baselines/tx1_gmm_seed0
-uv run python -m src.experiments.tx1_gmm_ridge evaluate --model outputs/baselines/tx1_gmm_seed0/model.joblib --split val
+uv run python -m src.experiments.joint.tx1_gmm_ridge fit --config configs/geneeffect_joint.yaml --out-dir outputs/baselines/tx1_gmm_seed0
+uv run python -m src.experiments.joint.tx1_gmm_ridge evaluate --model outputs/baselines/tx1_gmm_seed0/model.joblib --split val
 ```
 
 Fit requires a new output directory and automatically exports train and val, never

@@ -12,7 +12,7 @@ pytest.importorskip("accelerate")
 pytest.importorskip("state.tx.models.state_transition")
 
 from src.eval.accuracy import aggregate_geneeffect, evaluate_model  # noqa: E402
-from src.experiments import geneeffect  # noqa: E402
+from src.experiments.joint import train as geneeffect  # noqa: E402
 from src.model.initialization import build_joint_model  # noqa: E402
 from src.model.normalization import fit_startup_standardizer  # noqa: E402
 from tests.test_joint import (  # noqa: E402, F401

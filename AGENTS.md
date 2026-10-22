@@ -67,8 +67,8 @@ hpc/run.sh test outputs/geneeffect_joint/<id>/train/best.pt   # test for any che
 hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   # linear context prior, CPU: bridge remedies scored on validation and test; rows/, results.md in outputs/context_prior/<id>/
 hpc/run.sh prior-selected CONFIG --run-id ID                # the reference row's data-selected genes, CPU: data_selected/ in the same run directory
 hpc/run.sh prior-export CONFIG --run-id ID                  # the reference row for the correction, CPU: export/ (val/test, training lines out of fold); never overwritten
-uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
-uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
+uv run python -m src.experiments.joint.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
+uv run python -m src.experiments.joint.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```
 
 `all` and `revision` skip every step whose output exists, so rerunning with the same run id resumes (training from `train/last.pt`). Every
@@ -116,7 +116,7 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   lines are the 226 and the built single-cell extras (`configs/benchmarks/extra_single_cell_lines_26Q1.json`), each read
   from `<paths.basal_raw_umi>/<ModelID>.h5ad`; an existing root grows by the lines it lacks, in the recorded space. The
   extras' h5ad are built from public deposits by `src/data/build/build_extra_single_cell_sources.py`.
-- **Training** (`src/experiments/geneeffect.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
+- **Training** (`src/experiments/joint/train.py:run_training` → `src/training/trainer.py`): STATE (`arc-state`, pinned commit)
   reads basal cells through its released encoder, driven by an ESM2 adapter's perturbation token; frozen Tx1 embeddings feed
   the head's context. The head is a rank-`factor_rank` product of a gene factor and a line factor read from the
   128-component context PCA (fitted on training lines), plus a per-(g, c) correction that never sees the context, and predicts in units of the
@@ -125,10 +125,10 @@ driven by one strict YAML config. `data` and `model` never import `training`, `e
   has 0). `train.state_mode` freezes STATE at the released weights or trains it; no STATE is `head_blocks` `use_delta_proj` and
   `use_s` both false, which skips STATE and the adapter. Warmup then cosine learning rate. `best.pt` and early stopping use
   **only** `val_selective_spearman` (higher wins), over the selective genes fitted on training lines.
-- **Evaluation** (`src/experiments/geneeffect.py:evaluate_checkpoint`) restores fitted preprocessing (gene means, variable and
+- **Evaluation** (`src/experiments/joint/train.py:evaluate_checkpoint`) restores fitted preprocessing (gene means, variable and
   selective genes, residual SD, context PCA) from the checkpoint;
   `src/baselines/residual.py` fits the control ladder (gene-mean, copy-prior, nearest-line, context-PCA-ridge) on train only;
-  `src/experiments/all.py` chains every step and writes `summary.md`; `src/experiments/revision.py` chains training, validation and test
+  `src/experiments/joint/all.py` chains every step and writes `summary.md`; `src/experiments/joint/revision.py` chains training, validation and test
   evaluation and baselines for one config.
 - `configs/benchmarks/cell_line_geneeffect_226_split.json` is the sole membership authority of the 226 (171 train / 27 val / 28 test; A549 moved to test on 2026-10-11);
   lines outside it join the training side only through `extra_bulk_lines_26Q1.json` or `extra_single_cell_lines_26Q1.json`;
