@@ -19,6 +19,7 @@ import torch
 from torch import nn
 
 from src.experiments.joint import response_comparison as rc
+from src.experiments.joint import response_arms as arms
 
 
 class LinearMockStateModel(nn.Module):
@@ -220,7 +221,7 @@ def test_folds_never_train_on_held_out_anchor(tmp_path):
     held = "ACH-A2"
     _, clean = run(tmp_path, out="clean")
     _, noisy = run(tmp_path, inputs=make_inputs(noisy_anchor=held), out="noisy")
-    for arm in ("global_mean_effect", *rc.TRAINED_ARMS):
+    for arm in ("global_mean_effect", *arms.TRAINED_ARMS):
         a = json.loads((clean / "folds" / f"{arm}__{held}.json").read_text())
         b = json.loads((noisy / "folds" / f"{arm}__{held}.json").read_text())
         # Changing only the held-out anchor's targets leaves the fitted model, and
@@ -258,7 +259,7 @@ def test_bootstrap_interval_contains_point(tmp_path):
     _, out_dir = run(tmp_path, epochs=1)
     verdicts = json.loads((out_dir / "verdicts.json").read_text())
     for variant in ("all_folds", "without_hct116"):
-        for arm in rc.ARMS:
+        for arm in arms.ARMS:
             pooled = verdicts["pooled"][variant][arm]
             low, high = pooled["interval"]
             assert low <= pooled["ratio"] <= high
@@ -280,7 +281,7 @@ def test_bootstrap_draws_each_gene_once_across_folds():
             }
             for a in ("A", "B")
         }
-        for arm in rc.ARMS
+        for arm in arms.ARMS
     }
     samples = rc._bootstrap(folds, ["A", "B"], {"all": ["A", "B"]}, 200)
     # Both folds share genes, so every resample weights them identically and
@@ -294,7 +295,7 @@ def test_pooled_with_and_without_hct116(tmp_path):
     table, out_dir = run(tmp_path, epochs=1)
     verdicts = json.loads((out_dir / "verdicts.json").read_text())
     assert verdicts["folds"]["without_hct116"] == list(ANCHORS[1:])
-    for arm in rc.ARMS:
+    for arm in arms.ARMS:
         ratios = table.loc[arm].held_out_ratio
         pooled = verdicts["pooled"]
         assert pooled["all_folds"][arm]["ratio"] == pytest.approx(ratios.mean())
@@ -332,16 +333,16 @@ def test_skips_when_verdicts_exist_and_resumes_finished_folds(tmp_path):
 
 def test_outputs_written(tmp_path, monkeypatch):
     out_dir = tmp_path / "out"
-    train = rc._train
+    train = arms.train
 
     def train_after_sanity(*args, **kwargs):
         assert (out_dir / "sanity.json").is_file()
         assert not (out_dir / "comparison.csv").exists()
         return train(*args, **kwargs)
 
-    monkeypatch.setattr(rc, "_train", train_after_sanity)
+    monkeypatch.setattr(rc, "train", train_after_sanity)
     table, _ = run(tmp_path, epochs=1)
-    assert len(table) == len(rc.ARMS) * len(ANCHORS)
+    assert len(table) == len(arms.ARMS) * len(ANCHORS)
     assert list(table.reset_index().columns) == [
         "arm",
         "fold",
@@ -357,9 +358,9 @@ def test_outputs_written(tmp_path, monkeypatch):
     ]
     assert times == sorted(times)
     curves = pd.read_csv(out_dir / "curves.csv")
-    assert set(curves.arm) == set(rc.TRAINED_ARMS)
+    assert set(curves.arm) == set(arms.TRAINED_ARMS)
     assert set(curves.epoch) == {0, 1}
-    for arm in rc.ARMS:
+    for arm in arms.ARMS:
         for anchor in ANCHORS:
             assert (out_dir / "folds" / f"{arm}__{anchor}.json").is_file()
 
@@ -397,7 +398,7 @@ def test_jobs_in_any_order_give_identical_fold_files(tmp_path):
         config, split, device="cpu", inputs=inputs, state_factory=state_factory()
     )
     jobs = rc.pending_trained_jobs(config, split, inputs=inputs)
-    assert len(jobs) == len(rc.TRAINED_ARMS) * len(ANCHORS)
+    assert len(jobs) == len(arms.TRAINED_ARMS) * len(ANCHORS)
     for arm, anchor in reversed(jobs):
         # Disturb the global generator: a job must not depend on what ran before.
         torch.manual_seed(1234)
@@ -428,7 +429,7 @@ def test_pending_trained_jobs_skips_finished(tmp_path):
     config = make_config(tmp_path, epochs=1)
     inputs = make_inputs()
     out_dir = tmp_path / "out"
-    every = [(arm, a) for a in ANCHORS for arm in rc.TRAINED_ARMS]
+    every = [(arm, a) for a in ANCHORS for arm in arms.TRAINED_ARMS]
     assert rc.pending_trained_jobs(config, out_dir, inputs=inputs) == every
 
     def job(arm, anchor, factory=refuse_state):
@@ -500,10 +501,10 @@ def test_cli_modes(tmp_path, monkeypatch):
     split = cli("split", "--untrained")
     assert (split / "sanity.json").is_file()
     assert sorted(p.stem.split("__")[0] for p in (split / "folds").iterdir()) == sorted(
-        rc.UNTRAINED_ARMS * len(ANCHORS)
+        arms.UNTRAINED_ARMS * len(ANCHORS)
     )
     jobs = rc.pending_trained_jobs(config, split)
-    assert len(jobs) == len(rc.TRAINED_ARMS) * len(ANCHORS)
+    assert len(jobs) == len(arms.TRAINED_ARMS) * len(ANCHORS)
     for arm, anchor in jobs:
         cli("split", "--job", arm, anchor)
     assert rc.pending_trained_jobs(config, split) == []
