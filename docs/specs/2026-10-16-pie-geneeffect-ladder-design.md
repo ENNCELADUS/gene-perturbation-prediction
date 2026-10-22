@@ -603,26 +603,26 @@ actually respond that way.
 | `third_party/pie/` | vendored, then extended | PIE's repository (CC BY-NC-SA 4.0, pinned commit), its own environment |
 | `third_party/pie/src/pie/model/geneeffect.py` | new | the direct-readout trunk: per-channel chunked encoder, gene queries and evidence, gene-to-cell block |
 | `src/data/ladder_cells.py` | new | Task 2's per-line cell computations (PIE's input, pseudo-bulk, spread, QC, HVG cells and shuffles) |
-| `src/experiments/ladder_inputs.py` | new | Task 2's frame, cells, mean channel, summaries, Tx1 caches and manifest |
-| `src/experiments/pie_precompute.py` | new | Task 2's frozen-PIE deltas (runs in PIE's environment) |
-| `src/data/prepare/cellosaurus_context.py` | new | Cellosaurus records and their embeddings (on the Mac) |
-| `src/data/prepare/embed_protein_sources.py`, `hpc/esm/setup.sh` | new | ESM C and ESM3-open embeddings (`.venv-esm`) |
+| `src/experiments/stage_one/ladder_inputs.py` | new | Task 2's frame, cells, mean channel, summaries, Tx1 caches and manifest |
+| `src/experiments/stage_one/pie_precompute.py` | new | Task 2's frozen-PIE deltas (runs in PIE's environment) |
+| `src/data/builders/cellosaurus_context.py` | new | Cellosaurus records and their embeddings (on the Mac) |
+| `src/data/builders/embed_protein_sources.py`, `hpc/esm/setup.sh` | new | ESM C and ESM3-open embeddings (`.venv-esm`) |
 | `src/data/gene_sources.py` | new | read and align §4.4's sources |
 | `src/model/stage_one.py` | new | Cilantro's FiLM layer and tail, the gene and context encoders, the virtual-cell, multi-encoder and hybrid arms |
 | `src/training/stage_one_trainer.py` | new | the training loop of §4.1 |
-| `src/experiments/stage_one.py` | new | config validation, runs, scoring, contrasts, `results.md` |
-| `src/experiments/pie_reproduction.py` | new | Task 1 |
+| `src/experiments/stage_one/run.py` | new | config validation, runs, scoring, contrasts, `results.md` |
+| `src/experiments/stage_one/pie_reproduction.py` | new | Task 1 |
 | `configs/stage_one/` | new | one config per run |
 | `hpc/run.sh` | edit | `pie-reproduce`, `ladder-inputs`, `pie-precompute`, `gene-sources` and `stage-one` commands |
 | `docs/03-geneeffect-protocol.md` | edit | §15 for the stage-one inputs; a new section for the stage-one model |
 | `src/data/ladder_reader.py` | new | memory-mapped readers of Task 2's outputs, the index check, targets with an excluded fold, the ΔE states |
-| `src/experiments/stage_one_prior.py` | new | the default prior refitted on the frame's mean channel (Task 3's linear reference and its 128 components) |
+| `src/experiments/stage_one/prior_reference.py` | new | the default prior refitted on the frame's mean channel (Task 3's linear reference and its 128 components) |
 | `src/experiments/run_dir.py`, `src/training/schedule.py` | new | run-directory binding and the learning-rate schedule, lifted so `.venv-pie` can import them |
 | `src/data/planted_terms.py` | new | Task 6's planted terms and Task 9's planted state effects |
-| `src/data/prepare/state_programs.py`, `hpc/states/setup.sh` | new | consensus NMF, starCAT and scVI fits in `.venv-states` |
+| `src/experiments/states/programs.py`, `hpc/states/setup.sh` | new | consensus NMF, starCAT and scVI fits in `.venv-states` |
 | `src/data/cell_states.py` | new | §3.5's vocabularies, projections, state masses and inputs, merging, permuted memberships, QC states, cycling-score weights |
-| `src/experiments/state_telemetry.py` | new | Task 8: fits, identity and confound reports, the frozen PIE's gaps |
-| `src/experiments/pie_precompute.py` | edit | (line, state) contexts with their own names; state passes |
+| `src/experiments/states/state_telemetry.py` | new | Task 8: fits, identity and confound reports, the frozen PIE's gaps |
+| `src/experiments/stage_one/pie_precompute.py` | edit | (line, state) contexts with their own names; state passes |
 | `src/model/stage_one.py` | edit | the state combiners and their saved decomposition |
 | `src/model/pie_differentiable.py` | new | Task 9's differentiable frozen-PIE path (no inference mode, membership-independent caches only) |
 | `configs/stage_one/states/` | new | one config per Task 9 run |

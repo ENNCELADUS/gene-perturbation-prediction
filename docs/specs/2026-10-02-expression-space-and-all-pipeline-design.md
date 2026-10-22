@@ -126,13 +126,13 @@ a rerun resumes:
 `src/baselines/residual.py`, `hpc/run.sh`. The Tx1 cache's on-disk format (`embeddings.npy`,
 `hvg.npy`, `obs.parquet` per line) is kept so no line is re-encoded.
 
-**Add:** `src/experiments/all.py` (the run), `src/experiments/response_comparison.py` with
-`src/model/response_mlp.py` (the comparison), `src/experiments/readout.py` (readout entry point moved
+**Add:** `src/experiments/joint/all.py` (the run), `src/experiments/joint/response_comparison.py` with
+`src/model/response_mlp.py` (the comparison), `src/experiments/joint/readout/` (readout entry point moved
 out of the deleted fixed-backbone head harness).
 
 **Keep untouched:** the readout head (`src/{model,training,eval,data}/readout*.py`,
-`src/eval/readout_comparison.py`), `src/eval/metrics.py`, `src/data/{splits,split_build,gene_splits,residual_target,geneeffect,embeddings,esm2_provenance,gene_order}.py`,
-the one-off raw-input builders under `src/data/prepare/`, `src/experiments/historical/`, the GMM
+`src/experiments/joint/readout/compare.py`), `src/eval/metrics.py`, `src/data/{splits,split_build,gene_splits,residual_target,geneeffect,embeddings,esm2_provenance,gene_order}.py`,
+the one-off raw-input builders under `src/data/builders/`, `src/experiments/historical/`, the GMM
 ridge baseline, every file under `results/`, and earlier specs.
 
 **Guards kept** (one line each where possible): fitting on training lines only

@@ -83,7 +83,7 @@ comparison arm and must not re-enter the standard Tx1 path.
 ## Reproduction
 
 ```bash
-uv run python -m src.data.prepare.prepare_kinker_umi_h5ad \
+uv run python -m src.data.builders.prepare_kinker_umi_h5ad \
   --matrix <sources>/kinker_sccle/UMIcount_data.txt \
   --selected-cells <derived>/kinker_sccle/selected_cells.tsv \
   --line-manifest <manifest>/cell_line_atlas_179_manifest.csv \

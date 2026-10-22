@@ -186,9 +186,9 @@ bridge diagnostics take medians from the bulk outside each fold. Rows: rank alon
 
 ## 4. Data steps
 
-- **Pinned programs** (Mac): `src/data/prepare/build_state_programs.py` writes `cell_cycle.tsv`, `meta_programs.tsv` and
+- **Pinned programs** (Mac): `src/data/builders/build_state_programs.py` writes `cell_cycle.tsv`, `meta_programs.tsv` and
   `meta_program_sources.tsv` under `configs/context_prior/reference/`; the config names the programs it reads.
-- **Second deposits** (plan on the Mac, build on the H20): `src/data/prepare/plan_second_sources.py` writes
+- **Second deposits** (plan on the Mac, build on the H20): `src/data/builders/plan_second_sources.py` writes
   `configs/data/second_source_lines_26Q1.json`, one accepted raw-count source per labelled single-cell training line other
   than its own and from another accession, chosen by the membership policy (condition class, raw counts, cells, name). It
   plans 99 lines (36 Kinker to MIX-seq, 13 Tahoe-100M to MIX-seq, the rest over GEO; 89 from wave-1 sources, 10 from

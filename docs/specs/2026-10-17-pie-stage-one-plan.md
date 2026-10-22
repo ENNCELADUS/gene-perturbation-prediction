@@ -45,7 +45,7 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
 
 - **Environments.**
   - Add `scikit-learn` to `.venv-pie` as a `geneeffect` dependency group in `third_party/pie/pyproject.toml`, re-locked;
-    `hpc/pie/setup.sh` syncs it. The scorer `src/eval/geneeffect.py` imports sklearn.
+    `hpc/pie/setup.sh` syncs it. The scorer `src/eval/accuracy.py` imports sklearn.
   - Lift `make_scheduler` (`src/training/trainer.py:97`, a module that imports accelerate) into `src/training/schedule.py`.
   - The prior reference and the sklearn mixtures run in the project env.
   - cNMF, starCAT and scvi-tools run in a new `.venv-states` (`hpc/states/setup.sh`).
@@ -63,7 +63,7 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
   - after = before + Δ̂Cᵀ.
   - The share of x_c's variance kept is reported.
 - **Run directories.** `outputs/stage_one/<task>/<config stem>[__fold<k>]/`. `_bind` and `_locked` move from
-  `src/experiments/context_prior.py:520–545` to `src/experiments/run_dir.py`.
+  `src/experiments/prior/context_prior.py:520–545` to `src/experiments/run_dir.py`.
 - **Out-of-fold telemetry (Task 3 rows).** `--fold k` drops fold k from training and refits `m_g` without it. μ_g, σ_g
   and the selective genes stay the protocol's; selection stays on validation.
 - **State pseudo-contexts in `pie_precompute`.**
@@ -96,7 +96,7 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
    - `docs/data/ladder-inputs.md:35`: no RRID column (it lives in `context_text_provenance.json`), plus the before-state
      note;
    - protocol §15: the same ΔE wording.
-3. **Guards** in `src/experiments/pie_precompute.py`, against silent reuse:
+3. **Guards** in `src/experiments/stage_one/pie_precompute.py`, against silent reuse:
    - `reference_pass` (PP:807) stores `lines` and refuses a `reference.npz` whose row count or lines differ;
    - `write_dataset` (PP:244) refuses an existing dataset whose `context_to_id` or genes differ.
    - Tests go in `tests/test_pie_precompute.py`.
@@ -135,19 +135,19 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
     `load_checkpoint`;
   - checkpoints record membership, using `_membership`/`_restored_split` lifted from `src/data/prepared.py:124,260`
     into `src/data/splits.py`; resume refuses a conflicting config.
-- `src/experiments/stage_one.py`:
+- `src/experiments/stage_one/run.py`:
   - train, score validation and then test once, and export `row.json`, `predictions.parquet` and `V.npy`;
   - the per-gene ridge on line-centred ΔH (dual closed form on the GPU);
   - `report`, which writes `results.md` with every §4.1 metric, the calibration slope, contrasts with 1,000-resample
     `paired_line_bootstrap` intervals (`src/eval/metrics.py:605`) and the out-of-fold table.
-- `src/experiments/stage_one_prior.py` (project env): refits the default prior on the 981 frame lines' `mean_channel`
+- `src/experiments/stage_one/prior_reference.py` (project env): refits the default prior on the 981 frame lines' `mean_channel`
   rows, via `context_prior.prior_inputs:300`, `stages:363`, `prior.fit_prior:266` and `crossfit:364` with the frame
   folds. It writes validation, test and out-of-fold predictions and the 128 component scores, which the shared
   nonlinear reader of 128 components needs.
 
 **Edits:**
-- `src/eval/`: move `long_frame`, `score` and `gain` from `src/experiments/context_prior.py:234–290` into
-  `src/eval/geneeffect.py`, and re-import them from `context_prior`. Add `calibration_slope` to `src/eval/metrics.py`.
+- `src/eval/`: move `long_frame`, `score` and `gain` from `src/experiments/prior/context_prior.py:234–290` into
+  `src/eval/accuracy.py`, and re-import them from `context_prior`. Add `calibration_slope` to `src/eval/metrics.py`.
   The scorer receives `(m_g − μ_g)/σ_g + z`.
 - `src/experiments/config.py`: `validate_stage_one_config` / `load_stage_one_config`, following the `_GROUPS` and
   `_require_keys` pattern, with groups data, model, train and eval.
@@ -205,12 +205,12 @@ hpc/run.sh stage-one-report configs/stage_one/architecture/report_3a.yaml
   - `per_cell_log_cp10k`, which recomputes u_i from the raw h5ad via `tx1_cache.read_basal_source`,
     `ladder_cells.library_sizes`, `_scaled(PIE_TARGET_SUM)` and `align_columns`, filling unlisted genes as `build_mean`
     does (`ladder_inputs.py:593`) so that Σπx = x̄ exactly.
-- `src/data/prepare/state_programs.py` (`.venv-states`):
+- `src/experiments/states/programs.py` (`.venv-states`):
   - consensus NMF per training line, clustering of programs across lines with cycle programs set aside, starCAT spectra;
   - scVI with library size modelled, chemistry as the nuisance, and S/G2M as covariates;
   - latents written for every cell; a manifest records the spectra normalisation, the background program and the
     usage-to-weight rule.
-- `src/experiments/state_telemetry.py` (project env), steps `fit | project | inputs | report`:
+- `src/experiments/states/state_telemetry.py` (project env), steps `fit | project | inputs | report`:
   - **fit:** the cycle, programs, scVI × K{4,6,8} × {centred, absolute}, HVG-PCA and Tx1 × K{4,6,8} fits, and QC states,
     each at three fitting seeds.
   - **project:** `train_cells` and `val` only. Test is added after the choice is recorded.
@@ -224,7 +224,7 @@ hpc/run.sh stage-one-report configs/stage_one/architecture/report_3a.yaml
     - agreement between a line's two deposits, through the second deposits in `noise_diagnosis.yaml`;
     - stability, with states matched by the Hungarian method;
     - PIE's gap for ΔH, ΔE and the own slots, against the uncentred `pie/genes/<g>.npz`.
-- `src/experiments/pie_precompute.py`: a `states` step (`--set`, `--shard` over owners) with a `StateTables`, the
+- `src/experiments/stage_one/pie_precompute.py`: a `states` step (`--set`, `--shard` over owners) with a `StateTables`, the
   pseudo-context design above, outputs per line that resume, and `assemble_states`. Task 8 runs it on
   `pilot_genes(tables, 200, 0)` (PP:229).
 - `config.py`: `validate_states_config`. `hpc/run.sh`: `cell-states CONFIG --steps …` (with `STATES_PYTHON` for the
@@ -293,7 +293,7 @@ Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each ta
   - `.venv/bin/ruff check .` and `ruff format` on touched files;
   - the synthetic end-to-end tests above.
 - **On the H20:**
-  - the `.venv-pie` import check: `python -c "import src.eval.geneeffect, src.eval.metrics, src.context_prior.targets"`;
+  - the `.venv-pie` import check: `python -c "import src.eval.accuracy, src.eval.metrics, src.context_prior.targets"`;
   - one short run per new command before the queue;
   - confirm `row.json`, `results.md` and the run manifests exist and that epoch-0 validation equals the base row.
 - **Silent-error checks with tests:**
