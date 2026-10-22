@@ -1,31 +1,6 @@
 """What limits the default prior: per-cell sampling, the number of training lines,
-the deposit a line's cells come from, cell-state heterogeneity and the noise of
-the label (protocol §14; design ``docs/specs/2026-10-12-noise-diagnosis-design.md``).
-
-``python -m src.experiments.prior.noise_diagnosis CONFIG --run-id ID [--sections A,B]``
-reads the prior run named by ``prior_run`` (its bound config and ``export/``) and
-writes ``<output_root>/<run id>/noise/<section>.json`` for each section, skipping
-a section whose file exists, then ``results.md`` from every section present:
-
-- ``cell_sampling``: split-half reliability of pseudo-bulk per gene against the
-  bridge's agreement with bulk (``cell_sampling_genes.csv``), and the reference
-  prior queried with half of each validation and test line's cells and with
-  10 to 400 of them;
-- ``learning_curve``: the reference row refitted on nested patient-grouped
-  fractions of the training side, each beside its own gene mean, scored on the
-  line-specific part (selective Spearman, within-gene R², AUPR lift, residual
-  Pearson) and the whole prediction (per-line Pearson, RMSE); at the full side,
-  Cilantro-SL's stage one on the pairs it covers;
-- ``deposit_confound``: the share of the out-of-fold error a training line's
-  deposit explains, against permutations within lineage;
-- ``deposit_swap``: out-of-fold predictions of training lines read from a second
-  deposit, against two halves of their own deposit;
-- ``cell_states``: cell-state features stacked on the out-of-fold export.
-
-Every score is on the metric of the prior run; gains carry 95% paired
-line-bootstrap intervals. It reports and chooses nothing; nothing here is
-synthetic-lethality evidence.
-"""
+the deposit a line's cells come from, cell-state heterogeneity and the noise of the
+label (protocol §14)."""
 
 from __future__ import annotations
 
@@ -47,16 +22,6 @@ from src.experiments.prior.noise_sections import (
 )
 from src.experiments.run_dir import bind
 
-# ----------------------------------------------------------------------------
-# The prior run
-# ----------------------------------------------------------------------------
-
-
-# ----------------------------------------------------------------------------
-# Sections
-# ----------------------------------------------------------------------------
-
-
 RUNNERS: dict[str, Callable[[Diagnosis, Path], dict]] = {
     "cell_sampling": cell_sampling,
     "learning_curve": learning_curve,
@@ -64,16 +29,6 @@ RUNNERS: dict[str, Callable[[Diagnosis, Path], dict]] = {
     "deposit_swap": deposit_swap,
     "cell_states": cell_states,
 }
-
-
-# ----------------------------------------------------------------------------
-# results.md
-# ----------------------------------------------------------------------------
-
-
-# ----------------------------------------------------------------------------
-# The run
-# ----------------------------------------------------------------------------
 
 
 def main(argv: Sequence[str] | None = None) -> int:

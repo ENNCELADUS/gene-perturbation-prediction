@@ -80,7 +80,6 @@ def test_analysis_matches_the_reference_row(tmp_path):
             equal_nan=True,
         )
     variants = result["ablation"]["variants"]
-    assert "without the stage" in variants
     # Ten features kept of twelve; the larger counts exceed the space.
     assert set(variants) == {"without the stage", "top 10 only", "without top 10"}
     spread = analysis.concentration(targets)

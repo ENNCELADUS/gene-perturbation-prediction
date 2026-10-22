@@ -24,18 +24,9 @@ from src.context_prior.prior import (
 from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.eval.accuracy import gain, score
 from src.experiments.joint.config import load_config
-from src.experiments.prior.base import (
-    RunBase,
-    build,
-    load_base,
-    prior_inputs,
-    stages,
-)
+from src.experiments.prior.base import RunBase, build, load_base, prior_inputs, stages
 
-#: A reproduced export row may differ from the written one by float rounding only.
 OUT_DIR = "noise"
-
-
 SECTIONS = (
     "cell_sampling",
     "learning_curve",
@@ -43,6 +34,7 @@ SECTIONS = (
     "deposit_swap",
     "cell_states",
 )
+#: A reproduced export row may differ from the written one by float rounding only.
 REPRODUCTION_TOLERANCE = 1e-6
 #: Lines whose source lists less of the scoring set than this are named in
 #: ``cell_states`` (their unlisted genes score as unexpressed).

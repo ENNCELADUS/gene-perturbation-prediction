@@ -34,26 +34,6 @@ from src.experiments.joint.config import load_config
 SCORED = ("val", "test")
 
 
-# ----------------------------------------------------------------------------
-# Run data
-# ----------------------------------------------------------------------------
-
-
-def scaled_residual(
-    gene_effect: pd.DataFrame, lines: Sequence[str], definitions: Definitions
-) -> pd.DataFrame:
-    """Lines x genes ``(y - mu_hat) / sigma``; NaN where a label is missing.
-
-    Raises when a line has no GeneEffect row at all: it would otherwise read as an
-    all-missing line and count as zero residual in every fit.
-    """
-    absent = [m for m in lines if m not in gene_effect.index]
-    if absent:
-        raise ValueError(f"no GeneEffect row for {len(absent)} lines: {absent[:10]}")
-    frame = residual_frame(gene_effect, lines, definitions)
-    return frame.div(definitions.residual_scale, axis=1)
-
-
 @dataclass(frozen=True)
 class RunBase:
     """Everything the experiments share, keyed by ModelID.
@@ -90,8 +70,18 @@ class RunBase:
     pseudobulk_fill: pd.Series
 
     def truth(self, lines: Sequence[str]) -> pd.DataFrame:
-        """Residual of ``lines`` in residual-SD units; reads their labels."""
-        return scaled_residual(self.gene_effect, lines, self.definitions)
+        """Lines x genes ``(y - mu_hat) / sigma``; NaN where a label is missing.
+
+        Raises when a line has no GeneEffect row at all: it would otherwise read as
+        an all-missing line and count as zero residual in every fit.
+        """
+        absent = [m for m in lines if m not in self.gene_effect.index]
+        if absent:
+            raise ValueError(
+                f"no GeneEffect row for {len(absent)} lines: {absent[:10]}"
+            )
+        frame = residual_frame(self.gene_effect, lines, self.definitions)
+        return frame.div(self.definitions.residual_scale, axis=1)
 
     def normalize_pseudobulk(self, pseudobulk: pd.DataFrame) -> pd.DataFrame:
         """Any pseudo-bulk rows (prepared transform, any genes) in the prior's
@@ -197,16 +187,6 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
         profile=profile,
         pseudobulk_fill=fill,
     )
-
-
-# ----------------------------------------------------------------------------
-# Scoring
-# ----------------------------------------------------------------------------
-
-
-# ----------------------------------------------------------------------------
-# Experiments
-# ----------------------------------------------------------------------------
 
 
 def prior_inputs(base: RunBase, inputs: BridgeInputs) -> PriorInputs:

@@ -60,7 +60,6 @@ def validate_prior_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def load_prior_config(path: Path) -> dict[str, Any]:
-    """Load and validate a prior YAML config; paths resolve from the repo root."""
     return validate_prior_config(read_yaml(path))
 
 
@@ -96,7 +95,6 @@ def validate_stack_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def load_stack_config(path: Path) -> dict[str, Any]:
-    """Load and validate a single-cell statistics stack YAML config."""
     return validate_stack_config(read_yaml(path))
 
 
@@ -139,5 +137,4 @@ def validate_noise_config(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def load_noise_config(path: Path) -> dict[str, Any]:
-    """Load and validate a noise-diagnosis YAML config."""
     return validate_noise_config(read_yaml(path))

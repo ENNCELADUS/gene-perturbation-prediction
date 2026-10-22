@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -205,8 +207,6 @@ def test_crossfit_refuses_a_query_line_of_another_fold():
 
 
 def test_gene_space_hides_unlisted_genes_from_gene_level_blocks():
-    from dataclasses import replace
-
     inputs, ids = synthetic()
     spec = PriorSpec(
         (Stage("expression_components", 0.1), Stage("own_expression", 1.0))
@@ -223,8 +223,6 @@ def test_gene_space_hides_unlisted_genes_from_gene_level_blocks():
 
 
 def test_gene_rows_fit_gene_level_blocks_on_other_rows_and_order_is_enforced():
-    from dataclasses import replace
-
     inputs, ids = synthetic()
     spec = PriorSpec(
         (
@@ -287,8 +285,6 @@ GENE_LEVEL = PriorSpec(
 
 
 def test_an_empty_gene_space_leaves_gene_level_blocks_intercepts_only():
-    from dataclasses import replace
-
     inputs, ids = synthetic()
     query = inputs.expression.loc[ids[:10]]
     stages = fit_prior(
@@ -304,8 +300,6 @@ def test_an_empty_gene_space_leaves_gene_level_blocks_intercepts_only():
 
 
 def test_a_gene_space_narrower_than_the_count_selects_every_column_but_own():
-    from dataclasses import replace
-
     inputs, ids = synthetic()
     spec = PriorSpec(
         (

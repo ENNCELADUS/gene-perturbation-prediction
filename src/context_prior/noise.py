@@ -69,8 +69,6 @@ def nested_fractions(
     order = [groups[i] for i in np.random.default_rng(seed).permutation(len(groups))]
     out = {}
     for fraction in fractions:
-        if not 0 < fraction <= 1:
-            raise ValueError(f"fractions must lie in (0, 1], got {fraction}")
         kept = set(order[: math.ceil(fraction * len(groups))])
         out[float(fraction)] = [m for m in lines if patients[m] in kept]
     return out

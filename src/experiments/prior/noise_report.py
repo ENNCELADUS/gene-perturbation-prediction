@@ -5,9 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from src.experiments.prior.base import (
-    SCORED,
-)
+from src.experiments.prior.base import SCORED
 from src.experiments.prior.diagnosis import LISTED_FLOOR, SECTIONS
 from src.experiments.run_dir import interval, number
 

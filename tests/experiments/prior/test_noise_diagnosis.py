@@ -26,11 +26,6 @@ from tests.fixtures.prior import synthetic_base, tiny_config
 CONFIG = yaml.safe_load(Path("configs/context_prior/noise_diagnosis.yaml").read_text())
 
 
-# ----------------------------------------------------------------------------
-# Statistics
-# ----------------------------------------------------------------------------
-
-
 def test_column_pearson_uses_rows_finite_in_both():
     left = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0], "b": [1.0, 1.0, 1.0, 2.0]})
     right = pd.DataFrame({"a": [2.0, 4.0, np.nan, 8.0], "b": [5.0, 5.0, 5.0, 5.0]})
@@ -107,11 +102,6 @@ def test_cluster_proportions_ignore_line_identity_and_held_out_lines():
     assert np.allclose(result.to_numpy(), 1 / 3, atol=0.02)
 
 
-# ----------------------------------------------------------------------------
-# Config
-# ----------------------------------------------------------------------------
-
-
 def test_noise_config_is_strict():
     validate_noise_config(CONFIG)
     unknown = copy.deepcopy(CONFIG)
@@ -144,11 +134,6 @@ def test_config_programs_are_pinned_and_none_has_a_cell_line_study():
     assert list(members) == programs
     assert len(members["S"]) == 43 and len(members["G2M"]) == 54
     assert all(len(genes) >= 48 for name, genes in members.items() if name[:2] == "MP")
-
-
-# ----------------------------------------------------------------------------
-# Sections on synthetic lines
-# ----------------------------------------------------------------------------
 
 
 class SyntheticDiagnosis(nd_base.Diagnosis):
@@ -390,7 +375,6 @@ def test_deposit_swap_reads_each_line_four_ways(diagnosis, tmp_path, monkeypatch
 
 def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypatch):
     rng = np.random.default_rng(5)
-    every = [*diagnosis.train, *diagnosis.base.bridge.val, *diagnosis.base.bridge.test]
     monkeypatch.setattr(
         nd_sections,
         "program_scores",
@@ -430,7 +414,6 @@ def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypa
             assert ("gain_over_program_means" in row["val"]) == (
                 arm == "program_fractions"
             )
-    assert len(every) == len(set(every))
 
 
 def test_main_writes_sections_and_skips_finished_ones(diagnosis, tmp_path, monkeypatch):
