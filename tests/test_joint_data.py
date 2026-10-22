@@ -15,7 +15,7 @@ import pytest
 
 from src.data.prepared import PreparedLine, load_inputs, write_prepared_line
 from src.data.q_sc import QScFeatures
-from src.data.response_cache import write_response_targets
+from src.data.response import write_response_targets
 
 ANCHORS = [f"ACH-A{i}" for i in range(4)]
 TARGET_SUM = 1000.0

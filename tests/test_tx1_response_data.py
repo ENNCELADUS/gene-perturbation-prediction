@@ -23,7 +23,7 @@ from src.data.response import (
     response_part,
     write_response_part,
 )
-from src.data.response_cache import open_response_targets, write_response_targets
+from src.data.response import open_response_targets, write_response_targets
 
 LABELS = ["non-targeting"] * 3 + ["kif11", "KIF11", "TP53", "TP53"]
 SYMBOLS = ["H1", "H2", "OTHER"]

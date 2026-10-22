@@ -186,7 +186,7 @@ def assert_identical(actual: dict[str, object], expected: dict[str, object]) -> 
 
 def naive_h5ad_cells(source: dict, hvg: tuple[str, ...], caps: dict, seed: int):
     """``(labels, library sizes, dense HVG counts)`` of a Perturb-seq h5ad."""
-    from src.data.basal import (
+    from src.data.response import (
         _cap_indices_by_group,
         _group_candidate_indices_by_label,
     )

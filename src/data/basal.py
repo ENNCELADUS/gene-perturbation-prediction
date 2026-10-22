@@ -11,9 +11,8 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Mapping, NamedTuple, Sequence
+from typing import Final, NamedTuple, Sequence
 
 import anndata as ad
 import numpy as np
@@ -23,7 +22,6 @@ import pyarrow.parquet as pq
 from scipy import sparse
 from scipy.sparse import csr_matrix
 
-from src.data.expression import library_sizes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,22 +48,6 @@ XATLAS_GENE_METADATA_TOKEN_COL: Final[str] = "gene_token_id"
 #: Rows per backed read; one huge fancy index over a dense unchunked HDF5
 #: dataset can spin for tens of minutes before reading a byte.
 _MATERIALIZE_CHUNK_ROWS: Final[int] = 2000
-
-
-@dataclass(frozen=True)
-class ResponseCells:
-    """Perturbed cells of one anchor, reduced to what response targets need.
-
-    ``labels`` are the raw perturbation labels, ``library_sizes`` each cell's
-    UMI total over every gene of its source (float64) and ``hvg_counts`` its
-    raw counts in a given gene order (float64 CSR; source columns sharing a
-    symbol summed, absent genes zero and ``False`` in ``present``).
-    """
-
-    labels: np.ndarray
-    library_sizes: np.ndarray
-    hvg_counts: csr_matrix
-    present: np.ndarray
 
 
 # --- raw-count helpers -------------------------------------------------------
@@ -153,7 +135,7 @@ def assert_tx1_input_contract(adata: ad.AnnData) -> None:
 # --- backed h5ad reads ---------------------------------------------------------
 
 
-def _require_ensembl_source(
+def require_ensembl_source(
     var: pd.DataFrame, var_ensembl_col: str, h5ad_path: Path
 ) -> None:
     """Ensembl ids must be a ``var`` column or the named ``var`` index."""
@@ -166,18 +148,7 @@ def _require_ensembl_source(
     )
 
 
-def _select_indices_deterministic(
-    candidate_indices: np.ndarray, max_cells: int, seed: int
-) -> np.ndarray:
-    """Seeded subsample of at most ``max_cells`` row indices (sorted)."""
-    if max_cells >= len(candidate_indices):
-        return candidate_indices
-    rng = np.random.default_rng(seed)
-    chosen = rng.choice(len(candidate_indices), size=max_cells, replace=False)
-    return np.sort(candidate_indices[chosen])
-
-
-def _row_chunks(
+def row_chunks(
     matrix: object,
     sorted_indices: np.ndarray,
     *,
@@ -214,7 +185,7 @@ def materialize_rows(
         stacked = matrix[sorted_indices, :]
     else:
         chunks = list(
-            _row_chunks(
+            row_chunks(
                 matrix,
                 sorted_indices,
                 chunk_size=chunk_size,
@@ -228,115 +199,6 @@ def materialize_rows(
     if sparse.issparse(stacked):
         return stacked.tocsr()[inverse, :]
     return np.asarray(stacked)[inverse]
-
-
-def _group_candidate_indices_by_label(
-    candidate_indices: np.ndarray, labels: np.ndarray
-) -> dict[str, np.ndarray]:
-    """Group co-indexed candidate rows by label; each group stays ascending."""
-    frame = pd.DataFrame(
-        {"index": candidate_indices, "label": np.asarray(labels).astype(str)}
-    )
-    return {
-        str(label): group["index"].to_numpy(dtype=np.int64)
-        for label, group in frame.groupby("label", sort=True)
-    }
-
-
-def _cap_indices_by_group(
-    grouped_indices: Mapping[str, np.ndarray], max_per_group: int, seed: int
-) -> np.ndarray:
-    """Cap each group in sorted-key order, one shared sub-seed stream."""
-    if not grouped_indices:
-        return np.asarray([], dtype=np.int64)
-    rng = np.random.default_rng(seed)
-    selected = [
-        _select_indices_deterministic(
-            grouped_indices[key], max_per_group, int(rng.integers(0, 2**32))
-        )
-        for key in sorted(grouped_indices)
-    ]
-    return np.concatenate(selected)
-
-
-def perturbseq_control_library_sizes(
-    h5ad_path: Path,
-    *,
-    control_label: str,
-    perturbation_col: str,
-    var_ensembl_col: str,
-    label: str,
-) -> np.ndarray:
-    """Whole-library UMI totals of a Perturb-seq h5ad's control cells, in row order."""
-    backed = ad.read_h5ad(h5ad_path, backed="r")
-    try:
-        _require_ensembl_source(backed.var, var_ensembl_col, h5ad_path)
-        labels = backed.obs[perturbation_col].astype(str).to_numpy()
-        control = np.flatnonzero(labels == control_label)
-        if not control.size:
-            raise ValueError(
-                f"No control cells found for {perturbation_col}={control_label!r} "
-                f"in {h5ad_path}"
-            )
-        sizes = []
-        for chunk in _row_chunks(backed.X, control, sparsify_chunks=True):
-            chunk = csr_matrix(chunk)
-            require_raw_counts(chunk, label)
-            sizes.append(library_sizes(chunk))
-    finally:
-        backed.file.close()
-    return np.concatenate(sizes)
-
-
-def read_perturbseq_response_cells(
-    h5ad_path: Path,
-    *,
-    control_label: str,
-    perturbation_col: str,
-    var_ensembl_col: str,
-    symbol_col: str,
-    gene_order: Sequence[str],
-    label: str,
-    max_cells_per_gene: int,
-    seed: int = 0,
-) -> ResponseCells:
-    """Perturbed cells of a Perturb-seq h5ad, columns aligned to ``gene_order``.
-
-    The per-gene cap is applied before any expression value is read. Rows come
-    out grouped by sorted label.
-    Each row chunk is reduced to library sizes and aligned columns before the
-    next is read.
-    """
-    backed = ad.read_h5ad(h5ad_path, backed="r")
-    try:
-        _require_ensembl_source(backed.var, var_ensembl_col, h5ad_path)
-        labels = backed.obs[perturbation_col].astype(str).to_numpy()
-        candidate = np.flatnonzero(labels != control_label)
-        if not candidate.size:
-            raise ValueError(
-                f"No perturbed cells found for {perturbation_col}!={control_label!r} "
-                f"in {h5ad_path}"
-            )
-        grouped = _group_candidate_indices_by_label(candidate, labels[candidate])
-        selected = _cap_indices_by_group(grouped, max_cells_per_gene, seed)
-        symbols = backed.var[symbol_col].astype(str)
-        order = np.argsort(selected)
-        sizes, counts = [], []
-        for chunk in _row_chunks(backed.X, selected[order], sparsify_chunks=True):
-            chunk = csr_matrix(chunk)
-            require_raw_counts(chunk, label)
-            sizes.append(library_sizes(chunk))
-            aligned, present = align_columns(chunk, symbols, gene_order)
-            counts.append(aligned)
-    finally:
-        backed.file.close()
-    inverse = np.argsort(order)
-    return ResponseCells(
-        labels=labels[selected],
-        library_sizes=np.concatenate(sizes)[inverse],
-        hvg_counts=sparse.vstack(counts, format="csr")[inverse, :],
-        present=present,
-    )
 
 
 # --- X-Atlas-Orion parquet shards ----------------------------------------------
