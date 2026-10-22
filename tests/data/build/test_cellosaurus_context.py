@@ -31,11 +31,9 @@ from pie.sources.embed import openai as openai_embed  # noqa: E402
 from pie.sources.text import contexts  # noqa: E402
 
 from src.data.build import cellosaurus_context as cc  # noqa: E402
+from src.experiments.run_dir import REPO_ROOT  # noqa: E402
 
-FIXTURES = (
-    Path(__file__).resolve().parents[1]
-    / "third_party/pie/tests/sources/text/fixtures/cellosaurus"
-)
+FIXTURES = REPO_ROOT / "third_party/pie/tests/sources/text/fixtures/cellosaurus"
 FAKE_KEY = "sk-fake-key-never-written-0123456789"
 #: A synthetic record whose age PIE's renderer refuses.
 REFUSED = "CVCL_Y009"

@@ -22,6 +22,7 @@ import pandas as pd
 import pytest
 
 from src.data.embeddings import Esm2EmbeddingTable, require_complete_esm_coverage
+from src.experiments.run_dir import REPO_ROOT
 
 # ---------------------------------------------------------------------------
 # Lazy import: stub out heavy optional imports before loading the script
@@ -50,9 +51,7 @@ def _import_module() -> types.ModuleType:
             sys.modules[mod] = types.ModuleType(mod)
 
     # Force reload so the module picks up stubs if first import in this process.
-    spec_path = (
-        Path(__file__).parent.parent / "src/data/build/precompute_esm2_embeddings.py"
-    )
+    spec_path = REPO_ROOT / "src/data/build/precompute_esm2_embeddings.py"
     spec = importlib.util.spec_from_file_location(
         "precompute_esm2_embeddings", spec_path
     )

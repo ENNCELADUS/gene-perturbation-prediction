@@ -174,5 +174,3 @@ def test_build_residual_targets_returns_expected_dataclass_shape() -> None:
     assert targets.n_lines == 3
     assert isinstance(targets.gene_mean, pd.Series)
     assert targets.gene_mean.name == "gene_mean"
-
-

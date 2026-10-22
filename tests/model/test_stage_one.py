@@ -17,22 +17,22 @@ import yaml
 
 from src.data.splits import FixedSplit
 from src.eval.metrics import calibration_slope
+from src.experiments.run_dir import REPO_ROOT
 from src.experiments.stage_one.config import validate_stage_one_config
 from src.model.stage_one import (
+    TAIL_SLOPE,
     CilantroTail,
     DeltaFiLM,
     FiLM,
     GeneEncoder,
     InputDims,
-    TAIL_SLOPE,
     PairBatch,
     build_model,
 )
 from src.training import stage_one_trainer as trainer
 
-REPO = Path(__file__).resolve().parents[1]
-CILANTRO = REPO / "third_party" / "cilantro_sl" / "nn_helpers"
-CONFIGS = REPO / "configs" / "stage_one" / "architecture"
+CILANTRO = REPO_ROOT / "third_party" / "cilantro_sl" / "nn_helpers"
+CONFIGS = REPO_ROOT / "configs" / "stage_one" / "architecture"
 
 
 def _batch(genes: int, lines: int, *, dim: int = 6, line_width: int = 4, seed=0):

@@ -406,9 +406,7 @@ def test_startup_standardizer_sees_exactly_the_enabled_blocks(prepared, setting)
     blocks = BLOCK_SETTINGS[setting]
     model = _model(prepared, blocks)
     enabled = {
-        name
-        for name in ("delta_proj", "s", "q_sc", "e_g")
-        if name in blocks.enabled
+        name for name in ("delta_proj", "s", "q_sc", "e_g") if name in blocks.enabled
     }
     assert set(model.standardizer.to_state()["blocks"]) == enabled
     assert model.uses_state == (blocks.use_delta_proj or blocks.use_s)
@@ -419,6 +417,7 @@ def test_startup_standardizer_sees_exactly_the_enabled_blocks(prepared, setting)
 
 def test_model_without_state_never_calls_state(prepared, monkeypatch):
     import src.model.joint as geneeffect
+
     calls = []
     real = geneeffect.predict_bags
 
@@ -491,9 +490,7 @@ def test_build_save_restore_round_trip(prepared, setting):
         torch.testing.assert_close(restored.state_dict()[name], value, rtol=0, atol=0)
     conditions = _train_batch(inputs).conditions
     with torch.no_grad():
-        torch.testing.assert_close(
-            restored(conditions), model(conditions)
-        )
+        torch.testing.assert_close(restored(conditions), model(conditions))
 
     reordered = dict(
         saved, architecture=dict(architecture, genes=architecture["genes"][::-1])

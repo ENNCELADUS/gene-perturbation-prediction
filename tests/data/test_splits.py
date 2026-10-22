@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from src.data.splits import assert_fit_eligible, load_geneeffect_split
-from src.data.splits import FixedSplit
+from src.data.splits import FixedSplit, assert_fit_eligible, load_geneeffect_split
+from src.experiments.run_dir import REPO_ROOT
 
 _SPLIT = FixedSplit(
     train=("ACH-TRAIN-1", "ACH-TRAIN-2", "ACH-PC9", "ACH-HELA"),
@@ -93,9 +93,8 @@ def test_load_geneeffect_split_against_the_real_tracked_file() -> None:
     """The actual tracked split file must load and satisfy the documented shape
     (171 train / 27 val / 28 test, PC9 + HeLa unlabeled) --
     ``docs/03-geneeffect-protocol.md`` §2."""
-    repo_root = Path(__file__).resolve().parents[1]
     split_path = (
-        repo_root / "configs" / "benchmarks" / "cell_line_geneeffect_226_split.json"
+        REPO_ROOT / "configs" / "benchmarks" / "cell_line_geneeffect_226_split.json"
     )
     if not split_path.exists():
         pytest.skip("cell_line_geneeffect_226_split.json not present")

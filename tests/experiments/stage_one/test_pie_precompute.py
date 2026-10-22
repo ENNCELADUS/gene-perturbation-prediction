@@ -14,17 +14,17 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-
-from src.data.io import write_npy, write_npz
 import pandas as pd
 import pytest
 
+from src.data.io import write_npy, write_npz
+from src.experiments.run_dir import REPO_ROOT
 from src.experiments.stage_one import pie as ppie
 from src.experiments.stage_one import pie_decode as pdecode
 from src.experiments.stage_one import pie_precompute as pp
 from src.experiments.stage_one import pie_states as pstates
 
-PIE_TESTS = Path(__file__).resolve().parents[1] / "third_party" / "pie" / "tests"
+PIE_TESTS = REPO_ROOT / "third_party" / "pie" / "tests"
 LINES = ("L1", "L2", "L3")  # L3 has no Cellosaurus text
 PANEL = ("GA", "GB", "GC", "GD", "GE")
 
@@ -214,7 +214,6 @@ def _theirs(pie, lines, perturbation):
 @pytest.mark.parametrize("perturbation", ["GA", "GC"])
 def test_our_batches_match_pies_data_path(tiny_pie, perturbation):
     import torch
-
     from pie.predict import _batch_to
 
     pie, tables = tiny_pie

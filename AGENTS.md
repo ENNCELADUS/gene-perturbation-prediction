@@ -57,7 +57,7 @@ imports are `src.*`.
 ```bash
 uv sync                                                   # core deps + dev group (pytest, ruff, xgboost); scib/datasets are optional extras
 uv run python -m pytest tests -q > pytest.txt 2>&1       # full suite; redirect — see rtk note
-uv run python -m pytest tests/test_all.py -q             # one file; -k for one test
+uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k for one test
 .venv/bin/ruff check .                                    # lint (E,W,F only; import order not enforced)
 .venv/bin/ruff format <files you touched>                 # never `ruff format .` — rewrites unrelated files
 
