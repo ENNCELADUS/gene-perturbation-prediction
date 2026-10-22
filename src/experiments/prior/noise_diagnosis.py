@@ -2,7 +2,7 @@
 the deposit a line's cells come from, cell-state heterogeneity and the noise of
 the label (protocol §14; design ``docs/specs/2026-10-12-noise-diagnosis-design.md``).
 
-``python -m src.experiments.noise_diagnosis CONFIG --run-id ID [--sections A,B]``
+``python -m src.experiments.prior.noise_diagnosis CONFIG --run-id ID [--sections A,B]``
 reads the prior run named by ``prior_run`` (its bound config and ``export/``) and
 writes ``<output_root>/<run id>/noise/<section>.json`` for each section, skipping
 a section whose file exists, then ``results.md`` from every section present:
@@ -66,9 +66,9 @@ from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.data.io import write_json, write_text
 from src.experiments.run_dir import bind, interval, number
 from src.experiments.joint.config import load_config
-from src.experiments.config import load_noise_config
+from src.experiments.prior.config import load_noise_config
 from src.eval.accuracy import BOOTSTRAP_SEED, gain, long_frame, score
-from src.experiments.context_prior import (
+from src.experiments.prior.base import (
     SCORED,
     RunBase,
     build,

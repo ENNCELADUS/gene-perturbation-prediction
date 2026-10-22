@@ -453,8 +453,8 @@ def _check_prior_out_of_fold(setup, prior_dir: Path, root: Path) -> None:
     from src.context_prior.prior import PriorInputs, PriorSpec, fit_prior, total
     from src.context_prior.reference import load_reference
     from src.context_prior.views import fit_expression_components
-    from src.experiments.config import load_prior_config
-    from src.experiments.context_prior import stages
+    from src.experiments.prior.config import load_prior_config
+    from src.experiments.prior.base import stages
 
     ladder = setup.ladder
     prior = load_prior_config(Path(setup.ladder_config["prior_config"]))

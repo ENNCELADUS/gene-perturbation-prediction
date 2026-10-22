@@ -2,7 +2,7 @@
 # then own expression, partners and data-selected genes at gene penalty 10; chosen on
 # 2026-10-07 from bridge_remedies_penalty_grid.yaml). Gains are measured against it.
 # Block sets separate own expression from partners once data-selected genes are in;
-# src.experiments.data_selected_analysis reads the reference row's data-selected stage.
+# src.experiments.prior.data_selected_analysis reads the reference row's data-selected stage.
 seed: 0
 joint_config: configs/revision/frozen_huber.yaml
 output_root: outputs/context_prior

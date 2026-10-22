@@ -1,6 +1,6 @@
 """Export the reference row of a prior config for the single-cell correction.
 
-``python -m src.experiments.prior_export CONFIG --run-id ID`` writes
+``python -m src.experiments.prior.prior_export CONFIG --run-id ID`` writes
 ``<output_root>/<run id>/export/{prior.npz, prior.json}``: the prior's residual
 prediction in residual-SD units for every labelled single-cell training line out of
 fold (the bridge and every stage refitted without the line's fold; extras sharing a
@@ -23,11 +23,11 @@ import pandas as pd
 from src.context_prior.bridging import oof_bridged
 from src.context_prior.folds import training_side_folds
 from src.context_prior.prior import PriorSpec, crossfit, fit_prior, total
-from src.experiments.config import load_prior_config
+from src.experiments.prior.config import load_prior_config
 from src.eval.accuracy import score
 from src.data.io import write_json
 from src.experiments.run_dir import bind
-from src.experiments.context_prior import (
+from src.experiments.prior.base import (
     SCORED,
     RunBase,
     build,

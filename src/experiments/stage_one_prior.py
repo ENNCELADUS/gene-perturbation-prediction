@@ -49,8 +49,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     from src.context_prior.reference import load_reference
     from src.context_prior.views import expression_components, fit_expression_components
     from src.eval.accuracy import fold_accuracy, wide_accuracy
-    from src.experiments.config import load_prior_config
-    from src.experiments.context_prior import stages
+    from src.experiments.prior.config import load_prior_config
+    from src.experiments.prior.base import stages
     from src.experiments.stage_one import load_setup
 
     run_dir = Path(config["output_root"]) / config["task"] / run_id

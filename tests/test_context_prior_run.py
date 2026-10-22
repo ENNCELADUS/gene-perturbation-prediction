@@ -19,10 +19,11 @@ from src.context_prior.space import quantile_reference
 from src.context_prior.targets import Definitions
 from src.data.splits import FixedSplit
 from src.eval.accuracy import METRICS, long_frame
-from src.experiments import context_prior as run
+from src.experiments.prior import base as prior_base
+from src.experiments.prior import context_prior as run
 from src.data.io import jsonable, read_json
 from src.experiments.run_dir import bind, locked
-from src.experiments.config import validate_prior_config
+from src.experiments.prior.config import validate_prior_config
 from tests.test_context_prior_bridging import GENES, base
 
 CONFIG = yaml.safe_load(Path("configs/context_prior/bridge_remedies.yaml").read_text())
@@ -185,18 +186,18 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
         "prepared_root": "prepared",
     }
     seen, prepared = [], []
-    monkeypatch.setattr(run, "load_config", lambda path: joint)
-    monkeypatch.setattr(run, "load_geneeffect_split", lambda path: split)
+    monkeypatch.setattr(prior_base, "load_config", lambda path: joint)
+    monkeypatch.setattr(prior_base, "load_geneeffect_split", lambda path: split)
     monkeypatch.setattr(
-        run,
+        prior_base,
         "load_bulk_lines",
         lambda path, split: ExtraLines(
             (*extras, "XB0"), (*unlabelled, "YB0"), {"Z0": "shares a patient"}
         ),
     )
-    monkeypatch.setattr(run, "read_models", lambda path: models)
+    monkeypatch.setattr(prior_base, "read_models", lambda path: models)
     monkeypatch.setattr(
-        run,
+        prior_base,
         "read_depmap_matrix",
         lambda path: (bulk if str(path) == "bulk" else gene_effect).copy(),
     )
@@ -204,7 +205,7 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     def reference(path, *, blocked):
         seen.extend(blocked)
 
-    monkeypatch.setattr(run, "load_reference", reference)
+    monkeypatch.setattr(prior_base, "load_reference", reference)
     monkeypatch.setattr(
         "src.data.prepared.read_manifest",
         lambda root: {"common_gene_panel": ["E0", "E1", "Q"]},
@@ -218,7 +219,7 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     config = copy.deepcopy(CONFIG)
     config["paths"]["bulk_expression"] = "bulk"
     config["training_side"]["exclude_lineages"] = ["Myeloid", "Lymphoid"]
-    loaded = run.load_base(config)
+    loaded = prior_base.load_base(config)
     side = [*single[:-2], "U0", *extras, *unlabelled]
     space = [g for g in SPACE if g != "E14"]
     bridge = loaded.bridge
@@ -275,7 +276,7 @@ def tiny_config(tmp_path: Path) -> dict:
     return validate_prior_config(config)
 
 
-def synthetic_base(config) -> run.RunBase:
+def synthetic_base(config) -> prior_base.RunBase:
     """The bridging test's lines; labels follow expression with noise."""
     bridge = base()
     extras = [m for m in bridge.bulk.index if m not in set(bridge.paired)]
@@ -307,7 +308,7 @@ def synthetic_base(config) -> run.RunBase:
         drivers=pd.DataFrame({"KRAS": 0}, index=side),
         msi=pd.Series(0.0, index=side),
     )
-    return run.RunBase(
+    return prior_base.RunBase(
         config=config,
         split=FixedSplit(
             train=bridge.single_cell_train, val=bridge.val, test=bridge.test
@@ -327,7 +328,7 @@ def synthetic_base(config) -> run.RunBase:
 def test_run_setting_scores_every_block_set_and_penalty(tmp_path):
     config = tiny_config(tmp_path)
     synthetic = synthetic_base(config)
-    reference = run.reference_predictions(synthetic)
+    reference = prior_base.reference_predictions(synthetic)
     assert set(reference) == {"val", "test"}
     result = run.run_setting(synthetic, config["experiments"]["affine"], {}, reference)
     rows = result["rows"]
@@ -385,7 +386,7 @@ def test_gains_are_measured_against_a_pinned_gene_level_row(tmp_path):
     }
     config = validate_prior_config(config)
     synthetic = synthetic_base(config)
-    reference = run.reference_predictions(synthetic)
+    reference = prior_base.reference_predictions(synthetic)
     rows = run.run_setting(synthetic, config["experiments"]["affine"], {}, reference)[
         "rows"
     ]

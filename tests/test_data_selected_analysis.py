@@ -7,9 +7,10 @@ import pandas as pd
 import pytest
 import yaml
 
-from src.experiments import context_prior as run
-from src.experiments import data_selected_analysis as analysis
-from src.experiments.config import validate_prior_config
+from src.eval.accuracy import score
+from src.experiments.prior import base as run
+from src.experiments.prior import data_selected_analysis as analysis
+from src.experiments.prior.config import validate_prior_config
 from tests.test_context_prior_run import synthetic_base, tiny_config
 
 
@@ -59,7 +60,7 @@ def test_analysis_matches_the_reference_row(tmp_path):
     reference = run.reference_predictions(base)
     scores = result["ablation"]["reference"]
     for split in ("val", "test"):
-        expected = run.score(
+        expected = score(
             reference[split], base.truth(list(reference[split].index)), base.definitions
         )
         assert scores[split]["selective_spearman"] == pytest.approx(

@@ -15,9 +15,9 @@ import pytest
 import yaml
 
 from src.context_prior import noise
-from src.experiments import noise_diagnosis as run
-from src.experiments.config import validate_noise_config, validate_prior_config
-from src.experiments.prior_export import export_predictions
+from src.experiments.prior import noise_diagnosis as run
+from src.experiments.prior.config import validate_noise_config, validate_prior_config
+from src.experiments.prior.prior_export import export_predictions
 from tests.test_context_prior_run import synthetic_base, tiny_config
 
 CONFIG = yaml.safe_load(Path("configs/context_prior/noise_diagnosis.yaml").read_text())
