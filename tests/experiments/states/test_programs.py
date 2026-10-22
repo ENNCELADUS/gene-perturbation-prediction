@@ -208,6 +208,6 @@ def test_the_worker_pool_spawns_rather_than_forks(monkeypatch):
         return real(*args, **kwargs)
 
     monkeypatch.setattr(state_programs, "ProcessPoolExecutor", recording)
-    monkeypatch.setattr(state_programs, "_workers", lambda: 2)
-    state_programs._in_processes([partial(int, "7"), partial(int, "8")], "test")
+    monkeypatch.setattr(state_programs, "workers", lambda: 2)
+    state_programs.in_processes([partial(int, "7"), partial(int, "8")], "test")
     assert [c.get_start_method() for c in contexts] == ["spawn"]

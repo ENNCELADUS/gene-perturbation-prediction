@@ -17,7 +17,7 @@ def test_repair_hela_excel_symbols_is_position_aware() -> None:
         ["MAPT-IT1", "1-Mar", "2-Mar", "1-Mar", "10-Mar", "2-Mar", "1-Sep", "1-Dec"]
     )
 
-    assert builder._repair_hela_symbols(symbols) == [
+    assert builder.repair_hela_symbols(symbols) == [
         "MAPT-IT1",
         "MARC1",
         "MARC2",
@@ -39,7 +39,7 @@ def test_minimum_qc_uses_cells_by_genes_orientation() -> None:
     )
     adata = ad.AnnData(X=matrix, obs=pd.DataFrame(index=["pass", "fail"]), var=var)
 
-    assert builder._minimum_qc_mask(adata).tolist() == [True, False]
+    assert builder.minimum_qc_mask(adata).tolist() == [True, False]
 
 
 def test_build_pc9_transposes_gene_by_cell_matrix(monkeypatch, tmp_path) -> None:
@@ -77,7 +77,7 @@ def test_build_pc9_transposes_gene_by_cell_matrix(monkeypatch, tmp_path) -> None
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"formal")
 
-    monkeypatch.setattr(builder, "_write_verified", fake_write)
+    monkeypatch.setattr(builder, "write_verified", fake_write)
 
     result = builder.build_pc9(tmp_path)
 

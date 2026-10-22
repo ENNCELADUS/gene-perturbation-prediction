@@ -276,7 +276,7 @@ def _comparison_section(comparison: Path) -> list[str]:
     return lines
 
 
-def _validation_section(config: dict, run: Path) -> list[str]:
+def validation_section(config: dict, run: Path) -> list[str]:
     done = read_json(run / "train" / "done.json")
     train = config["train"]
     if done["bad_epochs"] >= train["patience"]:
@@ -343,7 +343,7 @@ def write_summary(config: dict, run: Path, run_id: str) -> Path:
         "",
         *_comparison_section(run / "comparison"),
         "",
-        *_validation_section(config, run),
+        *validation_section(config, run),
     ]
     path = run / "summary.md"
     path.write_text("\n".join(lines) + "\n")

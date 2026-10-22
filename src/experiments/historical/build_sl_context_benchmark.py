@@ -700,7 +700,7 @@ def apply_context_split(
     return selected, stats
 
 
-def _manifest(
+def screen_manifest(
     min_class_count: int,
     selection_stats: dict[str, int],
     pre_split_stats: dict[str, int],
@@ -874,7 +874,7 @@ def build(output_dir: Path, min_class_count: int, chunksize: int) -> dict[str, A
     inventory.to_csv(output_dir / CONTEXT_FILENAME, index=False)
     audit.to_csv(output_dir / AUDIT_FILENAME, index=False)
     statistics.to_csv(output_dir / STATISTICS_FILENAME, index=False)
-    manifest = _manifest(
+    manifest = screen_manifest(
         min_class_count,
         _sum_stats(chunk_stats),
         pre_split_stats,

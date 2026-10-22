@@ -104,7 +104,7 @@ def train_joint(
         run_training(config, train)
 
 
-def _evaluate(config: dict, run: Path, split: str) -> None:
+def evaluate(config: dict, run: Path, split: str) -> None:
     """Score ``train/best.pt`` and fit and score the baselines on ``split``."""
     from src.experiments.joint.baselines import run_baselines
     from src.experiments.joint.evaluate import evaluate_checkpoint, export_evaluation
@@ -194,7 +194,7 @@ def _lineages(
     ]
 
 
-def _training_record(run: Path) -> dict[str, Any]:
+def training_record(run: Path) -> dict[str, Any]:
     """Best epoch (1-based; 0 is the pre-update validation of a stack) and its
     diagnostic and validation selective Spearman."""
     done = read_json(run / "train" / "done.json")
@@ -256,7 +256,7 @@ def build_record(
         **{
             split: _split_record(run, split, selective, split_table) for split in SPLITS
         },
-        "training": _training_record(run),
+        "training": training_record(run),
     }
 
 
@@ -389,7 +389,7 @@ def run_revision(
         prepare_inputs(config)
         train_joint(config_path, config, run, chosen)
         for split in SPLITS:
-            _evaluate(config, run, split)
+            evaluate(config, run, split)
         # The split table (model_id, lineage) sits next to the split file.
         split_table = Path(config["paths"]["split"]).with_suffix(".csv")
         if not split_table.is_file():

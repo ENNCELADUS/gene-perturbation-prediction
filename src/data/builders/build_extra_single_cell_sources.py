@@ -88,7 +88,7 @@ def build_source(
     )
     root = Path(context.spec["raw_root"]) / name
     for archive in source["unpack"]:
-        _unpack(root / archive, root)
+        unpack(root / archive, root)
     accepted = context.candidates.loc[
         (context.candidates["source"] == name) & (context.candidates["review"] == "ok")
     ]
@@ -241,7 +241,7 @@ def _write_h5ad(adata: ad.AnnData, path: Path) -> None:
     os.replace(temporary, path)
 
 
-def _unpack(archive: Path, into: Path) -> None:
+def unpack(archive: Path, into: Path) -> None:
     marker = into / f".{archive.name}.unpacked"
     if marker.exists():
         return

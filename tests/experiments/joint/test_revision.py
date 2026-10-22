@@ -294,7 +294,7 @@ def test_summary_requires_the_tx1_ridge_and_a_best_epoch_record(finished, bootst
         )
     write_json(finished / "train/done.json", {"best_epoch": 7, "next_epoch": 8})
     with pytest.raises(ValueError, match="no epoch record for epoch 7"):
-        revision._training_record(finished)
+        revision.training_record(finished)
 
 
 def test_nan_difference_is_written_as_null(finished, monkeypatch):
@@ -448,7 +448,7 @@ def test_default_run_id_is_revision_timestamp(world, monkeypatch, capsys):
 def test_run_directory_refuses_a_different_config(world, monkeypatch):
     config, _ = world
     monkeypatch.setattr(revision, "train_joint", lambda *args, **kwargs: None)
-    monkeypatch.setattr(revision, "_evaluate", lambda *args: None)
+    monkeypatch.setattr(revision, "evaluate", lambda *args: None)
     monkeypatch.setattr(revision, "write_outputs", lambda *args: Path("s.md"))
     revision.run_revision(Path("c.yaml"), run_id="bound")
     revision.run_revision(Path("c.yaml"), run_id="bound")

@@ -182,12 +182,12 @@ def test_failed_export_is_retryable_without_changing_fit_status(tmp_path, monkey
 
     monkeypatch.setattr(evaluate, "export_evaluation", fail)
     with pytest.raises(OSError, match="simulated"):
-        experiment._export(model, inputs, tmp_path, "val")
+        experiment.export(model, inputs, tmp_path, "val")
     record = json.loads((tmp_path / "run.json").read_text())
     assert record["fitting"]["status"] == "completed"
     assert record["evaluation"]["status"] == "failed"
     monkeypatch.setattr(evaluate, "export_evaluation", export)
-    experiment._export(model, inputs, tmp_path, "val")
+    experiment.export(model, inputs, tmp_path, "val")
     assert (
         json.loads((tmp_path / "run.json").read_text())["evaluation"]["status"]
         == "completed"

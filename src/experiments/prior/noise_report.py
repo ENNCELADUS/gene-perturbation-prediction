@@ -78,7 +78,7 @@ def _cell_sampling_md(section: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _learning_curve_md(section: Mapping[str, Any]) -> list[str]:
+def learning_curve_md(section: Mapping[str, Any]) -> list[str]:
     specific, whole = [], []
     for row in section["rows"]:
         lines = (
@@ -307,7 +307,7 @@ def _cell_states_md(section: Mapping[str, Any]) -> list[str]:
 
 SECTION_MARKDOWN: dict[str, Callable[[Mapping[str, Any]], list[str]]] = {
     "cell_sampling": _cell_sampling_md,
-    "learning_curve": _learning_curve_md,
+    "learning_curve": learning_curve_md,
     "deposit_confound": _deposit_confound_md,
     "deposit_swap": _deposit_swap_md,
     "cell_states": _cell_states_md,

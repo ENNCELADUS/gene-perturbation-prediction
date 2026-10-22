@@ -283,7 +283,7 @@ def test_bootstrap_draws_each_gene_once_across_folds():
         }
         for arm in arms.ARMS
     }
-    samples = rc._bootstrap(folds, ["A", "B"], {"all": ["A", "B"]}, 200)
+    samples = rc.bootstrap(folds, ["A", "B"], {"all": ["A", "B"]}, 200)
     # Both folds share genes, so every resample weights them identically and
     # the two fold ratios agree: no resample can mix G1 in one fold with G2 in
     # the other.

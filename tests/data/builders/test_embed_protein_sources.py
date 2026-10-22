@@ -106,7 +106,7 @@ def test_final_states_hook_equals_esmc_embeddings():
     np.testing.assert_allclose(
         hook.take(), output.embeddings.float().numpy(), rtol=1e-6
     )
-    pooled = eps._embed(model, hook, sequence, None)
+    pooled = eps.embed_protein(model, hook, sequence, None)
     np.testing.assert_allclose(
         pooled, output.embeddings[0, 1:-1].float().mean(0).numpy(), rtol=1e-5, atol=1e-6
     )

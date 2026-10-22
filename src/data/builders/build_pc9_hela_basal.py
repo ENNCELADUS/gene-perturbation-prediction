@@ -19,7 +19,7 @@ from scipy import io, sparse
 from src.data.basal import assert_tx1_input_contract
 
 
-def _write_verified(adata: ad.AnnData, output: Path) -> None:
+def write_verified(adata: ad.AnnData, output: Path) -> None:
     assert_tx1_input_contract(adata)
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".tmp.h5ad")
@@ -55,7 +55,7 @@ def _qc(adata: ad.AnnData) -> dict[str, object]:
     }
 
 
-def _minimum_qc_mask(adata: ad.AnnData) -> np.ndarray:
+def minimum_qc_mask(adata: ad.AnnData) -> np.ndarray:
     totals = np.asarray(adata.X.sum(axis=1)).ravel()
     detected = np.asarray((adata.X > 0).sum(axis=1)).ravel()
     mito = adata.var["gene_symbol"].astype(str).str.upper().str.startswith("MT-")
@@ -88,10 +88,10 @@ def build_pc9(root: Path) -> dict[str, object]:
     var = genes.set_index("ensembl_id", drop=False)
     adata = ad.AnnData(X=matrix, obs=obs, var=var)
     source_qc = _qc(adata)
-    keep = _minimum_qc_mask(adata)
+    keep = minimum_qc_mask(adata)
     adata = adata[keep].copy()
     output = source / "formal/pc9_untreated_tx1_raw_counts.h5ad"
-    _write_verified(adata, output)
+    write_verified(adata, output)
     result = {
         "context": "PC9",
         "model_id": "ACH-000779",
@@ -134,7 +134,7 @@ def _gencode_symbol_map(gtf: Path) -> tuple[dict[str, str], set[str]]:
     return unique, ambiguous
 
 
-def _repair_hela_symbols(symbols: pd.Index) -> list[str]:
+def repair_hela_symbols(symbols: pd.Index) -> list[str]:
     march_occurrence = {"1-Mar": 0, "2-Mar": 0}
     repaired: list[str] = []
     for raw in symbols.astype(str):
@@ -169,7 +169,7 @@ def _hela_batch(
         frame = pd.read_csv(handle, sep="\t", index_col=0)
     raw_total = int(frame.to_numpy().sum())
     symbols = (
-        _repair_hela_symbols(frame.index)
+        repair_hela_symbols(frame.index)
         if member.name.endswith("_3.txt.gz")
         else list(frame.index.astype(str))
     )
@@ -226,10 +226,10 @@ def build_hela(root: Path, gtf: Path) -> dict[str, object]:
         id_to_symbol.setdefault(ensembl_id, symbol)
     adata.var["gene_symbol"] = [id_to_symbol[value] for value in adata.var.index]
     source_qc = _qc(adata)
-    keep = _minimum_qc_mask(adata)
+    keep = minimum_qc_mask(adata)
     adata = adata[keep].copy()
     output = source / "formal/hela_720_tx1_raw_counts.h5ad"
-    _write_verified(adata, output)
+    write_verified(adata, output)
     result = {
         "context": "HELA",
         "model_id": "ACH-001086",

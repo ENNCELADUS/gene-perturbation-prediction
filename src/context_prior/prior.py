@@ -150,7 +150,7 @@ def total(predictions: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
     return out
 
 
-def _context_view(
+def context_view(
     block: str, inputs: PriorInputs, fit_rows: pd.DataFrame, encoder_rows: pd.DataFrame
 ) -> tuple[Features, np.ndarray]:
     """Features of any rows, and the fit rows' training features.
@@ -304,7 +304,7 @@ def fit_prior(
         if stage.block in CONTEXT_BLOCKS:
             if gene_remaining is not None:
                 raise ValueError("context blocks must come before gene-level blocks")
-            features, train = _context_view(stage.block, inputs, fit_rows, encoder_rows)
+            features, train = context_view(stage.block, inputs, fit_rows, encoder_rows)
             model = shared_ridge(train, remaining, [stage.penalty], basis=basis)[0]
             remaining -= model.predict(train)
             stages.append((stage.block, features, model))

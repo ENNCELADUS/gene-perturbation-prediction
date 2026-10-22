@@ -12,7 +12,7 @@ import torch
 from src.data.tx1_cache import EncoderFn
 
 
-class _TorchBertPadding:
+class TorchBertPadding:
     """Pure-Torch equivalent of flash_attn.bert_padding for the width probe."""
 
     @staticmethod
@@ -35,7 +35,7 @@ def install_padding_metadata_fallback() -> None:
     from llmfoundry.models.mpt import modeling_mpt
 
     if not hasattr(modeling_mpt, "bert_padding"):
-        modeling_mpt.bert_padding = _TorchBertPadding
+        modeling_mpt.bert_padding = TorchBertPadding
 
 
 def validate_load_result(load_result: Any) -> dict[str, object]:

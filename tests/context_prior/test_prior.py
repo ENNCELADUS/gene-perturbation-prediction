@@ -13,7 +13,7 @@ from src.context_prior.prior import (
     PriorInputs,
     PriorSpec,
     Stage,
-    _context_view,
+    context_view,
     crossfit,
     fit_prior,
     total,
@@ -157,9 +157,7 @@ def test_reduced_rank_applies_to_context_stages_only():
 def test_genotype_trains_on_out_of_sample_features_and_queries_on_full_encoders():
     inputs, ids = synthetic()
     fit_rows, encoder_rows = inputs.expression.loc[ids[:60]], inputs.expression
-    features, train = _context_view(
-        "predicted_genotype", inputs, fit_rows, encoder_rows
-    )
+    features, train = context_view("predicted_genotype", inputs, fit_rows, encoder_rows)
     folds = patient_folds(
         ids, inputs.patients, n_folds=INNER_FOLDS, seed=INNER_FOLD_SEED
     )
