@@ -42,13 +42,9 @@ from src.data.depmap import read_depmap_matrix, read_models
 from src.data.extra_lines import load_bulk_lines
 from src.data.splits import FixedSplit, load_geneeffect_split
 from src.eval.geneeffect import gain, score
-from src.data.io import read_json as _read_json
-from src.data.io import write_json as _write_json
-from src.data.io import write_text as _write_text
-from src.experiments.all import _number
+from src.data.io import read_json, write_json, write_text
 from src.experiments.config import load_config, load_prior_config
-from src.experiments.run_dir import bind as _bind
-from src.experiments.run_dir import locked as _locked
+from src.experiments.run_dir import bind, locked, number
 
 SCORED = ("val", "test")
 
@@ -246,12 +242,12 @@ def prior_inputs(base: RunBase, inputs: BridgeInputs) -> PriorInputs:
     )
 
 
-def _build(base: RunBase, kind: str, setting: Mapping[str, Any]) -> BridgeInputs:
+def build(base: RunBase, kind: str, setting: Mapping[str, Any]) -> BridgeInputs:
     module = importlib.import_module(f"src.context_prior.remedies.{kind}")
     return module.build(base.bridge, setting)
 
 
-class _Fitter:
+class Fitter:
     """Fits the prior of a list of stages on the labelled training lines and
     scores its total prediction of every query."""
 
@@ -321,8 +317,8 @@ def run_setting(
     the scale-free score barely separates the components penalties alone.
     """
     config = base.config
-    inputs = _build(base, experiment["kind"], setting)
-    fit = _Fitter(base, inputs)
+    inputs = build(base, experiment["kind"], setting)
+    fit = Fitter(base, inputs)
     repeats = int(config["prior"]["bootstrap_repeats"])
     grid = fit.components()
     rows = []
@@ -331,7 +327,7 @@ def run_setting(
         print(
             f"  {block_set}, components {components_penalty:g}, gene "
             f"{'-' if gene_penalty is None else f'{gene_penalty:g}'}: validation "
-            f"selective Spearman {_number(scores['val']['selective_spearman'])}",
+            f"selective Spearman {number(scores['val']['selective_spearman'])}",
             flush=True,
         )
         gains = {
@@ -384,7 +380,7 @@ def reference_predictions(base: RunBase) -> dict[str, pd.DataFrame]:
     ``test`` predictions."""
     reference = base.config["reference"]
     experiment = base.config["experiments"][reference["experiment"]]
-    fit = _Fitter(base, _build(base, experiment["kind"], experiment["settings"][0]))
+    fit = Fitter(base, build(base, experiment["kind"], experiment["settings"][0]))
     predictions, _ = fit(
         stages(
             base.config,
@@ -427,7 +423,7 @@ def _penalty(value: float | None) -> str:
 
 def _gain(entry: Mapping[str, Any]) -> str:
     low, high = entry["interval"]
-    return f"{_number(entry['difference'])} [{_number(low)}, {_number(high)}]"
+    return f"{number(entry['difference'])} [{number(low)}, {number(high)}]"
 
 
 def _counts(entry: Mapping[str, Any]) -> str:
@@ -440,15 +436,15 @@ def write_results(run_dir: Path) -> Path:
     """``results.md`` from every row file present: run facts, then per experiment
     a table with one row per setting x block set x penalty and a diagnostics
     table with one row per setting."""
-    with _locked(run_dir):
+    with locked(run_dir):
         return _write_results(run_dir)
 
 
 def _write_results(run_dir: Path) -> Path:
-    config = _read_json(run_dir / "run_config.json")["config"]
+    config = read_json(run_dir / "run_config.json")["config"]
     out = [f"# Linear context prior experiments, run {run_dir.name}", ""]
     if (run_dir / "facts.json").is_file():
-        facts = _read_json(run_dir / "facts.json")
+        facts = read_json(run_dir / "facts.json")
         out += [
             f"Shared expression space: {facts['space_genes']} genes "
             f"({facts['filled_lines']} training lines took the training mean for "
@@ -473,7 +469,7 @@ def _write_results(run_dir: Path) -> Path:
     ]
     records: dict[str, list[dict]] = {}
     for path in (run_dir / "rows").glob("*.json"):
-        record = _read_json(path)
+        record = read_json(path)
         records.setdefault(record["experiment"], []).append(record)
     columns = (
         "Setting | Block set | Components penalty | Gene penalty "
@@ -501,15 +497,15 @@ def _write_results(run_dir: Path) -> Path:
                     row["block_set"],
                     _penalty(row["components_penalty"]),
                     _penalty(row["gene_penalty"]),
-                    _number(row["val"]["selective_spearman"]),
-                    _number(row["test"]["selective_spearman"]),
+                    number(row["val"]["selective_spearman"]),
+                    number(row["test"]["selective_spearman"]),
                     _gain(row["val_gain"]),
                     _gain(row["test_gain"]),
-                    _number(row["val"]["selective_aupr_lift"]),
-                    _number(row["test"]["selective_aupr_lift"]),
-                    _number(row["val"]["residual_pearson_macro_per_gene"]),
-                    _number(row["test"]["residual_pearson_macro_per_gene"]),
-                    _number(row["oracle"]["selective_spearman"]),
+                    number(row["val"]["selective_aupr_lift"]),
+                    number(row["test"]["selective_aupr_lift"]),
+                    number(row["val"]["residual_pearson_macro_per_gene"]),
+                    number(row["test"]["residual_pearson_macro_per_gene"]),
+                    number(row["oracle"]["selective_spearman"]),
                 ]
                 out.append("| " + " | ".join(cells) + " |")
         out += [
@@ -526,9 +522,9 @@ def _write_results(run_dir: Path) -> Path:
             report = record["diagnostics"]
             cells = [
                 _label(record["setting"]),
-                _number(report["median"], 3),
-                _number(report["q25"], 3),
-                _number(report["q75"], 3),
+                number(report["median"], 3),
+                number(report["q25"], 3),
+                number(report["q75"], 3),
                 _counts(report["all"]),
                 _counts(report["selective"]),
                 _counts(report["selective_paralogs"]),
@@ -536,7 +532,7 @@ def _write_results(run_dir: Path) -> Path:
             ]
             out.append("| " + " | ".join(cells) + " |")
     path = run_dir / "results.md"
-    _write_text(path, "\n".join(out) + "\n")
+    write_text(path, "\n".join(out) + "\n")
     return path
 
 
@@ -571,7 +567,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"run id: {run_id}", flush=True)
     run_dir = Path(config["output_root"]) / run_id
     (run_dir / "rows").mkdir(parents=True, exist_ok=True)
-    _bind(run_dir, config)
+    bind(run_dir, config)
     pending = [
         (name, index, setting)
         for name in names
@@ -581,14 +577,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if pending:
         base = load_base(config)
         if not (run_dir / "facts.json").is_file():
-            _write_json(run_dir / "facts.json", _facts(base))
+            write_json(run_dir / "facts.json", _facts(base))
         print("reference row", flush=True)
         reference = reference_predictions(base)
         for name, index, setting in pending:
             experiment = config["experiments"][name]
             print(f"{name}, setting {index}: {_label(setting)}", flush=True)
             result = run_setting(base, experiment, setting, reference)
-            _write_json(
+            write_json(
                 _row_path(run_dir, name, index),
                 {
                     "experiment": name,

@@ -52,7 +52,7 @@ def _require_columns(frame: pd.DataFrame, columns: list[str], path: Path) -> Non
         raise ValueError(f"{path}: missing required columns {missing}")
 
 
-def _load_gene_mapping(config: dict[str, Any]) -> tuple[pd.DataFrame, dict[str, str]]:
+def load_gene_mapping(config: dict[str, Any]) -> tuple[pd.DataFrame, dict[str, str]]:
     path = Path(config["gene_metadata_path"])
     frame = pd.read_parquet(path)
     ensembl_col = str(config["gene_metadata_ensembl_column"])
@@ -113,7 +113,7 @@ def _load_gene_mapping(config: dict[str, Any]) -> tuple[pd.DataFrame, dict[str, 
     return indexed, symbol_to_ensembl
 
 
-def _map_and_collapse_genes(
+def map_and_collapse_genes(
     matrix: sparse.spmatrix,
     source_ids: list[str],
     id_kind: str,
@@ -165,7 +165,7 @@ def _map_and_collapse_genes(
     return collapsed, var, stats
 
 
-def _assert_raw_integer(matrix: sparse.spmatrix, label: str) -> None:
+def assert_raw_integer(matrix: sparse.spmatrix, label: str) -> None:
     data = sparse.csr_matrix(matrix).data
     if data.size and (not np.all(np.isfinite(data)) or np.any(data < 0)):
         raise ValueError(f"{label}: matrix has negative or non-finite values")
@@ -217,8 +217,8 @@ def _build_adata(
         )
     if len(source_cell_ids) != len(set(source_cell_ids)):
         raise ValueError(f"{model_id}: duplicate source cell ids")
-    _assert_raw_integer(matrix, model_id)
-    matrix, var, gene_stats = _map_and_collapse_genes(
+    assert_raw_integer(matrix, model_id)
+    matrix, var, gene_stats = map_and_collapse_genes(
         matrix, source_gene_ids, gene_id_kind, gene_metadata, symbol_to_ensembl
     )
     empty_genes = np.asarray(matrix.getnnz(axis=0) == 0).ravel()
@@ -401,7 +401,7 @@ def _load_hvgs(state_model_dir: Path) -> set[str]:
     return set(names)
 
 
-def _probe_tx1_loader(adata: ad.AnnData, config: dict[str, Any]) -> None:
+def probe_tx1_loader(adata: ad.AnnData, config: dict[str, Any]) -> None:
     """Materialize one real Tx1 input batch without loading model weights or a GPU."""
     from omegaconf import OmegaConf
     from tahoe_x1.tokenizer import GeneVocab
@@ -452,7 +452,7 @@ def _write_output(
         for adata, qc in built:
             model_id = str(qc["model_id"])
             if bool(config["run_tx1_loader_probe"]):
-                _probe_tx1_loader(adata, config)
+                probe_tx1_loader(adata, config)
                 qc["tx1_loader_probe"] = "passed"
             else:
                 qc["tx1_loader_probe"] = "not_run"
@@ -570,7 +570,7 @@ def run(config_path: Path, output_dir: Path, only_model_id: str | None) -> None:
     if missing_inputs:
         raise FileNotFoundError(f"missing provenance inputs: {missing_inputs}")
     config["_input_file_count"] = len(input_paths)
-    gene_metadata, symbol_to_ensembl = _load_gene_mapping(config)
+    gene_metadata, symbol_to_ensembl = load_gene_mapping(config)
     hvg_names = _load_hvgs(Path(config["state_model_dir"]))
     built: list[tuple[ad.AnnData, dict[str, Any]]] = []
     for source_name, source in config["sources"].items():

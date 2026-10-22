@@ -52,7 +52,6 @@ import os
 import subprocess
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Final
@@ -62,10 +61,10 @@ import pandas as pd
 
 from src.data import cell_states as cs
 from src.data.io import write_json, write_npz, write_parquet
+from src.experiments.run_dir import REPO_ROOT, absolute, open_manifest, record_step
 
 _LOGGER = logging.getLogger(__name__)
 
-REPO_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 STEPS: Final[tuple[str, ...]] = ("fit", "project", "inputs", "report")
 MANIFEST: Final[str] = "manifest.json"
 #: Largest difference allowed between the mass-weighted state inputs and the
@@ -75,11 +74,6 @@ IDENTITY_TOLERANCE: Final[float] = 1e-4
 REFERENCE_GROUPS: Final[tuple[str, ...]] = ("kinker", "gavish", "hallmarks", "tirosh")
 QC_NAMES: Final[tuple[str, ...]] = ("log_umi", "genes_detected", "mito_fraction")
 DELTAS: Final[tuple[str, ...]] = ("dH", "dE", "own_h", "own_dp")
-
-
-def _absolute(path: str | Path) -> Path:
-    path = Path(path)
-    return path if path.is_absolute() else REPO_ROOT / path
 
 
 def _load_npz(path: Path) -> dict[str, np.ndarray]:
@@ -175,11 +169,11 @@ class Telemetry:
         from src.experiments.config import load_ladder_config
         from src.experiments.ladder_inputs import load_setup
 
-        return load_setup(load_ladder_config(_absolute(self.config["ladder_config"])))
+        return load_setup(load_ladder_config(absolute(self.config["ladder_config"])))
 
     @property
     def ladder_root(self) -> Path:
-        return _absolute(self.setup.config["ladder_root"])
+        return absolute(self.setup.config["ladder_root"])
 
     @property
     def layout(self) -> Layout:
@@ -203,7 +197,7 @@ class Telemetry:
     def split(self) -> Any:
         from src.data.splits import load_geneeffect_split
 
-        return load_geneeffect_split(_absolute(self.setup.joint["paths"]["split"]))
+        return load_geneeffect_split(absolute(self.setup.joint["paths"]["split"]))
 
     @property
     def train(self) -> list[str]:
@@ -237,14 +231,14 @@ class Telemetry:
         """Each split line's deposit (the noise diagnosis's ``_deposits``)."""
         from src.data.prepare.plan_second_sources import PRIMARY_KEYS
 
-        path = _absolute(self.setup.joint["paths"]["split"]).with_suffix(".csv")
+        path = absolute(self.setup.joint["paths"]["split"]).with_suffix(".csv")
         table = pd.read_csv(path)
         sources = table.set_index("model_id")["expression_source"].astype(str)
         return sources.replace(PRIMARY_KEYS)
 
     @cached_property
     def chemistry_table(self) -> pd.DataFrame:
-        path = _absolute(self.config["references"]["chemistry"])
+        path = absolute(self.config["references"]["chemistry"])
         return pd.read_csv(path, keep_default_na=False, dtype=str)
 
     def cell_chemistry(self, model_id: str, cell_ids: np.ndarray) -> np.ndarray:
@@ -265,7 +259,7 @@ class Telemetry:
     def second_sources(self) -> dict[str, Path]:
         """Second-deposit h5ads of the projected lines (noise diagnosis's
         ``deposit.second_source_root``)."""
-        root = _absolute(self.setup.noise["deposit"]["second_source_root"])
+        root = absolute(self.setup.noise["deposit"]["second_source_root"])
         return {
             m: root / f"{m}.h5ad"
             for m in self.projected
@@ -273,9 +267,7 @@ class Telemetry:
         }
 
     def source(self, model_id: str) -> Path:
-        return (
-            _absolute(self.setup.joint["paths"]["basal_raw_umi"]) / f"{model_id}.h5ad"
-        )
+        return absolute(self.setup.joint["paths"]["basal_raw_umi"]) / f"{model_id}.h5ad"
 
     @cached_property
     def preparation(self) -> Mapping[str, Any]:
@@ -295,7 +287,7 @@ class Telemetry:
         panel = set(self.panel)
         out: dict[str, list[str]] = {}
         for group in REFERENCE_GROUPS:
-            table = pd.read_csv(_absolute(refs[group]), sep="\t")
+            table = pd.read_csv(absolute(refs[group]), sep="\t")
             key = table.columns[0]
             for name, members in table.groupby(key, sort=False):
                 genes = list(members["gene"].astype(str))
@@ -304,7 +296,7 @@ class Telemetry:
         return out
 
     def tirosh(self) -> dict[str, list[str]]:
-        table = pd.read_csv(_absolute(self.config["references"]["tirosh"]), sep="\t")
+        table = pd.read_csv(absolute(self.config["references"]["tirosh"]), sep="\t")
         return {p: list(g["gene"].astype(str)) for p, g in table.groupby("phase")}
 
 
@@ -318,39 +310,13 @@ def settings(t: Telemetry) -> dict[str, Any]:
     }
 
 
-def open_manifest(t: Telemetry) -> dict[str, Any]:
-    path = t.layout.root / MANIFEST
-    current = settings(t)
-    if path.is_file():
-        manifest = json.loads(path.read_text())
-        if manifest["settings"] != current:
-            raise ValueError(
-                f"{t.layout.root} was written under other settings; move it aside "
-                "(it holds the frozen PIE's state outputs too, under pie/)"
-            )
-        return manifest
-    manifest = {"settings": current, "steps": {}}
-    write_json(path, manifest, keep_nan=True)
-    return manifest
-
-
-def record_step(t: Telemetry, step: str, payload: Mapping[str, Any]) -> None:
-    path = t.layout.root / MANIFEST
-    manifest = json.loads(path.read_text())
-    manifest["steps"][step] = {
-        **payload,
-        "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-    }
-    write_json(path, manifest, keep_nan=True)
-
-
 # --- per-cell representations -------------------------------------------------------
 
 
 def _tx1(t: Telemetry, model_id: str, cell_ids: np.ndarray) -> np.ndarray:
     from src.data.tx1_cache import load_line_cache
 
-    root = _absolute(t.setup.config["paths"]["tx1_cache"]) / "real"
+    root = absolute(t.setup.config["paths"]["tx1_cache"]) / "real"
     embeddings, _, obs = load_line_cache(root, model_id)
     if list(obs.index.astype(str)) != [str(c) for c in cell_ids]:
         raise ValueError(f"{model_id}: Tx1 cells are not the line's cells in order")
@@ -990,7 +956,7 @@ def per_state_group_share(
     variance across lines explained by ``groups`` (eta squared), against
     ``groups`` permuted among the lines of each stratum (the noise diagnosis's
     null, state by state)."""
-    from src.context_prior.noise import _between_share
+    from src.context_prior.noise import between_share
 
     lines = list(frame.index)
     labels = groups.loc[lines].astype(str).to_numpy()
@@ -1003,7 +969,7 @@ def per_state_group_share(
 
     def share(assigned: np.ndarray) -> np.ndarray:
         onehot = (assigned[:, None] == levels[None, :]).astype(np.float64)
-        return _between_share(values, finite, onehot)
+        return between_share(values, finite, onehot)
 
     observed = share(labels)
     rng = np.random.default_rng(seed)
@@ -1330,7 +1296,7 @@ def gap_section(t: Telemetry, set_name: str) -> dict[str, Any] | None:
 
 
 def step_report(t: Telemetry) -> dict[str, Any]:
-    out_dir = _absolute(t.config["output_root"]) / t.name
+    out_dir = absolute(t.config["output_root"]) / t.name
     report: dict[str, Any] = {"vocabularies": {}, "pie_gap": {}}
     for vocabulary in cs.vocabularies(t.config):
         frame = line_masses(t, vocabulary, t.seed, t.train)
@@ -1487,10 +1453,10 @@ RUNNERS = {
 def run(config: Mapping[str, Any], name: str, steps: Sequence[str]) -> None:
     t = Telemetry(config, name)
     t.layout.root.mkdir(parents=True, exist_ok=True)
-    open_manifest(t)
+    open_manifest(t.layout.root / MANIFEST, settings(t), keep_nan=True)
     for step in steps:
         _LOGGER.info("%s: start", step)
-        record_step(t, step, RUNNERS[step](t))
+        record_step(t.layout.root / MANIFEST, step, RUNNERS[step](t), keep_nan=True)
         _LOGGER.info("%s: done", step)
 
 
@@ -1508,7 +1474,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
-    run(load_states_config(_absolute(args.config)), args.config.stem, steps)
+    run(load_states_config(absolute(args.config)), args.config.stem, steps)
     return 0
 
 

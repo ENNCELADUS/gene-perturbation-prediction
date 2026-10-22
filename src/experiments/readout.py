@@ -43,7 +43,8 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
     ``load_inputs`` (synthetic tests)."""
     from src.data.datasets import DependencyDataset
     from src.data.readout_cache import write_feature_cache
-    from src.experiments.geneeffect import _revision, mixed_precision, restore_model
+    from src.experiments.geneeffect import mixed_precision, restore_model
+    from src.experiments.run_dir import git_revision
     from src.training.checkpoint import load_checkpoint
 
     checkpoint = Path(checkpoint)
@@ -62,7 +63,7 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
     provenance = {
         "checkpoint": str(checkpoint.resolve()),
         "checkpoint_train_state": saved["train_state"],
-        "revision": _revision(),
+        "revision": git_revision(),
         "precision": mixed_precision(),
         "extraction_batch_size": batch_size,
         "config": saved["config"],

@@ -74,10 +74,10 @@ from typing import Any, Final
 import numpy as np
 import pandas as pd
 from src.data.io import write_json, write_npy, write_npz
+from src.experiments.run_dir import REPO_ROOT, absolute, record_step, shard
 
 log = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 STEPS: Final[tuple[str, ...]] = ("rescore", "pilot", "basis", "full", "assemble")
 #: Steps on a states config (``configs/stage_one/states/``), with ``--set``.
 STATE_STEPS: Final[tuple[str, ...]] = ("states", "assemble_states")
@@ -106,11 +106,6 @@ SHARD_ARRAYS: Final[tuple[str, ...]] = ("dH", "dL", "own_h", "own_dp", "own_x")
 
 
 # --- paths ------------------------------------------------------------------------
-
-
-def _absolute(path: str | Path) -> Path:
-    path = Path(path)
-    return path if path.is_absolute() else REPO_ROOT / path
 
 
 @dataclass(frozen=True)
@@ -145,9 +140,9 @@ class Layout:
 
 def layout(config: Mapping[str, Any]) -> Layout:
     return Layout(
-        root=_absolute(config["ladder_root"]),
-        checkpoint=_absolute(config["paths"]["pie_checkpoint"]),
-        context_text=_absolute(config["paths"]["context_text"]),
+        root=absolute(config["ladder_root"]),
+        checkpoint=absolute(config["paths"]["pie_checkpoint"]),
+        context_text=absolute(config["paths"]["context_text"]),
         config=config,
     )
 
@@ -163,18 +158,6 @@ def exclusive(out: Layout) -> Iterator[None]:
             yield
         finally:
             fcntl.flock(handle, fcntl.LOCK_UN)
-
-
-def record(out: Layout, step: str, payload: Mapping[str, Any]) -> None:
-    """Add a step's record to ``pie/run.json``, re-read so shards keep theirs."""
-    path = out.pie / "run.json"
-    with exclusive(out):
-        run = json.loads(path.read_text()) if path.is_file() else {"steps": {}}
-        run["steps"][step] = {
-            **payload,
-            "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        }
-        write_json(path, run)
 
 
 # --- the ladder's tables ------------------------------------------------------------
@@ -1713,7 +1696,7 @@ def run_state_steps(
 ) -> None:
     from src.experiments.config import load_ladder_config
 
-    config = load_ladder_config(_absolute(states_config["ladder_config"]))
+    config = load_ladder_config(absolute(states_config["ladder_config"]))
     out = layout(config)
     tables = read_tables(out.root)
     with exclusive(out):
@@ -1723,8 +1706,8 @@ def run_state_steps(
             run_states(out, tables, states_config, sets, shard, device)
         elif step == "assemble_states":
             for name in sets:
-                record(
-                    out,
+                record_step(
+                    out.pie / "run.json",
                     f"assemble_states_{name}",
                     assemble_states(out, tables, states_config, name),
                 )
@@ -1746,7 +1729,7 @@ def run(
     seed = int(config["seed"])
     for step in steps:
         if step == "rescore":
-            record(out, "rescore", rescore(out, device))
+            record_step(out.pie / "run.json", "rescore", rescore(out, device))
         elif step == "pilot":
             genes = shard_genes(
                 pilot_genes(tables, int(config["pie"]["pilot_genes"]), seed), shard
@@ -1754,9 +1737,13 @@ def run(
             result = run_genes(
                 out, tables, genes, device, keep_full=set(genes), basis=None
             )
-            record(out, f"pilot_shard_{shard[0]}_of_{shard[1]}", result)
+            record_step(
+                out.pie / "run.json", f"pilot_shard_{shard[0]}_of_{shard[1]}", result
+            )
         elif step == "basis":
-            record(out, "basis", build_basis(out, tables, device, seed))
+            record_step(
+                out.pie / "run.json", "basis", build_basis(out, tables, device, seed)
+            )
         elif step == "full":
             basis_path = out.pie / "basis.npz"
             if not basis_path.is_file():
@@ -1766,23 +1753,18 @@ def run(
             result = run_genes(
                 out, tables, genes, device, keep_full=tables.selective, basis=basis
             )
-            record(out, f"full_shard_{shard[0]}_of_{shard[1]}", result)
+            record_step(
+                out.pie / "run.json", f"full_shard_{shard[0]}_of_{shard[1]}", result
+            )
         elif step == "assemble":
-            record(out, "assemble", assemble(out, tables))
-
-
-def _shard(value: str) -> tuple[int, int]:
-    index, count = (int(part) for part in value.split("/"))
-    if not 0 <= index < count:
-        raise argparse.ArgumentTypeError(f"shard {value}: need 0 <= I < N")
-    return index, count
+            record_step(out.pie / "run.json", "assemble", assemble(out, tables))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
     parser.add_argument("--steps", required=True)
-    parser.add_argument("--shard", type=_shard, default=(0, 1))
+    parser.add_argument("--shard", type=shard, default=(0, 1))
     parser.add_argument("--device", default="cuda")
     parser.add_argument(
         "--set",
@@ -1804,7 +1786,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         from src.data.cell_states import state_sets
         from src.experiments.config import load_states_config
 
-        states_config = load_states_config(_absolute(args.config))
+        states_config = load_states_config(absolute(args.config))
         every = state_sets(states_config)
         sets = every if args.sets == "ALL" else args.sets.split(",")
         if set(sets) - set(every):
@@ -1815,7 +1797,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--set belongs to the states steps")
     from src.experiments.config import load_ladder_config
 
-    run(load_ladder_config(_absolute(args.config)), steps, args.shard, args.device)
+    run(load_ladder_config(absolute(args.config)), steps, args.shard, args.device)
     return 0
 
 

@@ -39,15 +39,15 @@ import subprocess
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from src.experiments.run_dir import REPO_ROOT, now
+
 log = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_ROOT = REPO_ROOT / "outputs" / "pie_reproduction"
 
 VENDORED_COMMIT = "21a526add9ff3a81b4f962d9b16bbae570052c63"
@@ -569,10 +569,6 @@ def compare(run_dir: Path, run_id: str) -> None:
 # --- record ------------------------------------------------------------------------
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
 def environment() -> dict[str, object]:
     """Python, torch, PIE and the GPU, each as far as this environment has it."""
     record: dict[str, object] = {
@@ -672,11 +668,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if done[step]():
             log.info("%s: outputs exist, skipping", step)
             continue
-        started = _now()
+        started = now()
         run[step]()
         # Re-read: another process may have recorded its steps meanwhile.
         record = json.loads(record_path.read_text())
-        record["steps"][step] = {"started": started, "finished": _now()}
+        record["steps"][step] = {"started": started, "finished": now()}
         _write_record(record_path, record)
     return 0
 

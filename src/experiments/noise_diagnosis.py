@@ -63,17 +63,15 @@ from src.context_prior.prior import (
 )
 from src.context_prior.ridge import shared_ridge
 from src.data.prior_offsets import checked_prior, read_prior_offsets
-from src.experiments.all import _number
+from src.data.io import write_json, write_text
+from src.experiments.run_dir import bind, interval, number
 from src.experiments.config import load_config, load_noise_config
 from src.eval.geneeffect import BOOTSTRAP_SEED, gain, long_frame, score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,
-    _bind,
-    _build,
-    _Fitter,
-    _write_json,
-    _write_text,
+    build,
+    Fitter,
     load_base,
     prior_inputs,
     stages,
@@ -151,7 +149,7 @@ class Diagnosis:
             raise ValueError(
                 f"the diagnosis rebuilds the affine bridge, not {experiment['kind']!r}"
             )
-        return prior_inputs(self.base, _build(self.base, "affine", {}))
+        return prior_inputs(self.base, build(self.base, "affine", {}))
 
     def raw_pseudobulk(self) -> pd.DataFrame:
         from src.data.pseudobulk import read_pseudobulk
@@ -319,7 +317,7 @@ def cell_sampling(diagnosis: Diagnosis, out: Path) -> dict:
     half_a, _ = draw("half_a", lines, measured_only=True)
     half_b, _ = draw("half_b", lines, measured_only=True)
     paired = [m for m in base.bridge.paired if m in halved]
-    affine = _build(base, "affine", {})
+    affine = build(base, "affine", {})
     genes = pd.DataFrame(
         {
             "split_half_r": column_pearson(half_a, half_b),
@@ -478,7 +476,7 @@ def learning_curve(diagnosis: Diagnosis, out: Path) -> dict:
                 folds={m: base.bridge.folds[m] for m in sc},
             ),
         )
-        predictions, _ = _Fitter(sub, _build(sub, "affine", {}))(
+        predictions, _ = Fitter(sub, build(sub, "affine", {}))(
             stages(
                 base.config,
                 reference_row["block_set"],
@@ -859,22 +857,15 @@ RUNNERS: dict[str, Callable[[Diagnosis, Path], dict]] = {
 # ----------------------------------------------------------------------------
 
 
-def _interval(entry: Mapping[str, Any] | None) -> str:
-    if entry is None:
-        return ""
-    low, high = entry["interval"]
-    return f"{_number(entry['difference'])} [{_number(low)}, {_number(high)}]"
-
-
 def _quartiles(entry: Mapping[str, Any]) -> str:
     return (
-        f"{_number(entry['median'], 3)} [{_number(entry['q25'], 3)}, "
-        f"{_number(entry['q75'], 3)}] (n={entry['count']})"
+        f"{number(entry['median'], 3)} [{number(entry['q25'], 3)}, "
+        f"{number(entry['q75'], 3)}] (n={entry['count']})"
     )
 
 
 def _split_cells(entry: Mapping[str, Any]) -> list[str]:
-    return [_number(entry["selective_spearman"]), _interval(entry["gain"])]
+    return [number(entry["selective_spearman"]), interval(entry["gain"])]
 
 
 def _table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> list[str]:
@@ -947,24 +938,24 @@ def _learning_curve_md(section: Mapping[str, Any]) -> list[str]:
                     f"{row['fraction']:g}",
                     lines,
                     split,
-                    _number(prior["selective_spearman"]),
-                    _interval(entry["gain"]),
-                    _number(prior["within_gene_r2"]),
-                    _number(mean["within_gene_r2"]),
-                    _interval(entry["r2_over_gene_mean"]),
-                    _interval(entry["r2_over_full"]),
-                    _number(prior["aupr_lift"]),
-                    _number(prior["residual_pearson"]),
+                    number(prior["selective_spearman"]),
+                    interval(entry["gain"]),
+                    number(prior["within_gene_r2"]),
+                    number(mean["within_gene_r2"]),
+                    interval(entry["r2_over_gene_mean"]),
+                    interval(entry["r2_over_full"]),
+                    number(prior["aupr_lift"]),
+                    number(prior["residual_pearson"]),
                 ]
             )
             whole.append(
                 [
                     f"{row['fraction']:g}",
                     split,
-                    _number(prior["absolute_pearson"]),
-                    _number(mean["absolute_pearson"]),
-                    _number(prior["rmse"]),
-                    _number(mean["rmse"]),
+                    number(prior["absolute_pearson"]),
+                    number(mean["absolute_pearson"]),
+                    number(prior["rmse"]),
+                    number(mean["rmse"]),
                 ]
             )
     out = [
@@ -1022,18 +1013,18 @@ def _learning_curve_md(section: Mapping[str, Any]) -> list[str]:
                     name,
                     split,
                     f"{entry['pairs']:,} ({entry['selective_pairs']:,} selective)",
-                    f"{_number(scores['selective_spearman'])} "
+                    f"{number(scores['selective_spearman'])} "
                     f"({scores['selective_spearman_scored']} genes)",
-                    _number(scores["within_gene_r2"]),
-                    _number(scores["absolute_pearson"]),
-                    _number(scores["rmse"]),
+                    number(scores["within_gene_r2"]),
+                    number(scores["absolute_pearson"]),
+                    number(scores["rmse"]),
                 ]
             )
     gains = [
         [
             split,
-            _interval(cilantro[split]["cilantro_over_gene_mean"]),
-            _interval(cilantro[split]["prior_over_cilantro"]),
+            interval(cilantro[split]["cilantro_over_gene_mean"]),
+            interval(cilantro[split]["prior_over_cilantro"]),
         ]
         for split in SCORED
     ]
@@ -1067,17 +1058,17 @@ def _deposit_confound_md(section: Mapping[str, Any]) -> list[str]:
         [
             name,
             grouping,
-            _number(entry["observed"]),
-            _number(entry["null_mean"]),
-            _number(entry["null_q95"]),
-            _number(entry["p_value"], 3),
+            number(entry["observed"]),
+            number(entry["null_mean"]),
+            number(entry["null_q95"]),
+            number(entry["p_value"], 3),
             str(entry["groups"]),
         ]
         for name, groupings in section["shares"].items()
         for grouping, entry in groupings.items()
     ]
     deposits = [
-        [name, str(entry["lines"]), _number(entry["error_ms_ratio"], 3)]
+        [name, str(entry["lines"]), number(entry["error_ms_ratio"], 3)]
         for name, entry in section["per_deposit"].items()
     ]
     return [
@@ -1097,7 +1088,7 @@ def _deposit_confound_md(section: Mapping[str, Any]) -> list[str]:
 
 def _deposit_swap_md(section: Mapping[str, Any]) -> list[str]:
     scores = [
-        [name, _number(entry["selective_spearman"]), _interval(entry["gain"])]
+        [name, number(entry["selective_spearman"]), interval(entry["gain"])]
         for name, entry in section["scores"].items()
     ]
     agreement = [
@@ -1134,7 +1125,7 @@ def _cell_states_md(section: Mapping[str, Any]) -> list[str]:
                 for split in SCORED
                 for cell in (
                     *_split_cells(row[split]),
-                    _interval(row[split].get("gain_over_program_means")),
+                    interval(row[split].get("gain_over_program_means")),
                 )
             ),
         ]
@@ -1146,8 +1137,8 @@ def _cell_states_md(section: Mapping[str, Any]) -> list[str]:
         "## Cell states",
         "",
         "Prior alone: validation "
-        f"{_number(prior['val']['selective_spearman'])}, test "
-        f"{_number(prior['test']['selective_spearman'])}. Gains over the prior "
+        f"{number(prior['val']['selective_spearman'])}, test "
+        f"{number(prior['test']['selective_spearman'])}. Gains over the prior "
         "alone; `program_fractions` also over `program_means` at the same penalty.",
         "",
         *_table(header + ["Test", "Test gain", "Test over means"], rows),
@@ -1211,19 +1202,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_dir = Path(config["output_root"]) / args.run_id
     out = run_dir / OUT_DIR
     out.mkdir(parents=True, exist_ok=True)
-    _bind(run_dir, config)
+    bind(run_dir, config)
     pending = [name for name in names if not (out / f"{name}.json").is_file()]
     if pending:
         diagnosis = load_diagnosis(config)
         for name in pending:
             print(f"section {name}", flush=True)
-            _write_json(out / f"{name}.json", RUNNERS[name](diagnosis, out))
+            write_json(out / f"{name}.json", RUNNERS[name](diagnosis, out))
     results = {
         name: json.loads((out / f"{name}.json").read_text())
         for name in SECTIONS
         if (out / f"{name}.json").is_file()
     }
-    _write_text(out / "results.md", results_markdown(args.run_id, config, results))
+    write_text(out / "results.md", results_markdown(args.run_id, config, results))
     print(f"noise diagnosis: {out / 'results.md'}", flush=True)
     return 0
 

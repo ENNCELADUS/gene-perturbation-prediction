@@ -57,20 +57,21 @@ def evaluate_model(model, inputs, *, split):
 
 
 def _export(model, inputs, run_dir, split):
-    from src.experiments.geneeffect import _set_status, export_evaluation
+    from src.experiments.geneeffect import export_evaluation
+    from src.experiments.run_dir import set_status
 
-    _set_status(run_dir, "evaluation", "running", split=split)
+    set_status(run_dir, "evaluation", "running", split=split)
     try:
         result, features = evaluate_model(model, inputs, split=split)
         destination = run_dir / "evaluation" / split
         export_evaluation(result, destination)
         features.to_csv(destination / "context_features.csv")
-        _set_status(
+        set_status(
             run_dir, "evaluation", "completed", split=split, output=str(destination)
         )
         return result
     except Exception as exc:
-        _set_status(run_dir, "evaluation", "failed", split=split, error=str(exc))
+        set_status(run_dir, "evaluation", "failed", split=split, error=str(exc))
         raise
 
 
@@ -80,17 +81,17 @@ def fit_baseline(config_path: Path, out_dir: Path) -> Path:
     from src.baselines.tx1_gmm import Tx1GMMRidge
     from src.data.prepared import load_inputs
     from src.experiments.config import load_config
-    from src.data.io import write_json as _write_json
-    from src.experiments.geneeffect import _revision, _set_status
+    from src.data.io import write_json as write_json
+    from src.experiments.run_dir import git_revision, set_status
 
     config = load_config(config_path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=False)
-    _write_json(
+    write_json(
         out_dir / "run.json",
         {
             "method": "tx1_gmm_ridge",
-            "revision": _revision(),
+            "revision": git_revision(),
             "config": config,
             "sklearn_version": sklearn.__version__,
             "fitting": {"status": "running"},
@@ -112,8 +113,8 @@ def fit_baseline(config_path: Path, out_dir: Path) -> Path:
         }
         joblib.dump(bundle, temporary)
         temporary.replace(destination)
-        _write_json(out_dir / "diagnostics.json", model.diagnostics)
-        _set_status(
+        write_json(out_dir / "diagnostics.json", model.diagnostics)
+        set_status(
             out_dir,
             "fitting",
             "completed",
@@ -125,7 +126,7 @@ def fit_baseline(config_path: Path, out_dir: Path) -> Path:
             flush=True,
         )
     except Exception as exc:
-        _set_status(out_dir, "fitting", "failed", error=str(exc))
+        set_status(out_dir, "fitting", "failed", error=str(exc))
         raise
     finally:
         temporary.unlink(missing_ok=True)

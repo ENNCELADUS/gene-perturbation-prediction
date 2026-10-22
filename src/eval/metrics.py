@@ -15,7 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 MIN_OBSERVATIONS = 3
 
 
-def _unit_pearson(truth: np.ndarray, pred: np.ndarray) -> float:
+def unit_pearson(truth: np.ndarray, pred: np.ndarray) -> float:
     """Pearson on finite pairs, with the same undefined policy as Spearman."""
     finite = np.isfinite(truth) & np.isfinite(pred)
     truth, pred = truth[finite], pred[finite]
@@ -26,7 +26,7 @@ def _unit_pearson(truth: np.ndarray, pred: np.ndarray) -> float:
     return float(pearsonr(truth, pred).statistic)
 
 
-def _unit_spearman(truth: np.ndarray, pred: np.ndarray) -> float:
+def unit_spearman(truth: np.ndarray, pred: np.ndarray) -> float:
     """Spearman rho for one unit's (truth, pred) pairs, or NaN if undefined.
 
     Rows where either value is NaN are dropped first. The remaining pair is
@@ -59,7 +59,7 @@ def _unit_spearman(truth: np.ndarray, pred: np.ndarray) -> float:
 def _spearman_by_unit(
     frame: pd.DataFrame, *, unit_col: str, truth_col: str, pred_col: str
 ) -> pd.Series:
-    """Compute :func:`_unit_spearman` within each group of ``unit_col``.
+    """Compute :func:`unit_spearman` within each group of ``unit_col``.
 
     Args:
         frame: Long-form predictions frame.
@@ -85,7 +85,7 @@ def _spearman_by_unit(
     for unit, group in frame.groupby(unit_col, sort=False):
         truth = group[truth_col].to_numpy(dtype=float)
         pred = group[pred_col].to_numpy(dtype=float)
-        values[unit] = _unit_spearman(truth, pred)
+        values[unit] = unit_spearman(truth, pred)
 
     series = pd.Series(values, dtype=float, name="spearman")
     series.index.name = unit_col
@@ -160,7 +160,7 @@ class _ResampledSpearman:
     once, and the correlation is the ``c``-weighted Pearson of those ranks.
     Entries where either value is not finite are dropped; a gene is NaN with
     fewer than :data:`MIN_OBSERVATIONS` usable pairs or a constant truth or
-    prediction in the resample, as in :func:`_unit_spearman`.
+    prediction in the resample, as in :func:`unit_spearman`.
     """
 
     def __init__(self, truth: np.ndarray, pred: np.ndarray) -> None:

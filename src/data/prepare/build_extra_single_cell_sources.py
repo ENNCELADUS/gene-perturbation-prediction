@@ -46,10 +46,10 @@ from src.data.basal import align_columns, assert_tx1_input_contract
 from src.data.depmap import read_depmap_matrix, read_model_ids, read_models
 from src.data.prepare.build_extra_single_cell_lines import Admission, admit, read_map
 from src.data.prepare.prepare_cell_line_atlas_raw_umi import (
-    _assert_raw_integer,
-    _load_gene_mapping,
-    _map_and_collapse_genes,
-    _probe_tx1_loader,
+    assert_raw_integer,
+    load_gene_mapping,
+    map_and_collapse_genes,
+    probe_tx1_loader,
 )
 from src.data.splits import FixedSplit, load_geneeffect_split
 
@@ -377,7 +377,7 @@ def _read_tahoe(root: Path, spec: Mapping[str, Any]) -> Library:
     """Tahoe-100M parquet shards (paths relative to the working directory): every
     cell of the listed Cellosaurus lines given ``drug``, labelled by
     ``cell_line_id`` in obs."""
-    from src.data.basal import _assemble_tahoe_matrix
+    from src.data.basal import assemble_tahoe_matrix
 
     wanted = set(spec["cell_lines"])
     columns = ["genes", "expressions", "BARCODE_SUB_LIB_ID", "cell_line_id", "drug"]
@@ -392,7 +392,7 @@ def _read_tahoe(root: Path, spec: Mapping[str, Any]) -> Library:
     if not cells:
         raise ValueError(f"{spec['shards']}: no cells of {sorted(wanted)}")
     metadata = pd.read_parquet(spec["gene_metadata"]).set_index("token_id")
-    counts, var = _assemble_tahoe_matrix(reservoir, metadata)
+    counts, var = assemble_tahoe_matrix(reservoir, metadata)
     return Library(
         counts=sparse.csr_matrix(counts),
         cells=cells,
@@ -421,7 +421,7 @@ def read_library(root: Path, spec: Mapping[str, Any]) -> Library:
     reader = spec["reader"]
     _require(spec, READERS[reader], f"{reader} library")
     library = _READ[reader](root, spec)
-    _assert_raw_integer(library.counts, f"{root} {reader} library")
+    assert_raw_integer(library.counts, f"{root} {reader} library")
     if library.counts.shape != (len(library.cells), len(library.genes)):
         raise ValueError(f"{root}: counts {library.counts.shape} do not match ids")
     if len(set(library.cells)) != len(library.cells):
@@ -819,7 +819,7 @@ def build_source(
         if not keep.any():
             continue
         rows = np.flatnonzero(keep)
-        mapped, var, gene_stats = _map_and_collapse_genes(
+        mapped, var, gene_stats = map_and_collapse_genes(
             library.counts[rows],
             [gene.split(".")[0] for gene in library.genes]
             if source["gene_id_kind"] == "ensembl"
@@ -847,7 +847,7 @@ def build_source(
             continue
         adata = _line_adata(model_id, name, blocks[model_id], context)
         if context.spec["run_tx1_loader_probe"]:
-            _probe_tx1_loader(adata, context.spec)
+            probe_tx1_loader(adata, context.spec)
         _write_h5ad(adata, output / f"{model_id}.h5ad")
         written[model_id] = {
             "cells": int(adata.n_obs),
@@ -948,7 +948,7 @@ def run(
         labelled_ids=read_model_ids(Path(spec["gene_effect_path"])),
         split=split,
     )
-    gene_metadata, symbol_to_ensembl = _load_gene_mapping(spec)
+    gene_metadata, symbol_to_ensembl = load_gene_mapping(spec)
     context = Context(
         spec, candidates, admission, split, models, gene_metadata, symbol_to_ensembl
     )

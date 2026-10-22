@@ -34,15 +34,13 @@ from src.context_prior.single_cell import (
 )
 from src.data.prepared import read_manifest
 from src.data.prior_offsets import checked_prior, read_prior_offsets
-from src.experiments.all import _number
+from src.data.io import write_json, write_text
+from src.experiments.run_dir import bind, number
 from src.experiments.config import load_config, load_stack_config
 from src.eval.geneeffect import gain, score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,
-    _bind,
-    _write_json,
-    _write_text,
     load_base,
 )
 
@@ -150,8 +148,8 @@ def results_markdown(run_id: str, config: Mapping[str, object], result: dict) ->
         "intervals are 95% paired line bootstraps. Nothing is chosen here; nothing "
         "here is synthetic-lethality evidence.",
         "",
-        f"Prior alone: validation {_number(prior['val']['selective_spearman'])}, "
-        f"test {_number(prior['test']['selective_spearman'])}.",
+        f"Prior alone: validation {number(prior['val']['selective_spearman'])}, "
+        f"test {number(prior['test']['selective_spearman'])}.",
         "",
     ]
     for arm, record in result["arms"].items():
@@ -168,7 +166,7 @@ def results_markdown(run_id: str, config: Mapping[str, object], result: dict) ->
             for split in SCORED:
                 entry = row[split]
                 cells += [
-                    _number(entry["selective_spearman"]),
+                    number(entry["selective_spearman"]),
                     interval(entry["gain_over_prior"]),
                     interval(entry.get(f"gain_over_{CONTROL_ARM}")),
                 ]
@@ -190,7 +188,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if (out / "results.md").exists():
         raise FileExistsError(f"{out} is complete; use a new --run-id")
     (out / "rows").mkdir(parents=True, exist_ok=True)
-    _bind(run_dir, config)
+    bind(run_dir, config)
 
     prior_run = Path(config["prior_run"])
     base_config = json.loads((prior_run / "run_config.json").read_text())["config"]
@@ -215,11 +213,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     result = run_arms(config, base, export.values.loc[every], statistics)
     result["facts"]["prior_identity"] = export.identity
     for arm, record in result["arms"].items():
-        _write_json(out / "rows" / f"{arm}.json", record)
-    _write_json(
+        write_json(out / "rows" / f"{arm}.json", record)
+    write_json(
         out / "facts.json", {**result["facts"], "prior_alone": result["prior_alone"]}
     )
-    _write_text(out / "results.md", results_markdown(args.run_id, config, result))
+    write_text(out / "results.md", results_markdown(args.run_id, config, result))
     print(f"single-cell stack: {out / 'results.md'}", flush=True)
     return 0
 

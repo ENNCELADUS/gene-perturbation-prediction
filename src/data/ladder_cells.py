@@ -59,7 +59,7 @@ def library_sizes(counts: sparse.csr_matrix) -> np.ndarray:
     return np.asarray(counts.sum(axis=1), dtype=np.float64).ravel()
 
 
-def _scaled(counts: sparse.csr_matrix, library: np.ndarray, target_sum: float):
+def scale_to_total(counts: sparse.csr_matrix, library: np.ndarray, target_sum: float):
     """``x * target_sum / L`` per cell; cells without UMI stay zero."""
     scale = np.zeros_like(library)
     scale[library > 0] = target_sum / library[library > 0]
@@ -107,7 +107,7 @@ def gene_summaries(
     aligned, listed = align_columns(matrix, upper_symbols(symbols), list(genes))
     aligned.eliminate_zeros()
     n_cells = aligned.shape[0]
-    scaled = _scaled(aligned, library, PIE_TARGET_SUM)
+    scaled = scale_to_total(aligned, library, PIE_TARGET_SUM)
     rate = np.asarray(scaled.sum(axis=0)).ravel() / n_cells
     pie_input, sd = _log_moments(scaled)
     detected = np.diff(aligned.tocsc().indptr) / n_cells
@@ -120,7 +120,7 @@ def gene_summaries(
         detected_expected[start:stop] = 1.0 - np.exp(-expected).mean(axis=0)
         replicate = sparse.csr_matrix(rng.poisson(expected), dtype=np.float64)
         _, sd_expected[start:stop] = _log_moments(
-            _scaled(replicate, library, PIE_TARGET_SUM)
+            scale_to_total(replicate, library, PIE_TARGET_SUM)
         )
     values = [
         pie_input,
@@ -206,7 +206,7 @@ def hvg_cells(
     aligned, listed = align_columns(
         matrix, upper_symbols(symbols), upper_symbols(hvg_order)
     )
-    scaled = _scaled(aligned, library, target_sum)
+    scaled = scale_to_total(aligned, library, target_sum)
     cells = np.log1p(scaled.toarray()).astype(np.float32)
     mean_cell = np.log1p(np.asarray(scaled.mean(axis=0)).ravel()).astype(np.float32)
     return HvgCells(

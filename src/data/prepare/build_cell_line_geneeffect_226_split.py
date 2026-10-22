@@ -11,8 +11,8 @@ from pathlib import Path
 import pandas as pd
 
 from src.data.split_build import (
-    _require_manifest,
-    _require_selection_audit,
+    require_manifest,
+    require_selection_audit,
     assign_splits,
 )
 
@@ -126,8 +126,8 @@ def build(
     if output_dir.exists():
         raise FileExistsError(f"refusing to overwrite {output_dir}")
 
-    atlas = _require_manifest(pd.read_csv(atlas_manifest_path), 179)
-    selection_audit = _require_selection_audit(selection_audit_path, atlas)
+    atlas = require_manifest(pd.read_csv(atlas_manifest_path), 179)
+    selection_audit = require_selection_audit(selection_audit_path, atlas)
     assignment, source_targets, optimizer = assign_splits(
         atlas,
         counts={"train": 125, "val": 27, "test": 27},

@@ -12,7 +12,7 @@ import pandas as pd
 #: DepMap header ``SYMBOL (Entrez)``; some Omics columns carry ``(Unknown)``.
 _COLUMN = re.compile(r"^(?P<symbol>\S+) \((?:\d+|Unknown)\)$")
 #: Profile metadata of DepMap Omics matrices (one row per sequencing profile).
-_OMICS_METADATA = frozenset(
+OMICS_METADATA = frozenset(
     {
         "SequencingID",
         "ModelConditionID",
@@ -45,7 +45,7 @@ def read_depmap_matrix(path: Path) -> pd.DataFrame:
             columns=[
                 column
                 for column in frame.columns
-                if column in _OMICS_METADATA or str(column).startswith("Unnamed")
+                if column in OMICS_METADATA or str(column).startswith("Unnamed")
             ]
         )
     else:

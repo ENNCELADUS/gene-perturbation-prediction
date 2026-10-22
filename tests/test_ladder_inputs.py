@@ -295,7 +295,7 @@ def test_tx1_embeds_real_and_count_shuffled_cells(world, monkeypatch):
 
         return encode, {}
 
-    monkeypatch.setattr(tx1, "_build_tx1_encoder", fake_builder)
+    monkeypatch.setattr(tx1, "build_tx1_encoder", fake_builder)
     ladder.run(config, ["tx1"], (1, 2))
     setup = ladder.load_setup(config)
     lines = ladder.tx1_lines(ladder.load_frame(setup))[1::2]
