@@ -2,9 +2,7 @@
 
 Updated 2026-10-02. This is the **separate, unimplemented SL-pair protocol** under
 [the research blueprint](01-blueprint.md); its rules are in §8. It builds on the backbone defined by the
-[GeneEffect protocol](03-geneeffect-protocol.md), whose seed-0 model has completed
-training and testing once
-([result](../results/joint_geneeffect_seed0/README.md)). No SL head, out-of-fold SL
+[GeneEffect protocol](03-geneeffect-protocol.md) (§4). No SL head, out-of-fold SL
 feature set or SL performance result exists.
 
 **Superseded in part (2026-10-09, benchmark 2026-10-11).** The [research blueprint](01-blueprint.md#3-task-formulation) now fixes
@@ -133,15 +131,11 @@ The four response anchors are those of the
 [GeneEffect protocol §3.2](03-geneeffect-protocol.md#32-response-anchors): K562, HCT116,
 Jurkat and HepG2, with genetic-perturbation responses and non-targeting controls.
 Inner-fold exclusion also removes an excluded context's response supervision.
-Response supervision is auxiliary and uses every condition of each included anchor;
-there is no response-condition holdout.
 
 ### 3.3 Dependency labels
 
 Use the pinned DepMap 26Q1 GeneEffect release. Fit gene means, variable-gene
-membership and normalization on the eligible training cohort of each fit only.
-The 226-line benchmark is a separate diagnostic experiment; its supervised
-membership does not determine eligibility under the SL split.
+membership and normalization on the eligible training cohort of each fit only (§4).
 
 ### 3.4 Pair labels
 
@@ -160,17 +154,15 @@ its [current design](specs/2026-10-02-expression-space-and-all-pipeline-design.m
 adds requirements that the GeneEffect run does not meet.
 
 The SL experiment must specify its own eligible dependency cohort and validation
-surface before fitting; it must not import the 226-line split by convenience.
-SL validation/test contexts are excluded from supervised fitting and fitted
-preprocessing. Validation may select but never join the training cohort. Record
+surface before fitting (§8); it must not import the 226-line split by convenience. Record, for every inner model,
 response loss and both component terms alongside dependency error and correlation;
 improving one task is not evidence of improving the other.
 
 The completed seed-0 `best.pt` is diagnostic evidence only: it beats the context-blind
 gene mean by 0.0773% Huber and trails the Tx1 context-PCA ridge on residual
 correlation ([result](../results/joint_geneeffect_seed0/README.md)). It neither supplies
-the required SL exclusions nor the inner-fold models of §5, and its 226-line test set,
-observed once on 2026-09-07, must not become an SL tuning surface. Inner fits that
+the required SL exclusions nor the inner-fold models of §5, and its 226-line test set was
+observed once on 2026-09-07 (§8). Inner fits that
 exclude a response anchor need an explicit eligible-anchor configuration; the fixed
 four-anchor trainer cannot be reused unchanged for those folds.
 
@@ -233,8 +225,7 @@ uses out-of-fold predicted profiles, the **measured-profile arm** measured DepMa
 over the same $\mathcal{C}_{\text{ref}}$ columns, and the **measured all-lines ceiling**
 measured GeneEffect over all DepMap columns.
 
-Controls, all reported as per-context lift on the same universe; none may remove a
-context after its result is seen:
+Controls, all reported as per-context lift on the same universe (§8):
 
 | Control | Definition | Shortcut removed |
 | --- | --- | --- |
@@ -258,12 +249,9 @@ context claim is licensed at any absolute AUPR.
 
 **GeneEffect.** The [metric definitions](03-geneeffect-protocol.md#6-evaluation)
 distinguish cross-gene absolute correlation from per-gene cross-context residual
-correlation. The latter is scored on the separate 226-line benchmark under the
-[GeneEffect protocol §6](03-geneeffect-protocol.md#6-evaluation), which this document
-does not duplicate; that score is diagnostic, not an SL test score. Among SL
-test contexts only 22RV1 is GeneEffect-covered; its per-context cross-gene Spearman is
-reportable and cannot support a context claim. Report response loss and its two terms
-for every inner model.
+correlation. The latter is scored on the separate 226-line benchmark; that score is
+diagnostic, not an SL test score. Among SL test contexts only 22RV1 is GeneEffect-covered;
+its per-context cross-gene Spearman is reportable and cannot support a context claim.
 
 **SL.** Coverage and post-filter class counts precede every performance number. Report
 AUPR − prior per test context and as a macro; AUROC is secondary. Stratify each AUPR
@@ -307,8 +295,8 @@ validation, report both, experiment code reports and people decide). The SL-spec
 ## 9. Required outputs
 
 ```text
-context_screen_v2_split.json   copy of the tracked split file, with its hash
-checkpoint_selection.json      per inner model: selection surface, epoch, hashes
+context_screen_v2_split.json   copy of the tracked split file
+checkpoint_selection.json      per inner model: selection surface, epoch
 geneeffect_predictions.csv     out-of-fold yhat, deltahat and mu_train per (gene, context)
 geneeffect_metrics.json
 sl_features.parquet
@@ -317,7 +305,7 @@ sl_metrics.json
 run_manifest.json
 ```
 
-`run_manifest.json` records the git commit, input and checkpoint hashes, the DepMap
+`run_manifest.json` records the git commit, the DepMap
 release, exact context lists and inner groups, the gene universe and variable-gene set,
 all hyperparameters with the surface each was selected on, and the training, collation
 and projection seeds. `sl_scores.csv` records context ModelID, canonical pair, arm,

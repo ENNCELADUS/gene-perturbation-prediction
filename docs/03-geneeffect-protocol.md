@@ -1,28 +1,16 @@
 # Experiment Protocol: Held-Out-Cell-Line GeneEffect Prediction
 
-Updated 2026-10-12. This is the protocol for the **implemented** GeneEffect track under
-[the research blueprint](01-blueprint.md); it holds the rules (§11), the model, expression space, training,
-metrics and results. The design behind the current wiring is the
-[expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md),
-and operating commands are in the [runbook](../hpc/README.md). One run has completed: seed 0,
-trained, tested and baselined ([result](../results/joint_geneeffect_seed0/README.md)). It
-predates the expression-space change of §3.4 (STATE was fed raw counts) and its numbers are
-not compared like for like with the current pipeline. The best validation model to date is
-that backbone frozen under an explicit gene-specific context-slope head (§7, validation
-only). Response-pathway diagnostics (§8, [result](../results/p1_response_pathway_diagnostics/README.md))
-found that the response pathway learns the cell lines it is adapted on but does not
-transfer to a held-out line; §9 specifies the comparison that measures what STATE adds and
-the single command that runs the whole pipeline. The 2026-10-03
-[revision](specs/2026-10-03-geneeffect-revision-design.md) replaced the joint model's head, objective,
-selection rule and STATE treatment (§4–§6, §9.3): §4–§6 state the current rules, while §7 and §8 are
-historical records of earlier runs under the earlier head and Huber selection. The
-[SL ranking protocol](04-sl-ranking-protocol.md) builds on this backbone; nothing here
-is SL evidence. §10 specifies the linear context prior, a CPU control that the joint model is
-compared against, §12 the single-cell correction that stacks the joint head on it, §13 the
-linear single-cell statistics stack, the first test of whether single-cell resolution adds to
-pseudo-bulk, and §14 the noise diagnosis, which measures what limits the default prior before any
-denoising model is built. §15 holds the inputs of the PIE-based stage-one model and §16 the model, its
-training and its report.
+Updated 2026-10-12. The protocol of the **implemented** GeneEffect track under
+[the research blueprint](01-blueprint.md): rules (§11), model, expression space, training, metrics and results. The
+current wiring follows the [expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md);
+commands are in the [runbook](../hpc/README.md). The 2026-10-03
+[revision](specs/2026-10-03-geneeffect-revision-design.md) replaced the joint model's head, objective, selection rule
+and STATE treatment: §4–§6 state the current rules; §7 and §8 are historical records of earlier runs. §9 holds
+the response-model comparison and the `all` and `revision` runs, §10 the linear context prior (a CPU control), §12 the
+single-cell correction that stacks the joint head on it, §13 the linear single-cell statistics stack (the first test of
+whether single-cell resolution adds to pseudo-bulk), §14 the noise diagnosis (what limits the default prior, before any
+denoising model), §15 the inputs of the PIE-based stage-one model and §16 the model, its training and its report. The
+[SL ranking protocol](04-sl-ranking-protocol.md) builds on this backbone; nothing here is SL evidence.
 
 ## 1. Objective and prediction unit
 
@@ -67,11 +55,10 @@ The 47 original basal/SL-context union lines are fixed in train except A549, fix
 since 2026-10-11 for the SL benchmark (the split was rebuilt in place; results recorded before
 that date used the 172/27/27 version with A549 in train). The 179 atlas lines
 follow a patient-grouped partition: no patient's lines are split across cohorts, and
-GeneEffect values did not determine membership. The 226-line benchmark and the
-nine-context SL split never substitute for each other. The planned SL split instead nests in this
-one ([blueprint §3.6](01-blueprint.md#36-splits-and-generalization-settings)): its training,
-validation and test lines are training, validation and test lines here, so the nine-context split
-is no longer the plan.
+GeneEffect values did not determine membership. The nine-context SL split never substitutes for
+this benchmark and is no longer the plan: the planned SL split nests in this one
+([blueprint §3.6](01-blueprint.md#36-splits-and-generalization-settings)), its training, validation and
+test lines being training, validation and test lines here.
 
 ## 3. Inputs and supervision
 
@@ -83,19 +70,18 @@ it reads the counts underneath, and the shift survives pooling
 cells per line is encoded once by the frozen Tx1-3B foundation model; the same cells,
 in the expression space of §3.4, are STATE's basal input.
 
-The training lines are the 226's 171 and the 208 single-cell extras built from public deposits
-([card](data/single-cell-atlas-search.md)); an extra's cells are prepared like the 226's and read the
-same way. Validation and test lines are the 226's.
+The 208 single-cell extras (§2) are built from public deposits ([card](data/single-cell-atlas-search.md))
+and prepared and read like the 226's lines; validation and test lines are the 226's.
 
 ### 3.2 Response anchors
 
-Four labeled training lines carry genetic-perturbation response data: K562, HCT116,
-Jurkat and HepG2, joined by DepMap ModelID. Use genetic-perturbation responses and
-non-targeting controls; a response condition need not carry a GeneEffect observation.
-Response supervision is an auxiliary task that fine-tunes STATE: it uses all conditions of
-all four anchors and withholds no condition. The 27 GeneEffect validation lines (§2) are the
-only validation split, so the response task has no held-out score inside training; its
-held-out behaviour is measured by the comparison of §9.
+Four labeled training lines carry genetic-perturbation responses and non-targeting controls:
+K562, HCT116, Jurkat and HepG2, joined by DepMap ModelID; a response condition need not carry a
+GeneEffect observation.
+Response supervision is an auxiliary task that fine-tunes STATE on all conditions of
+all four anchors, withholding none. The 27 GeneEffect validation lines (§2) are the
+only validation split, so the response task has no held-out score inside training; §9
+measures its held-out behaviour.
 
 ### 3.3 Dependency labels
 
@@ -128,8 +114,7 @@ $$
   prepared line, the response targets and anchor control bags, the basal statistics $q_{g,c}$
   (mean and variance; detected fraction is space-invariant), and the HVG features of the
   context baselines (§6).
-- The prepared lines are the split's (the 226 and the built single-cell extras,
-  [card](data/single-cell-atlas-search.md)); each line's raw-UMI cells are
+- The prepared lines are the split's (the 226 and the built single-cell extras); each line's raw-UMI cells are
   `<paths.basal_raw_umi>/<ModelID>.h5ad`, and a missing file stops preparation. $T$, the gene
   panel and the HVG order are fixed by the 226. Once the manifest exists, a run prepares only
   the lines without `lines/<ModelID>.npz`, in the recorded space, and records the line list in
@@ -148,15 +133,10 @@ Both are computed once and cached. The same cells in log-normalised HVG expressi
 STATE's basal input. (b) A trainable adapter turns the gene embedding into a perturbation
 token. The STATE transition model, initialised from a published Replogle checkpoint, reads the
 log-normalised basal cells through its own released basal encoder and predicts the line's
-post-perturbation expression; it is frozen or fine-tuned by variant (`train.state_mode`), and
-the no-STATE variant skips STATE and the adapter. Response replay to measured Perturb-seq is
+post-perturbation expression (STATE settings below). Response replay to measured Perturb-seq is
 drawn dashed: it is off in the current runs. Response descriptors summarise how predicted
-expression differs from basal expression. (c) The nested low-rank head: a gene factor $G(g)$
-(free per-gene embedding plus a linear map of $e_g$) meets a line factor $C(\tilde z_c)$ read
-from the training-line context PCA alone, and a per-(g, c) correction $h$ reads the basal
-statistics, the response descriptors and $e_g$ but never the context; their sum, scaled by
-the fixed per-gene residual SD $\sigma_g$, is $\hat\delta$, and the training gene mean is added
-for the GeneEffect prediction. Tx1 feeds only the head; it does not enter
+expression differs from basal expression. (c) The nested low-rank head (below); the training gene
+mean is added to $\hat\delta$ for the GeneEffect prediction. Tx1 feeds only the head; it does not enter
 STATE. Arrows carry the tensors passed between modules, shaped for one gene–line condition
 (cells × features, no batch dimension); boxes state the width change inside each module. The
 adapter emits 2024 values because that is the width of STATE's perturbation vocabulary; STATE
@@ -167,8 +147,7 @@ the projected expression shift and scalar response summaries; $q_{g,c}$, basal s
 in $c$; $z_c$, the pooled context embedding; $\mu_{\text{train}}(g)$, the training gene mean;
 $\hat\delta$, the predicted residual. The training protocol is Figure 2 in §5.*
 
-Figure 1 shows the data flow and the nested head defined below. Tx1 is frozen and supplies cached basal-cell embeddings. STATE and an
-ESM2 adapter predict perturbed expression, and the head uses five feature blocks: pooled
+The head uses five feature blocks: pooled
 expression change $\Delta$ (projected), response dispersion statistics $s$, gene-specific basal
 single-cell statistics $q_{g,c}$, gene embedding $e_g$ and the compressed basal context
 $\tilde z_c$. $\Delta$, $s$, $q_{g,c}$ and $e_g$ are standardised per dimension with statistics
@@ -264,7 +243,7 @@ FP32.
 
 Response replay is optional. Every fourth update (`response_interval`; 0, 4, 8, …), only when
 `train.response_weight`$\,=\lambda>0$, a response batch of 64 conditions balanced across the four
-anchors (K562, HepG2, Jurkat, HCT116) and sampled from all of their conditions is added:
+anchors (§3.2) and sampled from all of their conditions is added:
 
 $$
 L_t=L_{\text{GE}}+\mathbf{1}[t\bmod4=0]\,\lambda\,\big(L_{\text{mean-shift MSE}}+L_{\text{energy distance}}\big).
@@ -280,14 +259,12 @@ ESM2 adapter at $10^{-4}$ when STATE is used; and STATE at $10^{-5}$, only under
 (a frozen STATE has no gradient and runs without dropout). The learning rate rises linearly
 over the first epoch of updates (`warmup_epochs` 1) and then follows a cosine to zero at the
 last of at most 30 epochs, stepped per update. Training, cell-collation and projection base
-seeds are all 0. Settings are fixed in `configs/geneeffect_joint.yaml`,
-`configs/revision/` holds one config per objective with STATE frozen, and `configs/correction/`
+seeds are all 0. Settings are fixed in `configs/geneeffect_joint.yaml`;
+`configs/revision/` holds one config per objective with STATE frozen, `configs/correction/`
 the single-cell correction's objective screen (§12). The loop follows the
-joint-training design (`docs/specs/2026-09-06-modular-joint-training-design.md`, removed; `git show 1694f5c:<path>`); the
-[expression-space design](specs/2026-10-02-expression-space-and-all-pipeline-design.md) set its
-response wiring, basal path and validation splits and the
-[revision design](specs/2026-10-03-geneeffect-revision-design.md) its head, objectives,
-learning rates, schedule and selection.
+joint-training design (`docs/specs/2026-09-06-modular-joint-training-design.md`, removed; `git show 1694f5c:<path>`), with
+response wiring, basal path and validation splits from the expression-space design and head, objectives,
+learning rates, schedule and selection from the revision design.
 
 Validation runs once per completed epoch over the 27 validation lines, the only validation
 split, and, when the config names a prior export (§12), once before the first update (epoch
@@ -295,9 +272,8 @@ split, and, when the config names a prior export (§12), once before the first u
 controls early stopping** (patience 5, at most 30 epochs); an undefined selector stops the run
 rather than counting as a loss. Each epoch also scores 27 fixed training lines, chosen as
 the validation split's size, as a telemetry curve (`train_eval_`): the fit is observed, never
-gated. Test restores the checkpoint's preprocessing without refitting or optimizer updates;
-the seed-0 test has been observed once and must not become a tuning or checkpoint-selection
-surface. Runs before the revision selected on minimum validation GeneEffect Huber loss (§7).
+gated. Test restores the checkpoint's preprocessing without refitting or optimizer updates
+(§11 on the observed seed-0 test). Runs before the revision selected on minimum validation GeneEffect Huber loss (§7).
 
 ## 6. Evaluation
 
@@ -348,8 +324,8 @@ $$
 where $G_{\mathrm{S}}\subseteq\mathcal G_{\mathrm{sel}}$ holds the genes with a defined
 correlation. The set is fitted on training lines only
 (`features.selective_min_lines`, `features.selective_max_fraction`) and stored with the
-checkpoint; on the current split it has 3,111 genes, with 1,004 commonly essential genes
-excluded ([design](specs/2026-10-03-geneeffect-revision-design.md) §2). The per-gene gene mean is
+checkpoint; at the revision it had 3,111 genes, with 1,004 commonly essential genes
+excluded ([design](specs/2026-10-03-geneeffect-revision-design.md) §2), and 4,323 on the final split (§3.3). The per-gene gene mean is
 constant, so $\rho^{\mathrm S}_g$ is the rank correlation of the predicted and observed
 GeneEffect of gene $g$ across lines (the centring rules below apply). Undefined correlations are
 excluded and counted. This quantity is the selection criterion of §5
@@ -393,10 +369,9 @@ $$
 \rho_{\mathrm{macro}}=\frac{1}{|G_\rho|}\sum_{g\in G_\rho}\rho_g.
 $$
 
-This measures how well predictions follow gene-specific context variation. The reported
-set contains 4,447 train-defined variable genes; undefined correlations are excluded
-and counted. A context-blind predictor, such as the gene mean, is constant per gene, so
-its residual correlation is undefined rather than zero.
+This measures how well predictions follow gene-specific context variation, over the
+train-defined variable genes; undefined correlations are excluded and counted (a
+context-blind predictor's are undefined, below).
 
 ### SD ratio
 
@@ -450,23 +425,21 @@ never zero-filled.
 
 Every model is compared on identical observed keys with the controls fitted on training
 lines only: gene mean, K562 copy prior, nearest line, and context-PCA ridge on both the Tx1
-embedding and the log-space HVG mean and variance features (§3.4). High absolute
-correlation alone cannot establish context learning, and response improvement alone cannot
-establish dependency improvement.
+embedding and the log-space HVG mean and variance features (§3.4); §11 says what they license.
 
 ## 7. Results
 
 Sections 7 and 8 record runs made before the revision of §4–§6: they used the shared MLP
 head without the gene $\times$ context product, Huber selection and, in §7.0, raw-count STATE
-input. They are historical and are not recomputed under the selective-gene metrics.
+input (before the expression-space change of §3.4). They are historical, are not recomputed under the
+selective-gene metrics and are not compared like for like with later runs.
 
 ### 7.0 Seed-0 joint backbone
 
 The seed-0 joint run completed eight epochs and selected epoch 3 (stored index 2). Epochs
 1–2 used batch 256 per rank and epochs 3–8 continued at 1024, a mixed-batch continuation,
 not a batch ablation. Test and all six baseline variants completed on 2026-09-07 with
-identical 478,501 observed keys. STATE was fed raw counts in this run (§3.4), so the
-numbers below predate the expression-space change.
+identical 478,501 observed keys.
 
 | Test method | Huber ↓ | Absolute Pearson ↑ | Residual Pearson ↑ | Residual Spearman ↑ |
 | --- | ---: | ---: | ---: | ---: |
@@ -492,12 +465,8 @@ where $u_c$ holds the first eight principal components of the pooled Tx1 context
 embedding, fitted on training lines, and $w_g$ is one regularised slope per
 training-covered gene. The head sees the context embedding, gene embedding and basal
 covariates; the backbone's response block is excluded. Selection followed minimum validation
-Huber, the rule of that time (§5 now selects on selective-gene Spearman). The model
-is validation-selected and carries **no test number**: the test split was spent once on
-the joint backbone, which improved on the gene mean by 0.08% Huber and trailed the
-context ridge baselines
-([joint result](../results/joint_geneeffect_seed0/README.md)), and it has not been opened
-for any readout. Provenance and the full numbers:
+Huber. The model carries **no test number**: the test split was spent once on the joint
+backbone (above) and has not been opened for any readout. Full numbers:
 [readout and response diagnostics](../results/p1_response_pathway_diagnostics/README.md).
 All result figures are drawn from tracked evidence by
 [`plot_geneeffect_protocol.py`](figures/plot_geneeffect_protocol.py).
@@ -544,7 +513,7 @@ linear context baseline and no SL claim.
 ## 8. Where the model stalls: response-pathway diagnostics
 
 Three closed, validation-only diagnostics on the selected backbone locate the
-bottleneck; designs are under [`specs/`](specs/) and evidence in the
+bottleneck; designs and evidence are in the
 [result note](../results/p1_response_pathway_diagnostics/README.md). The seed-0 backbone
 was trained on response data cached as raw counts, whereas STATE expects log-normalised
 expression, so its response block made no detectable use of perturbation identity. The diagnostics
@@ -572,9 +541,8 @@ holds up on a held-out line or a richer context representation.
 
 The diagnostics of §8 never replaced STATE with a plain model on the same inputs, so the
 value of STATE's transformer, and of Tx1 as a representation for the response task, is
-unmeasured. The comparison below measures both, in the expression space of §3.4. The
-design and its decisions are in the
-[expression-space and `all`-run design](specs/2026-10-02-expression-space-and-all-pipeline-design.md).
+unmeasured. The comparison below measures both, in the expression space of §3.4, under the
+expression-space and `all`-run design.
 
 ### 9.1 Six-arm response-model comparison
 
@@ -619,13 +587,12 @@ checkpoint on each anchor; joint training on every chosen GPU (every visible GPU
 job per chosen GPU at a time; validation evaluation of `best.pt`, the controls of §6 and the explicit
 context-slope readout of §7 on the new backbone's cached features; and `summary.md`
 (target total $T$, sanity line, comparison table and verdicts, validation table, with selective
-Spearman and AUPR lift, for the joint model, readout and every control). `hpc/run.sh test CHECKPOINT` is the only route to
-the test split; `all` never calls it, and the test split stays closed until a model beats
-the context ridge by at least +0.02 residual Pearson, with an interval excluding 0, at each
-of three training seeds.
+Spearman and AUPR lift, for the joint model, readout and every control). `all` never runs test;
+`hpc/run.sh test CHECKPOINT` scores any checkpoint on it. (The `all` run's bar for opening test, a model beating the
+context ridge by at least +0.02 residual Pearson with an interval excluding 0 at each of three training seeds, gave way
+to §9.3's one config, one seed, test reported for every run.)
 
-Seed-0 numbers in §7 predate the expression-space change and are not compared like for
-like with the `all` run. The readout objective and selection plan (`docs/specs/2026-09-10-readout-objective-and-selection-design.md`,
+The readout objective and selection plan (`docs/specs/2026-09-10-readout-objective-and-selection-design.md`,
 removed; `git show 1694f5c:<path>`) on the frozen backbone remains the follow-up for objective, selection and context
 representation; the response model re-enters the feature path only once it beats no-change
 on a held-out anchor.
@@ -635,8 +602,7 @@ on a held-out anchor.
 The `all` run `all_20261002T174946Z` finished. On validation the joint model of that run, with
 the earlier head and Huber selection, reached residual Pearson 0.068 against 0.133 for the Tx1
 context-PCA ridge, and the response comparison favoured the MLP on log HVG over fine-tuned
-STATE and over the MLP on Tx1. The revision of
-[the design](specs/2026-10-03-geneeffect-revision-design.md) answers that run with the head,
+STATE and over the MLP on Tx1. The revision answers that run with the head,
 objectives, STATE settings and selection rule of §4–§6, and `hpc/run.sh revision CONFIG
 [--run-id <id>] [--gpus 0,1,2,3]` runs one variant of it: preparation (returns at once on the
 existing prepared root), joint training on every chosen GPU, evaluation of `best.pt` with the
@@ -662,15 +628,14 @@ every run and never used to choose. The screens are model selection, not SL evid
 The [context-generalization design](specs/2026-10-04-context-generalization-design.md) adds a
 closed-form, CPU-only **linear context prior** that predicts the GeneEffect residual of §3.3 in
 units of the per-gene residual SD from a line's expression alone. It is a control, not a
-model of the joint pipeline: its own results table reports it beside the controls of §6, and the
-single-cell correction of §12 stacks the joint head on it. The prior reads the shared expression space of the design (bulk TPM for bulk lines,
+model of the joint pipeline: its own results table reports it beside the controls of §6, and §12
+stacks the joint head on it. It reads the design's shared expression space (bulk TPM for bulk lines,
 bridged pseudo-bulk for single-cell lines); the selective genes, $\hat\mu_g$ and $\sigma_g$ are
-those of §3.3 and §6, fitted on the labelled training lines, so every number stays on the
-metrics of §6. A missing training label counts as a zero residual in fitting and is skipped in
-scoring. Lines outside the 226 enter the training side under the rules of §11 and the
-[data card](data/extra-bulk-lines-26q1.md).
+those of §3.3 and §6, so every number stays on the metrics of §6. A missing training label counts as a
+zero residual in fitting and is skipped in scoring. Lines outside the 226 enter the training side under
+§11 and the [data card](data/extra-bulk-lines-26q1.md).
 
-`hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]` runs a minimal experiment runner
+`hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]` runs the experiment runner
 (`src/experiments/prior/context_prior.py`). The config names the paths, the training side (the
 lineages dropped from the extra lines), the prior (component count, folds, bootstrap repeats,
 data-selected genes), the penalty grids, the **block sets** (each starts with the expression
@@ -719,9 +684,8 @@ block sets to fit under it. A run:
 Every components penalty is a reported row, and a gene-level block set has a row for every
 components and gene penalty pair: the components penalty sets how much residual the gene-level
 stages fit, while the scale-free score barely separates components penalties on their own.
-Gains are measured against the reference row the config pins; nothing is chosen, kept, dropped,
-passed or failed in code. Which setting, block set or bulk-only cohort to use is decided by
-reading the table. `hpc/run.sh prior-selected CONFIG --run-id ID`
+Gains are measured against the reference row the config pins; the setting, block set and bulk-only
+cohort are chosen by reading the table, never in code (§11). `hpc/run.sh prior-selected CONFIG --run-id ID`
 (`src/experiments/prior/data_selected_analysis.py`) fits the reference row, which must end with the
 data-selected genes, and writes `data_selected/` into the run directory: per feature, how often
 and how heavily it is selected, whether it is a partner of its target and how much of its variance
@@ -750,12 +714,11 @@ bound to; a resume with another config is refused), `rows/`, and `results.md`, r
 whatever rows exist: run facts, then per experiment one table with a line per setting, block
 set and penalty (validation and test selective Spearman, gain over the reference with its
 interval, selective AUPR lift, residual Pearson over variable genes, oracle validation
-selective Spearman) and a bridge-diagnostics table per setting. One config is one run at seed
-0. The prior is not SL evidence; a GeneEffect result estimates no genetic interaction.
+selective Spearman) and a bridge-diagnostics table per setting. The prior is not SL evidence.
 
 The first runs (2026-10-04, [record](../results/context_prior_seed0/README.md)) used an earlier
-runner that applied a learning-curve rule to the extra lines and kept blocks by bootstrap
-interval; its code is gone. Read from its tables: without the 133 haematopoietic extras the
+runner, now gone, that applied a learning-curve rule to the extra lines and kept blocks by bootstrap
+interval. Read from its tables: without the 133 haematopoietic extras the
 prior on all labelled lines beat the prior on the single-cell training lines (+0.051 [0.027, 0.069]
 selective Spearman, bridged input), and the chosen config (expression components only) scored
 0.223 on validation and 0.223 on test against 0.130 and 0.121 for the Tx1 context-PCA ridge.
@@ -847,7 +810,7 @@ context prior of §10. Wave one builds it without changing any model input.
   `standardized_mse` the head fits what the prior leaves. The training lines' offsets are the
   out-of-fold export, so the head learns at the error a query line will have.
 - **The start.** The head predicts zero before its first update (§4), so the stack starts at the
-  prior. Validation runs then (epoch −1) and is eligible for `best.pt`: "the prior alone" can win.
+  prior, and validation at epoch −1 (§5) lets "the prior alone" win `best.pt`.
 - **Controls.** With a prior export the control ladder adds the prior alone
   (`context_prior`) and the prior plus the Tx1 context-PCA ridge fitted on what the prior leaves
   on the labelled training lines (`context_prior+context_pca_ridge[tx1]`; same view, 8
@@ -855,17 +818,13 @@ context prior of §10. Wave one builds it without changing any model input.
   the same target. The revision summary (§9.3) bootstraps the stack minus the Tx1 ridge, minus the
   prior and minus the prior plus Tx1 ridge, and adds the per-lineage table.
 - **Wave one.** `configs/correction/` holds the objective screen with STATE absent, one config
-  per objective (`huber`, `standardized_mse`, `line_ranking`, `dependency_classification`), all on
-  the default prior's export (wave one, on the 172/27/27 split:
-  `outputs/context_prior/default_prior_export/export`), each run with
-  `hpc/run.sh revision CONFIG --run-id <id>` into `outputs/geneeffect_correction/`. The configs now
-  read the final split and stack on its default prior's export
-  (`outputs/context_prior/default_prior_final_split_20261012/export`). The winner on
-  validation then runs with frozen and with trainable STATE. The reading rule is that of §9.3:
-  the highest validation selective Spearman at `best.pt`; within the 27-line paired bootstrap
-  interval (`uv run python -m src.experiments.joint.compare_runs RUN_A RUN_B --split val`) the simpler
-  wins, a single-term loss before a two-term one and STATE absent before frozen before
-  trainable. Test is reported for every run and never used to choose.
+  per objective (`huber`, `standardized_mse`, `line_ranking`, `dependency_classification`), each run with
+  `hpc/run.sh revision CONFIG --run-id <id>` into `outputs/geneeffect_correction/`, on the default prior's
+  export: `outputs/context_prior/default_prior_export/export` on the 172/27/27 split in wave one,
+  `outputs/context_prior/default_prior_final_split_20261012/export` on the final split now. The winner on
+  validation then runs with frozen and with trainable STATE. The reading rule is §9.3's (the paired
+  bootstrap: `uv run python -m src.experiments.joint.compare_runs RUN_A RUN_B --split val`), with a
+  single-term loss also simpler than a two-term one.
 - **Scope.** A correction result is single-gene dependency evidence on held-out lines; it
   estimates no genetic interaction and is not an SL result.
 
@@ -898,7 +857,7 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
   intervals. Single-cell resolution adds information in this linear form when `single_cell` or
   `distribution` beats `mean` on validation by an interval above zero; distributional models
   (state views, partner fractions, STATE's response; a second wave, never built) then start from the
-  statistic that carries it. Nothing is chosen in code.
+  statistic that carries it.
 - **Result (2026-10-11, [record](../results/single_cell_stack_seed0/README.md)).** Two runs (the first grid, then
   selected penalties to 10,000 because every best row sat at 100). No single-cell arm beats `mean` on validation by an
   interval above zero at any penalty pair (largest +0.0011 [−0.0005, +0.0026]), and no arm's best validation row
@@ -922,7 +881,7 @@ the number of training lines, the deposit a line's cells come from, and cell-sta
 `configs/context_prior/noise_diagnosis.yaml`, run with `hpc/run.sh prior-noise CONFIG --run-id <id> [--sections A,B]`
 (`src/experiments/prior/noise_diagnosis.py`), reads the prior run named by `prior_run` (its bound config and export) and writes
 `outputs/context_prior/<id>/noise/<section>.json`, skipping a section whose file exists, then `results.md`. Every score is
-on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing is chosen in code.
+on that run's metric; gains carry 95% paired line-bootstrap intervals.
 
 - **Preparation.** The first section that needs them prepares, from each split line's raw cells, `noise/subsamples.parquet`:
   pseudo-bulk (the §10 transform) of half A and half B of the line's cells (even and odd ranks of `sha256(ModelID|cell)`,
@@ -934,7 +893,7 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals; nothing i
   and the 21 Gavish meta-programs with no cell-line study among their sources (`configs/context_prior/reference/`,
   `build_state_programs.py`; the other 20 count Kinker's CCLE pools, the cells of validation and test lines).
   `noise/second_source/` holds pseudo-bulk of each line's second deposit (below). Any pseudo-bulk enters the prior's space
-  as the prepared rows do: the space's genes, a gap given the training mean, quantile-normalised to the training profile.
+  as the prepared rows do (§10).
 - **`cell_sampling`.** Per space gene, the split-half Pearson across lines over measured values (a training-mean fill would
   pair equal values) and its Spearman–Brown reliability, beside the
   bridge's out-of-fold agreement with bulk on the paired lines and that agreement over the square root of their
@@ -995,8 +954,7 @@ the split, labels, bulk RNA and dropped lineages and the noise diagnosis's for p
 `hpc/run.sh ladder-inputs CONFIG --steps lines,cells,mean,summaries` (`src/experiments/stage_one/ladder_inputs.py`, project
 environment) and `--steps tx1 --shard I/N` (one GPU per shard); `hpc/run.sh pie-precompute CONFIG --steps …`
 (`src/experiments/stage_one/pie_precompute.py`, `.venv-pie`); `hpc/run.sh gene-sources STEP …`. Every step skips what exists;
-`manifest.json` records the settings (a root written under others is refused) and each step's counts. Nothing is chosen
-in code.
+`manifest.json` records the settings (a root written under others is refused) and each step's counts.
 
 - **Frame.** The 981 labelled lines every arm trains on: the split's 377 labelled single-cell training lines (lymphoid,
   myeloid and lines without bulk RNA included) and the 604 bulk-only labelled lines with bulk RNA outside the default
@@ -1012,8 +970,7 @@ in code.
   scores (§14), a Scrublet doublet score (NaN below 100 cells). HVG cells are STATE's HVGs in the prepared space
   (`log1p(x T / L)`), the shuffled cells each HVG permuted across the line's cells (seeded by line), and the mean as one
   cell `log1p` of the line's mean normalised HVG profile.
-- **Mean channel** (`mean/`). The default prior's space (§10: bulk genes every held-out line measures, a gap given the
-  training mean, quantile-normalised to the training side's bulk profile), on the per-cell CP10K pseudo-bulk. A line with
+- **Mean channel** (`mean/`). The default prior's space (§10), on the per-cell CP10K pseudo-bulk. A line with
   cells always reads its cells, through an affine bridge refitted on the paired lines (343): a training line's fitted
   outside its frame fold, a held-out line's on all of them. A bulk-only line reads its bulk. No held-out line's bulk RNA
   is read. PIE's input for every line on the panel: a bulk-only line's `log2(TPM + 1)` as `log1p(TPM / 100)`; a gene the
@@ -1061,7 +1018,7 @@ Task 3 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-desi
 [2026-10-17](specs/2026-10-17-pie-stage-one-plan.md), Wave 1A) trains the architecture arms on the §15 inputs, one
 config per run (`configs/stage_one/architecture/`, `kind: train`), with `hpc/run.sh stage-one CONFIG [--fold K]`
 (`src/experiments/stage_one/run.py`, `.venv-pie`; the queue `stage-one-queue` runs every config and fold, one per GPU) and
-reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config). Nothing is chosen in code.
+reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config).
 
 - **Target and base.** `z = (GeneEffect − m_g) / σ_g` on the 981 frame lines, `m_g` their mean, `σ_g` the §6 residual SD;
   the labelled pairs come from `src/data/ladder_reader.py` `training_targets`, which refuses any line but a
@@ -1157,9 +1114,8 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   (`--fold k`: fold k dropped, `m_g` refitted without it; `μ_g`, `σ_g` and the selective genes stay §6's; selection stays
   on validation) scores its fold's single-cell training lines out of fold.
 - **Report.** Validation, test and out-of-fold tables (the five folds' predictions over the 377 single-cell training
-  lines, telemetry) of every row, with the per-line residual Spearman (and the lines scored), selective Spearman over
-  the 4,323 genes (and the count defined) and over the
-  4,269 in the panel. Out of fold each fold's lines are predicted around their own `m_g` without the fold, which
+  lines, telemetry) of every row, with the scoring metrics above (lines scored and genes defined counted). Out of fold
+  each fold's lines are predicted around their own `m_g` without the fold, which
   moves with the fold's labels, so pooled rank metrics are anti-correlated with the truth by construction (a base
   scores below zero): selective Spearman, AUPR lift, residual Pearson and the calibration slope are scored within
   each fold and averaged (per-fold counts kept), the per-line residual Spearman, within-gene R², RMSE and per-line
@@ -1178,7 +1134,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
 Task 8 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) (§3.5; plan
 [2026-10-17](specs/2026-10-17-pie-stage-one-plan.md), Wave 1B): frozen cell-state vocabularies, the state inputs they
 give PIE and their controls, the frozen PIE on those inputs, and a telemetry report people read before choosing the
-vocabularies Task 9 precomputes. No model is trained on GeneEffect and nothing is chosen in code.
+vocabularies Task 9 precomputes. No model is trained on GeneEffect.
 `configs/stage_one/states/telemetry.yaml` names the stage-one inputs config (§15), whose ladder root holds `states/`,
 the frozen PIE's state outputs under `states/pie/` ([data card](data/cell-states.md)). `hpc/run.sh cell-states CONFIG --steps fit,project,inputs`, then
 `hpc/run.sh pie-precompute CONFIG --steps states --set ALL --shard I/N` and `--steps assemble_states --set ALL`, then
