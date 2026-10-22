@@ -114,7 +114,7 @@ def train_joint(
         return
     if gpus:
         _check_resume_processes(train, len(gpus))
-        job = Job("train", training_argv(config_path, config, run, len(gpus)))
+        job = Job("train", training_argv(config_path, run, len(gpus)))
         run_pool([job], [gpus], run / "logs", start)
     else:
         run_training(config, train)

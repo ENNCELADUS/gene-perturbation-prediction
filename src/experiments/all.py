@@ -33,7 +33,7 @@ import sys
 import time
 from typing import Any
 
-from src.experiments.config import load_config
+from src.experiments.config import PRECISION, load_config
 
 LINE_NAMES = {
     "ACH-000551": "K562",
@@ -243,9 +243,7 @@ def comparison_argv(config_path: Path, run: Path, *mode: str) -> tuple[str, ...]
     )
 
 
-def training_argv(
-    config_path: Path, config: dict, run: Path, processes: int
-) -> tuple[str, ...]:
+def training_argv(config_path: Path, run: Path, processes: int) -> tuple[str, ...]:
     launch = [
         sys.executable,
         "-m",
@@ -255,7 +253,7 @@ def training_argv(
         "--num_machines",
         "1",
         "--mixed_precision",
-        str(config["precision"]),
+        PRECISION,
     ]
     if processes > 1:
         launch.append("--multi_gpu")
@@ -319,7 +317,7 @@ def comparison_and_training(
     if not (train / "done.json").is_file():
         if gpus:
             _check_resume_processes(train, len(gpus))
-            job = Job("train", training_argv(config_path, config, run, len(gpus)))
+            job = Job("train", training_argv(config_path, run, len(gpus)))
             run_pool([job], [gpus], logs, start)
         else:
             run_training(config, train)

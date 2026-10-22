@@ -105,8 +105,7 @@ def response_cells(
     model_id: str,
     hvg_order: Sequence[str],
     *,
-    max_cells_per_gene: int | None,
-    total_cells_per_line: int | None,
+    max_cells_per_gene: int,
     seed: int,
 ) -> ResponseCells:
     """Raw-count perturbed cells of one anchor, reduced to STATE's HVG order.
@@ -114,11 +113,7 @@ def response_cells(
     STATE HVGs absent from the source are zero columns.
     """
     _LOGGER.info("Reading perturbed cells of response anchor %s", model_id)
-    caps = dict(
-        max_cells_per_gene=max_cells_per_gene,
-        total_cells_per_line=total_cells_per_line,
-        seed=seed,
-    )
+    caps = dict(max_cells_per_gene=max_cells_per_gene, seed=seed)
     if isinstance(source, PerturbseqSource):
         cells = read_perturbseq_response_cells(
             source.h5ad_path,
@@ -203,8 +198,7 @@ def write_response_part(
     model_id: str,
     hvg_order: Sequence[str],
     *,
-    max_cells_per_gene: int | None,
-    total_cells_per_line: int | None,
+    max_cells_per_gene: int,
     seed: int,
 ) -> Path:
     """Read one anchor and write its :class:`ResponsePart` to ``path`` (``.npz``)."""
@@ -214,7 +208,6 @@ def write_response_part(
             model_id,
             hvg_order,
             max_cells_per_gene=max_cells_per_gene,
-            total_cells_per_line=total_cells_per_line,
             seed=seed,
         )
     )

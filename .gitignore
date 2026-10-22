@@ -55,10 +55,8 @@ wheels/
 !configs/benchmarks/single_cell_source_chemistry.csv
 # Hand-authored provenance CSVs for paper tables (small, source-of-truth; not data dumps)
 !docs/report/tables/*.csv
-# Small historical benchmark provenance manifests.
+# The original lines' manifest (the 226 builder and the original-47 materializer read it).
 !configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv
-!configs/benchmarks/provenance/phase_a_tx1_20260724/differentially_essential_slice.csv
-!configs/benchmarks/provenance/phase_a_tx1_20260724/k_label_panels.csv
 # Curated P1 diagnostic evidence (small comparison tables and summaries, source-of-truth for results)
 !results/p1_response_pathway_diagnostics/evidence/**
 # PIE reproduction comparison tables (small, the record of results/pie_reproduction/)

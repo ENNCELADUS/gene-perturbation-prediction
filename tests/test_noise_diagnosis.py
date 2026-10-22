@@ -182,6 +182,23 @@ def _draws(raw: pd.DataFrame, lines, seed: int = 4) -> pd.DataFrame:
     return pd.concat(frames)
 
 
+def _stage_one(base, path: Path) -> tuple[pd.DataFrame, list[str]]:
+    """A perfect Cilantro stage one of the held-out lines on every other gene,
+    nothing on the rest, written to ``path``; its rows and covered genes."""
+    lines = [*base.bridge.val, *base.bridge.test]
+    covered = list(base.definitions.genes)[::2]
+    truth = base.truth(lines).mul(base.definitions.residual_scale, axis=1)
+    absolute = truth.add(base.definitions.gene_means, axis=1).loc[:, covered]
+    rows = (
+        absolute.stack()
+        .rename("prediction")
+        .rename_axis(["model_id", "gene_symbol"])
+        .reset_index()
+    )
+    rows.to_csv(path, index=False)
+    return rows, covered
+
+
 @pytest.fixture
 def diagnosis(tmp_path) -> SyntheticDiagnosis:
     config = tiny_config(tmp_path)
@@ -203,8 +220,10 @@ def diagnosis(tmp_path) -> SyntheticDiagnosis:
     noise_config.update(bootstrap_repeats=20)
     noise_config["cell_sampling"]["cells"] = [10, 30]
     noise_config["learning_curve"].update(
-        fractions=[0.5, 0.75], cilantro_predictions=None
+        fractions=[0.5, 0.75],
+        cilantro_predictions=str(tmp_path / "stage_one.csv"),
     )
+    _stage_one(base, tmp_path / "stage_one.csv")
     noise_config["deposit"].update(permutations=50, min_lines=3)
     noise_config["cell_states"].update(
         programs=["P0", "P1", "P2"], cluster_components=3, cluster_counts=[2, 3]
@@ -256,7 +275,7 @@ def test_learning_curve_ends_at_the_prior_itself(diagnosis, tmp_path):
     assert [row["fraction"] for row in rows] == [0.5, 0.75, 1.0]
     sizes = [row["training_side_lines"] for row in rows]
     assert sizes == sorted(sizes) and sizes[-1] == len(diagnosis.base.bridge.bulk)
-    assert section["cilantro"] is None
+    assert set(section["cilantro"]) >= {"val", "test"}
     for split in ("val", "test"):
         full = rows[-1][split]
         assert full["gain"]["difference"] == 0.0
@@ -269,25 +288,13 @@ def test_learning_curve_ends_at_the_prior_itself(diagnosis, tmp_path):
         assert full["r2_over_gene_mean"]["difference"] > 0
         assert full["prior"]["absolute_pearson"] > 0
     markdown = "\n".join(run._learning_curve_md(section))
-    assert "Within-gene R²" in markdown and "Cilantro" not in markdown
+    assert "Within-gene R²" in markdown and "Cilantro R² over gene mean" in markdown
 
 
 def test_cilantro_rows_score_only_the_pairs_stage_one_covers(diagnosis, tmp_path):
     base = diagnosis.base
-    lines = [*base.bridge.val, *base.bridge.test]
-    genes = list(base.definitions.genes)
-    # A perfect stage one on every other gene; nothing on the rest.
-    covered = genes[::2]
-    truth = base.truth(lines).mul(base.definitions.residual_scale, axis=1)
-    absolute = truth.add(base.definitions.gene_means, axis=1).loc[:, covered]
-    rows = (
-        absolute.stack()
-        .rename("prediction")
-        .rename_axis(["model_id", "gene_symbol"])
-        .reset_index()
-    )
     path = tmp_path / "stage_one.csv"
-    rows.to_csv(path, index=False)
+    rows, covered = _stage_one(base, path)
     result = run.cilantro_rows(diagnosis, path)
     for split in ("val", "test"):
         entry = result[split]

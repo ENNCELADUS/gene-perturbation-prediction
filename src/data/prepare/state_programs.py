@@ -118,7 +118,7 @@ def read_counts(
     source = read_basal_source(
         Path(path), model_id=model_id, var_ensembl_col=plan["var_ensembl_col"]
     )
-    symbols = source.var[symbol_column(source.var, plan["hvg_gene_symbol_col"])]
+    symbols = source.var[symbol_column(source.var)]
     matrix = sparse.csr_matrix(source.X, dtype=np.float64)
     aligned, _ = align_columns(matrix, upper_symbols(symbols.astype(str)), list(genes))
     return (

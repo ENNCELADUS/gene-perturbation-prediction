@@ -151,7 +151,6 @@ def encode_lines(
     encoder: EncoderFn,
     hvg_order: Sequence[str],
     var_ensembl_col: str,
-    hvg_gene_symbol_col: str,
     max_cells_per_line: int | None,
     seed: int = 0,
 ) -> list[str]:
@@ -165,7 +164,7 @@ def encode_lines(
             source.obs_names.astype(str), model_id, max_cells_per_line, seed
         )
         adata = source[cells].copy()
-        symbols = adata.var[symbol_column(adata.var, hvg_gene_symbol_col)]
+        symbols = adata.var[symbol_column(adata.var)]
         hvg, _ = align_columns(adata.X, symbols.astype(str), hvg_order)
         _LOGGER.info("%s: encoding %d basal cells with Tx1-3B", model_id, adata.n_obs)
         write_line_cache(cache_dir, model_id, encoder(adata), hvg.toarray(), adata.obs)

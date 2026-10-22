@@ -102,7 +102,6 @@ def _prepare_basal_line(
     *,
     tx1_cache: Path,
     var_ensembl_col: str,
-    hvg_gene_symbol_col: str,
     hvg_order: tuple[str, ...],
     genes: tuple[str, ...],
     target_sum: float,
@@ -117,7 +116,7 @@ def _prepare_basal_line(
         source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
     )
     embeddings, _, obs = load_line_cache(tx1_cache, model_id)
-    column = symbol_column(source.var, hvg_gene_symbol_col)
+    column = symbol_column(source.var)
     line = prepare_line(
         source.X,
         source.obs_names.astype(str),
@@ -178,7 +177,6 @@ def _encode_missing_tx1(
         encoder=encoder,
         hvg_order=tuple(load_hvg_gene_order(Path(paths["state_model_dir"]))),
         var_ensembl_col=settings["var_ensembl_col"],
-        hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
         max_cells_per_line=config["features"]["cells_per_context"],
         seed=0,
     )
@@ -231,7 +229,6 @@ def _prepare_lines(
             root / "lines" / f"{model_id}.npz",
             tx1_cache=Path(paths["tx1_cache"]),
             var_ensembl_col=settings["var_ensembl_col"],
-            hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
             hvg_order=hvg_order,
             genes=genes,
             target_sum=target_sum,
@@ -343,7 +340,6 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
                 model_id,
                 hvg_order,
                 max_cells_per_gene=settings["response_max_cells_per_gene"],
-                total_cells_per_line=settings["response_total_cells_per_line"],
                 seed=settings["response_sampling_seed"],
             )
             for model_id in anchors
@@ -407,7 +403,6 @@ def _pseudobulk_line(
     source_path: Path,
     *,
     var_ensembl_col: str,
-    hvg_gene_symbol_col: str,
     genes: tuple[str, ...],
 ):
     from src.data.basal import symbol_column
@@ -417,7 +412,7 @@ def _pseudobulk_line(
     source = read_basal_source(
         source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
     )
-    column = symbol_column(source.var, hvg_gene_symbol_col)
+    column = symbol_column(source.var)
     return pseudobulk(source.X, source.var[column].astype(str).tolist(), genes)
 
 
@@ -453,7 +448,6 @@ def prepare_pseudobulk(config: Mapping[str, Any], genes: Sequence[str]) -> Path:
             model_id,
             sources[model_id],
             var_ensembl_col=settings["var_ensembl_col"],
-            hvg_gene_symbol_col=settings["hvg_gene_symbol_col"],
             genes=tuple(genes),
         )
         for model_id in missing
@@ -485,7 +479,6 @@ def _noise_line(
     programs_path: Path,
     *,
     var_ensembl_col: str,
-    hvg_gene_symbol_col: str,
     genes: tuple[str, ...],
     cells: tuple[int, ...],
     programs: Mapping[str, tuple[str, ...]],
@@ -504,7 +497,7 @@ def _noise_line(
     source = read_basal_source(
         source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
     )
-    symbols = source.var[symbol_column(source.var, hvg_gene_symbol_col)]
+    symbols = source.var[symbol_column(source.var)]
     symbols = symbols.astype(str).tolist()
     draws = {
         name: pseudobulk(source.X[rows], symbols, genes)
@@ -571,7 +564,6 @@ def prepare_noise_inputs(
             path,
             root / "programs" / f"{model_id}.npz",
             var_ensembl_col=options["var_ensembl_col"],
-            hvg_gene_symbol_col=options["hvg_gene_symbol_col"],
             genes=tuple(genes),
             cells=tuple(settings["cells"]),
             programs={name: tuple(m) for name, m in settings["programs"].items()},
@@ -650,7 +642,6 @@ def prepare_second_source(
             model_id,
             available[model_id],
             var_ensembl_col=options["var_ensembl_col"],
-            hvg_gene_symbol_col=options["hvg_gene_symbol_col"],
             genes=tuple(genes),
         )
         for model_id in missing

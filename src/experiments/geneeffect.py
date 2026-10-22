@@ -11,7 +11,15 @@ import random
 import subprocess
 from typing import TYPE_CHECKING, Any
 
-from src.experiments.config import validate_config
+from src.experiments.config import PRECISION, validate_config
+
+
+def mixed_precision() -> str:
+    """bf16 on CUDA, where every joint run goes; fp32 on the CPU (the tests)."""
+    import torch
+
+    return PRECISION if torch.cuda.is_available() else "no"
+
 
 if TYPE_CHECKING:
     from src.data.prepared import PreparedInputs
@@ -80,7 +88,7 @@ def run_training(
     )
     if saved is not None and saved["config"] != config:
         raise ValueError(f"config differs from the one saved in {run_dir / 'last.pt'}")
-    accelerator = Accelerator(mixed_precision=config["precision"])
+    accelerator = Accelerator(mixed_precision=mixed_precision())
     if accelerator.is_main_process and saved is None:
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "config.yaml").write_text(
@@ -147,7 +155,7 @@ def evaluate_checkpoint(
             config, preprocessing=saved["preprocessing"], include_test=split == "test"
         )
     # The same precision as training-time validation, so the numbers agree.
-    accelerator = Accelerator(mixed_precision=config["precision"])
+    accelerator = Accelerator(mixed_precision=mixed_precision())
     if accelerator.num_processes > 1:
         raise ValueError(
             "evaluate_checkpoint runs in one process: only rank zero holds the tables"

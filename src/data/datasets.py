@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from src.data.batches import DependencyBatch, OnlineConditionBatch, ResponseBatch
+from src.data.batches import DependencyBatch, OnlineConditionBatch
 from src.data.context_pca import pooled_context
 from src.data.prepared import PreparedInputs
 
@@ -168,35 +168,3 @@ class DependencyDataset(Dataset[int]):
         )
 
 
-class ResponseDataset(Dataset[int]):
-    """Every prepared perturbation condition of the response anchors."""
-
-    def __init__(
-        self, inputs: PreparedInputs, *, device: torch.device | str = "cpu"
-    ) -> None:
-        self.inputs = inputs
-        self.cache = inputs.response_targets
-        self.keys = tuple(self.cache.keys)
-        self.device = torch.device(device)
-        self._basal = {
-            m: torch.from_numpy(np.asarray(inputs.lines[m].basal_hvg)).to(self.device)
-            for m in sorted({model_id for model_id, _ in self.keys})
-        }
-
-    def __len__(self) -> int:
-        return len(self.keys)
-
-    def __getitem__(self, index: int) -> int:
-        return int(index)
-
-    def collate(self, indices: Sequence[int]) -> ResponseBatch:
-        """One host-to-device copy of every observed bag, split back per condition."""
-        keys = [self.keys[index] for index in indices]
-        bags = [self.cache.target_bag(index) for index in indices]
-        observed = torch.from_numpy(np.concatenate(bags).astype(np.float32, copy=False))
-        return ResponseBatch(
-            model_ids=tuple(model_id for model_id, _ in keys),
-            genes=tuple(gene for _, gene in keys),
-            control_hvg=tuple(self._basal[model_id] for model_id, _ in keys),
-            observed_hvg=observed.to(self.device).split([len(bag) for bag in bags]),
-        )

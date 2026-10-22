@@ -89,19 +89,15 @@ def require_raw_counts(matrix: object, label: str) -> None:
         )
 
 
-def symbol_column(var: pd.DataFrame, configured: str) -> str:
-    """Resolve the ``var`` gene-symbol column; ``auto`` picks the one present."""
-    if configured == "auto":
-        candidates = [name for name in _SYMBOL_COLUMNS if name in var.columns]
-        if len(candidates) != 1:
-            raise ValueError(
-                f"var needs exactly one gene-symbol column of {_SYMBOL_COLUMNS}, "
-                f"found {candidates}"
-            )
-        return candidates[0]
-    if configured not in var.columns:
-        raise ValueError(f"var is missing gene-symbol column {configured!r}")
-    return configured
+def symbol_column(var: pd.DataFrame) -> str:
+    """The ``var`` gene-symbol column: the one of ``_SYMBOL_COLUMNS`` present."""
+    candidates = [name for name in _SYMBOL_COLUMNS if name in var.columns]
+    if len(candidates) != 1:
+        raise ValueError(
+            f"var needs exactly one gene-symbol column of {_SYMBOL_COLUMNS}, "
+            f"found {candidates}"
+        )
+    return candidates[0]
 
 
 def align_columns(
@@ -171,10 +167,10 @@ def _require_ensembl_source(
 
 
 def _select_indices_deterministic(
-    candidate_indices: np.ndarray, max_cells: int | None, seed: int
+    candidate_indices: np.ndarray, max_cells: int, seed: int
 ) -> np.ndarray:
-    """Seeded subsample of row indices (sorted), or all when uncapped."""
-    if max_cells is None or max_cells >= len(candidate_indices):
+    """Seeded subsample of at most ``max_cells`` row indices (sorted)."""
+    if max_cells >= len(candidate_indices):
         return candidate_indices
     rng = np.random.default_rng(seed)
     chosen = rng.choice(len(candidate_indices), size=max_cells, replace=False)
@@ -248,7 +244,7 @@ def _group_candidate_indices_by_label(
 
 
 def _cap_indices_by_group(
-    grouped_indices: Mapping[str, np.ndarray], max_per_group: int | None, seed: int
+    grouped_indices: Mapping[str, np.ndarray], max_per_group: int, seed: int
 ) -> np.ndarray:
     """Cap each group in sorted-key order, one shared sub-seed stream."""
     if not grouped_indices:
@@ -301,14 +297,13 @@ def read_perturbseq_response_cells(
     symbol_col: str,
     gene_order: Sequence[str],
     label: str,
-    max_cells_per_gene: int | None = None,
-    total_cells_per_line: int | None = None,
+    max_cells_per_gene: int,
     seed: int = 0,
 ) -> ResponseCells:
     """Perturbed cells of a Perturb-seq h5ad, columns aligned to ``gene_order``.
 
-    The per-gene cap is applied before any expression value is read; the
-    optional total cap follows it. Rows come out grouped by sorted label.
+    The per-gene cap is applied before any expression value is read. Rows come
+    out grouped by sorted label.
     Each row chunk is reduced to library sizes and aligned columns before the
     next is read.
     """
@@ -324,7 +319,6 @@ def read_perturbseq_response_cells(
             )
         grouped = _group_candidate_indices_by_label(candidate, labels[candidate])
         selected = _cap_indices_by_group(grouped, max_cells_per_gene, seed)
-        selected = _select_indices_deterministic(selected, total_cells_per_line, seed)
         symbols = backed.var[symbol_col].astype(str)
         order = np.argsort(selected)
         sizes, counts = [], []

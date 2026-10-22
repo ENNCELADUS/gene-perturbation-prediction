@@ -172,7 +172,7 @@ def test_training_loss_and_evaluation_score_the_stack(tmp_path):
 
     batch = DependencyDataset(inputs, "train").collate(range(8))
     with torch.no_grad():
-        head = model(batch.conditions).delta_hat
+        head = model(batch.conditions)
     expected = geneeffect_loss(
         head + batch.prior,
         batch.residual,
@@ -188,7 +188,6 @@ def test_training_loss_and_evaluation_score_the_stack(tmp_path):
         optimizer,
         make_scheduler(optimizer, config, 1),
         batch,
-        None,
         config,
         Accelerator(cpu=True),
     )

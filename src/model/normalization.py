@@ -247,7 +247,7 @@ def fit_startup_standardizer(
         enabled = [
             name
             for name in sorted(STANDARDIZED_BLOCKS)
-            if getattr(model.head.blocks, f"use_{name}")
+            if name in model.head.blocks.enabled
         ]
 
         def blocks():

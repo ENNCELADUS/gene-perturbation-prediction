@@ -85,7 +85,6 @@ def make_world(root: Path, monkeypatch, *, max_epochs: int = 1) -> Path:
         (*test_prepare.ANCHORS, *(f"ACH-T{i}" for i in range(6)), "ACH-U1"),
     )
     config = test_prepare.build_world(root)
-    config["precision"] = "no"
     config["output_root"] = str(root / "runs")
     config["paths"]["state_checkpoint"] = str(write_state(root / "state"))
     # Eight context components: the readout's context PCA needs eight features.
@@ -96,7 +95,6 @@ def make_world(root: Path, monkeypatch, *, max_epochs: int = 1) -> Path:
         max_epochs=max_epochs,
         patience=5,
         dependency_batch_size=8,
-        response_batch_size=4,
     )
     config["comparison"].update(
         epochs=1, hidden=8, batch_size=4, shuffles=2, bootstrap=20
@@ -342,7 +340,7 @@ def _plan(tmp_path, gpus, polls=lambda step: 1):
     launcher = FakeLauncher(polls)
     run = tmp_path / "run"
     pipeline.comparison_and_training(
-        Path("c.yaml"), {"precision": "bf16"}, run, gpus, start=launcher
+        Path("c.yaml"), {}, run, gpus, start=launcher
     )
     return run, launcher
 

@@ -388,7 +388,6 @@ def _cells_line(
     target_sum: float,
     cycle_columns: tuple[int, int],
     var_ensembl_col: str,
-    hvg_gene_symbol_col: str,
     seed: int,
 ) -> int:
     """Write one line's ``cells/<ModelID>.npz``; return its cell count."""
@@ -399,7 +398,7 @@ def _cells_line(
     source = read_basal_source(
         source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
     )
-    symbols = source.var[symbol_column(source.var, hvg_gene_symbol_col)]
+    symbols = source.var[symbol_column(source.var)]
     symbols = symbols.astype(str).tolist()
     with np.load(programs_path) as payload:
         programs = payload["scores"]
@@ -477,7 +476,6 @@ def build_cells(setup: Setup, frame: Frame) -> dict[str, Any]:
             target_sum=recorded["prepared_target_sum"],
             cycle_columns=cycle,
             var_ensembl_col=preparation["var_ensembl_col"],
-            hvg_gene_symbol_col=preparation["hvg_gene_symbol_col"],
             seed=setup.seed,
         )
         for model_id in missing
@@ -713,7 +711,7 @@ def build_tx1(setup: Setup, frame: Frame, shard: tuple[int, int]) -> dict[str, A
                     source.X, line_rng(model_id, setup.seed, "count_shuffle")
                 ).astype(np.float32)
             symbols = source.var[
-                symbol_column(source.var, preparation["hvg_gene_symbol_col"])
+                symbol_column(source.var)
             ].astype(str)
             hvg, _ = align_columns(source.X, symbols, hvg_order)
             start = time.monotonic()

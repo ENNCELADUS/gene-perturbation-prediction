@@ -10,44 +10,8 @@ import pytest
 
 import test_prepare as base
 from src.data import response_streaming
-from src.data.response_streaming import (
-    prefetched,
-    read_xatlas_response_cells,
-    resolve_total_budget_keep_mask,
-)
+from src.data.response_streaming import prefetched, read_xatlas_response_cells
 from test_prepare_equivalence import CAPPED, _write_xatlas, naive_xatlas_cells
-
-
-# --- resolve_total_budget_keep_mask ----------------------------------------
-
-
-def test_keep_mask_none_keeps_everything() -> None:
-    mask = resolve_total_budget_keep_mask(100, None, seed=0)
-    assert mask.dtype == bool
-    assert mask.all()
-    assert mask.sum() == 100
-
-
-def test_keep_mask_budget_above_n_cells_keeps_everything() -> None:
-    mask = resolve_total_budget_keep_mask(10, total_cells=50, seed=0)
-    assert mask.all()
-
-
-def test_keep_mask_trims_to_exact_budget() -> None:
-    mask = resolve_total_budget_keep_mask(1000, total_cells=100, seed=0)
-    assert mask.sum() == 100
-
-
-def test_keep_mask_deterministic_for_same_seed() -> None:
-    first = resolve_total_budget_keep_mask(500, total_cells=50, seed=3)
-    second = resolve_total_budget_keep_mask(500, total_cells=50, seed=3)
-    np.testing.assert_array_equal(first, second)
-
-
-def test_keep_mask_different_seed_changes_selection() -> None:
-    first = resolve_total_budget_keep_mask(500, total_cells=50, seed=3)
-    second = resolve_total_budget_keep_mask(500, total_cells=50, seed=99)
-    assert not np.array_equal(first, second)
 
 
 # --- prefetched -----------------------------------------------------------
@@ -85,7 +49,6 @@ def _read(source: dict, caps: dict, seed: int):
         symbol_col="gene_name",
         gene_order=base.HVG,
         max_cells_per_gene=caps["response_max_cells_per_gene"],
-        total_cells_per_line=caps["response_total_cells_per_line"],
         seed=seed,
     )
 
@@ -94,12 +57,11 @@ def _read(source: dict, caps: dict, seed: int):
     "caps",
     [
         CAPPED,
-        {"response_max_cells_per_gene": 3, "response_total_cells_per_line": None},
-        {"response_max_cells_per_gene": None, "response_total_cells_per_line": 700},
+        {"response_max_cells_per_gene": 3},
     ],
 )
 def test_reservoir_matches_whole_cell_reference(tmp_path, caps) -> None:
-    """Several shards, rejected rows, duplicate and unknown tokens, both caps."""
+    """Several shards, rejected rows, duplicate and unknown tokens, two caps."""
     source = _write_xatlas(tmp_path, seed=300)
     cells = _read(source, caps, seed=11)
     labels, sizes, aligned = naive_xatlas_cells(source, base.HVG, caps, seed=11)
@@ -120,7 +82,7 @@ def test_only_rows_a_reservoir_keeps_are_converted(tmp_path, monkeypatch) -> Non
         return original(table, rows)
 
     monkeypatch.setattr(response_streaming, "xatlas_token_rows", spy)
-    caps = {"response_max_cells_per_gene": 1, "response_total_cells_per_line": None}
+    caps = {"response_max_cells_per_gene": 1}
     cells = _read(source, caps, seed=0)
     n_genes = len(set(cells.labels.tolist()))
     assert len(converted) == 5  # one conversion per shard

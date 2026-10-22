@@ -79,7 +79,6 @@ def test_encode_lines_writes_selected_raw_cells(tmp_path):
         encoder=encoder,
         hvg_order=("A", "C", "Z"),
         var_ensembl_col="ensembl_id",
-        hvg_gene_symbol_col="auto",
         max_cells_per_line=4,
         seed=0,
     )
