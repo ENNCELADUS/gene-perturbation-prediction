@@ -50,5 +50,5 @@ per-gene Spearman over the selective genes, fitted on training lines) selects `b
 controls early stopping. Training, collation and projection use seed 0.
 
 The atlas preparation configuration is `configs/data/cell_line_atlas_raw_umi_27.json`;
-`data.split_build` owns shared split construction helpers. The design is
+The design is
 [`docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`](../docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md).
