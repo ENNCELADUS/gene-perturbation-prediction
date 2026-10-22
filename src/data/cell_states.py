@@ -45,7 +45,7 @@ from scipy import sparse
 from src.data.basal import align_columns
 from src.data.ladder_cells import (
     PIE_TARGET_SUM,
-    _scaled,
+    scale_to_total,
     library_sizes,
     line_rng,
     upper_symbols,
@@ -405,7 +405,7 @@ def per_cell_log_cp10k(
     if not np.array_equal(present, np.asarray(listed, dtype=bool)):
         raise ValueError("the source lists other panel genes than PIE's input records")
     aligned.eliminate_zeros()
-    u = _scaled(aligned, library, PIE_TARGET_SUM)
+    u = scale_to_total(aligned, library, PIE_TARGET_SUM)
     u.data = np.log1p(u.data)
     fill = np.where(present, np.nan, np.asarray(pie_input, dtype=np.float64))
     return LineCells(u=u.tocsr(), listed=present, fill=fill)

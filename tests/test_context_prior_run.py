@@ -21,6 +21,7 @@ from src.data.splits import FixedSplit
 from src.eval.geneeffect import METRICS, long_frame
 from src.experiments import context_prior as run
 from src.data.io import jsonable, read_json
+from src.experiments.run_dir import bind, locked
 from src.experiments.config import validate_prior_config
 from tests.test_context_prior_bridging import GENES, base
 
@@ -92,32 +93,32 @@ def test_json_values_are_plain():
 
 
 def test_a_run_directory_belongs_to_one_config(tmp_path):
-    run._bind(tmp_path, CONFIG)
-    run._bind(tmp_path, copy.deepcopy(CONFIG))
+    bind(tmp_path, CONFIG)
+    bind(tmp_path, copy.deepcopy(CONFIG))
     changed = copy.deepcopy(CONFIG)
     changed["prior"]["selected_genes"] = 10
     with pytest.raises(ValueError, match="different config"):
-        run._bind(tmp_path, changed)
+        bind(tmp_path, changed)
 
 
 def test_shared_files_wait_for_the_run_directory_lock(tmp_path):
     """Two processes share a run directory: the config check and a results scan
     with its replacement each run under the lock, so neither interleaves."""
-    run._bind(tmp_path, CONFIG)
+    bind(tmp_path, CONFIG)
     (tmp_path / "rows").mkdir()
     changed = copy.deepcopy(CONFIG)
     changed["prior"]["selected_genes"] = 10
     errors = []
 
-    def bind():
+    def bind_changed():
         try:
-            run._bind(tmp_path, changed)
+            bind(tmp_path, changed)
         except ValueError as error:
             errors.append(error)
 
-    with run._locked(tmp_path):
+    with locked(tmp_path):
         writer = threading.Thread(target=run.write_results, args=(tmp_path,))
-        binder = threading.Thread(target=bind)
+        binder = threading.Thread(target=bind_changed)
         writer.start()
         binder.start()
         writer.join(0.3)

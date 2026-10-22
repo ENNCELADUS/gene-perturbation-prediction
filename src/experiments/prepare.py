@@ -56,7 +56,7 @@ def _forward_logs_to(queue, level: int) -> None:
     root.setLevel(level)
 
 
-def _in_processes(calls: Sequence[Callable[[], Any]], processes: int) -> Iterator[Any]:
+def in_processes(calls: Sequence[Callable[[], Any]], processes: int) -> Iterator[Any]:
     """Each call's result, in order, from up to ``processes`` spawned processes.
 
     One process (or one call) runs them here, in turn. Worker log records go
@@ -164,10 +164,10 @@ def _encode_missing_tx1(
     missing = missing_lines(cache, list(sources))
     if not missing:
         return []
-    from src.model.tx1 import _build_tx1_encoder
+    from src.model.tx1 import build_tx1_encoder
 
     _LOGGER.info("Encoding %d lines missing from the Tx1 cache", len(missing))
-    encoder, _ = _build_tx1_encoder(
+    encoder, _ = build_tx1_encoder(
         Path(paths["tx1_model_dir"]),
         settings["tx1_batch_size"],
         settings["tx1_max_length"],
@@ -231,7 +231,7 @@ def _prepare_lines(
         )
         for model_id, path in sources.items()
     ]
-    for done, _ in enumerate(_in_processes(line_calls, LINE_PROCESSES), start=1):
+    for done, _ in enumerate(in_processes(line_calls, LINE_PROCESSES), start=1):
         if done % 25 == 0:
             _LOGGER.info("Prepared basal line %d of %d", done, len(line_calls))
     _LOGGER.info("Prepared %d basal lines", len(line_calls))
@@ -339,7 +339,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
             )
             for model_id in anchors
         ]
-        results = list(_in_processes(calls, RESPONSE_PROCESSES))
+        results = list(in_processes(calls, RESPONSE_PROCESSES))
         target_sum = median_library_size(*results[: len(TARGET_SUM_SOURCES)])
         _LOGGER.info("Expression target sum T = %.1f", target_sum)
         parts = dict(zip(anchors, results[len(TARGET_SUM_SOURCES) :], strict=True))
@@ -448,7 +448,7 @@ def prepare_pseudobulk(config: Mapping[str, Any], genes: Sequence[str]) -> Path:
         for model_id in missing
     ]
     added = pd.DataFrame(
-        np.stack(list(_in_processes(calls, LINE_PROCESSES))),
+        np.stack(list(in_processes(calls, LINE_PROCESSES))),
         index=missing,
         columns=list(genes),
     )
@@ -568,7 +568,7 @@ def prepare_noise_inputs(
     ]
     rows, index, listed = [], [], {}
     for model_id, (draws, shares) in zip(
-        sources, _in_processes(calls, LINE_PROCESSES), strict=True
+        sources, in_processes(calls, LINE_PROCESSES), strict=True
     ):
         listed[model_id] = shares
         for name, values in draws.items():
@@ -643,7 +643,7 @@ def prepare_second_source(
     ]
     if calls:
         added = pd.DataFrame(
-            np.stack(list(_in_processes(calls, LINE_PROCESSES))),
+            np.stack(list(in_processes(calls, LINE_PROCESSES))),
             index=missing,
             columns=list(genes),
         )

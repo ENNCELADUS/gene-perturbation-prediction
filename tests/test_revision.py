@@ -124,7 +124,7 @@ def bootstrap(monkeypatch):
 
 
 def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
-    monkeypatch.setattr(revision, "_git_revision", lambda: "abc123")
+    monkeypatch.setattr(revision, "git_revision", lambda: "abc123")
     summary = revision.write_outputs(
         Path("configs/revision/x.yaml"), finished, "rid", finished.parent / "split.csv"
     )
@@ -213,7 +213,7 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
 def test_best_before_the_first_update_is_the_prior_alone(
     finished, bootstrap, monkeypatch
 ):
-    monkeypatch.setattr(revision, "_git_revision", lambda: "abc123")
+    monkeypatch.setattr(revision, "git_revision", lambda: "abc123")
     write_json(finished / "train" / "done.json", {"best_epoch": -1, "next_epoch": 3})
     before = {
         "epoch": -1,
@@ -237,7 +237,7 @@ def test_best_before_the_first_update_is_the_prior_alone(
 def test_summary_bootstraps_the_stack_against_every_prior_control(
     finished, bootstrap, monkeypatch
 ):
-    monkeypatch.setattr(revision, "_git_revision", lambda: "abc123")
+    monkeypatch.setattr(revision, "git_revision", lambda: "abc123")
     for split in ("val", "test"):
         path = finished / f"baselines/{split}/metrics.json"
         metrics = json.loads(path.read_text())

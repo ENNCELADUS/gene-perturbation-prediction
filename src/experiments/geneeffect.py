@@ -7,11 +7,11 @@ from dataclasses import asdict
 import json
 from pathlib import Path
 import random
-import subprocess
 from typing import TYPE_CHECKING, Any
 
 from src.experiments.config import PRECISION, validate_config
 from src.data.io import write_json
+from src.experiments.run_dir import git_revision
 
 
 def mixed_precision() -> str:
@@ -25,20 +25,6 @@ if TYPE_CHECKING:
     from src.data.prepared import PreparedInputs
     from src.eval.geneeffect import EvalResult
     from src.model.geneeffect import GeneEffectE2EModel
-
-
-def _revision() -> str | None:
-    try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    except (OSError, subprocess.CalledProcessError):
-        return None
-
-
-def _set_status(run_dir: Path, status_key: str, status: str, **details) -> None:
-    path = run_dir / "run.json"
-    record = json.loads(path.read_text()) if path.exists() else {}
-    record[status_key] = {"status": status, **details}
-    write_json(path, record)
 
 
 def restore_model(
@@ -91,7 +77,7 @@ def run_training(
         write_json(
             run_dir / "run.json",
             {
-                "revision": _revision(),
+                "revision": git_revision(),
                 "world_size": accelerator.num_processes,
                 "precision": accelerator.mixed_precision,
                 "device": str(accelerator.device),

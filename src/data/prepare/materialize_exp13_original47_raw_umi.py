@@ -19,11 +19,11 @@ from scipy import sparse
 
 
 from src.data.basal import (
-    _assemble_tahoe_matrix,
-    _assemble_token_matrix,
-    _filter_xatlas_shard,
-    _materialize_rows,
-    _row_to_xatlas_cell,
+    assemble_tahoe_matrix,
+    assemble_token_matrix,
+    filter_xatlas_shard,
+    materialize_rows,
+    row_to_xatlas_cell,
     assert_tx1_input_contract,
 )
 
@@ -149,7 +149,7 @@ def _materialize_tahoe(
             raise ValueError(
                 f"{model_id}: expected {max_cells} Tahoe cells; got {len(selected)}"
             )
-        matrix, var = _assemble_tahoe_matrix(
+        matrix, var = assemble_tahoe_matrix(
             [(item[2], item[3]) for item in selected], metadata
         )
         obs = pd.DataFrame(
@@ -247,7 +247,7 @@ def _build_perturbseq_hash(
         )
         selected = control_indices[selected_local]
         matrix = sparse.csr_matrix(
-            _materialize_rows(backed.X, selected, sparsify_chunks=True)
+            materialize_rows(backed.X, selected, sparsify_chunks=True)
         )
         var = backed.var.copy()
     finally:
@@ -284,13 +284,13 @@ def _build_xatlas_hash(
         raise FileNotFoundError(f"{model_id}: no X-Atlas shards")
     selected: list[tuple[int, str, object]] = []
     for path in paths:
-        frame, _ = _filter_xatlas_shard(
+        frame, _ = filter_xatlas_shard(
             path,
             str(config["control_label"]),
             int(config["pass_guide_filter_value"]),
         )
         for row in frame.itertuples(index=False):
-            cell = _row_to_xatlas_cell(row)
+            cell = row_to_xatlas_cell(row)
             cell_id = f"{cell.sample}:{cell.cell_barcode}"
             rank = _stable_rank(seed, model_id, cell_id)
             entry = (-rank, cell_id, cell)
@@ -304,7 +304,7 @@ def _build_xatlas_hash(
     metadata = pd.read_parquet(Path(str(config["gene_metadata_path"]))).set_index(
         "gene_token_id"
     )
-    matrix, var = _assemble_token_matrix(
+    matrix, var = assemble_token_matrix(
         [(cell.genes, cell.values) for cell in cells],
         metadata,
         metadata_var_columns=("ensembl_id", "gene_name"),

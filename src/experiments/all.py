@@ -24,16 +24,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
 import logging
-import math
 import os
 from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
-from typing import Any
 
 from src.data.io import read_json
+from src.experiments.run_dir import number
 from src.experiments.config import PRECISION, load_config
 
 LINE_NAMES = {
@@ -81,13 +80,6 @@ def _name(model_id: str) -> str:
     return (
         f"{LINE_NAMES[model_id]} ({model_id})" if model_id in LINE_NAMES else model_id
     )
-
-
-def _number(value: Any, digits: int = 4) -> str:
-    """Undefined (None or NaN) is written as such, never as 0."""
-    if value is None or not math.isfinite(float(value)):
-        return "undefined"
-    return f"{float(value):.{digits}f}"
 
 
 # ----------------------------------------------------------------------------
@@ -265,7 +257,7 @@ def training_argv(config_path: Path, run: Path, processes: int) -> tuple[str, ..
     )
 
 
-def _check_resume_processes(train: Path, processes: int) -> None:
+def check_resume_processes(train: Path, processes: int) -> None:
     """Resuming ``last.pt`` needs the process count it was started with."""
     if not (train / "last.pt").is_file():
         return
@@ -313,7 +305,7 @@ def comparison_and_training(
             print(sanity_line(comparison), flush=True)
     if not (train / "done.json").is_file():
         if gpus:
-            _check_resume_processes(train, len(gpus))
+            check_resume_processes(train, len(gpus))
             job = Job("train", training_argv(config_path, run, len(gpus)))
             run_pool([job], [gpus], logs, start)
         else:
@@ -380,7 +372,7 @@ def target_sum_line(manifest: dict) -> str:
 def sanity_line(comparison: Path) -> str:
     sanity = read_json(comparison / "sanity.json")
     parts = [
-        f"{_name(anchor)} {_number(row['ratio_to_no_change'], 3)} "
+        f"{_name(anchor)} {number(row['ratio_to_no_change'], 3)} "
         f"({row['covered_genes']} of {row['total_genes']} genes in its vocabulary)"
         for anchor, row in sanity["anchors"].items()
     ]
@@ -392,7 +384,7 @@ def sanity_line(comparison: Path) -> str:
 
 def _interval(pooled: dict) -> str:
     low, high = pooled["interval"]
-    return f"{_number(pooled['ratio'])} [{_number(low)}, {_number(high)}]"
+    return f"{number(pooled['ratio'])} [{number(low)}, {number(high)}]"
 
 
 def _comparison_section(comparison: Path) -> list[str]:
@@ -426,10 +418,10 @@ def _comparison_section(comparison: Path) -> list[str]:
         identity = by_fold.loc[arm].identity_share.dropna()
         cells = [
             name,
-            *(_number(by_fold.loc[(arm, f), "held_out_ratio"]) for f in folds),
+            *(number(by_fold.loc[(arm, f), "held_out_ratio"]) for f in folds),
             _interval(verdicts["pooled"]["all_folds"][arm]),
             _interval(verdicts["pooled"]["without_hct116"][arm]),
-            _number(identity.mean() if len(identity) else None),
+            number(identity.mean() if len(identity) else None),
         ]
         lines.append("| " + " | ".join(cells) + " |")
     lines += [
@@ -453,8 +445,8 @@ def _comparison_section(comparison: Path) -> list[str]:
             else:
                 outcome = "no separation, the interval includes 0"
             words.append(
-                f"{label}: difference {_number(difference)} "
-                f"[{_number(low)}, {_number(high)}], {outcome}"
+                f"{label}: difference {number(difference)} "
+                f"[{number(low)}, {number(high)}], {outcome}"
             )
         lines.append(
             f"- {ARM_NAMES[first]} vs {ARM_NAMES[second]}: " + "; ".join(words) + "."
@@ -489,7 +481,7 @@ def _validation_section(config: dict, run: Path) -> list[str]:
         "",
         f"Joint model: `train/best.pt` is epoch {done['best_epoch'] + 1} of "
         f"{done['next_epoch']} trained (validation selective-gene Spearman "
-        f"{_number(done['best_score'])}); {stop}.",
+        f"{number(done['best_score'])}); {stop}.",
         "",
         "| Model | " + " | ".join(VALIDATION_COLUMNS) + " |",
         "|" + "---|" * (len(VALIDATION_COLUMNS) + 1),
@@ -498,7 +490,7 @@ def _validation_section(config: dict, run: Path) -> list[str]:
         cells = (
             ["not produced"] * len(VALIDATION_COLUMNS)
             if metrics is None
-            else [_number(metrics[key]) for key in VALIDATION_COLUMNS.values()]
+            else [number(metrics[key]) for key in VALIDATION_COLUMNS.values()]
         )
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
     lines += [

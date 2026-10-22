@@ -28,7 +28,7 @@ EXPECTED_SOURCE_SEMANTICS = {
 }
 
 
-def _require_manifest(frame: pd.DataFrame, expected_lines: int) -> pd.DataFrame:
+def require_manifest(frame: pd.DataFrame, expected_lines: int) -> pd.DataFrame:
     missing = sorted(set(REQUIRED_COLUMNS) - set(frame.columns))
     if missing:
         raise ValueError(f"manifest is missing columns: {missing}")
@@ -295,7 +295,7 @@ def assign_splits(
     )
 
 
-def _require_selection_audit(path: Path, manifest: pd.DataFrame) -> dict[str, object]:
+def require_selection_audit(path: Path, manifest: pd.DataFrame) -> dict[str, object]:
     audit = json.loads(path.read_text())
     if audit.get("status") != "verified_against_local_26q1_and_exclusion_manifests":
         raise ValueError("selection audit is not verified")

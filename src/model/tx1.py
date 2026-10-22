@@ -86,7 +86,7 @@ def load_local_safetensors(model_dir: Path) -> tuple[Any, Any, Any, dict[str, ob
     return model, vocab, collator_config, load_report
 
 
-def _build_tx1_encoder(
+def build_tx1_encoder(
     model_dir: Path, batch_size: int, max_length: int
 ) -> tuple[EncoderFn, dict[str, object]]:
     """Build the real Tx1-3B ``EncoderFn``, reusing the width-probe's loader."""

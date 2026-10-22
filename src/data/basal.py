@@ -195,7 +195,7 @@ def _row_chunks(
         yield chunk
 
 
-def _materialize_rows(
+def materialize_rows(
     matrix: object,
     row_indices: np.ndarray,
     *,
@@ -351,7 +351,7 @@ class _XatlasCell(NamedTuple):
     sample: str
 
 
-def _filter_xatlas_shard(
+def filter_xatlas_shard(
     path: Path,
     control_label: str,
     pass_guide_filter_value: int,
@@ -373,7 +373,7 @@ def _filter_xatlas_shard(
     return frame, np.array([total, after_label, len(frame)], dtype=np.int64)
 
 
-def _row_to_xatlas_cell(row: object) -> _XatlasCell:
+def row_to_xatlas_cell(row: object) -> _XatlasCell:
     """X-Atlas tokens reserve no special ids; only positive values are kept."""
     genes = np.asarray(getattr(row, _XATLAS_GENE_TOKEN_COL), dtype=np.int64)
     values = np.asarray(getattr(row, _XATLAS_EXPRESSION_COL), dtype=np.float32)
@@ -386,16 +386,16 @@ def _row_to_xatlas_cell(row: object) -> _XatlasCell:
     )
 
 
-def _assemble_tahoe_matrix(
+def assemble_tahoe_matrix(
     reservoir: list[tuple[np.ndarray, np.ndarray]], metadata: pd.DataFrame
 ) -> tuple[csr_matrix, pd.DataFrame]:
     """CSR matrix and Ensembl ``var`` for Tahoe-100M token/value cells."""
-    return _assemble_token_matrix(
+    return assemble_token_matrix(
         reservoir, metadata, metadata_var_columns=("ensembl_id", "gene_symbol")
     )
 
 
-def _assemble_token_matrix(
+def assemble_token_matrix(
     reservoir: list[tuple[np.ndarray, np.ndarray]],
     metadata: pd.DataFrame,
     *,
@@ -439,7 +439,7 @@ def read_xatlas_shard(
 ) -> tuple[list[str], np.ndarray, pa.Table, np.ndarray]:
     """Perturbed, guide-QC-passing rows of one shard, token lists left in Arrow.
 
-    Applies :func:`_filter_xatlas_shard`'s filters to the label and QC columns
+    Applies :func:`filter_xatlas_shard`'s filters to the label and QC columns
     only. Returns ``(labels, rows, table, [total, after_label_filter,
     after_guide_filter])``: ``rows[i]`` is the ``table`` row (token and value
     lists) of ``labels[i]``.

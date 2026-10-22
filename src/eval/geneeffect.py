@@ -23,7 +23,7 @@ from torch.nn import functional as F
 from src.data.datasets import DependencyDataset
 from src.data.geneeffect import DEPENDENCY_THRESHOLD
 from src.data.prepared import PreparedInputs
-from src.eval.metrics import _unit_pearson, _unit_spearman, paired_line_bootstrap
+from src.eval.metrics import unit_pearson, unit_spearman, paired_line_bootstrap
 
 if TYPE_CHECKING:
     from src.context_prior.targets import Definitions
@@ -68,8 +68,8 @@ def _correlation_details(
         row = {
             unit_col: unit,
             "valid_pairs": int(valid.sum()),
-            "pearson": _unit_pearson(truth, prediction),
-            "spearman": _unit_spearman(truth, prediction),
+            "pearson": unit_pearson(truth, prediction),
+            "spearman": unit_spearman(truth, prediction),
         }
         if residual_errors:
             target, predicted = truth[valid], prediction[valid]
@@ -426,7 +426,7 @@ def line_spearmans(
     predicted = prediction.loc[:, list(genes)].to_numpy(dtype=np.float64)
     measured = truth.loc[prediction.index, list(genes)].to_numpy(dtype=np.float64)
     return np.array(
-        [_unit_spearman(measured[i], predicted[i]) for i in range(len(predicted))]
+        [unit_spearman(measured[i], predicted[i]) for i in range(len(predicted))]
     )
 
 

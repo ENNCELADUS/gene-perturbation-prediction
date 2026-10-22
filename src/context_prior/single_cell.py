@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from src.context_prior.gene_features import select_genes
-from src.context_prior.prior import _feature_scale, _standardize
+from src.context_prior.prior import feature_scale, standardize
 from src.context_prior.ridge import column_scale, gene_ridge, selected_ridge
 from src.context_prior.space import quantile_normalize, quantile_reference
 
@@ -150,9 +150,9 @@ def stack_predictions(
     remaining = np.where(np.isfinite(target.to_numpy()), target.to_numpy(), 0.0)
 
     raw = _own_features(statistics, chosen, genes, train)
-    mean, inverse = _feature_scale(raw)
-    own_train = _standardize(raw, mean, inverse)
-    own_query = _standardize(
+    mean, inverse = feature_scale(raw)
+    own_train = standardize(raw, mean, inverse)
+    own_query = standardize(
         _own_features(statistics, chosen, genes, queries), mean, inverse
     )
 

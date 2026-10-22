@@ -331,9 +331,9 @@ def test_interrupted_pool_stops_running_workers():
     import functools
     import time
 
-    from src.experiments.prepare import _in_processes
+    from src.experiments.prepare import in_processes
 
-    results = _in_processes(
+    results = in_processes(
         [functools.partial(int, "1"), functools.partial(time.sleep, 60)], 2
     )
     assert next(results) == 1

@@ -247,7 +247,7 @@ def test_selective_genes_outside_gene_order_raise() -> None:
 
 def _reference_bootstrap_macro(frame, genes, lines, draw) -> float:
     """Macro selective Spearman of ``frame`` over the resampled ``draw`` of lines."""
-    from src.eval.metrics import _unit_spearman
+    from src.eval.metrics import unit_spearman
 
     values = []
     for gene in genes:
@@ -255,7 +255,7 @@ def _reference_bootstrap_macro(frame, genes, lines, draw) -> float:
         sub = sub.reindex(lines)
         truth = sub.residual.to_numpy()[draw]
         pred = sub.residual_prediction.to_numpy()[draw]
-        values.append(_unit_spearman(truth, pred))
+        values.append(unit_spearman(truth, pred))
     finite = [value for value in values if np.isfinite(value)]
     return float(np.mean(finite)) if finite else math.nan
 

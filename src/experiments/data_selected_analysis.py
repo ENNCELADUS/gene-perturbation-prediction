@@ -33,21 +33,19 @@ from src.context_prior.gene_features import partner_index
 from src.context_prior.prior import PriorSpec, fit_prior, total
 from src.context_prior.ridge import SelectedFit
 from src.eval.geneeffect import aggregate_geneeffect
-from src.experiments.all import _number
+from src.data.io import write_json, write_text
+from src.experiments.run_dir import bind, number
 from src.experiments.config import load_prior_config
 from src.eval.geneeffect import gain, long_frame, score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,
-    _bind,
-    _build,
-    _write_json,
-    _write_text,
+    build,
     load_base,
     prior_inputs,
     stages,
 )
-from src.data.io import jsonable as _jsonable
+from src.data.io import jsonable as jsonable
 
 #: Feature counts the ablation keeps or strips.
 TOP = (10, 50, 200, 1000)
@@ -104,7 +102,7 @@ def analyse(base: RunBase) -> dict:
     config = base.config
     reference = config["reference"]
     experiment = config["experiments"][reference["experiment"]]
-    inputs = _build(base, experiment["kind"], experiment["settings"][0])
+    inputs = build(base, experiment["kind"], experiment["settings"][0])
     prior = prior_inputs(base, inputs)
     spec = PriorSpec(
         tuple(
@@ -274,7 +272,7 @@ def concentration(targets: pd.DataFrame) -> dict:
 
 def _gain_text(entry: Mapping) -> str:
     low, high = entry["interval"]
-    return f"{_number(entry['difference'])} [{_number(low)}, {_number(high)}]"
+    return f"{number(entry['difference'])} [{number(low)}, {number(high)}]"
 
 
 def summary_lines(result: Mapping, spread: Mapping, run_id: str) -> list[str]:
@@ -291,13 +289,13 @@ def summary_lines(result: Mapping, spread: Mapping, run_id: str) -> list[str]:
         "| Variant | Val selective Spearman | Test selective Spearman | Val gain "
         "| Test gain |",
         "| --- | ---: | ---: | --- | --- |",
-        f"| reference | {_number(ablation['reference']['val']['selective_spearman'])} "
-        f"| {_number(ablation['reference']['test']['selective_spearman'])} | — | — |",
+        f"| reference | {number(ablation['reference']['val']['selective_spearman'])} "
+        f"| {number(ablation['reference']['test']['selective_spearman'])} | — | — |",
     ]
     for label, scores in ablation["variants"].items():
         out.append(
-            f"| {label} | {_number(scores['val']['selective_spearman'])} "
-            f"| {_number(scores['test']['selective_spearman'])} "
+            f"| {label} | {number(scores['val']['selective_spearman'])} "
+            f"| {number(scores['test']['selective_spearman'])} "
             f"| {_gain_text(scores['val']['gain'])} "
             f"| {_gain_text(scores['test']['gain'])} |"
         )
@@ -309,28 +307,28 @@ def summary_lines(result: Mapping, spread: Mapping, run_id: str) -> list[str]:
         f"{int(features['times_selected'].sum())}.",
         "",
         "Median share of variance over the fit lines explained by lineage: "
-        f"{_number(features['lineage_r2'].head(50).median(), 3)} for the top 50 "
-        f"features, {_number(used['lineage_r2'].median(), 3)} for every feature "
-        f"used, {_number(features['lineage_r2'].median(), 3)} for every space "
+        f"{number(features['lineage_r2'].head(50).median(), 3)} for the top 50 "
+        f"features, {number(used['lineage_r2'].median(), 3)} for every feature "
+        f"used, {number(features['lineage_r2'].median(), 3)} for every space "
         "gene; by the expression components: "
-        f"{_number(features['components_r2'].head(50).median(), 3)}, "
-        f"{_number(used['components_r2'].median(), 3)} and "
-        f"{_number(features['components_r2'].median(), 3)}.",
+        f"{number(features['components_r2'].head(50).median(), 3)}, "
+        f"{number(used['components_r2'].median(), 3)} and "
+        f"{number(features['components_r2'].median(), 3)}.",
         "",
         "Per-target gain of the stage (selective Spearman with minus without): "
-        f"mean {_number(spread['mean_gain']['val'])} validation, "
-        f"{_number(spread['mean_gain']['test'])} test; positive for "
+        f"mean {number(spread['mean_gain']['val'])} validation, "
+        f"{number(spread['mean_gain']['test'])} test; positive for "
         f"{spread['val_positive']} and {spread['test_positive']} of "
         f"{spread['targets']} targets; Spearman of the validation and test gains "
-        f"across targets {_number(spread['val_test_gain_spearman'], 3)}.",
+        f"across targets {number(spread['val_test_gain_spearman'], 3)}.",
         "",
         "| Decile by validation gain | Val mean gain | Test mean gain |",
         "| ---: | ---: | ---: |",
     ]
     for row in spread["test_gain_by_val_decile"]:
         out.append(
-            f"| {row['decile']} | {_number(row['val_mean_gain'])} "
-            f"| {_number(row['test_mean_gain'])} |"
+            f"| {row['decile']} | {number(row['val_mean_gain'])} "
+            f"| {number(row['test_mean_gain'])} |"
         )
     out += [
         "",
@@ -344,7 +342,7 @@ def summary_lines(result: Mapping, spread: Mapping, run_id: str) -> list[str]:
         out.append(
             f"| {row.gene} | {row.times_selected} | {row.summed_abs_weight:.3f} "
             f"| {row.partner_of_target} | {'yes' if row.selective_gene else 'no'} "
-            f"| {_number(row.lineage_r2, 3)} | {_number(row.components_r2, 3)} "
+            f"| {number(row.lineage_r2, 3)} | {number(row.components_r2, 3)} "
             f"| {row.top_targets} |"
         )
     return out
@@ -360,18 +358,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     config = load_prior_config(args.config)
     run_dir = Path(config["output_root"]) / args.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    _bind(run_dir, config)
+    bind(run_dir, config)
     out = run_dir / "data_selected"
     out.mkdir(exist_ok=True)
     result = analyse(load_base(config))
     spread = concentration(result["targets"])
     result["features"].to_csv(out / "features.csv", index=False)
     result["targets"].to_csv(out / "targets.csv", index=False)
-    _write_json(
+    write_json(
         out / "ablation.json",
-        _jsonable({**result["ablation"], "concentration": spread}),
+        jsonable({**result["ablation"], "concentration": spread}),
     )
-    _write_text(
+    write_text(
         out / "summary.md", "\n".join(summary_lines(result, spread, args.run_id)) + "\n"
     )
     print(f"data-selected analysis: {out / 'summary.md'}", flush=True)

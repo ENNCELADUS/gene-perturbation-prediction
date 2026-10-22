@@ -28,15 +28,13 @@ import json
 import logging
 import math
 from pathlib import Path
-import subprocess
 from typing import Any
 
 from src.experiments.all import (
     BASELINE_NAMES,
     PRIOR_CONTROLS,
     Job,
-    _check_resume_processes,
-    _number,
+    check_resume_processes,
     choose_gpus,
     run_pool,
     sigterm_raises,
@@ -45,9 +43,9 @@ from src.experiments.all import (
     visible_gpus,
 )
 from src.data.io import read_json
+from src.experiments.run_dir import git_revision, number
 from src.experiments.config import load_config
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 JOINT_NAME = "Joint model"
 TX1_RIDGE = "context_pca_ridge[tx1]"
 BOOTSTRAP_REPEATS = 1000
@@ -81,19 +79,6 @@ def _finite(value: Any) -> float | None:
     return float(value)
 
 
-def _git_revision() -> str:
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-
-
 # ----------------------------------------------------------------------------
 # Training and evaluation
 # ----------------------------------------------------------------------------
@@ -113,7 +98,7 @@ def train_joint(
     if (train / "done.json").is_file():
         return
     if gpus:
-        _check_resume_processes(train, len(gpus))
+        check_resume_processes(train, len(gpus))
         job = Job("train", training_argv(config_path, run, len(gpus)))
         run_pool([job], [gpus], run / "logs", start)
     else:
@@ -285,14 +270,14 @@ def _split_lines(title: str, split: dict[str, Any]) -> list[str]:
         "|" + "---|" * len(header),
     ]
     for name, row in split["models"].items():
-        cells = [_number(row[key]) for _, key, _ in COLUMNS]
+        cells = [number(row[key]) for _, key, _ in COLUMNS]
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
     lines.append("")
     for bootstrap in split["bootstraps"]:
         low, high = bootstrap["interval"]
         lines.append(
             f"Selective Spearman, {bootstrap['comparison']}: "
-            f"{_number(bootstrap['difference'])} [{_number(low)}, {_number(high)}], "
+            f"{number(bootstrap['difference'])} [{number(low)}, {number(high)}], "
             f"paired bootstrap over {title.lower()} lines ({bootstrap['repeats']} "
             f"resamples, seed {bootstrap['seed']})."
         )
@@ -306,7 +291,7 @@ def _split_lines(title: str, split: dict[str, Any]) -> list[str]:
         "|---|---|" + "---|" * len(models),
     ]
     for row in split["lineages"]:
-        cells = [_number(row[model]) for model in models]
+        cells = [number(row[model]) for model in models]
         lines.append(
             f"| {row['lineage']} | {row['lines']} | " + " | ".join(cells) + " |"
         )
@@ -340,15 +325,15 @@ def _summary_lines(record: dict[str, Any]) -> list[str]:
         "",
         f"`train/best.pt` is {when}; {training['epochs_trained']} epochs trained. "
         f"At that point the selective Spearman is "
-        f"{_number(training[TRAIN_DIAGNOSTIC_KEY])} on the training diagnostic "
-        f"lines and {_number(training[VALIDATION_KEY])} on the validation lines.",
+        f"{number(training[TRAIN_DIAGNOSTIC_KEY])} on the training diagnostic "
+        f"lines and {number(training[VALIDATION_KEY])} on the validation lines.",
     ]
 
 
 def write_outputs(config_path: Path, run: Path, run_id: str, split_table: Path) -> Path:
     """Write revision.json, then summary.md; return summary.md. ``split_table`` is
     the split's CSV (``model_id``, ``lineage``) for the per-lineage table."""
-    record = build_record(config_path, run, run_id, _git_revision(), split_table)
+    record = build_record(config_path, run, run_id, git_revision(), split_table)
     (run / "revision.json").write_text(
         json.dumps(record, indent=2, allow_nan=False) + "\n"
     )

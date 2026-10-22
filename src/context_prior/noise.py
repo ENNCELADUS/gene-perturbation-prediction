@@ -109,7 +109,7 @@ def r2_gain(
     }
 
 
-def _between_share(
+def between_share(
     values: np.ndarray, finite: np.ndarray, onehot: np.ndarray
 ) -> np.ndarray:
     """Per column, the between-group sum of squares over the total, over the
@@ -146,7 +146,7 @@ def group_share(
     def onehot(assigned: np.ndarray) -> np.ndarray:
         return (assigned[:, None] == np.asarray(levels)[None, :]).astype(np.float64)
 
-    observed = float(np.nanmean(_between_share(values, finite, onehot(labels))))
+    observed = float(np.nanmean(between_share(values, finite, onehot(labels))))
     rng = np.random.default_rng(seed)
     if strata is None:
         blocks = [np.arange(len(lines))]
@@ -160,7 +160,7 @@ def group_share(
         shuffled = labels.copy()
         for block in blocks:
             shuffled[block] = labels[rng.permutation(block)]
-        null[k] = np.nanmean(_between_share(values, finite, onehot(shuffled)))
+        null[k] = np.nanmean(between_share(values, finite, onehot(shuffled)))
     return {
         "observed": observed,
         "null_mean": float(null.mean()),

@@ -191,7 +191,7 @@ def _context_view(
     return features, own.loc[list(fit_rows.index), columns].to_numpy()
 
 
-def _feature_scale(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def feature_scale(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Per gene and feature over the fit rows: the mean, and the inverse SD.
 
     A feature whose range on the fit rows is zero (constant, or undefined: no such
@@ -209,7 +209,7 @@ def _feature_scale(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return np.where(varies, mean, 0.0).astype(np.float32), inverse.astype(np.float32)
 
 
-def _standardize(
+def standardize(
     values: np.ndarray, mean: np.ndarray, inverse: np.ndarray
 ) -> np.ndarray:
     """``(values - mean) * inverse`` in place; an undefined feature reads zero."""
@@ -236,12 +236,12 @@ def _knowledge_view(
         return values[:, :, features_of_block]
 
     train = raw(fit_rows)
-    mean, inverse = _feature_scale(train)
+    mean, inverse = feature_scale(train)
 
     def features(rows: pd.DataFrame) -> np.ndarray:
-        return _standardize(raw(rows), mean, inverse)
+        return standardize(raw(rows), mean, inverse)
 
-    return features, _standardize(train, mean, inverse)
+    return features, standardize(train, mean, inverse)
 
 
 def _selected_view(fit_rows: pd.DataFrame) -> tuple[Features, np.ndarray]:

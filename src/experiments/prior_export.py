@@ -25,17 +25,17 @@ from src.context_prior.folds import training_side_folds
 from src.context_prior.prior import PriorSpec, crossfit, fit_prior, total
 from src.experiments.config import load_prior_config
 from src.eval.geneeffect import score
+from src.data.io import write_json
+from src.experiments.run_dir import bind
 from src.experiments.context_prior import (
     SCORED,
     RunBase,
-    _bind,
-    _build,
-    _write_json,
+    build,
     load_base,
     prior_inputs,
     stages,
 )
-from src.data.io import jsonable as _jsonable
+from src.data.io import jsonable as jsonable
 
 EXPORT_DIR = "export"
 SPLITS = ("train", *SCORED)
@@ -53,7 +53,7 @@ def export_predictions(base: RunBase) -> dict[str, pd.DataFrame]:
             "the export refits the bridge out of fold for the affine bridge only, "
             f"not {experiment['kind']!r}"
         )
-    inputs = _build(base, "affine", experiment["settings"][0])
+    inputs = build(base, "affine", experiment["settings"][0])
     prior = prior_inputs(base, inputs)
     spec = PriorSpec(
         tuple(
@@ -127,9 +127,9 @@ def write_export(run_dir: Path, base: RunBase, run_id: str) -> Path:
         genes=np.asarray(genes, dtype=str),
         residual_scale=base.definitions.residual_scale.loc[genes].to_numpy(np.float64),
     )
-    _write_json(
+    write_json(
         staging / "prior.json",
-        _jsonable(
+        jsonable(
             {
                 "run_id": run_id,
                 "reference": dict(base.config["reference"]),
@@ -154,7 +154,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_dir = Path(config["output_root"]) / args.run_id
     _refuse_existing(run_dir / EXPORT_DIR)  # before the long load
     run_dir.mkdir(parents=True, exist_ok=True)
-    _bind(run_dir, config)
+    bind(run_dir, config)
     out = write_export(run_dir, load_base(config), args.run_id)
     print(f"prior export: {out}", flush=True)
     return 0

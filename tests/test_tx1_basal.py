@@ -15,7 +15,7 @@ from scipy.sparse import csr_matrix
 from src.data.basal import (
     _cap_indices_by_group,
     _group_candidate_indices_by_label,
-    _materialize_rows,
+    materialize_rows,
     align_columns,
     assert_tx1_input_contract,
     perturbseq_control_library_sizes,
@@ -96,14 +96,14 @@ def test_materialize_rows_chunks_keep_requested_order(tmp_path, dense):
         with h5py.File(tmp_path / "x.h5", "w") as handle:
             handle["X"] = values
         with h5py.File(tmp_path / "x.h5", "r") as handle:
-            out = _materialize_rows(handle["X"], rows, chunk_size=4)
-            sparsified = _materialize_rows(
+            out = materialize_rows(handle["X"], rows, chunk_size=4)
+            sparsified = materialize_rows(
                 handle["X"], rows, chunk_size=4, sparsify_chunks=True
             )
         np.testing.assert_array_equal(out, values[rows])
         np.testing.assert_array_equal(sparsified.toarray(), values[rows])
     else:
-        out = _materialize_rows(csr_matrix(values), rows, chunk_size=4)
+        out = materialize_rows(csr_matrix(values), rows, chunk_size=4)
         np.testing.assert_array_equal(out.toarray(), values[rows])
 
 
@@ -122,7 +122,7 @@ def test_materialize_rows_holds_one_dense_chunk_at_a_time():
             alive.append(weakref.ref(chunk))
             return chunk
 
-    out = _materialize_rows(
+    out = materialize_rows(
         Backed(), np.arange(12)[::-1], chunk_size=3, sparsify_chunks=True
     )
     np.testing.assert_array_equal(out.toarray(), values[::-1])

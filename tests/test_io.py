@@ -26,3 +26,10 @@ def test_array_writes_keep_the_target_name(tmp_path):
     assert np.load(tmp_path / "a.npy").tolist() == [0, 1, 2]
     with np.load(tmp_path / "b.npz") as payload:
         assert payload["x"].tolist() == [1.0, 1.0]
+
+
+def test_relative_config_paths_resolve_from_the_repository_root():
+    from src.experiments.run_dir import REPO_ROOT, absolute
+
+    assert (REPO_ROOT / "pyproject.toml").is_file()
+    assert absolute("configs") == REPO_ROOT / "configs"

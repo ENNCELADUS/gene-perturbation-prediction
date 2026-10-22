@@ -42,7 +42,6 @@ import logging
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Any, Final
@@ -50,6 +49,8 @@ from typing import Any, Final
 import numpy as np
 import pandas as pd
 from src.data.io import write_json, write_parquet
+from src.experiments import run_dir
+from src.experiments.run_dir import record_step, shard
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -134,44 +135,22 @@ def settings(setup: Setup) -> dict[str, Any]:
 
 
 def open_manifest(setup: Setup) -> dict[str, Any]:
-    """The root's manifest, written now if new; refuses a root of other settings."""
+    """The ladder root's manifest, written now if new; refuses a root of other
+    settings."""
     setup.root.mkdir(parents=True, exist_ok=True)
-    path = setup.root / MANIFEST
     current = settings(setup)
-    if path.is_file():
-        manifest = json.loads(path.read_text())
-        if manifest["settings"] != current:
-            raise ValueError(
-                f"{setup.root} was written under other settings; choose a new "
-                "ladder_root for these"
-            )
-        return manifest
-    manifest = {
-        "settings": current,
-        "expression_spaces": {
-            "pie_input": "mean over cells of log1p(CP10K); bulk-only lines "
-            "log1p(TPM / 100)",
-            "pseudobulk": "log1p(mean over cells of CP10K), then the default "
-            "prior's space (quantile-normalised to the training side's bulk)",
-            "hvg_cells": "log1p(x * T / L) over STATE's HVGs, "
-            f"T = {current['prepared_target_sum']}",
-            "tx1": "raw UMI",
-        },
-        "steps": {},
+    spaces = {
+        "pie_input": "mean over cells of log1p(CP10K); bulk-only lines "
+        "log1p(TPM / 100)",
+        "pseudobulk": "log1p(mean over cells of CP10K), then the default "
+        "prior's space (quantile-normalised to the training side's bulk)",
+        "hvg_cells": "log1p(x * T / L) over STATE's HVGs, "
+        f"T = {current['prepared_target_sum']}",
+        "tx1": "raw UMI",
     }
-    write_json(path, manifest)
-    return manifest
-
-
-def record_step(setup: Setup, step: str, record: Mapping[str, Any]) -> None:
-    """Add a step's record to the manifest, re-read so concurrent shards keep theirs."""
-    path = setup.root / MANIFEST
-    manifest = json.loads(path.read_text())
-    manifest["steps"][step] = {
-        **record,
-        "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-    }
-    write_json(path, manifest)
+    return run_dir.open_manifest(
+        setup.root / MANIFEST, current, fresh={"expression_spaces": spaces}
+    )
 
 
 # --- the frame ------------------------------------------------------------------
@@ -436,7 +415,7 @@ def _cells_line(
 
 def build_cells(setup: Setup, frame: Frame) -> dict[str, Any]:
     """``cells/<ModelID>.npz`` for every split line lacking one."""
-    from src.experiments.prepare import LINE_PROCESSES, NOISE_DIR, _in_processes
+    from src.experiments.prepare import LINE_PROCESSES, NOISE_DIR, in_processes
 
     genes = read_genes(setup.root)
     panel = list(genes.index[genes["in_panel"]])
@@ -469,7 +448,7 @@ def build_cells(setup: Setup, frame: Frame) -> dict[str, Any]:
         for model_id in missing
     ]
     _LOGGER.info("cells: %d of %d lines to write", len(calls), len(frame.cell_lines))
-    for done, _ in enumerate(_in_processes(calls, LINE_PROCESSES), start=1):
+    for done, _ in enumerate(in_processes(calls, LINE_PROCESSES), start=1):
         if done % 25 == 0:
             _LOGGER.info("cells: line %d of %d", done, len(calls))
     write_json(out / "genes.json", {"genes": union, "panel": len(panel)})
@@ -492,14 +471,12 @@ def build_cells(setup: Setup, frame: Frame) -> dict[str, Any]:
 def bulk_gene_columns(path: Path) -> list[str]:
     """The upper-case gene symbols of a DepMap matrix's header, in file order, as
     ``read_depmap_matrix`` names its columns."""
-    from src.data.depmap import _OMICS_METADATA, depmap_symbol
+    from src.data.depmap import OMICS_METADATA, depmap_symbol
 
     header = list(pd.read_csv(path, nrows=0).columns)
     if "ModelID" in header:
         columns = [
-            c
-            for c in header
-            if c not in _OMICS_METADATA and not c.startswith("Unnamed")
+            c for c in header if c not in OMICS_METADATA and not c.startswith("Unnamed")
         ]
     else:
         columns = header[1:]
@@ -668,7 +645,7 @@ def build_tx1(setup: Setup, frame: Frame, shard: tuple[int, int]) -> dict[str, A
     from src.data.basal import align_columns, symbol_column
     from src.data.ladder_cells import line_rng, shuffle_counts
     from src.data.tx1_cache import missing_lines, read_basal_source, write_line_cache
-    from src.model.tx1 import _build_tx1_encoder
+    from src.model.tx1 import build_tx1_encoder
 
     index, count = shard
     lines = tx1_lines(frame)[index::count]
@@ -676,7 +653,7 @@ def build_tx1(setup: Setup, frame: Frame, shard: tuple[int, int]) -> dict[str, A
     todo = {kind: missing_lines(root / kind, lines) for kind in ("real", "shuffled")}
     if not any(todo.values()):
         return {"lines": len(lines), "encoded": 0}
-    encoder, _ = _build_tx1_encoder(
+    encoder, _ = build_tx1_encoder(
         Path(setup.joint["paths"]["tx1_model_dir"]),
         int(setup.config["tx1"]["batch_size"]),
         int(setup.config["tx1"]["max_length"]),
@@ -752,27 +729,22 @@ def run(
     for step in steps:
         if step == "tx1":
             record = build_tx1(setup, frame, shard)
-            record_step(setup, f"tx1_shard_{shard[0]}_of_{shard[1]}", record)
+            record_step(
+                setup.root / MANIFEST, f"tx1_shard_{shard[0]}_of_{shard[1]}", record
+            )
             continue
         if _step_done(setup, step):
             _LOGGER.info("%s: written, skipping", step)
             continue
-        record_step(setup, step, builders[step](setup, frame))
+        record_step(setup.root / MANIFEST, step, builders[step](setup, frame))
         _LOGGER.info("%s: done", step)
-
-
-def _shard(value: str) -> tuple[int, int]:
-    index, count = (int(part) for part in value.split("/"))
-    if not 0 <= index < count:
-        raise argparse.ArgumentTypeError(f"shard {value}: need 0 <= I < N")
-    return index, count
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
     parser.add_argument("--steps", default="lines,cells,mean,summaries")
-    parser.add_argument("--shard", type=_shard, default=(0, 1))
+    parser.add_argument("--shard", type=shard, default=(0, 1))
     args = parser.parse_args(argv)
     steps = [s for s in args.steps.split(",") if s]
     unknown = [s for s in steps if s not in STEPS]

@@ -51,7 +51,7 @@ from src.context_prior.targets import Definitions
 from src.data import ladder_reader as reader
 from src.data.splits import FixedSplit
 from src.data.io import read_json, write_json, write_text
-from src.experiments.run_dir import assert_bound, bind, locked
+from src.experiments.run_dir import assert_bound, bind, interval, locked, number
 
 log = logging.getLogger(__name__)
 
@@ -769,7 +769,7 @@ def dh_ridge(
     for start in range(0, len(panel), RIDGE_GENES):
         end = min(start + RIDGE_GENES, len(panel))
         x = torch.from_numpy(np.array(features[start:end], dtype=np.float32)).to(device)
-        for number, (_, train, query, _, values) in enumerate(fits):
+        for fit, (_, train, query, _, values) in enumerate(fits):
             target = torch.from_numpy(np.ascontiguousarray(values[:, start:end].T)).to(
                 device
             )
@@ -782,9 +782,7 @@ def dh_ridge(
             for penalty in penalties:
                 factor = torch.linalg.cholesky(gram + penalty * eye)
                 alpha = torch.cholesky_solve(target, factor)
-                z[penalty][number][start:end] = (
-                    (cross @ alpha).squeeze(-1).cpu().numpy()
-                )
+                z[penalty][fit][start:end] = (cross @ alpha).squeeze(-1).cpu().numpy()
         if start // RIDGE_GENES % 25 == 0:
             log.info("dH ridge: %d of %d panel genes", end, len(panel))
     return {
@@ -1086,18 +1084,6 @@ def report(config_path: Path, device: str) -> Path:
     return out
 
 
-def _number(value: Any, digits: int = 4) -> str:
-    """Undefined (None or NaN) is written as such, never as 0."""
-    if value is None or not np.isfinite(float(value)):
-        return "undefined"
-    return f"{float(value):.{digits}f}"
-
-
-def _interval(entry: Mapping[str, Any]) -> str:
-    low, high = entry["interval"]
-    return f"{_number(entry['difference'])} [{_number(low)}, {_number(high)}]"
-
-
 def results_markdown(payload: Mapping[str, Any]) -> str:
     config = payload["config"]
     counts = payload["lines"]
@@ -1135,7 +1121,7 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
         for name, splits in payload["scores"].items():
             entry = splits[split]
             cells = [
-                "undefined" if entry is None else _number(entry[key])
+                "undefined" if entry is None else number(entry[key])
                 for key, _ in REPORTED
             ]
             out.append(f"| {name} | " + " | ".join(cells) + " |")
@@ -1153,7 +1139,7 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
         for metric in ("line_spearman", "selective_spearman", "within_gene_r2"):
             for split in SPLITS:
                 result = entry[split]
-                text = "undefined" if result is None else _interval(result[metric])
+                text = "undefined" if result is None else interval(result[metric])
                 if result is not None and metric == "selective_spearman":
                     text += f" ({result[metric]['genes']} genes)"
                 cells.append(text)
@@ -1175,7 +1161,7 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
         train, val = record["train_in_sample"], payload["scores"][name]["val"]
         # Rows trained before the per-line selector (2026-10-21) did not record it.
         train_line = (
-            _number(train["line_spearman"])
+            number(train["line_spearman"])
             if "line_spearman" in train
             else "not recorded"
         )
@@ -1183,11 +1169,11 @@ def results_markdown(payload: Mapping[str, Any]) -> str:
             f"| {name} | {record['best_epoch']} | {record['epochs']} "
             f"| {record['updates']} "
             f"| {record['lines_trained']} | {train_line} "
-            f"| {_number(None if val is None else val['line_spearman'])} "
-            f"| {_number(train['selective_spearman'])} "
-            f"| {_number(None if val is None else val['selective_spearman'])} "
-            f"| {_number(train['within_gene_r2'])} "
-            f"| {_number(None if val is None else val['within_gene_r2'])} |"
+            f"| {number(None if val is None else val['line_spearman'])} "
+            f"| {number(train['selective_spearman'])} "
+            f"| {number(None if val is None else val['selective_spearman'])} "
+            f"| {number(train['within_gene_r2'])} "
+            f"| {number(None if val is None else val['within_gene_r2'])} |"
         )
     return "\n".join(out) + "\n"
 
