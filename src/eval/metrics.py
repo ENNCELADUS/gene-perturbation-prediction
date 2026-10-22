@@ -8,7 +8,7 @@ from typing import Sequence
 
 import numpy as np
 import pandas as pd
-from scipy.stats import pearsonr, spearmanr
+from scipy.stats import pearsonr, rankdata, spearmanr
 
 MIN_OBSERVATIONS = 3
 
@@ -35,6 +35,56 @@ def unit_spearman(truth: np.ndarray, pred: np.ndarray) -> float:
     if np.all(truth == truth[0]) or np.all(pred == pred[0]):
         return float("nan")
     return float(spearmanr(truth, pred).statistic)
+
+
+def row_correlations(
+    truth: np.ndarray, pred: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per row of two units x observations arrays: the finite-pair count and
+    :func:`unit_pearson` / :func:`unit_spearman` over those pairs, all rows at once."""
+    valid = np.isfinite(truth) & np.isfinite(pred)
+    truth = np.where(valid, truth, np.nan)
+    pred = np.where(valid, pred, np.nan)
+    count = valid.sum(axis=1)
+    constant = np.zeros(len(truth), dtype=bool)
+    for values in (truth, pred):
+        high = np.where(valid, values, -np.inf).max(axis=1, initial=-np.inf)
+        constant |= high == np.where(valid, values, np.inf).min(axis=1, initial=np.inf)
+    undefined = (count < MIN_OBSERVATIONS) | constant
+    ranks = [rankdata(values, axis=1, nan_policy="omit") for values in (truth, pred)]
+    return (
+        count,
+        _masked_pearson(truth, pred, valid, undefined),
+        _masked_pearson(*ranks, valid, undefined),
+    )
+
+
+def _masked_pearson(
+    x: np.ndarray, y: np.ndarray, valid: np.ndarray, undefined: np.ndarray
+) -> np.ndarray:
+    count = np.maximum(valid.sum(axis=1, keepdims=True), 1)
+    centred = []
+    for values in (x, y):
+        mean = np.where(valid, values, 0.0).sum(axis=1, keepdims=True) / count
+        centred.append(np.where(valid, values - mean, 0.0))
+    xm, ym = centred
+    with np.errstate(invalid="ignore", divide="ignore"):
+        r = (xm * ym).sum(axis=1) / np.sqrt(
+            (xm * xm).sum(axis=1) * (ym * ym).sum(axis=1)
+        )
+    return np.where(undefined, np.nan, np.clip(r, -1.0, 1.0))
+
+
+def average_precision(positive: np.ndarray, score: np.ndarray) -> float:
+    """sklearn's ``average_precision_score``: the step-wise area under the
+    precision-recall curve, tied scores forming one threshold."""
+    order = np.argsort(score, kind="mergesort")[::-1]
+    score, positive = score[order], positive[order]
+    last = np.r_[np.flatnonzero(np.diff(score)), score.size - 1]
+    true_positives = np.cumsum(positive)[last]
+    precision = true_positives / (last + 1)
+    recall = true_positives / true_positives[-1]
+    return float(np.sum(np.diff(recall, prepend=0.0) * precision))
 
 
 def per_gene_spearman(

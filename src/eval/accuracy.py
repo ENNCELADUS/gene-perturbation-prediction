@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.metrics import average_precision_score
 from torch import nn
 from torch.nn import functional as F
 
@@ -24,10 +23,10 @@ from src.data.labels import DEPENDENCY_THRESHOLD
 from src.data.prepared import PreparedInputs
 from src.eval.metrics import (
     MIN_OBSERVATIONS,
+    average_precision,
     calibration_slope,
     paired_line_bootstrap,
-    unit_pearson,
-    unit_spearman,
+    row_correlations,
 )
 
 if TYPE_CHECKING:
@@ -55,6 +54,23 @@ class EvalResult:
     response: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
+def _unit_rows(
+    frame: pd.DataFrame, units: Sequence[str], unit_col: str, columns: Sequence[str]
+) -> list[np.ndarray]:
+    """``frame``'s ``columns`` as units x observations arrays (NaN where absent), one
+    row per unit in ``units`` order."""
+    other_col = "gene_symbol" if unit_col == "model_id" else "model_id"
+    row = pd.Index(units).get_indexer(frame[unit_col])
+    column, others = pd.factorize(frame[other_col])
+    keep = row >= 0
+    arrays = []
+    for name in columns:
+        values = np.full((len(units), len(others)), np.nan)
+        values[row[keep], column[keep]] = frame[name].to_numpy(dtype=float)[keep]
+        arrays.append(values)
+    return arrays
+
+
 def _correlation_details(
     frame: pd.DataFrame,
     units: Sequence[str],
@@ -64,37 +80,37 @@ def _correlation_details(
     pred_col: str,
     residual_errors: bool = False,
 ) -> pd.DataFrame:
-    rows = []
-    groups = dict(tuple(frame.groupby(unit_col, sort=False)))
-    for unit in units:
-        group = groups.get(unit, frame.iloc[:0])
-        truth = group[truth_col].to_numpy(dtype=float)
-        prediction = group[pred_col].to_numpy(dtype=float)
-        valid = np.isfinite(truth) & np.isfinite(prediction)
-        row = {
-            unit_col: unit,
-            "valid_pairs": int(valid.sum()),
-            "pearson": unit_pearson(truth, prediction),
-            "spearman": unit_spearman(truth, prediction),
+    truth, prediction = _unit_rows(frame, units, unit_col, (truth_col, pred_col))
+    count, pearson, spearman = row_correlations(truth, prediction)
+    table = pd.DataFrame(
+        {
+            unit_col: list(units),
+            "valid_pairs": count.astype(int),
+            "pearson": pearson,
+            "spearman": spearman,
         }
-        if residual_errors:
-            target, predicted = truth[valid], prediction[valid]
-            enough = len(target) >= 2
-            target_sd = float(target.std()) if enough else math.nan
-            prediction_sd = float(predicted.std()) if enough else math.nan
-            error = predicted - target
-            row.update(
-                target_sd=target_sd,
-                prediction_sd=prediction_sd,
-                sd_ratio=prediction_sd / target_sd if target_sd > 0 else math.nan,
-                rmse=float(np.sqrt(np.mean(error**2))) if len(error) else math.nan,
-                mae=float(np.mean(np.abs(error))) if len(error) else math.nan,
-            )
-        rows.append(row)
-    columns = [unit_col, "valid_pairs", "pearson", "spearman"]
+    )
     if residual_errors:
-        columns += ["target_sd", "prediction_sd", "sd_ratio", "rmse", "mae"]
-    return pd.DataFrame(rows, columns=columns)
+        valid = np.isfinite(truth) & np.isfinite(prediction)
+        n = np.maximum(count, 1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            sd = []
+            for values in (truth, prediction):
+                kept = np.where(valid, values, 0.0)
+                centred = np.where(
+                    valid, values - kept.sum(axis=1)[:, None] / n[:, None], 0.0
+                )
+                sd.append(
+                    np.where(count >= 2, np.sqrt((centred**2).sum(axis=1) / n), np.nan)
+                )
+            error = np.where(valid, prediction - truth, 0.0)
+            table["target_sd"], table["prediction_sd"] = sd
+            table["sd_ratio"] = np.where(sd[0] > 0, sd[1] / sd[0], np.nan)
+            table["rmse"] = np.where(
+                count > 0, np.sqrt((error**2).sum(axis=1) / n), np.nan
+            )
+            table["mae"] = np.where(count > 0, np.abs(error).sum(axis=1) / n, np.nan)
+    return table
 
 
 def _aupr_lift(frame: pd.DataFrame, units: Sequence[str]) -> pd.Series:
@@ -104,21 +120,19 @@ def _aupr_lift(frame: pd.DataFrame, units: Sequence[str]) -> pd.Series:
     dependent when ``gene_effect < DEPENDENCY_THRESHOLD`` and ranks higher the lower
     its predicted GeneEffect. A constant prediction scores exactly 0.
     """
-    groups = dict(tuple(frame.groupby("gene_symbol", sort=False)))
+    truth, prediction = _unit_rows(
+        frame, units, "gene_symbol", ("gene_effect", "geneeffect_prediction")
+    )
     lift = {}
-    for gene in units:
-        group = groups.get(gene, frame.iloc[:0])
-        truth = group["gene_effect"].to_numpy(dtype=float)
-        prediction = group["geneeffect_prediction"].to_numpy(dtype=float)
-        valid = np.isfinite(truth) & np.isfinite(prediction)
-        dependent = truth[valid] < DEPENDENCY_THRESHOLD
+    for gene, t, p in zip(units, truth, prediction):
+        valid = np.isfinite(t) & np.isfinite(p)
+        dependent = t[valid] < DEPENDENCY_THRESHOLD
         positives = int(dependent.sum())
         if positives == 0 or positives == len(dependent):
             lift[gene] = math.nan
             continue
-        lift[gene] = float(
-            average_precision_score(dependent, -prediction[valid])
-            - positives / len(dependent)
+        lift[gene] = average_precision(dependent, -p[valid]) - positives / len(
+            dependent
         )
     return pd.Series(lift, dtype=float)
 
@@ -146,7 +160,8 @@ def aggregate_geneeffect(
     variable, selective = set(variable_genes), set(selective_genes)
     if not (variable | selective) <= set(genes):
         raise ValueError("variable or selective genes outside the gene order")
-    tabled = [gene for gene in genes if gene in variable | selective]
+    either = variable | selective
+    tabled = [gene for gene in genes if gene in either]
     if frame.duplicated(["model_id", "gene_symbol"]).any():
         raise ValueError("duplicate GeneEffect rows")
     scored = frame.loc[np.isfinite(frame["residual"].to_numpy(dtype=float))]
@@ -429,9 +444,7 @@ def line_spearmans(
     (fewer than ``MIN_OBSERVATIONS`` genes, or a side constant across them)."""
     predicted = prediction.loc[:, list(genes)].to_numpy(dtype=np.float64)
     measured = truth.loc[prediction.index, list(genes)].to_numpy(dtype=np.float64)
-    return np.array(
-        [unit_spearman(measured[i], predicted[i]) for i in range(len(predicted))]
-    )
+    return row_correlations(measured, predicted)[2]
 
 
 def line_spearman_gain(
