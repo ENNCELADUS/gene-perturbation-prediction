@@ -20,6 +20,8 @@ import yaml
 
 from src.data import ladder_reader as reader
 from src.experiments.stage_one import ladder_inputs as ladder
+from src.experiments.stage_one import report as stage_one_report
+from src.experiments.stage_one import resident as device_inputs
 from src.experiments.stage_one import run as stage_one
 from src.experiments.stage_one.config import load_stage_one_config
 from tests.test_ladder_inputs import BULK_LABELLED, TEST, TRAIN, VAL, build_world
@@ -412,7 +414,7 @@ def test_prior_reference_components_reader_and_report(world):
     }
     path = root / "configs" / "report.yaml"
     path.write_text(yaml.safe_dump(report))
-    out = stage_one.report(path, "cpu")
+    out = stage_one_report.report(path, "cpu")
     results = json.loads((out / "results.json").read_text())
     assert results["scores"]["components reader"]["oof"]["lines"] == len(TRAIN)
     assert results["scores"]["missing"]["val"] is None
@@ -505,7 +507,7 @@ def _check_reads_are_bound(
     with pytest.raises(ValueError, match="another config"):
         stage_one.queue([reader_path], ["0"], ["main"])
     with pytest.raises(ValueError, match="another config"):
-        stage_one.report(report_path, "cpu")
+        stage_one_report.report(report_path, "cpu")
     bound.write_text(original)
 
     prior_bound = prior_dir / "run_config.json"
@@ -514,11 +516,11 @@ def _check_reads_are_bound(
     changed["config"]["ladder_config"] = str(root / "elsewhere.yaml")
     prior_bound.write_text(json.dumps(changed))
     with pytest.raises(ValueError, match="the report"):
-        stage_one.report(report_path, "cpu")
+        stage_one_report.report(report_path, "cpu")
     prior_bound.write_text(original)
     (prior_dir / "row.json").rename(prior_dir / "row.json.aside")
     results = json.loads(
-        (stage_one.report(report_path, "cpu") / "results.json").read_text()
+        (stage_one_report.report(report_path, "cpu") / "results.json").read_text()
     )
     assert results["scores"]["prior"]["val"] is None
     (prior_dir / "row.json.aside").rename(prior_dir / "row.json")
@@ -529,7 +531,7 @@ def _check_reads_are_bound(
     changed["lines"] = {}
     fingerprint.write_text(json.dumps(changed))
     with pytest.raises(ValueError, match="other inputs"):
-        stage_one.report(report_path, "cpu")
+        stage_one_report.report(report_path, "cpu")
     fingerprint.write_text(original)
 
 
@@ -571,7 +573,9 @@ def test_matched_profile_rows_train_on_the_same_genes_and_are_contrasted(world):
     }
     path = root / "configs" / "report_profile.yaml"
     path.write_text(yaml.safe_dump(report))
-    results = json.loads((stage_one.report(path, "cpu") / "results.json").read_text())
+    results = json.loads(
+        (stage_one_report.report(path, "cpu") / "results.json").read_text()
+    )
     contrast = results["contrasts"][0]["val"]["selective_spearman"]
     assert contrast["genes"] <= len(selective) - 1
 
@@ -593,7 +597,7 @@ def test_gene_sources_are_centred_on_their_panel_mean(world, centre):
     config = yaml.safe_load(_config(root, "multi_dL").read_text())
     config["data"]["centre_gene_sources"] = centre
     targets = setup.targets(None)
-    resident = stage_one.Resident(
+    resident = device_inputs.Resident(
         setup, config, None, targets, torch.device("cpu"), setup.ladder.panel
     )
     vectors = resident.gene_vectors["gene_text"].numpy()
@@ -652,7 +656,7 @@ def test_film_reads_the_priors_prediction_as_a_pair_feature(world):
     ladder = setup.ladder
     targets = setup.targets(None)
     data = {"prior_run": prior_dir, "ladder_config": str(root / "ladder.yaml")}
-    feature = stage_one.prior_feature(setup, data, targets.m_g)
+    feature = device_inputs.prior_feature(setup, data, targets.m_g)
     val = ladder.role_lines("val")[0]
     written = pd.read_parquet(Path(prior_dir) / "predictions_val.parquet").loc[val]
     base = reader.base_prediction(ladder, targets.m_g, [val]).loc[val]
@@ -665,7 +669,7 @@ def test_film_reads_the_priors_prediction_as_a_pair_feature(world):
         name: _config(root, f"../prior_input/{name}", prior_run=prior_dir)
         for name in names
     }
-    permuted = stage_one.Resident(
+    permuted = device_inputs.Resident(
         setup,
         load_stage_one_config(paths["permuted_film_prior_dE"]),
         None,
