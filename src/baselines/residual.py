@@ -1,4 +1,7 @@
-"""baselines / residual."""
+"""The residual control ladder (gene mean, copy prior, nearest line, context-PCA ridge),
+fitted once on a fixed split's supervised training lines and scored on its validation
+and test lines. Predictions centre on the fold-independent ``mu_bar_g``: one centred on
+the fold-fit ``mu_hat_g`` would score Spearman +1.0 by construction."""
 
 from __future__ import annotations
 
@@ -17,43 +20,21 @@ from src.data.splits import FixedSplit, assert_fit_eligible
 
 _LOGGER = logging.getLogger(__name__)
 
-
 GENE_MEAN: str = "gene_mean"
-
-
 COPY_PRIOR: str = "copy_prior"
-
-
 NEAREST_LINE: str = "nearest_line"
-
-
 CONTEXT_PCA_RIDGE: str = "context_pca_ridge"
-
-
 VAL_SLICE: str = "val"
-
-
 TEST_SLICE: str = "test"
-
-
 _MIN_TRAIN_LINES_FOR_CONTEXT: int = 2
-
-
 _FEATURE_CONSTANT_EPS: float = 1e-12
 
 
 @dataclass(frozen=True)
 class _LadderConfig:
-    """Ladder-wide tuning knobs, bundled to shorten call sites below."""
-
     pca_components: int
     ridge_alpha: float
     min_lines: int
-
-
-def _view_method_name(base: str, view_name: str) -> str:
-    """Per-context-view method name, e.g. ``nearest_line[tx1]``."""
-    return f"{base}[{view_name}]"
 
 
 def _row(
@@ -74,14 +55,8 @@ def _row(
 def _build_fold_targets(
     labels: pd.DataFrame, train_lines: Sequence[str], min_lines: int
 ) -> ResidualTargets:
-    """Fit mu_hat_g on ``train_lines`` only; attach it to every label row.
-
-    This is the TARGET-centering mean -- safe to fit per-fold/per-slice
-    (see module docstring, fact 1). Mirrors
-    ``residual_target.build_residual_targets``, but forwards ``min_lines``
-    to :func:`fit_gene_means` -- ``build_residual_targets`` always uses
-    that function's own default (3) with no override.
-    """
+    """The target-centring ``mu_hat_g``, fitted on ``train_lines`` only with
+    ``min_lines``, attached to every labelled row with the residual it centres."""
     gene_mean = fit_gene_means(labels, train_lines, min_lines=min_lines)
     n_before = len(labels)
     long = labels.merge(
@@ -227,7 +202,7 @@ def _run_fixed_evals(
             eval_scaled[:, np.newaxis, :] - train_scaled[np.newaxis, :, :], axis=2
         )
         donor_orders = np.argsort(distances, axis=1, kind="stable")
-        nearest_method = _view_method_name(NEAREST_LINE, view_name)
+        nearest_method = f"{NEAREST_LINE}[{view_name}]"
         for slice_name, held_out_id in eval_specs:
             held = held_by_id[held_out_id]
             donor_order = donor_orders[eval_row_by_id[held_out_id]]
@@ -266,7 +241,7 @@ def _run_fixed_evals(
         pca = PCA(n_components=n_components, svd_solver="full").fit(train_scaled)
         train_pcs = pca.transform(train_scaled)
         eval_pcs = pca.transform(eval_scaled)
-        ridge_method = _view_method_name(CONTEXT_PCA_RIDGE, view_name)
+        ridge_method = f"{CONTEXT_PCA_RIDGE}[{view_name}]"
         eval_genes = set().union(*(set(held.index) for held in held_by_id.values()))
         for gene in rt.gene_mean.index:
             if gene not in eval_genes:

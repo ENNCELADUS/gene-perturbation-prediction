@@ -1,9 +1,8 @@
-"""GeneEffect evaluation of the joint model on one split.
+"""GeneEffect scoring: the joint model on one split, and wide residual-SD predictions.
 
-Targets are residuals centred on the fold-fit gene mean (the prepared ``residual``
-column); absolute predictions add the fixed training mean to the predicted residual.
-Correlations of a constant prediction are undefined (NaN, counted), never zero.
-"""
+Targets are residuals centred on the fold-fit gene mean, absolute predictions add the
+fixed training mean, and a constant prediction's correlation is undefined (NaN,
+counted), never zero."""
 
 from __future__ import annotations
 
@@ -23,7 +22,13 @@ from torch.nn import functional as F
 from src.data.datasets import DependencyDataset
 from src.data.labels import DEPENDENCY_THRESHOLD
 from src.data.prepared import PreparedInputs
-from src.eval.metrics import paired_line_bootstrap, unit_pearson, unit_spearman
+from src.eval.metrics import (
+    MIN_OBSERVATIONS,
+    calibration_slope,
+    paired_line_bootstrap,
+    unit_pearson,
+    unit_spearman,
+)
 
 if TYPE_CHECKING:
     from src.context_prior.targets import Definitions
@@ -349,10 +354,8 @@ def evaluate_model(
     return EvalResult(payload[0], predictions, per_line, per_gene)
 
 
-# --- wide predictions in residual-SD units ------------------------------------------
-#
-# A prediction table is lines x genes in units of the per-gene residual SD, centred
-# on the training gene mean of ``definitions`` (the scorer re-centres every
+# A wide prediction table is lines x genes in units of the per-gene residual SD,
+# centred on the training gene mean of ``definitions`` (the scorer re-centres every
 # prediction on it); the truth table is ``(y - mu_g) / sigma_g`` on the same axes.
 
 
@@ -466,8 +469,6 @@ def wide_accuracy(
     which scores 0); selective AUPR lift; residual Pearson; per-line absolute
     Pearson; RMSE; the calibration slope over the selective genes. With ``panel``,
     also the selective Spearman over the selective genes in it."""
-    from src.eval.metrics import calibration_slope
-
     lines, genes = list(prediction.index), list(definitions.genes)
     prediction, truth = prediction.loc[lines, genes], truth.loc[lines, genes]
     metrics, _, per_gene = aggregate_geneeffect(
@@ -516,8 +517,6 @@ def defined_genes(
     """``genes`` whose Spearman across the prediction's lines is defined: at least
     ``MIN_OBSERVATIONS`` labelled lines, with neither the truth nor the prediction
     constant over them (a row that predicts the base for a gene is undefined there)."""
-    from src.eval.metrics import MIN_OBSERVATIONS
-
     lines = list(prediction.index)
     predicted = prediction.loc[lines, list(genes)].to_numpy(dtype=np.float64)
     measured = truth.loc[lines, list(genes)].to_numpy(dtype=np.float64)

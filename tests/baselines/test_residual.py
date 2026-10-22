@@ -314,9 +314,6 @@ def test_fixed_split_rejects_undeclared_unknown_train() -> None:
         _ladder(labels, _split([*lines[:5], "TYPO"], [lines[5]], []))
 
 
-# --- The command on synthetic prepared inputs ---------------------------
-
-
 def _synthetic_inputs():
     """Eleven lines on 12 genes; ACH-000551 (the K562 copy-prior donor) trains."""
     from src.data.context_pca import fit_context_pca, pooled_context

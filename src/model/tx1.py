@@ -1,4 +1,5 @@
-"""model / tx1."""
+"""Tx1-3B (Tahoe-x1) loaded from its released safetensors without flash-attn, and its
+basal-cell ``EncoderFn``."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from src.data.tx1_cache import EncoderFn
 
 
 class TorchBertPadding:
-    """Pure-Torch equivalent of flash_attn.bert_padding for the width probe."""
+    """Pure-Torch equivalent of ``flash_attn.bert_padding``."""
 
     @staticmethod
     def unpad_input(
@@ -92,7 +93,7 @@ def load_local_safetensors(model_dir: Path) -> tuple[Any, Any, Any, dict[str, ob
 def build_tx1_encoder(
     model_dir: Path, batch_size: int, max_length: int
 ) -> tuple[EncoderFn, dict[str, object]]:
-    """Build the real Tx1-3B ``EncoderFn``, reusing the width-probe's loader."""
+    """The Tx1-3B ``EncoderFn`` (CUDA only) and its load report."""
     from composer import Trainer
     from tahoe_x1.utils.util import loader_from_adata
 

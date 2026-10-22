@@ -1,12 +1,5 @@
-"""Tests for :mod:`src.eval.metrics`.
-
-All frames are synthetic and built in-test; nothing here depends on
-gitignored data. The tests are organized around the two mathematical facts
-the module exists to encode (see the module docstring of
-``residual_metrics.py``): per-gene across-line Spearman is invariant to a
-per-gene constant shift, and a context-blind predictor is undefined (NaN,
-never 0.0) on that axis while scoring well on the historical per-line axis.
-"""
+"""Per-gene Spearman, the selective-gene aggregate and the paired line bootstrap on
+synthetic frames: undefined units are NaN, never 0."""
 
 from __future__ import annotations
 
@@ -38,11 +31,6 @@ def _long_frame(genes: list[str], lines: list[str], truth_fn, pred_fn) -> pd.Dat
                 }
             )
     return pd.DataFrame(rows)
-
-
-# --------------------------------------------------------------------------
-# Fact 1: per-gene axis is invariant to a per-gene constant shift.
-# --------------------------------------------------------------------------
 
 
 def test_per_gene_spearman_invariant_to_per_gene_constant_shift() -> None:
@@ -82,12 +70,6 @@ def test_per_gene_spearman_invariant_to_per_gene_constant_shift() -> None:
     pd.testing.assert_series_equal(raw.sort_index(), residual.sort_index())
 
 
-# --------------------------------------------------------------------------
-# Undefined-unit causes: too few observations, constant truth, constant
-# prediction -- each must land in the undefined counts without crashing.
-# --------------------------------------------------------------------------
-
-
 def test_score_predictions_drops_nan_rows_before_correlating() -> None:
     rows = [
         {"model_id": "L0", "gene_symbol": "GE", "truth": 1.0, "pred": 1.0},
@@ -102,10 +84,6 @@ def test_score_predictions_drops_nan_rows_before_correlating() -> None:
     per_gene = per_gene_spearman(frame, truth_col="truth", pred_col="pred")
     assert per_gene["GE"] == pytest.approx(1.0)
 
-
-# --------------------------------------------------------------------------
-# Selective-gene metrics and the paired line bootstrap.
-# --------------------------------------------------------------------------
 
 _EFFECT_LINES = [f"L{i}" for i in range(8)]
 

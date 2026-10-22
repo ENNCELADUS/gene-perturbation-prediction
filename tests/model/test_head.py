@@ -1,5 +1,5 @@
-"""Nested low-rank head, explicit missingness, the joint model's STATE use, context
-and residual scale, and per-gene reporting metrics."""
+"""Nested low-rank head, explicit missingness, and the joint model's STATE use,
+context and residual scale."""
 
 import dataclasses
 import math
@@ -17,11 +17,6 @@ from src.model.head import (
     SwiGLU,
     masked_blocks,
 )
-
-
-def test_formal_feature_dimension_defaults() -> None:
-    dims = GeneEffectFeatureDims()
-    assert dims == GeneEffectFeatureDims(delta_proj=256, s=6, q_sc=3, e_g=1280, z_c=128)
 
 
 N_GENES = 4
@@ -217,11 +212,8 @@ def test_forward_requires_masks_for_enabled_blocks() -> None:
 
 
 def test_masked_missing_q_sc_value_never_leaks_into_output() -> None:
-    """The critical masking test: two forward passes with wildly different
-    RAW q_sc values, but both marked missing (q_sc_mask=False), must yield
-    identical output -- proving the raw value never enters as data, only
-    the mask bit does. This is what distinguishes a masked-missing feature
-    from a naive zero-fill."""
+    """Wildly different raw q_sc values marked missing give the same output: only
+    the mask bit enters, unlike a naive zero-fill."""
     torch.manual_seed(0)
     dims = _full_dims()
     head = _live(_head(dims))

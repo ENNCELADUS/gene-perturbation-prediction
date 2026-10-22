@@ -1,31 +1,8 @@
-"""Stage-one architecture arms (PIE stage-one design §3.3; protocol §16).
-
-Every arm predicts ``z``, a (gene, line) pair's GeneEffect minus the base ``m_g`` in
-units of the residual SD ``sigma_g``, and ends in Cilantro's tail
-(``-> 64 -> act -> 32 -> act -> 1``, from ``FiLMNet128``) whose 32-d layer is the
-viability embedding ``V(c, g)``. Cilantro's ReLUs are leaky (slope 0.01) here: on the
-residual target, whose learnable part is a few per cent of its variance, the ReLU
-tail's units died within an epoch on the H20 and the arms collapsed to the base
-(protocol §16). The tail's output layer starts at zero, so an untrained arm predicts
-the base. No module holds a per-gene parameter: a gene enters
-only through its sources (``GeneEncoder``), so a gene never seen in training decodes.
-
-Arms, by what comes before the tail:
-
-- ``DeltaFiLM`` (virtual cell + FiLM, Cilantro): the pair input -> Linear 256 ->
-  ReLU -> FiLM conditioned on the gene encoder. One class serves the frozen-PIE
-  deltas (``[Delta centred ; frame mean Delta_g]`` plus own-gene slots), the
-  multi-encoder (FiLM condition ``gene encoder (+) context encoder``), its no-delta
-  control (a learned constant in place of the input) and the line-level reference
-  rows (components, lineage, Cellosaurus text, own expression).
-- ``DirectReadout``: a PIE-architecture trunk (``pie.model.geneeffect``) trained from
-  fresh weights reads the line's tokens; gene g's query decodes ``h(c, g)`` ->
-  Linear 256 -> ReLU.
-- ``Hybrid``: ``[h(c, g) ; FiLM(delta)]`` -> Linear 256 -> ReLU.
-
-A batch is a block of genes by a block of lines (``PairBatch``); every arm returns
-``z`` (genes x lines) and ``V`` (genes x lines x 32).
-"""
+"""Stage-one architecture arms (PIE stage-one design §3.3; protocol §16): each maps a
+``PairBatch`` to ``z`` (genes x lines; GeneEffect minus the base ``m_g`` in units of
+``sigma_g``) and the viability embedding ``V`` (genes x lines x 32) through Cilantro's
+``FiLMNet128`` tail. No module holds a per-gene parameter: a gene enters only through
+its sources (``GeneEncoder``), so a gene never seen in training decodes."""
 
 from __future__ import annotations
 
@@ -39,7 +16,8 @@ from torch import Tensor, nn
 #: Cilantro's FiLMNet128: cell embedding 256, gene condition 128.
 HIDDEN = 256
 VIABILITY_WIDTH = 32
-#: The tail's activation slope below zero; 0 is Cilantro's ReLU.
+#: The tail's activation slope below zero; 0 is Cilantro's ReLU, whose units died
+#: within an epoch on the residual target on the H20 (protocol §16).
 TAIL_SLOPE = 0.01
 
 
@@ -363,8 +341,6 @@ class DirectReadout(nn.Module):
         from pie.model.geneeffect import GeneEffectTrunk
 
         d = int(trunk["d_model"])
-        if gene_encoder.width != d:
-            raise ValueError("the direct readout's gene encoder must be d_model wide")
         self.gene_encoder = gene_encoder
         self.token_value = value_embedding(d)
         self.trunk = GeneEffectTrunk(

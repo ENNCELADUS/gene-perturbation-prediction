@@ -57,9 +57,6 @@ def _line_film(line_width: int = 4, dim: int = 6) -> DeltaFiLM:
     )
 
 
-# --- Cilantro's layers --------------------------------------------------------------
-
-
 def _load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
@@ -250,9 +247,6 @@ def test_the_tail_output_is_fp32_under_autocast():
     assert torch.equal(z, expected)
 
 
-# --- the calibration slope ---------------------------------------------------------
-
-
 def test_calibration_slope_is_one_on_scaled_truth():
     rng = np.random.default_rng(0)
     truth = rng.normal(size=(30, 6))
@@ -263,9 +257,6 @@ def test_calibration_slope_is_one_on_scaled_truth():
     assert np.isfinite(calibration_slope(truth, truth))
     constant = np.tile(offsets, (30, 1))
     assert np.isnan(calibration_slope(constant, truth))
-
-
-# --- configs ------------------------------------------------------------------------
 
 
 def _config(name: str) -> dict:
@@ -297,9 +288,6 @@ def test_stage_one_configs_refuse_unknown_and_missing_keys():
         validate_stage_one_config(wrong)
     with pytest.raises(ValueError, match="kind"):
         validate_stage_one_config({**config, "kind": "sweep"})
-
-
-# --- the training loop ---------------------------------------------------------------
 
 
 SPLIT = FixedSplit(train=("T0", "T1"), val=("V0",), test=("S0",))

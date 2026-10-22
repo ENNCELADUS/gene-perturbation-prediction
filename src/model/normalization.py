@@ -185,14 +185,11 @@ class BlockStandardizer:
 
     @classmethod
     def from_state(cls, state: Mapping[str, object]) -> BlockStandardizer:
-        payload = state
-        if payload.get("version") != 1 or not isinstance(
-            payload.get("blocks"), Mapping
-        ):
+        if state.get("version") != 1 or not isinstance(state.get("blocks"), Mapping):
             raise ValueError("invalid standardizer state")
         restored = cls()
         stats: dict[str, _BlockStats] = {}
-        for name, raw in payload["blocks"].items():
+        for name, raw in state["blocks"].items():
             if name not in _CONTINUOUS_BLOCKS or not isinstance(raw, Mapping):
                 raise ValueError("invalid standardized block state")
             mean = np.asarray(raw.get("mean"), dtype=np.float64)
@@ -230,8 +227,7 @@ def fit_startup_standardizer(
     Only the enabled :data:`STANDARDIZED_BLOCKS` are fitted; with none enabled
     the standardizer is empty. Rank zero fits from the fresh model's live
     features; other ranks receive its statistics so every rank standardizes
-    identically. Resume restores saved
-    statistics instead of calling this.
+    identically. Resume restores saved statistics instead of calling this.
     """
     from src.data.datasets import DependencyDataset
 

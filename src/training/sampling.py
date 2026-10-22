@@ -64,13 +64,11 @@ def dependency_loader(
 ) -> DataLoader[DependencyBatch]:
     """One shuffled GeneEffect epoch of training batches for this rank.
 
-    ``pearson_blocks`` and ``line_ranking`` take gene blocks
-    (``GeneBlockSampler``); every other
-    objective takes ``dependency_batch_size`` rows from a seeded
-    ``DistributedSampler`` with the incomplete tail dropped. Either way every rank
-    takes the same number of updates. Do not pass the loader through
-    ``accelerator.prepare``. The dataset keeps its tables on the rank's device, so
-    the loader collates in-process, without workers.
+    ``GENE_BLOCK_OBJECTIVES`` take gene blocks (``GeneBlockSampler``); every other
+    objective takes ``dependency_batch_size`` rows from a seeded ``DistributedSampler``
+    with the incomplete tail dropped, so every rank takes the same number of updates.
+    Do not pass the loader through ``accelerator.prepare``. The dataset keeps its
+    tables on the rank's device, so the loader collates in-process, without workers.
     """
     train = config["train"]
     rank, world = accelerator.process_index, accelerator.num_processes

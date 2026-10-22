@@ -1,9 +1,6 @@
-"""STATE on its own HVG basal path, with ESM2 perturbation tokens.
-
-STATE's control-cell input is log-space basal HVG expression (2000 genes, STATE's
-own order) through its released 2000->328 basal encoder. Tx1 embeddings never
-reach STATE; they feed only the GeneEffect head's pooled context.
-"""
+"""STATE driven by ESM2 perturbation tokens on log-space basal HVG cells (2000 genes in
+STATE's own order, through its released 2000->328 basal encoder); Tx1 embeddings never
+reach STATE, only the GeneEffect head's context."""
 
 from __future__ import annotations
 

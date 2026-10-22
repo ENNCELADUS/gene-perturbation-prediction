@@ -1,31 +1,9 @@
-"""The stage-one training loop (PIE stage-one design §4.1; protocol §16): plain torch
-on one device, no accelerate (it runs in ``.venv-pie``).
-
-An update is one block of panel genes by one block of training lines (every pair of
-the two blocks); an epoch visits every gene block with every line block once, in a
-random order. The loss is the mean squared error in units of the residual SD over
-the pairs with a label, plus ``train.dependency_weight`` times the binary
-cross-entropy of the dependency call (GeneEffect below -0.5) over the labelled pairs
-of selective genes, the protocol's ``dependency_classification`` term
-(``losses.dependency_loss``): stage one hands stage two calibrated context
-effects, so the call that the size of z implies is trained as well as the size.
-AdamW, linear warmup then cosine (``schedule``), optional
-EMA weights (``torch.optim.swa_utils.AveragedModel``), which then are the weights
-validated and saved as ``best.pt``.
-
-Validation runs before the first update (epoch 0: the zero-initialised tail is the
-base) and after every epoch; ``best.pt`` and early stopping follow
-``val_line_spearman`` only (``SELECTOR``, ``checkpoint.record_validation``): the
-per-line residual Spearman over the selective genes, since stage two reads each
-held-out line on its own (protocol §6). An epoch is a candidate only when its score
-is defined (the base's usually is: it varies across genes), and is otherwise
-recorded as telemetry.
-``last.pt`` holds everything a resume needs and is written before ``best.pt``, so a
-resume rewrites a ``best.pt`` left behind by a crash between the two from the
-restored weights; a resume refuses another config, and
-every checkpoint records the split membership it was fitted under and refuses
-another on load.
-"""
+"""The stage-one training loop (PIE stage-one design §4.1; protocol §16), plain torch on
+one device for ``.venv-pie``: residual-SD MSE plus ``train.dependency_weight`` times the
+dependency call's cross-entropy on selective genes, AdamW with the shared schedule and
+optional EMA weights (then the ones validated and saved). Validation runs before the
+first update (epoch 0, the base) and after every epoch; an epoch is a ``best.pt``
+candidate only when ``SELECTOR`` is defined, otherwise telemetry."""
 
 from __future__ import annotations
 
@@ -57,7 +35,9 @@ from src.training.schedule import make_scheduler
 
 log = logging.getLogger(__name__)
 
-#: The validation metric ``best.pt`` and early stopping follow.
+#: The validation metric ``best.pt`` and early stopping follow: the per-line residual
+#: Spearman over the selective genes, as stage two reads each held-out line on its own
+#: (protocol §6).
 SELECTOR = "val_line_spearman"
 
 

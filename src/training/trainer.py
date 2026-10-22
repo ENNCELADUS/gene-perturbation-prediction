@@ -1,14 +1,7 @@
-"""Joint training loop: one GeneEffect objective every update.
-
-The objective is ``train.objective`` (``src.model.losses``). The learning rate warms
-up linearly over ``warmup_epochs`` and decays by cosine to zero at ``max_epochs``,
-stepped per update. Validation runs once per epoch on the validation lines'
-GeneEffect rows only and, when a prior is set, once before the first update
-(epoch -1), so the prior alone can be ``best.pt``. ``best.pt`` and early stopping
-follow ``val_selective_spearman`` (higher wins). The ``train_eval_`` diagnostic
-scores a fixed subset of supervised training lines of the validation split's size,
-so the two curves are comparable.
-"""
+"""Joint training loop: one ``train.objective`` (``src.model.losses``) every update,
+validation once per epoch and, with a prior, before the first update (epoch -1, so
+the prior alone can be ``best.pt``); ``best.pt`` and early stopping follow
+``val_selective_spearman`` only."""
 
 import json
 from collections.abc import Mapping
@@ -31,10 +24,9 @@ from src.training.checkpoint import (
     save_checkpoint,
 )
 from src.training.sampling import dependency_loader
-
-# Re-exported: the schedule lives where .venv-pie (no accelerate) can import it.
 from src.training.schedule import make_scheduler
 
+# The validation split's size, so the train_eval_ and val_ curves are comparable.
 TRAINING_DIAGNOSTIC_LINES = 27
 
 
@@ -53,7 +45,6 @@ def training_diagnostic_lines(inputs: PreparedInputs) -> tuple[str, ...]:
 
 
 def trains_state(model, config: Mapping[str, Any]) -> bool:
-    """Whether STATE's own weights train: it is used and ``state_mode`` is trainable."""
     return model.uses_state and config["train"]["state_mode"] == "trainable"
 
 
@@ -145,7 +136,6 @@ def fit(
     per-rank RNG state continue exactly where that epoch ended.
     """
     train = config["train"]
-    run_dir = Path(run_dir)
     state = TrainState() if restored is None else TrainState(**restored["train_state"])
     if restored is not None and restored["world_size"] != accelerator.num_processes:
         raise ValueError(
@@ -171,8 +161,8 @@ def fit(
     if restored is not None:
         optimizer.load_state_dict(restored["optimizer"])
         scheduler.load_state_dict(restored["scheduler"])
-    # Replay-free updates, disabled head blocks and STATE's unused released
-    # decoder leave parameters without gradients; DDP must discover them per step.
+    # Disabled head blocks and STATE's unused released decoder leave parameters
+    # without gradients; DDP must discover them per step.
     if accelerator.ddp_handler is None:
         accelerator.ddp_handler = DistributedDataParallelKwargs()
     accelerator.ddp_handler.find_unused_parameters = True
