@@ -21,22 +21,12 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from src.data.build.prepare_kinker_umi_h5ad import matrix_qc, quantile_summary
 from src.data.basal import assert_tx1_input_contract
 
 SEMANTICS = "processed_cpm"
 STATUS = "verified_processed_cpm_sensitivity_only"
 ENSEMBL_PATTERN = re.compile(r"^ENSG\d+$")
-
-
-def _quantiles(values: np.ndarray) -> dict[str, float]:
-    return {
-        name: float(value)
-        for name, value in zip(
-            ("min", "p25", "median", "p75", "max"),
-            np.quantile(values, (0.0, 0.25, 0.5, 0.75, 1.0)),
-            strict=True,
-        )
-    }
 
 
 def _read_header(path: Path) -> list[str]:
@@ -154,20 +144,6 @@ def _map_genes(
     return keep, mapped, audit
 
 
-def _line_qc(matrix: sparse.csr_matrix) -> dict[str, object]:
-    library_sums = np.asarray(matrix.sum(axis=1)).ravel()
-    detected = np.diff(matrix.indptr)
-    return {
-        "n_cells": int(matrix.shape[0]),
-        "n_genes": int(matrix.shape[1]),
-        "nnz": int(matrix.nnz),
-        "empty_cells": int((library_sums == 0).sum()),
-        "empty_genes": int((np.asarray(matrix.getnnz(axis=0)) == 0).sum()),
-        "library_sum": _quantiles(library_sums),
-        "detected_genes": _quantiles(detected),
-    }
-
-
 def build(args: argparse.Namespace) -> dict[str, object]:
     output_dir = args.output_dir.resolve()
     staging = output_dir.with_name(f".{output_dir.name}.building")
@@ -270,7 +246,7 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             raise ValueError(
                 "Kinker matrix does not exhibit the declared CPM semantics"
             )
-        library_sum_audit = _quantiles(full_library_sums)
+        library_sum_audit = quantile_summary(full_library_sums)
         library_sum_mean = float(full_library_sums.mean())
         library_sum_audit["cv"] = float(full_library_sums.std() / library_sum_mean)
         library_sum_audit["max_relative_deviation_from_median"] = float(
@@ -362,9 +338,9 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                     f"{model_id} unexpectedly satisfies the standard Tx1 "
                     "artifact contract"
                 )
-            qc = _line_qc(adata.X)
+            qc = matrix_qc(adata.X)
             source_sums = full_library_sums[row_indices]
-            qc["source_full_gene_library_sum"] = _quantiles(source_sums)
+            qc["source_full_gene_library_sum"] = quantile_summary(source_sums)
             qc["cpm_scale_outlier_cells"] = int((~scale_pass[row_indices]).sum())
             qc["cpm_scale_outlier_fraction"] = float((~scale_pass[row_indices]).mean())
             if qc["empty_cells"]:

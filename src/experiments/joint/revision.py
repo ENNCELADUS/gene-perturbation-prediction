@@ -43,13 +43,12 @@ from src.experiments.joint.pipeline import (
     visible_gpus,
 )
 from src.data.io import read_json
+from src.eval.accuracy import BOOTSTRAP_REPEATS, BOOTSTRAP_SEED
 from src.experiments.run_dir import git_revision, number
 from src.experiments.joint.config import load_config
 
 JOINT_NAME = "Joint model"
 TX1_RIDGE = "context_pca_ridge[tx1]"
-BOOTSTRAP_REPEATS = 1000
-BOOTSTRAP_SEED = 0
 # Evaluated splits, in order, with their summary section titles.
 SPLITS = {"val": "Validation", "test": "Test"}
 # Table column name, revision.json key, metrics key of the joint model and of every

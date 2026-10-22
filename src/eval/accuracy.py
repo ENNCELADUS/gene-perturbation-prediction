@@ -37,6 +37,7 @@ METRICS = (
     "residual_sd_ratio_macro_per_gene",
 )
 BOOTSTRAP_SEED = 0
+BOOTSTRAP_REPEATS = 1000
 
 
 @dataclass

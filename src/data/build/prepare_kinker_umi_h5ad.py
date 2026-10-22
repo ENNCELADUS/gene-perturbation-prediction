@@ -58,12 +58,13 @@ STATUS = "verified_raw_umi"
 METADATA_ROWS: tuple[str, ...] = ("Cell_line", "Pool_ID")
 
 
-def _quantiles(values: np.ndarray) -> dict[str, float]:
+def quantile_summary(values: np.ndarray) -> dict[str, float]:
     return {
         name: float(value)
         for name, value in zip(
             ("min", "p25", "median", "p75", "max"),
             np.quantile(values, (0.0, 0.25, 0.5, 0.75, 1.0)),
+            strict=True,
         )
     }
 
@@ -256,7 +257,7 @@ def map_genes_to_ensembl(
     return keep, mapped, audit
 
 
-def _line_qc(matrix: sparse.csr_matrix) -> dict[str, object]:
+def matrix_qc(matrix: sparse.csr_matrix) -> dict[str, object]:
     library_sums = np.asarray(matrix.sum(axis=1)).ravel()
     detected = np.diff(matrix.indptr)
     return {
@@ -265,8 +266,8 @@ def _line_qc(matrix: sparse.csr_matrix) -> dict[str, object]:
         "nnz": int(matrix.nnz),
         "empty_cells": int((library_sums == 0).sum()),
         "empty_genes": int((np.asarray(matrix.getnnz(axis=0)) == 0).sum()),
-        "library_sum": _quantiles(library_sums),
-        "detected_genes": _quantiles(detected),
+        "library_sum": quantile_summary(library_sums),
+        "detected_genes": quantile_summary(detected),
     }
 
 
@@ -381,7 +382,7 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                 f"{noninteger} of {nonzero} nonzero values are non-integer"
             )
 
-        library_sum_audit = _quantiles(full_library_sums)
+        library_sum_audit = quantile_summary(full_library_sums)
         library_sum_audit["cv"] = float(
             full_library_sums.std() / float(full_library_sums.mean())
         )
@@ -427,8 +428,8 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                 }
             )
             assert_tx1_input_contract(adata)
-            qc = _line_qc(adata.X)
-            qc["source_full_gene_library_sum"] = _quantiles(
+            qc = matrix_qc(adata.X)
+            qc["source_full_gene_library_sum"] = quantile_summary(
                 full_library_sums[row_indices]
             )
             if qc["empty_cells"]:

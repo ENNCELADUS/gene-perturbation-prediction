@@ -35,6 +35,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import sparse
 
+from src.data.expression import library_sizes
 from src.data.basal import align_columns
 
 #: PIE's per-cell target sum (CP10K).
@@ -53,10 +54,6 @@ def line_rng(model_id: str, seed: int, purpose: str) -> np.random.Generator:
 
 def upper_symbols(symbols: Sequence[str]) -> list[str]:
     return [str(symbol).strip().upper() for symbol in symbols]
-
-
-def library_sizes(counts: sparse.csr_matrix) -> np.ndarray:
-    return np.asarray(counts.sum(axis=1), dtype=np.float64).ravel()
 
 
 def scale_to_total(counts: sparse.csr_matrix, library: np.ndarray, target_sum: float):
