@@ -1,11 +1,4 @@
-"""Tests for the raw-UMI Kinker ingest (historical Exp13 protocol §6, branch 1).
-
-The CPM sibling's tests assert its output is *blocked* from the Tx1 raw-count
-path. These assert the inverse, plus the two guards that are specific to this
-matrix's layout: the ``Cell_line`` metadata row must reconcile with the
-selection made from the CPM matrix, and a non-integer value must be refused
-rather than quietly ingested as counts.
-"""
+"""Raw-UMI Kinker ingest: Tx1-contract output and the guards on the SCP layout."""
 
 from __future__ import annotations
 
@@ -112,8 +105,6 @@ def test_build_emits_tx1_contract_passing_raw_count_h5ads(tmp_path: Path) -> Non
     assert qc["cell_line_labels_cross_checked"] == 2
 
     written = ad.read_h5ad(tmp_path / "output" / "h5ad" / "ACH-000001.h5ad")
-    # The whole point of this ingest: the artifact the CPM path deliberately
-    # fails must now pass.
     assert_tx1_input_contract(written)
     assert written.uns["expression_semantics"] == "raw_umi"
     assert written.uns["tx1_standard_raw_count_compatible"] is True
@@ -122,7 +113,6 @@ def test_build_emits_tx1_contract_passing_raw_count_h5ads(tmp_path: Path) -> Non
 
 
 def test_build_refuses_a_non_integer_matrix(tmp_path: Path) -> None:
-    """A normalized matrix must not be ingested as counts."""
     files = _fixture(tmp_path, values=("4.5", "7"))
     with pytest.raises(ValueError, match="not raw counts"):
         build(_args(tmp_path, files))
@@ -130,7 +120,6 @@ def test_build_refuses_a_non_integer_matrix(tmp_path: Path) -> None:
 
 
 def test_build_rejects_disagreeing_cell_line_labels(tmp_path: Path) -> None:
-    """The matrix's own Cell_line row must reconcile with the selection."""
     files = _fixture(tmp_path)
     _write_matrix(
         files["matrix"],

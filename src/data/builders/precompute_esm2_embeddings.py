@@ -1,8 +1,5 @@
-"""Fetch UniProt sequences for a supplied gene universe and embed with ESM2.
-
-Run with ``python -m src.data.builders.precompute_esm2_embeddings``.
-Use explicit benchmark, sequence-cache and output paths; see ``--help``.
-"""
+"""Fetch UniProt sequences for a supplied gene universe and embed them with ESM2,
+writing the table with its UniProt mapping and provenance."""
 
 from __future__ import annotations
 
@@ -61,17 +58,9 @@ def symbols_from_csv(csv_path: Path, symbol_columns: tuple[str, ...]) -> list[st
 def fetch_sequence(
     symbol: str, identifier: str | None = None
 ) -> UniProtSequenceRecord | None:
-    """Return the reviewed canonical UniProt record for a gene symbol.
-
-    Queries UniProt REST for the top reviewed human hit. On any network
-    error, logs a warning and returns ``None``.
-
-    Args:
-        symbol: Upper-case HGNC gene symbol.
-
-    Returns:
-        Amino-acid sequence string, or ``None`` if not found or on error.
-    """
+    """The top reviewed human UniProt hit for ``symbol`` (by GeneID when
+    ``identifier`` is given), or None when absent, mismatched or on a network error
+    (logged)."""
     gene_query = f"xref:GeneID-{identifier}" if identifier else f"gene_exact:{symbol}"
     query = f"({gene_query}) AND (organism_id:9606) AND (reviewed:true)"
     params = urllib.parse.urlencode({"query": query, "format": "json", "size": 1})
@@ -136,17 +125,8 @@ def load_or_fetch_sequences(
     refetch_legacy_cache: bool = False,
     read_only: bool = False,
 ) -> dict[str, UniProtSequenceRecord]:
-    """Load cached symbol→sequence map; fetch missing symbols from UniProt.
-
-    Writes incrementally to ``cache`` every 100 new symbols.
-
-    Args:
-        symbols: Upper-case gene symbols to resolve.
-        cache: Path to the JSON cache file (created if absent).
-
-    Returns:
-        Mapping from upper-case symbol to amino-acid sequence.
-    """
+    """Cached UniProt records, the missing symbols fetched (the cache is rewritten
+    every 100 records and at the end) unless ``read_only``, which refuses a gap."""
     records: dict[str, UniProtSequenceRecord] = {}
     if cache.exists():
         try:
@@ -262,17 +242,7 @@ def identifiers_from_csv(
 
 
 def truncate_sequence(seq: str, symbol: str, max_len: int = 1022) -> str:
-    """Truncate a protein sequence to ``max_len`` tokens; warns when truncation occurs.
-
-    Args:
-        seq: Amino-acid sequence string.
-        symbol: Gene symbol for log messages.
-        max_len: Maximum allowed sequence length (default: 1022, ESM2 limit).
-
-    Returns:
-        The original sequence if within ``max_len``, otherwise the first
-        ``max_len`` characters.
-    """
+    """The first ``max_len`` residues (ESM2's limit), with a warning when it cuts."""
     if len(seq) > max_len:
         logger.warning(
             "truncating %s from %d to %d residues for ESM2 input",
@@ -285,15 +255,7 @@ def truncate_sequence(seq: str, symbol: str, max_len: int = 1022) -> str:
 
 
 def check_resolution(resolved: np.ndarray, n_symbols: int) -> None:
-    """Validate that a sufficient fraction of symbols were resolved to sequences.
-
-    Args:
-        resolved: Boolean array indicating which symbols have embeddings.
-        n_symbols: Total number of symbols in the universe.
-
-    Raises:
-        RuntimeError: If no symbols resolved (all-zero ``resolved`` array).
-    """
+    """Raise when no symbol resolved; warn when fewer than half did."""
     n_resolved = int(resolved.sum())
     if n_resolved == 0:
         raise RuntimeError("no sequences resolved; aborting embedding write")
@@ -327,22 +289,8 @@ def require_complete_asset_coverage(
 def mean_pool_residues(
     hidden: np.ndarray, special_tokens_mask: np.ndarray
 ) -> np.ndarray:
-    """Mean-pool token embeddings over residues, excluding special tokens.
-
-    ESM2 prepends a BOS (``<cls>``) and appends an EOS (``<eos>``) token; padding
-    tokens may also be present. The spec calls for a residue mean, so special
-    tokens (``special_tokens_mask == 1``) are excluded from the average.
-
-    Args:
-        hidden: Token embeddings, shape ``(n_tokens, dim)``.
-        special_tokens_mask: Per-token mask, shape ``(n_tokens,)``; ``1`` marks a
-            special (non-residue) token to exclude.
-
-    Returns:
-        Residue-mean embedding, shape ``(dim,)``. If every token is special
-        (degenerate input), falls back to a full mean over all tokens to avoid
-        a NaN.
-    """
+    """Mean of the residue rows of ``hidden`` (``special_tokens_mask == 0``, so BOS,
+    EOS and padding are left out); the mean of all rows when every token is special."""
     hidden = np.asarray(hidden, dtype=np.float32)
     keep = np.asarray(special_tokens_mask) == 0
     if not keep.any():
@@ -357,21 +305,8 @@ def embed_sequences(
     cache_dir: Path | None = None,
     local_files_only: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, str]]:
-    """Embed resolved sequences with ESM2; unresolved rows stay zero.
-
-    Args:
-        symbols: Upper-case gene symbols in universe order.
-        seqs: Mapping from symbol to amino-acid sequence.
-        model_name: HuggingFace model ID, e.g. ``"facebook/esm2_t33_650M_UR50D"``.
-        cache_dir: Optional Hugging Face cache directory for model/tokenizer files.
-        local_files_only: If True, require the model/tokenizer to already be in
-            the local Hugging Face cache.
-
-    Returns:
-        ``(vectors, resolved, runtime_identity)`` where ``vectors`` has shape
-        ``(n_gene, hidden_size)``, ``resolved`` is a boolean array, and the
-        identity record names the loaded model and tokenizer classes.
-    """
+    """``(vectors, resolved, runtime_identity)``: one row per symbol in order, zero
+    where no sequence resolved, and the loaded model and tokenizer classes."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     from_pretrained_kwargs = {
         "cache_dir": str(cache_dir) if cache_dir is not None else None,
@@ -433,8 +368,6 @@ def write_embedding_with_provenance(
     outputs = (output, provenance_output, mapping_json_output, mapping_csv_output)
     if len({path.resolve() for path in outputs}) != len(outputs):
         raise ValueError("embedding, provenance, and mapping outputs must be distinct")
-    if resolved.shape != (len(symbols),):
-        raise ValueError("resolved mask must align with symbols")
     resolved_symbols = {
         symbol
         for symbol, is_resolved in zip(symbols, resolved, strict=True)
@@ -463,8 +396,6 @@ def write_embedding_with_provenance(
     mapping_records = []
     for symbol in symbols:
         record = uniprot_records.get(symbol)
-        if symbol in resolved_symbols and record is None:
-            raise ValueError(f"resolved symbol lacks UniProt identity: {symbol}")
         mapping_records.append(
             {
                 "gene_symbol": symbol,
@@ -512,7 +443,6 @@ def write_embedding_with_provenance(
 
 
 def main() -> None:
-    """CLI entry point: fetch sequences and embed with ESM2."""
     parser = argparse.ArgumentParser(
         description="Fetch UniProt sequences and embed with ESM2."
     )
@@ -606,21 +536,12 @@ def main() -> None:
         identifiers = identifiers_from_csv(
             args.benchmark_csv, symbol_columns[0], args.id_column
         )
-    records = (
-        load_or_fetch_sequences(
-            symbols,
-            args.seq_cache,
-            identifiers,
-            refetch_legacy_cache=args.refetch_legacy_cache,
-            read_only=args.sequence_cache_read_only,
-        )
-        if identifiers is not None
-        else load_or_fetch_sequences(
-            symbols,
-            args.seq_cache,
-            refetch_legacy_cache=args.refetch_legacy_cache,
-            read_only=args.sequence_cache_read_only,
-        )
+    records = load_or_fetch_sequences(
+        symbols,
+        args.seq_cache,
+        identifiers=identifiers,
+        refetch_legacy_cache=args.refetch_legacy_cache,
+        read_only=args.sequence_cache_read_only,
     )
     seqs = {symbol: record.sequence for symbol, record in records.items()}
     vectors, resolved, runtime_identity = embed_sequences(

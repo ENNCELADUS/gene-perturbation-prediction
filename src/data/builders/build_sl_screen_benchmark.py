@@ -1,21 +1,7 @@
-"""Build the SL screen benchmark from the published multi-line screen tables.
-
-The benchmark is the screen set of Kebabci et al. 2026 (Ito 2021, Klingbeil 2024,
-Harle 2025) plus MiT4SL's A549 labels as a secondary external test (SL protocol,
-blueprint §5).
-One row is one (screen, line, unordered gene pair) with the published scores, an SL
-label and the line's side of the nested split. Runs on the H20, where the tables are.
-
-uv run python -m src.data.builders.build_sl_screen_benchmark \
-    --raw data/sl_screens/raw \
-    --lines configs/benchmarks/sl_screen_lines.csv \
-    --split configs/benchmarks/cell_line_geneeffect_226_split.json \
-    --extra-bulk configs/benchmarks/extra_bulk_lines_26Q1.json \
-    --extra-single-cell configs/benchmarks/extra_single_cell_lines_26Q1.json \
-    --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
-    --hgnc data/sl_screens/raw/hgnc/hgnc_complete_set.txt \
-    --out data/sl_screens/benchmark
-"""
+"""Build the SL screen benchmark (docs/data/sl-screen-benchmark.md, blueprint §5): the
+screens of Kebabci et al. 2026 (Ito 2021, Klingbeil 2024, Harle 2025), one row per
+(screen, line, unordered gene pair) with the published scores, an SL label and the
+line's split side, plus MiT4SL's A549 labels as a secondary external test."""
 
 from __future__ import annotations
 

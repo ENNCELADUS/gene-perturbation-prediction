@@ -1,41 +1,7 @@
 """Cellosaurus text of the labelled lines as PIE's ``context_text``, keyed by ModelID.
 
-Runs on the Mac: the H20 cannot reach OpenAI. The lines are the final split's
-single-cell lines (train, val, test) and its labelled bulk-only lines; each is joined to
-its Cellosaurus accession through DepMap Model.csv's RRID.
-
-A line whose accession PIE's released ``context_text`` already holds takes PIE's vector
-and text byte for byte; only the other lines are embedded. A released key names its
-accession directly (Tahoe-100M's ``CVCL_0023``) or through its dataset's context map
-(``RELEASED_NAMED_CONTEXTS``); released contexts with a stimulation (Jiang's
-``a549_ifnb`` and the like) describe a stimulated line, not a basal one, and are never
-reused. Each reused line is also re-rendered from its 56.0 record under its released key
-and compared with PIE's released text; the result is recorded, not acted on.
-
-A line PIE has no vector for is rendered with PIE's template (``render_context``) from
-its record in PIE's release-pinned Cellosaurus client (56.0, PIE's pin) under its
-accession as the "Context Name", which is how PIE names every accession-keyed context it
-released (Tahoe's 50), then embedded by PIE's embedder (``text-embedding-3-large``,
-3,072-d). A record Cellosaurus does not serve, or one PIE's parser refuses (an age range
-such as ``52-54Y``), gives that line no text; such lines are listed with the reason,
-next to those without an RRID.
-
-This module imports only the standard library and PIE (with PIE's numpy and requests),
-never ``src.*``, because it runs in PIE's environment; OPENAI_API_KEY is read from the
-environment by PIE's embedder, only when some line needs embedding, and never written.
-An OpenAI-compatible relay is used by setting OPENAI_BASE_URL (read by the ``openai``
-client). Before any line is embedded, the released texts of the reused lines are
-embedded through the same endpoint and compared with PIE's released vectors; a cosine
-below ``ENDPOINT_MIN_COSINE`` (another model, or truncated vectors) stops the run::
-
-    uv run --isolated --no-project --python 3.12 \\
-        --with-editable 'third_party/pie[sources]' \\
-        python -m src.data.builders.cellosaurus_context --out data/ladder_context_text
-
-Under ``--out``: ``cellosaurus/`` (the client's record cache, reused on a rerun),
-``embed/context_text/`` (PIE's per-batch embedding checkpoint, reused on a rerun),
-``context_text/`` (the source) and ``provenance.json``. An existing source is never
-overwritten.
+Imports only the standard library and PIE (with its numpy and requests), never
+``src.*``, because it runs in PIE's environment.
 """
 
 from __future__ import annotations

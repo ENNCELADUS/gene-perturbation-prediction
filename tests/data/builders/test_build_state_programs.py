@@ -1,5 +1,4 @@
-"""The pinned cell-state programs: tables from the authors' R objects, and the
-count of cell-line studies behind each meta-program."""
+"""The pinned cell-state programs and the cell-line studies behind each."""
 
 from __future__ import annotations
 

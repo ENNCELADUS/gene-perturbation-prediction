@@ -1,35 +1,9 @@
 """Protein gene sources for the stage-one gene encoder (ladder design §4.4): ESM C 600M
 and ESM3-open over the reviewed human UniProt sequences behind PIE's ``esm2`` source.
 
-``python -m src.data.builders.embed_protein_sources --steps STEPS --out DIR ...`` runs
-these steps in order, each skipped when its output exists, so rerunning resumes:
-
-- ``proteins`` (``.venv-pie``, CPU): PIE's own UniProt code
-  (``pie.sources.uniprot``) streams the reviewed human proteome from UniProt REST and
-  matches it to the released ``esm2`` source's keys in their row order, which is PIE's
-  claim order, so the rows PIE claimed are claimed again (NCBI's ``gene_info``, PIE's
-  other input, is not reachable from the H20 and decides only which symbols are tried).
-  Writes ``proteins.tsv`` (symbol, accession, sequence) and ``proteins.json``, which
-  compares the table's SHA-256 with the one PIE recorded (equal only when the UniProt
-  release is PIE's).
-- ``afdb`` (any env, CPU): the AlphaFold DB v6 human-proteome archive from EBI's FTP
-  host into ``--afdb-dir`` (resumed by byte range), recorded in ``afdb.json``.
-- ``esmc`` (an ``esm`` environment, ``ESM_PYTHON`` in ``hpc/run.sh``; 1 GPU): ESM C
-  600M over every protein.
-- ``esm3`` (the same environment; 1 GPU): ESM3-open over sequence and structure, for the
-  proteins whose AFDB model (``AF-<accession>-F1``) has exactly the UniProt sequence;
-  every other protein has no ESM3 entry (masked, never sequence-only). The status of
-  every protein is written to ``esm3_open_structures.tsv``.
-
-Pooling is PIE's ``esm2`` rule: the final hidden states (the output of the transformer
-stack's last LayerNorm, captured by a hook) at the residue positions, the BOS and EOS
-positions dropped, averaged over residues; a protein longer than 1022 residues is read
-in 1022-residue windows starting every 511, each residue averaged over the windows that
-hold it before the global mean. Each protein is encoded alone, in bf16 as ``esm`` loads
-the models on GPU. Embeddings are written in chunks under ``chunks/<model>/`` and
-assembled into ``<model>.npz`` (``symbols``, ``accessions``, ``vectors`` float32) with
-``<model>.json`` provenance. The weights come through ``esm``'s own loaders, whose
-Hugging Face snapshot must be the pinned revision (``HF_ENDPOINT`` may name a mirror).
+Steps run in order, each skipped when its output exists: ``proteins`` in ``.venv-pie``,
+``afdb`` anywhere, ``esmc`` and ``esm3`` in an ``esm`` environment, hence the
+function-level imports.
 """
 
 from __future__ import annotations
@@ -102,9 +76,6 @@ ESM3 = ModelPin(
     revision="47f0545b2b6daf26a93439a3cd610f4f7f3d5478",
     data_root_key="esm3",
 )
-
-
-# --- pure pieces ----------------------------------------------------------------------
 
 
 def windows(length: int) -> list[tuple[int, int]]:
@@ -181,9 +152,6 @@ def pending_chunks(n_rows: int, chunk: int, chunk_dir: Path) -> list[int]:
     ]
 
 
-# --- files ----------------------------------------------------------------------------
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -195,11 +163,11 @@ def read_proteins(out: Path) -> pd.DataFrame:
     return table
 
 
-# --- proteins (.venv-pie) -------------------------------------------------------------
-
-
 def proteins(pie_sources: Path, out: Path) -> None:
-    """``proteins.tsv``: PIE's UniProt match, over the released esm2 source's keys."""
+    """``proteins.tsv``: PIE's UniProt match over the released esm2 source's keys in
+    their row order, PIE's claim order, so the rows PIE claimed are claimed again
+    (NCBI's ``gene_info``, PIE's other input, is unreachable from the H20 and only
+    decides which symbols are tried)."""
     from pie.sources import uniprot
     from pie.sources.common import input_record
 
@@ -256,9 +224,6 @@ def proteins(pie_sources: Path, out: Path) -> None:
     )
 
 
-# --- AFDB archive ---------------------------------------------------------------------
-
-
 def afdb(afdb_dir: Path, out: Path) -> None:
     """The AFDB human-proteome archive, resumed by byte range, and ``afdb.json``."""
     afdb_dir.mkdir(parents=True, exist_ok=True)
@@ -311,9 +276,6 @@ def afdb(afdb_dir: Path, out: Path) -> None:
         },
         sort_keys=True,
     )
-
-
-# --- models (the esm environment) -----------------------------------------------------
 
 
 def _pinned_snapshot(pin: ModelPin) -> Path:
@@ -511,9 +473,6 @@ def embed(pin: ModelPin, out: Path, device: str, chunk: int) -> None:
             "status": {str(k): int(v) for k, v in counts.items()},
         }
     write_json(out / f"{pin.name}.json", record, sort_keys=True)
-
-
-# --- CLI ------------------------------------------------------------------------------
 
 
 def main(argv: Sequence[str] | None = None) -> int:

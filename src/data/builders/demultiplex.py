@@ -95,7 +95,6 @@ def assign_pool(
     *,
     clusters: int,
     min_margin: float,
-    seed: int = 0,
 ) -> tuple[list[str | None], list[dict[str, Any]]]:
     """Each cell's identifier in a pool without labels: cluster the cells, then
     give each cluster the member (identifier to ModelID) whose DepMap bulk RNA
@@ -117,11 +116,9 @@ def assign_pool(
     )
     top = np.argsort(variance)[::-1][:2000]
     reduced = PCA(
-        n_components=min(30, len(top), counts.shape[0] - 1), random_state=seed
+        n_components=min(30, len(top), counts.shape[0] - 1), random_state=0
     ).fit_transform(logged[:, top].toarray())
-    labels = KMeans(n_clusters=clusters, n_init=10, random_state=seed).fit_predict(
-        reduced
-    )
+    labels = KMeans(n_clusters=clusters, n_init=10, random_state=0).fit_predict(reduced)
     profile = bulk.loc[list(members.values()), genes]
     markers = profile.var(axis=0).sort_values(ascending=False).index[:1000]
     position = [genes.index(g) for g in markers]
@@ -259,9 +256,7 @@ def identify(
             min_margin=identity["min_margin"],
         )
         return calls, [None] * n, {"clusters": table}
-    if kind == "rt_hash":
-        return _rt_hash(library, identity, root)
-    raise ValueError(f"unknown identity kind {kind!r}")
+    return _rt_hash(library, identity, root)
 
 
 def _rt_hash(

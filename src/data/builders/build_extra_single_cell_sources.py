@@ -1,22 +1,8 @@
-"""Build the extra single-cell lines' raw-UMI h5ad from their public deposits.
-
-One run takes the sources of one wave of the spec
-(``configs/data/extra_single_cell_sources_26Q1.json``). For every library of a
-source it reads the deposited counts, calls cells, names each cell's line (the
-whole library, the authors' per-cell labels, hashtags, or, for a pool without
-labels, the member whose DepMap bulk RNA its cluster matches), keeps the basal
-arms and applies the QC floor. Line names become ModelIDs only through accepted
-rows of the identity map; a name the map lacks raises. It then writes one
-``<output-dir>/<ModelID>.h5ad`` for each line the map's choice takes from this
-source (never a line of the 226), and ``<output-dir>/qc/<source>.json`` last. A
-source whose QC report exists is skipped; no h5ad is overwritten.
-
-uv run python -m src.data.builders.build_extra_single_cell_sources \
-    --spec configs/data/extra_single_cell_sources_26Q1.json --wave 1 --print-downloads
-uv run python -m src.data.builders.build_extra_single_cell_sources \
-    --spec configs/data/extra_single_cell_sources_26Q1.json --wave 1 \
-    --output-dir data/sl_dependency_v0/processed/basal_raw_umi
-"""  # noqa: E501
+"""Build the extra single-cell lines' raw-UMI h5ad from their public deposits, one wave
+of ``configs/data/extra_single_cell_sources_26Q1.json`` per run: each line the map's
+choice takes from a source (never a 226 line), named only through accepted map rows,
+with its basal arms above the QC floor. A source's ``qc/<source>.json`` is written
+last, a source that has one is skipped, and no h5ad is overwritten."""
 
 from __future__ import annotations
 
@@ -348,9 +334,7 @@ def downloads(spec_path: Path, wave: int) -> list[tuple[str, Path]]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--wave", type=int, required=True)
     parser.add_argument("--output-dir", type=Path)

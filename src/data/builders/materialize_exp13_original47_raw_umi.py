@@ -89,8 +89,6 @@ def _write_line(adata: ad.AnnData, path: Path, model_id: str) -> None:
     data = adata.X.data if sparse.issparse(adata.X) else np.asarray(adata.X).ravel()
     if data.size and not np.equal(data, np.floor(data)).all():
         raise ValueError(f"{model_id}: source matrix is not raw integer UMI counts")
-    if set(adata.obs["model_id"].astype(str)) != {model_id}:
-        raise ValueError(f"{model_id}: materialized obs.model_id is inconsistent")
     if not adata.obs_names.is_unique or not adata.var_names.is_unique:
         raise ValueError(f"{model_id}: materialized axes are not unique")
     assert_tx1_input_contract(adata)

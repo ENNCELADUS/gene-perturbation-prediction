@@ -1,22 +1,7 @@
-"""Fetch and pin the reference cell-state programs of the noise diagnosis.
-
-Runs on the Mac, like ``build_context_reference``; the tables are small and reach
-the H20 through git. Writes under configs/context_prior/reference/
-
-- ``cell_cycle.tsv`` (``phase`` in S, G2M; ``gene``): Tirosh et al. 2016's 43 S and
-  54 G2/M genes, as Seurat ships them (``cc.genes``);
-- ``meta_programs.tsv`` (``program``, ``gene``): Gavish et al. 2023's 41 malignant
-  meta-programs, 50 genes each, from the authors' repository;
-- ``meta_program_sources.tsv`` (``program``, ``studies``, ``cell_line_studies``):
-  how many studies each meta-program was derived from, and how many of them are
-  cell-line studies (Kinker et al. 2020's CCLE pools and the other cell-line sets),
-
-and records each file's source and row count in ``provenance.json``. A
-config chooses which programs a run reads; nothing here drops one.
-
-uv run --extra data python -m src.data.builders.build_state_programs \
-    --out configs/context_prior/reference
-"""  # noqa: E501
+"""Fetch and pin the noise diagnosis's reference cell-state programs under
+configs/context_prior/reference/: Tirosh et al. 2016's cell-cycle genes, Gavish et al.
+2023's malignant meta-programs and the studies behind each, sources recorded in
+``provenance.json``. A config chooses which programs a run reads; none is dropped."""
 
 from __future__ import annotations
 
@@ -163,9 +148,7 @@ def _write(out: Path, name: str, frame: pd.DataFrame, source: str) -> dict:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     out = args.out
