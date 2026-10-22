@@ -31,11 +31,6 @@ PINNED_SPLIT_SHA256: Final = (
 )
 
 
-PINNED_COPY_PRIOR_SHA256: Final = (
-    "b9a20999cdfdf94fd88f004d0d661e3e6d3c3214b9f8ed1b1ad9a0c276d3f785"
-)
-
-
 _GENE_EFFECT_COLUMN_RE: Final = re.compile(r"^(?P<symbol>\S+) \((?P<entrez>\d+)\)$")
 
 

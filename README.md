@@ -164,7 +164,7 @@ uv run python -m src.evaluate --checkpoint outputs/geneeffect_joint/<id>/train/b
 - `src/baselines/`: residual controls fitted on training lines.
 - `src/experiments/`: preparation, the response-model comparison, the readout head, baselines and the `all` run; `historical/` retains completed probes and the SL benchmark builder.
 - `src/train.py`, `src/evaluate.py`: thin module entry points.
-- `hpc/`: launcher and [operator guide](hpc/README.md); `scripts/` contains operational utilities.
+- `hpc/`: launcher and [operator guide](hpc/README.md).
 - `configs/`: current joint config, fixed benchmark membership and small input provenance.
 - `outputs/`: ignored generated runs; `results/`: tracked reports and small evidence.
 
