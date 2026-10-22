@@ -4,7 +4,8 @@ GeneEffect gene axis.
 - ``gene_text`` and ``string_space``: PIE_sources dense source dirs (``meta.json`` with
   the keys, ``embeddings.npy`` in the meta's dtype), read with numpy;
 - ``esmc_600m`` and ``esm3_open``: the ``.npz`` files of
-  ``src.data.build.embed_protein_sources`` (``symbols``, ``vectors``, ``accessions``);
+  ``src.data.builders.embed_protein_sources`` (``symbols``, ``vectors``,
+  ``accessions``);
 - ``gene2vec``: Cilantro's Gene2vec matrix (Ensembl ID -> 128-d vector), reached from a
   symbol through Geneformer's gc30M symbol -> Ensembl dictionary, as the historical
   Cilantro coverage reaches it; its keys that are not Ensembl IDs are never reached.

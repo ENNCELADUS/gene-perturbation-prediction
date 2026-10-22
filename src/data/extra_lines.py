@@ -1,6 +1,6 @@
 """DepMap lines outside the 226 that join the training side: through bulk RNA, or
 through basal single cells. The two membership files are inputs of the final split
-(``src.data.build.build_cell_line_geneeffect_split``); fits read the final split,
+(``src.data.builders.build_cell_line_geneeffect_split``); fits read the final split,
 its bulk-only lines through :func:`load_bulk_lines`."""
 
 from __future__ import annotations

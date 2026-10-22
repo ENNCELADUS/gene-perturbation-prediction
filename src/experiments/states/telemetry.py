@@ -176,7 +176,7 @@ class Telemetry:
     @cached_property
     def deposits(self) -> pd.Series:
         """Each split line's deposit (the noise diagnosis's ``_deposits``)."""
-        from src.data.build.plan_second_sources import PRIMARY_KEYS
+        from src.data.builders.plan_second_sources import PRIMARY_KEYS
 
         path = absolute(self.setup.joint["paths"]["split"]).with_suffix(".csv")
         table = pd.read_csv(path)

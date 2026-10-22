@@ -38,7 +38,7 @@ the SL task differently, and this protocol is rewritten to match before stage tw
   model adds the 13 screened lines read through bulk RNA from the labelled extras
   (`configs/benchmarks/extra_bulk_lines_26Q1.json`), reported beside it, never pooled. Flister 2025 and Fong 2024 are not adopted.
 - **Built (2026-10-11):** the screen tables fetched on the H20, the line map
-  `configs/benchmarks/sl_screen_lines.csv`, the builder `src/data/build/build_sl_screen_benchmark.py` and its
+  `configs/benchmarks/sl_screen_lines.csv`, the builder `src/data/builders/build_sl_screen_benchmark.py` and its
   output `data/sl_screens/benchmark/` on the H20, described in the [data card](data/sl-screen-benchmark.md). The
   labels follow Kebabci's rule but are not Kebabci's labels: on Ito's ten lines the rule gives 1,511 SL calls in
   47,315 points against their 958 in 41,244, because their GEMINI was recomputed from counts and their pairs were

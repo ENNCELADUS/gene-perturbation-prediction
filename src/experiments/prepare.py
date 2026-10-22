@@ -286,7 +286,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
 
     import numpy as np
 
-    from src.data.build.build_exp13_esm2_universe import (
+    from src.data.builders.build_exp13_esm2_universe import (
         build_coverage_universe,
         restrict_coverage_universe_to_copy_prior,
         write_embedding_union,
