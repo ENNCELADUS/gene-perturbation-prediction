@@ -73,6 +73,7 @@ from typing import Any, Final
 
 import numpy as np
 import pandas as pd
+from src.data.io import write_json, write_npy, write_npz
 
 log = logging.getLogger(__name__)
 
@@ -151,29 +152,6 @@ def layout(config: Mapping[str, Any]) -> Layout:
     )
 
 
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
-    os.replace(temporary, path)
-
-
-def _save_npz(path: Path, **arrays: np.ndarray) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with temporary.open("wb") as handle:
-        np.savez(handle, **arrays)
-    os.replace(temporary, path)
-
-
-def _save_npy(path: Path, array: np.ndarray) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with temporary.open("wb") as handle:
-        np.save(handle, array)
-    os.replace(temporary, path)
-
-
 @contextlib.contextmanager
 def exclusive(out: Layout) -> Iterator[None]:
     """Shards on one host take turns at what they share: the dataset, the run
@@ -196,7 +174,7 @@ def record(out: Layout, step: str, payload: Mapping[str, Any]) -> None:
             **payload,
             "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
-        _write_json(path, run)
+        write_json(path, run)
 
 
 # --- the ladder's tables ------------------------------------------------------------
@@ -871,7 +849,7 @@ def reference_pass(out: Layout, pie: Pie, tables: Tables) -> dict[str, np.ndarra
             latent.append(result.latent)
             features.append(result.features)
         payload = {"latent": np.vstack(latent), "features": np.vstack(features)}
-        _save_npz(path, lines=np.asarray(lines), **payload)
+        write_npz(path, lines=np.asarray(lines), **payload)
         return payload
 
 
@@ -921,8 +899,8 @@ def gene_pass(
     if basis is not None:
         arrays["dE"] = (change - basis["mean"]) @ basis["components"].T
     if keep_full:
-        _save_npy(out.full_dir / f"{gene}.npy", change)
-    _save_npz(
+        write_npy(out.full_dir / f"{gene}.npy", change)
+    write_npz(
         out.genes_dir / f"{gene}.npz",
         **{k: np.asarray(v, dtype=np.float32) for k, v in arrays.items()},
     )
@@ -1165,7 +1143,7 @@ def build_basis(out: Layout, tables: Tables, device: str, seed: int) -> dict[str
     frame = [tables.lines.index.get_loc(m) for m in tables.frame]
     changes = np.vstack([np.load(out.full_dir / f"{g}.npy")[frame] for g in genes])
     basis = fit_basis(changes, int(out.config["pie"]["components"]), device)
-    _save_npz(out.pie / "basis.npz", **basis)
+    write_npz(out.pie / "basis.npz", **basis)
     shards = {}
     for gene in genes:
         with np.load(out.genes_dir / f"{gene}.npz") as payload:
@@ -1296,8 +1274,8 @@ def assemble(out: Layout, tables: Tables) -> dict[str, Any]:
         array.flush()
         del array
         os.replace(out.pie / f".{name}.npy.tmp", out.pie / f"{name}.npy")
-    _save_npz(out.pie / "frame_means.npz", **means)
-    _write_json(
+    write_npz(out.pie / "frame_means.npz", **means)
+    write_json(
         out.pie / "index.json",
         {
             "genes": genes,
@@ -1580,7 +1558,7 @@ def states_pass(
                 )
                 for name in arrays
             }
-            _save_npz(
+            write_npz(
                 layout.line(states.name, owner),
                 contexts=np.asarray([states.contexts[j] for j in rows]),
                 genes=np.asarray(list(genes)),
@@ -1600,7 +1578,7 @@ def record_states(out: Layout, name: str, payload: Mapping[str, Any]) -> None:
             **payload,
             "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
-        _write_json(path, run)
+        write_json(path, run)
 
 
 def state_genes(
@@ -1709,7 +1687,7 @@ def assemble_states(
         values.flush()
         os.replace(folder / f".{array}.npy.tmp", folder / f"{array}.npy")
     states.masses.to_parquet(folder / "contexts.parquet")
-    _write_json(
+    write_json(
         folder / "index.json",
         {
             "genes": genes,

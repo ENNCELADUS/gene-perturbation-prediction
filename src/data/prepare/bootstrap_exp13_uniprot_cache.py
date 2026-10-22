@@ -5,25 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 from typing import Sequence
-import uuid
 
 import pandas as pd
+from src.data.io import write_json
 
 SCHEMA_VERSION = "uniprot-sequence-cache-v2"
 ISOFORM_POLICY = "canonical_reviewed_top_hit"
-
-
-def _atomic_write_json(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def build_cache(
@@ -165,7 +154,9 @@ def build_cache(
         }
         for symbol, accession in resolved.items()
     }
-    _atomic_write_json(output, {"schema_version": SCHEMA_VERSION, "records": records})
+    write_json(
+        output, {"schema_version": SCHEMA_VERSION, "records": records}, sort_keys=True
+    )
     return {
         "status": "built",
         "symbols": len(symbols),

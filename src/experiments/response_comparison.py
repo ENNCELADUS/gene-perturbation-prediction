@@ -46,6 +46,7 @@ from src.model.perturbation import Esm2PerturbationAdapter
 from src.model.response import predict_bags
 from src.model.response_mlp import ResponseMLP
 from src.model.state import StateResponse, load_released_state
+from src.data.io import write_json
 
 HCT116 = "ACH-000971"
 UNTRAINED_ARMS = ("no_change", "global_mean_effect", "released_state")
@@ -516,13 +517,6 @@ def _train(
     return curve
 
 
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
-    tmp.replace(path)
-
-
 def _fold_path(out_dir: Path, arm: str, anchor: str) -> Path:
     return out_dir / "folds" / f"{arm}__{anchor}.json"
 
@@ -548,7 +542,7 @@ def _write_fold(
         **result,
         "curve": curve,
     }
-    _write_json(_fold_path(out_dir, arm, anchor), payload)
+    write_json(_fold_path(out_dir, arm, anchor), payload)
     print(f"response comparison: {arm} held out {anchor} done", flush=True)
 
 
@@ -641,7 +635,7 @@ def _run_untrained(
                 "covered_genes": int(np.isfinite(loss).sum()),
                 "total_genes": len(loss),
             }
-        _write_json(
+        write_json(
             out_dir / "sanity.json",
             {
                 "checkpoint": str(config["paths"]["state_checkpoint"]),
@@ -913,7 +907,7 @@ def summarise(
                 "interval": [low, high],
                 "label": "separated" if separated else "overlap",
             }
-    _write_json(
+    write_json(
         out_dir / "verdicts.json",
         {
             "statistic": "held-out loss ratio to no-change, mean of per-fold ratios",

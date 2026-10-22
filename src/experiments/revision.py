@@ -37,7 +37,6 @@ from src.experiments.all import (
     Job,
     _check_resume_processes,
     _number,
-    _read_json,
     choose_gpus,
     run_pool,
     sigterm_raises,
@@ -45,6 +44,7 @@ from src.experiments.all import (
     training_argv,
     visible_gpus,
 )
+from src.data.io import read_json
 from src.experiments.config import load_config
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -213,7 +213,7 @@ def _lineages(
 def _training_record(run: Path) -> dict[str, Any]:
     """Best epoch (1-based; 0 is the pre-update validation of a stack) and its
     diagnostic and validation selective Spearman."""
-    done = _read_json(run / "train" / "done.json")
+    done = read_json(run / "train" / "done.json")
     best = done["best_epoch"]
     epoch_records = [
         json.loads(line)
@@ -236,8 +236,8 @@ def _split_record(
     run: Path, split: str, selective: frozenset[str], split_table: Path
 ) -> dict[str, Any]:
     """The split's table (joint model, then baselines), its bootstraps and lineages."""
-    baselines = _read_json(run / "baselines" / split / "metrics.json")
-    joint = _read_json(run / "evaluation" / split / "metrics.json")
+    baselines = read_json(run / "baselines" / split / "metrics.json")
+    joint = read_json(run / "evaluation" / split / "metrics.json")
     if TX1_RIDGE not in baselines:
         raise ValueError(f"baselines/{split}/metrics.json has no {TX1_RIDGE} method")
     return {

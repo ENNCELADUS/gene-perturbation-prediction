@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -36,13 +35,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.experiments.run_dir import bind, write_json
-
-
-def _write_parquet(path: Path, frame: pd.DataFrame) -> None:
-    temporary = path.with_name(f".{path.name}.tmp")
-    frame.astype(np.float32).to_parquet(temporary)
-    os.replace(temporary, path)
+from src.data.io import write_json, write_parquet
+from src.experiments.run_dir import bind
 
 
 def run(config: Mapping[str, Any], run_id: str) -> Path:
@@ -121,16 +115,20 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "oof": oof,
     }
     for name, values in split.items():
-        _write_parquet(run_dir / f"predictions_{name}.parquet", values)
+        write_parquet(
+            run_dir / f"predictions_{name}.parquet", values.astype(np.float32)
+        )
     lines = ladder.line_ids
-    _write_parquet(
+    write_parquet(
         run_dir / "components" / "main.parquet",
-        expression_components(components, expression.loc[lines]),
+        expression_components(components, expression.loc[lines]).astype(np.float32),
     )
     for k, fitted_components in fold_components.items():
-        _write_parquet(
+        write_parquet(
             run_dir / "components" / f"fold{k}.parquet",
-            expression_components(fitted_components, expression.loc[lines]),
+            expression_components(fitted_components, expression.loc[lines]).astype(
+                np.float32
+            ),
         )
     cells = ladder.role_lines("train_cells")
     scored = {

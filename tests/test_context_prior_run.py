@@ -20,7 +20,7 @@ from src.context_prior.targets import Definitions
 from src.data.splits import FixedSplit
 from src.eval.geneeffect import METRICS, long_frame
 from src.experiments import context_prior as run
-from src.experiments import run_dir as run_directory
+from src.data.io import jsonable, read_json
 from src.experiments.config import validate_prior_config
 from tests.test_context_prior_bridging import GENES, base
 
@@ -80,7 +80,7 @@ def test_json_values_are_plain():
         "d": [float("nan"), math.inf],
         ("e"): np.array([1.0, 2.0]),
     }
-    assert run_directory.jsonable(payload) == {
+    assert jsonable(payload) == {
         "a": 0.5,
         "b": 3,
         "c": True,
@@ -88,7 +88,7 @@ def test_json_values_are_plain():
         "e": [1.0, 2.0],
     }
     with pytest.raises(TypeError):
-        run_directory.jsonable({"x": object()})
+        jsonable({"x": object()})
 
 
 def test_a_run_directory_belongs_to_one_config(tmp_path):
@@ -431,7 +431,7 @@ def test_main_writes_rows_and_results_and_skips_existing_rows(tmp_path, monkeypa
         "affine__0.json",
         "affine_again__0.json",
     ]
-    record = run._read_json(run_dir / "rows" / "affine__0.json")
+    record = read_json(run_dir / "rows" / "affine__0.json")
     assert record["experiment"] == "affine" and record["setting"] == {}
     assert len(record["rows"]) == 5 + 3 * 5 * 3
     results = (run_dir / "results.md").read_text()

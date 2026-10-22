@@ -35,7 +35,7 @@ from src.experiments.context_prior import (
     prior_inputs,
     stages,
 )
-from src.experiments.run_dir import jsonable as _jsonable
+from src.data.io import jsonable as _jsonable
 
 EXPORT_DIR = "export"
 SPLITS = ("train", *SCORED)

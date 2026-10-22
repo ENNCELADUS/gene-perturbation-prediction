@@ -50,14 +50,8 @@ import torch
 from src.context_prior.targets import Definitions
 from src.data import ladder_reader as reader
 from src.data.splits import FixedSplit
-from src.experiments.run_dir import (
-    assert_bound,
-    bind,
-    locked,
-    read_json,
-    write_json,
-    write_text,
-)
+from src.data.io import read_json, write_json, write_text
+from src.experiments.run_dir import assert_bound, bind, locked
 
 log = logging.getLogger(__name__)
 
@@ -836,7 +830,7 @@ def cached_ridge(
     """The ridge's predictions per penalty, from ``out/dh_ridge/`` when its
     ``fingerprint.json`` matches the current inputs (refused otherwise), else
     computed and written with the fingerprint."""
-    from src.experiments.run_dir import jsonable
+    from src.data.io import jsonable
 
     folder = out / "dh_ridge"
     fingerprint = jsonable(ridge_fingerprint(setup, ladder_config))

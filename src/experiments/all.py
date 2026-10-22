@@ -33,6 +33,7 @@ import sys
 import time
 from typing import Any
 
+from src.data.io import read_json
 from src.experiments.config import PRECISION, load_config
 
 LINE_NAMES = {
@@ -87,10 +88,6 @@ def _number(value: Any, digits: int = 4) -> str:
     if value is None or not math.isfinite(float(value)):
         return "undefined"
     return f"{float(value):.{digits}f}"
-
-
-def _read_json(path: Path) -> Any:
-    return json.loads(Path(path).read_text())
 
 
 # ----------------------------------------------------------------------------
@@ -272,7 +269,7 @@ def _check_resume_processes(train: Path, processes: int) -> None:
     """Resuming ``last.pt`` needs the process count it was started with."""
     if not (train / "last.pt").is_file():
         return
-    started = _read_json(train / "run.json")["world_size"]
+    started = read_json(train / "run.json")["world_size"]
     if started != processes:
         raise ValueError(
             f"training in {train} was started on {started} GPU(s) and resumes "
@@ -381,7 +378,7 @@ def target_sum_line(manifest: dict) -> str:
 
 
 def sanity_line(comparison: Path) -> str:
-    sanity = _read_json(comparison / "sanity.json")
+    sanity = read_json(comparison / "sanity.json")
     parts = [
         f"{_name(anchor)} {_number(row['ratio_to_no_change'], 3)} "
         f"({row['covered_genes']} of {row['total_genes']} genes in its vocabulary)"
@@ -404,7 +401,7 @@ def _comparison_section(comparison: Path) -> list[str]:
     from src.experiments.response_comparison import VERDICTS
 
     table = pd.read_csv(comparison / "comparison.csv")
-    verdicts = _read_json(comparison / "verdicts.json")
+    verdicts = read_json(comparison / "verdicts.json")
     folds = list(dict.fromkeys(table.fold))
     by_fold = table.set_index(["arm", "fold"])
     header = [
@@ -466,7 +463,7 @@ def _comparison_section(comparison: Path) -> list[str]:
 
 
 def _validation_section(config: dict, run: Path) -> list[str]:
-    done = _read_json(run / "train" / "done.json")
+    done = read_json(run / "train" / "done.json")
     train = config["train"]
     if done["bad_epochs"] >= train["patience"]:
         stop = (
@@ -475,10 +472,10 @@ def _validation_section(config: dict, run: Path) -> list[str]:
         )
     else:
         stop = f"training ran to the maximum of {train['max_epochs']} epochs"
-    baselines = _read_json(run / "baselines" / "val" / "metrics.json")
+    baselines = read_json(run / "baselines" / "val" / "metrics.json")
     rows = {
-        "Joint model": _read_json(run / "evaluation" / "val" / "metrics.json"),
-        "Readout head with the explicit gene-specific context slope": _read_json(
+        "Joint model": read_json(run / "evaluation" / "val" / "metrics.json"),
+        "Readout head with the explicit gene-specific context slope": read_json(
             run / "readout" / "metrics.json"
         ),
         **{
@@ -515,7 +512,7 @@ def _validation_section(config: dict, run: Path) -> list[str]:
 def write_summary(config: dict, run: Path, run_id: str) -> Path:
     from src.data.prepared import PREPARED_METADATA_FILENAME
 
-    manifest = _read_json(Path(config["prepared_root"]) / PREPARED_METADATA_FILENAME)
+    manifest = read_json(Path(config["prepared_root"]) / PREPARED_METADATA_FILENAME)
     lines = [
         f"# Run {run_id}",
         "",
@@ -584,7 +581,7 @@ def run_all(
         # evaluation) uses the current device; make it the first chosen GPU.
         torch.cuda.set_device(visible.index(chosen[0]))
     with sigterm_raises():
-        manifest = _read_json(prepare_inputs(config))
+        manifest = read_json(prepare_inputs(config))
         print(target_sum_line(manifest), flush=True)
         comparison_and_training(config_path, config, run, chosen)
         device = f"cuda:{visible.index(chosen[0])}" if chosen else "cpu"

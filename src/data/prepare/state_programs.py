@@ -62,6 +62,7 @@ from typing import Any, Final
 import numpy as np
 import pandas as pd
 from scipy import sparse
+from src.data.io import write_json, write_npy, write_npz
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,29 +73,6 @@ USAGE_RULE: Final[str] = (
     "background program, cycle usages dropped, normalised to sum to one; a cell "
     "with none of them is all background (src.data.cell_states.program_memberships)"
 )
-
-
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2) + "\n")
-    os.replace(temporary, path)
-
-
-def _save(path: Path, array: np.ndarray) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with temporary.open("wb") as handle:
-        np.save(handle, array)
-    os.replace(temporary, path)
-
-
-def _save_npz(path: Path, **arrays: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with temporary.open("wb") as handle:
-        np.savez(handle, **arrays)
-    os.replace(temporary, path)
 
 
 def _workers() -> int:
@@ -221,7 +199,7 @@ def line_programs(
             spectra = program_spectra(spectra, top, list(plan["panel"]))
             arrays[f"top_k{k}"] = top.T.to_numpy(dtype=str)
             arrays[f"tpm_k{k}"] = spectra.to_numpy(dtype=np.float32)
-        _save_npz(
+        write_npz(
             output,
             **arrays,
             cells=np.asarray(adata.n_obs),
@@ -411,7 +389,7 @@ def build_reference(
     spectra = np.vstack(rows)[:, columns] / sd[columns]
     if not (spectra.sum(axis=1) > 0).all():
         raise ValueError("a reference program has an empty spectrum")
-    _save_npz(
+    write_npz(
         folder / "reference.npz",
         programs=np.asarray(names),
         kinds=np.asarray(kinds),
@@ -455,7 +433,7 @@ def line_usages(
     columns = [panel.index(str(g)) for g in reference["genes"]]
     tpm = _tpm(counts)[:, columns]
     scaled = sparse.csr_matrix(tpm @ sparse.diags(1.0 / reference["scale"]))
-    _save(output, nnls_usages(scaled, reference["spectra"]))
+    write_npy(output, nnls_usages(scaled, reference["spectra"]))
     return model_id
 
 
@@ -513,7 +491,7 @@ def programs_seed(plan: Mapping[str, Any], seed: int) -> None:
     _in_processes(calls, f"cNMF seed {seed}")
     if not (folder / "reference.npz").is_file():
         summary = build_reference(plan, seed, folder, sample)
-        _write_json(folder / "reference.json", summary)
+        write_json(folder / "reference.json", summary, keep_nan=True)
     reference = dict(np.load(folder / "reference.npz", allow_pickle=False))
     calls = [
         partial(line_usages, m, p, plan, reference, folder / sub / f"{m}.npy")
@@ -526,7 +504,7 @@ def programs_seed(plan: Mapping[str, Any], seed: int) -> None:
     ]
     _in_processes(calls, f"usages seed {seed}")
     if not (folder / "manifest.json").is_file():
-        _write_json(
+        write_json(
             folder / "manifest.json",
             {
                 "settings": dict(plan["programs"]),
@@ -549,6 +527,7 @@ def programs_seed(plan: Mapping[str, Any], seed: int) -> None:
                 "reference": json.loads((folder / "reference.json").read_text()),
                 "starcat_check": starcat_check(plan, folder, reference),
             },
+            keep_nan=True,
         )
 
 
@@ -639,7 +618,7 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
             for key, value in model.history.items()
             if key in ("elbo_train", "elbo_validation") and len(value)
         }
-        _write_json(
+        write_json(
             folder / "fit.json",
             {
                 "cells": int(adata.n_obs),
@@ -647,6 +626,7 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
                 "epochs": int(len(model.history["elbo_train"])),
                 "history": history,
             },
+            keep_nan=True,
         )
     # Saved with its training AnnData, so a resumed run reloads the model whole.
     model = scvi.model.SCVI.load(str(model_dir))
@@ -671,9 +651,9 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
                 np.zeros((len(ids), 2)),
             )
             latent = model.get_latent_representation(adata, give_mean=True)
-            _save(out, np.asarray(latent, dtype=np.float32))
+            write_npy(out, np.asarray(latent, dtype=np.float32))
     if not (folder / "manifest.json").is_file():
-        _write_json(
+        write_json(
             folder / "manifest.json",
             {
                 "settings": dict(settings),
@@ -688,6 +668,7 @@ def scvi_seed(plan: Mapping[str, Any], seed: int) -> None:
                 "encoder_reads_covariates": False,
                 "fit": json.loads((folder / "fit.json").read_text()),
             },
+            keep_nan=True,
         )
 
 

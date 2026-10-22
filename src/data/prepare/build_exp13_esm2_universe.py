@@ -6,12 +6,11 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 import json
-import os
 from pathlib import Path
-import uuid
 import numpy as np
 import pandas as pd
 from src.data.geneeffect import Exp13Split
+from src.data.io import write_text
 
 COVERAGE_THRESHOLDS = {"train": 5, "val": 3, "test": 3}
 
@@ -155,16 +154,6 @@ def inspect_npz_coverage(
     )
 
 
-def _atomic_write_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_text(text, encoding="utf-8")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
 def write_embedding_union(*, scored_symbols, response_symbols, esm2_path, output_dir):
     """Record dependency/response union and supplied table coverage, without seals."""
     from src.data.embeddings import load_esm2_embeddings
@@ -178,11 +167,11 @@ def write_embedding_union(*, scored_symbols, response_symbols, esm2_path, output
         raise ValueError("no scored genes resolve in supplied ESM2 table")
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    _atomic_write_text(
+    write_text(
         output_dir / "embedding_union.csv",
         pd.DataFrame({"gene_symbol": union}).to_csv(index=False),
     )
-    _atomic_write_text(
+    write_text(
         output_dir / "common_gene_panel.csv",
         pd.DataFrame({"gene_symbol": panel}).to_csv(index=False),
     )
@@ -194,7 +183,7 @@ def write_embedding_union(*, scored_symbols, response_symbols, esm2_path, output
         "esm2_order": list(table.vectors_by_symbol),
         "vector_width": table.dim,
     }
-    _atomic_write_text(
+    write_text(
         output_dir / "embedding_union.json", json.dumps(payload, indent=2) + "\n"
     )
     return payload

@@ -49,6 +49,7 @@ from typing import Any, Final
 
 import numpy as np
 import pandas as pd
+from src.data.io import write_json, write_parquet
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -132,18 +133,6 @@ def settings(setup: Setup) -> dict[str, Any]:
     }
 
 
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
-    os.replace(temporary, path)
-
-
-def _write_parquet(path: Path, frame: pd.DataFrame) -> None:
-    temporary = path.with_name(f".{path.name}.tmp")
-    frame.to_parquet(temporary)
-    os.replace(temporary, path)
-
-
 def open_manifest(setup: Setup) -> dict[str, Any]:
     """The root's manifest, written now if new; refuses a root of other settings."""
     setup.root.mkdir(parents=True, exist_ok=True)
@@ -170,7 +159,7 @@ def open_manifest(setup: Setup) -> dict[str, Any]:
         },
         "steps": {},
     }
-    _write_json(path, manifest)
+    write_json(path, manifest)
     return manifest
 
 
@@ -182,7 +171,7 @@ def record_step(setup: Setup, step: str, record: Mapping[str, Any]) -> None:
         **record,
         "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
-    _write_json(path, manifest)
+    write_json(path, manifest)
 
 
 # --- the frame ------------------------------------------------------------------
@@ -316,8 +305,8 @@ def build_lines(setup: Setup, frame: Frame) -> dict[str, Any]:
         },
         index=pd.Index(lines, name="model_id"),
     )
-    _write_parquet(setup.root / "genes.parquet", table)
-    _write_parquet(setup.root / "lines.parquet", rows)
+    write_parquet(setup.root / "genes.parquet", table)
+    write_parquet(setup.root / "lines.parquet", rows)
     return {
         "frame": len(frame.lines),
         "single_cell_train": len(frame.single_cell_train),
@@ -404,8 +393,7 @@ def _cells_line(
         programs = payload["scores"]
     if programs.shape[0] != source.n_obs:
         raise ValueError(
-            f"{model_id}: {programs.shape[0]} program-score rows, "
-            f"{source.n_obs} cells"
+            f"{model_id}: {programs.shape[0]} program-score rows, {source.n_obs} cells"
         )
     summaries = gene_summaries(
         source.X, symbols, genes, rng=line_rng(model_id, seed, "poisson")
@@ -484,7 +472,7 @@ def build_cells(setup: Setup, frame: Frame) -> dict[str, Any]:
     for done, _ in enumerate(_in_processes(calls, LINE_PROCESSES), start=1):
         if done % 25 == 0:
             _LOGGER.info("cells: line %d of %d", done, len(calls))
-    _write_json(out / "genes.json", {"genes": union, "panel": len(panel)})
+    write_json(out / "genes.json", {"genes": union, "panel": len(panel)})
     counts = {}
     for model_id in frame.cell_lines:
         with np.load(out / f"{model_id}.npz") as payload:
@@ -596,11 +584,11 @@ def build_mean(setup: Setup, frame: Frame) -> dict[str, Any]:
 
     out = setup.root / "mean"
     out.mkdir(exist_ok=True)
-    _write_parquet(out / "mean_channel.parquet", channel.astype(np.float32))
-    _write_parquet(out / "pseudobulk.parquet", pseudo_qn.astype(np.float32))
-    _write_parquet(out / "bulk_paired.parquet", bulk_qn.loc[paired].astype(np.float32))
-    _write_parquet(out / "pie_listed.parquet", listed)
-    _write_parquet(out / "pie_input.parquet", values.astype(np.float32))
+    write_parquet(out / "mean_channel.parquet", channel.astype(np.float32))
+    write_parquet(out / "pseudobulk.parquet", pseudo_qn.astype(np.float32))
+    write_parquet(out / "bulk_paired.parquet", bulk_qn.loc[paired].astype(np.float32))
+    write_parquet(out / "pie_listed.parquet", listed)
+    write_parquet(out / "pie_input.parquet", values.astype(np.float32))
     quality = bridge_quality(trained.loc[paired], bulk_qn.loc[paired])
     return {
         "space_genes": len(space),
@@ -656,7 +644,7 @@ def build_summaries(setup: Setup, frame: Frame) -> dict[str, Any]:
     ]
     table = pd.concat(parts, axis=1).loc[list(frame.cell_lines)]
     table.index.name = "model_id"
-    _write_parquet(setup.root / "summaries.parquet", table.astype(np.float32))
+    write_parquet(setup.root / "summaries.parquet", table.astype(np.float32))
     return {
         "lines": len(table),
         "features": int(table.shape[1]),
@@ -710,9 +698,7 @@ def build_tx1(setup: Setup, frame: Frame, shard: tuple[int, int]) -> dict[str, A
                 source.X = shuffle_counts(
                     source.X, line_rng(model_id, setup.seed, "count_shuffle")
                 ).astype(np.float32)
-            symbols = source.var[
-                symbol_column(source.var)
-            ].astype(str)
+            symbols = source.var[symbol_column(source.var)].astype(str)
             hvg, _ = align_columns(source.X, symbols, hvg_order)
             start = time.monotonic()
             embeddings = encoder(source)
