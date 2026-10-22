@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("accelerate")
 pytest.importorskip("state.tx.models.state_transition")
 
-import test_joint  # noqa: E402
+from tests.fixtures import joint as joint_world  # noqa: E402
 from src.experiments.joint.readout import run as readout  # noqa: E402
 from src.experiments.joint.train import run_training  # noqa: E402
 
@@ -17,18 +17,18 @@ def nine_training_lines(monkeypatch):
     # The readout's context PCA needs at least nine training contexts and eight
     # context components.
     monkeypatch.setattr(
-        test_joint, "TRAIN", (*test_joint.ANCHORS, *(f"ACH-T{i}" for i in range(6)))
+        joint_world, "TRAIN", (*joint_world.ANCHORS, *(f"ACH-T{i}" for i in range(6)))
     )
-    monkeypatch.setattr(test_joint, "CONTEXT_COMPONENTS", 8)
+    monkeypatch.setattr(joint_world, "CONTEXT_COMPONENTS", 8)
 
 
 def test_run_readout_writes_val_metrics_and_skips_when_done(
     tmp_path, monkeypatch, nine_training_lines
 ):
     monkeypatch.setenv("ACCELERATE_USE_CPU", "true")
-    config = test_joint.make_config(tmp_path)
+    config = joint_world.make_config(tmp_path)
     config["train"]["max_epochs"] = 1
-    inputs = test_joint.make_inputs()
+    inputs = joint_world.make_inputs()
     best = run_training(config, tmp_path / "train", inputs=inputs)
 
     out_dir = tmp_path / "readout"

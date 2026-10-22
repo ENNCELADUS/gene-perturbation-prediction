@@ -7,7 +7,7 @@ import pytest
 
 from src.context_prior.remedies import affine, denoise
 from src.data.context_pca import fit_context_pca
-from tests.test_context_prior_bridging import GENES, base
+from tests.fixtures.prior import GENES, base
 
 
 def project(frame, pca):

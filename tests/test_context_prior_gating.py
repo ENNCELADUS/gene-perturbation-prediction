@@ -10,7 +10,7 @@ import pytest
 
 from src.context_prior.bridge import bridge_quality
 from src.context_prior.remedies import affine, gating
-from tests.test_context_prior_bridging import GENES, base
+from tests.fixtures.prior import GENES, base
 
 
 def gated_base():

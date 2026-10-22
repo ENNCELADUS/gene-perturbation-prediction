@@ -15,15 +15,14 @@ from src.eval.accuracy import aggregate_geneeffect, evaluate_model  # noqa: E402
 from src.experiments.joint import train as geneeffect  # noqa: E402
 from src.model.initialization import build_joint_model  # noqa: E402
 from src.model.normalization import fit_startup_standardizer  # noqa: E402
-from tests.test_joint import (  # noqa: E402, F401
+from tests.fixtures.joint import (  # noqa: E402, F401
     TEST,
     TRAIN,
     VAL,
-    cpu,
     make_config,
     make_inputs,
 )
-from tests.test_prior_offsets import with_prior  # noqa: E402
+from tests.fixtures.joint import with_prior  # noqa: E402
 
 PRIOR = {m: float(v) for m, v in zip((*TRAIN, *VAL, *TEST), np.linspace(-1, 1, 10))}
 

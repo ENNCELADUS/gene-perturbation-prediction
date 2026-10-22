@@ -11,7 +11,7 @@ import pytest
 
 from src.context_prior.alignment import contrastive_directions, fit_alignment
 from src.context_prior.remedies import affine, contrastive
-from tests.test_context_prior_bridging import base
+from tests.fixtures.prior import base
 
 GENES = [f"G{i}" for i in range(30)]
 RNG = np.random.default_rng(7)

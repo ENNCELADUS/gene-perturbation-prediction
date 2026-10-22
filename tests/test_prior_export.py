@@ -12,7 +12,7 @@ from src.context_prior.folds import training_side_folds
 from src.experiments.prior import base as prior_base
 from src.experiments.prior import prior_export as export
 from src.experiments.prior.config import validate_prior_config
-from tests.test_context_prior_run import synthetic_base, tiny_config
+from tests.fixtures.prior import synthetic_base, tiny_config
 
 
 def selected_config(tmp_path):

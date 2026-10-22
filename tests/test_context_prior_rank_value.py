@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from src.context_prior.remedies import rank_value
-from tests.test_context_prior_bridging import base
+from tests.fixtures.prior import base
 
 
 def test_medians_skip_zeros_and_send_silent_genes_last():

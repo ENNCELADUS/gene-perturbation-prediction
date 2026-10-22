@@ -21,7 +21,7 @@ from src.experiments.prior import noise_report as nd_report
 from src.experiments.prior import noise_sections as nd_sections
 from src.experiments.prior.config import validate_noise_config, validate_prior_config
 from src.experiments.prior.prior_export import export_predictions
-from tests.test_context_prior_run import synthetic_base, tiny_config
+from tests.fixtures.prior import synthetic_base, tiny_config
 
 CONFIG = yaml.safe_load(Path("configs/context_prior/noise_diagnosis.yaml").read_text())
 

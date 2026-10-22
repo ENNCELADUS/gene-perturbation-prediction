@@ -16,7 +16,7 @@ from src.data.labels import (
 )
 from src.data.prepared import load_inputs
 from src.data.splits import FixedSplit
-from tests.test_joint_data import make_prepared_fixture
+from tests.fixtures.prepared import make_prepared_fixture
 
 
 def _split() -> FixedSplit:

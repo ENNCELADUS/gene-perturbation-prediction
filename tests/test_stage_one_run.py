@@ -24,7 +24,7 @@ from src.experiments.stage_one import report as stage_one_report
 from src.experiments.stage_one import resident as device_inputs
 from src.experiments.stage_one import run as stage_one
 from src.experiments.stage_one.config import load_stage_one_config
-from tests.test_ladder_inputs import BULK_LABELLED, TEST, TRAIN, VAL, build_world
+from tests.fixtures.ladder import BULK_LABELLED, TEST, TRAIN, VAL, build_world
 
 WIDTHS = {"dH": 6, "dL": 6, "own_h": 6, "own_dp": 1, "own_x": 1}
 TEXT_DIM, GENE_DIM = 5, 6

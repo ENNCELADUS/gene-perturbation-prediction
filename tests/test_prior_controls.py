@@ -13,8 +13,8 @@ from src.baselines.prior_controls import (
 )
 from src.baselines.residual import run_r1_ladder
 from src.data.splits import FixedSplit
-from tests.test_joint import TRAIN, VAL, make_inputs
-from tests.test_prior_offsets import with_prior
+from tests.fixtures.joint import TRAIN, VAL, make_inputs
+from tests.fixtures.joint import with_prior
 
 PRIOR_VALUES = {m: 0.1 * i for i, m in enumerate((*TRAIN, *VAL))}
 

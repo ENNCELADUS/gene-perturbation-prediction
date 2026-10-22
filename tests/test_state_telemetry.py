@@ -24,7 +24,7 @@ from src.experiments.states import report as st_report
 from src.experiments.states import telemetry as st_telemetry
 from src.experiments.states import vocabularies as st_vocab
 from src.experiments.states.config import validate_states_config
-from tests.test_ladder_inputs import TEST, TRAIN, VAL, build_world
+from tests.fixtures.ladder import TEST, TRAIN, VAL, build_world
 
 SECOND = ("ACH-T0", "ACH-T1", "ACH-T2", "ACH-V0")
 PROGRAM_KINDS = ("recurrent", "recurrent", "cycle", "background")

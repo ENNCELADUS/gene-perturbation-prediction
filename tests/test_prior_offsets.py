@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import json
 
 import numpy as np
@@ -18,15 +17,15 @@ from src.data.prior_offsets import (
     checked_prior,
     read_prior_offsets,
 )
-from tests.test_joint import (  # noqa: F401
+from tests.fixtures.joint import (  # noqa: F401
     GENES,
     TRAIN,
     VAL,
-    cpu,
     make_config,
     make_inputs,
 )
-from tests.test_joint_data import make_prepared_fixture
+from tests.fixtures.prepared import make_prepared_fixture
+from tests.fixtures.joint import with_prior
 
 
 def write_export(path, lines, genes, scale, *, run_id="prior_run", value=0.5):
@@ -121,14 +120,6 @@ def test_load_inputs_attaches_the_export_and_records_its_identity(tmp_path):
     load_inputs(config, preprocessing=state)  # same prior: accepted
     with pytest.raises(ValueError, match="lacks lines"):
         load_inputs(config, include_test=True)  # the export has no test lines
-
-
-def with_prior(inputs, per_line: dict[str, float]):
-    frame = pd.DataFrame({gene: pd.Series(per_line) for gene in inputs.genes}).loc[
-        :, list(inputs.genes)
-    ]
-    prior = PriorOffsets({"run_id": "r", "reference": {}}, frame, inputs.residual_scale)
-    return dataclasses.replace(inputs, prior=prior)
 
 
 def test_dataset_rows_carry_the_offset_in_residual_units():

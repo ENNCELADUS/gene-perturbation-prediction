@@ -1,6 +1,6 @@
 """The ``all`` run end to end on CPU, from a synthetic raw world to summary.md.
 
-The raw world is ``test_prepare.build_world`` widened to STATE's 2000 HVGs (the
+The raw world is ``prepare_world.build_world`` widened to STATE's 2000 HVGs (the
 joint model's width) and ten labeled training lines (the readout needs at least
 nine), so the real ``prepare_inputs`` runs. STATE is a tiny released-shaped
 checkpoint with a three-entry one-hot vocabulary covering one of the two
@@ -25,7 +25,7 @@ import yaml
 pytest.importorskip("accelerate")
 pytest.importorskip("state.tx.models.state_transition")
 
-import test_prepare  # noqa: E402
+from tests.fixtures import prepare as prepare_world  # noqa: E402
 from src.experiments.joint import all as pipeline  # noqa: E402
 from src.experiments.joint import pipeline as joint_pipeline
 from src.model.state import build_state  # noqa: E402
@@ -35,9 +35,9 @@ VOCABULARY = ("GA", "GC", "non-targeting")
 
 def write_state(state_dir: Path) -> Path:
     hparams = dict(
-        input_dim=len(test_prepare.HVG),
+        input_dim=len(prepare_world.HVG),
         hidden_dim=8,
-        output_dim=len(test_prepare.HVG),
+        output_dim=len(prepare_world.HVG),
         pert_dim=len(VOCABULARY),
         batch_dim=3,
         batch_encoder=True,
@@ -45,7 +45,7 @@ def write_state(state_dir: Path) -> Path:
         predict_residual=True,
         output_space="gene",
         embed_key="X_hvg",
-        gene_names=list(test_prepare.HVG),
+        gene_names=list(prepare_world.HVG),
         transformer_backbone_kwargs={
             "n_embd": 8,
             "n_layer": 1,
@@ -74,18 +74,18 @@ def write_state(state_dir: Path) -> Path:
 def make_world(root: Path, monkeypatch, *, max_epochs: int = 1) -> Path:
     """Write the raw world and its config; return the config path."""
     hvg = tuple(f"H{i}" for i in range(2000))
-    monkeypatch.setattr(test_prepare, "HVG", hvg)
+    monkeypatch.setattr(prepare_world, "HVG", hvg)
     monkeypatch.setattr(
-        test_prepare,
+        prepare_world,
         "SOURCE_GENES",
-        (*hvg, *test_prepare.PANEL_CANDIDATES, "X1", "X2"),
+        (*hvg, *prepare_world.PANEL_CANDIDATES, "X1", "X2"),
     )
     monkeypatch.setattr(
-        test_prepare,
+        prepare_world,
         "TRAIN",
-        (*test_prepare.ANCHORS, *(f"ACH-T{i}" for i in range(6)), "ACH-U1"),
+        (*prepare_world.ANCHORS, *(f"ACH-T{i}" for i in range(6)), "ACH-U1"),
     )
-    config = test_prepare.build_world(root)
+    config = prepare_world.build_world(root)
     config["output_root"] = str(root / "runs")
     config["paths"]["state_checkpoint"] = str(write_state(root / "state"))
     # Eight context components: the readout's context PCA needs eight features.
@@ -103,12 +103,6 @@ def make_world(root: Path, monkeypatch, *, max_epochs: int = 1) -> Path:
     path = root / "config.yaml"
     path.write_text(yaml.safe_dump(config))
     return path
-
-
-@pytest.fixture
-def cpu(monkeypatch):
-    monkeypatch.setenv("ACCELERATE_USE_CPU", "true")
-    torch.set_num_threads(1)
 
 
 @pytest.fixture(scope="module")
@@ -307,7 +301,7 @@ class FakeLauncher:
 
 TWELVE_JOBS = [
     (arm, anchor)
-    for anchor in test_prepare.ANCHORS
+    for anchor in prepare_world.ANCHORS
     for arm in ("state_joint", "mlp_hvg", "mlp_tx1")
 ]
 
@@ -543,7 +537,7 @@ def test_in_process_gpu_work_uses_first_chosen_gpu(tmp_path, monkeypatch):
 
     monkeypatch.setattr("src.experiments.prepare.prepare_inputs", stop)
     config_path = tmp_path / "config.yaml"
-    config = test_prepare.build_world(tmp_path)
+    config = prepare_world.build_world(tmp_path)
     config["output_root"] = str(tmp_path / "runs")
     config_path.write_text(yaml.safe_dump(config))
     with pytest.raises(RuntimeError, match="stop after"):
