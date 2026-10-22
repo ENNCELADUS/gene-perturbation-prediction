@@ -15,7 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.eval import metrics
-from src.experiments.joint.revision import BOOTSTRAP_REPEATS, BOOTSTRAP_SEED
+from src.eval.accuracy import BOOTSTRAP_REPEATS, BOOTSTRAP_SEED
 from src.training.checkpoint import load_checkpoint
 
 
