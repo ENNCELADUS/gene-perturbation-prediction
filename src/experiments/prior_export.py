@@ -24,18 +24,18 @@ from src.context_prior.bridging import oof_bridged
 from src.context_prior.folds import training_side_folds
 from src.context_prior.prior import PriorSpec, crossfit, fit_prior, total
 from src.experiments.config import load_prior_config
+from src.eval.geneeffect import score
 from src.experiments.context_prior import (
     SCORED,
     RunBase,
     _bind,
     _build,
-    _jsonable,
     _write_json,
     load_base,
     prior_inputs,
-    score,
     stages,
 )
+from src.experiments.run_dir import jsonable as _jsonable
 
 EXPORT_DIR = "export"
 SPLITS = ("train", *SCORED)

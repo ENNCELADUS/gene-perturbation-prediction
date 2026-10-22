@@ -18,7 +18,9 @@ from src.context_prior.reference import Reference
 from src.context_prior.space import quantile_reference
 from src.context_prior.targets import Definitions
 from src.data.splits import FixedSplit
+from src.eval.geneeffect import METRICS, long_frame
 from src.experiments import context_prior as run
+from src.experiments import run_dir as run_directory
 from src.experiments.config import validate_prior_config
 from tests.test_context_prior_bridging import GENES, base
 
@@ -63,7 +65,7 @@ def test_long_frame_keeps_finite_labels_in_geneeffect_units():
     )
     truth = pd.DataFrame({"A": [1.0, np.nan], "B": [0.5, 0.0]}, index=["L1", "L2"])
     prediction = pd.DataFrame({"A": [0.5, 0.1], "B": [0.0, 0.2]}, index=["L1", "L2"])
-    frame = run.long_frame(prediction, truth, definitions)
+    frame = long_frame(prediction, truth, definitions)
     assert len(frame) == 3
     row = frame.set_index(["model_id", "gene_symbol"]).loc[("L1", "A")]
     assert row["residual"] == 2.0 and row["residual_prediction"] == 1.0
@@ -78,7 +80,7 @@ def test_json_values_are_plain():
         "d": [float("nan"), math.inf],
         ("e"): np.array([1.0, 2.0]),
     }
-    assert run._jsonable(payload) == {
+    assert run_directory.jsonable(payload) == {
         "a": 0.5,
         "b": 3,
         "c": True,
@@ -86,7 +88,7 @@ def test_json_values_are_plain():
         "e": [1.0, 2.0],
     }
     with pytest.raises(TypeError):
-        run._jsonable({"x": object()})
+        run_directory.jsonable({"x": object()})
 
 
 def test_a_run_directory_belongs_to_one_config(tmp_path):
@@ -334,8 +336,8 @@ def test_run_setting_scores_every_block_set_and_penalty(tmp_path):
     ]
     assert len(rows) == len(components) + 3 * len(components) * 3
     for row in rows:
-        assert set(row["val"]) == set(run.METRICS) == set(row["oracle"])
-        assert set(row["test"]) == set(run.METRICS)
+        assert set(row["val"]) == set(METRICS) == set(row["oracle"])
+        assert set(row["test"]) == set(METRICS)
         for split in ("val", "test"):
             assert len(row[f"{split}_gain"]["interval"]) == 2
     pinned = [row for row in components if row["components_penalty"] == 10.0]

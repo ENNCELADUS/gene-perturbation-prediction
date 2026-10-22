@@ -2,7 +2,9 @@
 
 **Status:** agreed 2026-10-16 (two grill sessions after the review of the noise diagnosis; checked by a Codex
 alignment review and an Opus review). Task 1 done 2026-10-16 ([record](../../results/pie_reproduction/README.md): the
-released checkpoints reproduce to rounding); Tasks 2–7 not built. Revised 2026-10-16 after Task 1: PIE's DepMap
+released checkpoints reproduce to rounding); Task 2 done 2026-10-17
+([record](../../results/ladder_inputs/README.md)); Task 3's shared stack built 2026-10-17 (plan Wave 1A, §3.3 "As
+built"; protocol §16), not yet run. Revised 2026-10-16 after Task 1: PIE's DepMap
 source is masked in every pass (§3.2) and Task 4's GeneEffect profile is masked by fold, not by line. Revised
 2026-10-16 in the Task 2 grill ([plan](2026-10-16-pie-ladder-inputs-plan.md)): the frame is 981 lines (§4.1), a line
 with cells always reads its cells (pseudo-bulk from per-cell CP10K, §4.3), and every arm reads the Cellosaurus text
@@ -129,7 +131,8 @@ expression never reaches the latents: it enters only as each decoded gene's own 
 
 ### 3.3 Stage-one architecture arms (Task 3)
 
-Every arm ends in **Cilantro's tail** (`→ 64 → ReLU → 32 → ReLU → 1`, from `FiLMNet128`); its 32-d layer is the
+Every arm ends in **Cilantro's tail** (`→ 64 → act → 32 → act → 1`, from `FiLMNet128`, with its ReLUs made leaky at slope
+0.01 after the ReLU tail collapsed to the base on the H20, protocol §16); its 32-d layer is the
 viability embedding `V(c, g)`, saved for every line × gene for stage two. Arms differ only before the tail.
 
 | Arm | Before the tail |
@@ -140,7 +143,30 @@ viability embedding `V(c, g)`, saved for every line × gene for stage two. Arms 
 | **Hybrid** | `[h(c, g) ; FiLM(best Δ)]` → Linear 256 → ReLU. |
 
 The gene encoder in Task 3 is a projection of `gene_text`; Task 4 chooses its other sources. Selection is on
-validation selective Spearman; the winner carries to Tasks 4–7.
+the validation per-line residual Spearman (§4.1); the winner carries to Tasks 4–7.
+
+**As built (2026-10-17, plan Wave 1A; protocol §16).** Choices the text above leaves open:
+- the pair input of a delta is `[Δ centred within gene ; frame mean Δ̄_g]`; for ΔE, `E(after) − E(before)` minus `E`
+  at the frame-mean states (`E(shift_g) − E(0)`, the before-state's frame mean being 0), beside that frame-mean term;
+- the ΔH and ΔE rows append the scalar own-gene slots `own_dp` and `own_x` (each `[centred ; frame mean]`); the 768-d
+  `own_h` is left out (it would double the resident memory); ΔL rows carry no slot, so they stay expression-blind;
+- the line-permuted control permutes, per gene, across all 1,036 lines, and moves the delta, its slots and (for ΔE)
+  the before-state together;
+- a line token is one per gene of the panel ∪ the mean channel's space, carrying both values with their flags;
+- `V(c, g)` is Cilantro's `l3` output before its activation, as `FiLMNet128` returns it;
+- each gene source is centred on its mean over the panel genes it covers before the gene encoder (label-free; the
+  `gene_text` vectors share half their energy along that mean, which left the FiLM conditions nearly equal across
+  genes); the warm direct readout reads them uncentred, as PIE's gene query MLP did;
+- epoch 0 (the untrained model) is the base, a `best.pt` candidate when its per-line residual Spearman is defined; its
+  within-gene R² is the base row's;
+- the full-panel check of §3.2 is a matched pair per ΔE family (`film_dE_selective` and `film_dE_full`,
+  `multi_dE_selective` and `multi_dE_full`): both train and predict only the selective genes in the panel that have a
+  full-panel predicted change (`pie/full/`, coverage reported; every other gene predicts the base), with the same
+  steps; the full row's state encoder reads 17,607-d states (before `x_c − x̄_frame`, after plus `Δ̂`) through the same
+  fp32 change path, its `Δ̂` streamed from the memory maps by gene chunk (it cannot be resident: ~311 GB fp32). The
+  report contrasts full-panel minus 512-component on the genes defined on both sides. A first layer `W C` on the full
+  panel reproduces the 512-component row's `W` exactly, so the difference is what the compression loses to a
+  nonlinear reader.
 
 **Matched inputs.** The frozen PIE must read its own input, the mean over cells of `log1p` CP10K, which moves with a
 gene's variance and dropout, plus the Cellosaurus text. So that architecture contrasts compare models rather than
@@ -249,18 +275,27 @@ are paired views of a line for stability telemetry, never extra lines.
 - **Base and target.** `m_g` is the gene's mean measured GeneEffect over the 981 frame lines (single-cell training
   lines admitted by `assert_fit_eligible`, bulk-only labelled lines from `load_bulk_lines`, which refuses any overlap
   with validation and test; lymphoid and myeloid bulk-only lines dropped). The target is `GeneEffect(c, g) − m_g`; the loss is MSE in units of the 377-line residual SD
-  `σ_g` over every labelled gene.
+  `σ_g` over every labelled gene, plus (weight 1, `train.dependency_weight`) the binary cross-entropy of the
+  dependency call (GeneEffect below −0.5, logit `(−0.5 − m_g − σ_g z) / σ_g`) over the labelled pairs of selective
+  genes, protocol §5's `dependency_classification` term. Stage one hands stage two **calibrated context effects**
+  (decided 2026-10-20): stage two ranks many partners within one line, so it needs effect sizes comparable across
+  genes and a correct dependent call, not only each gene's ranking of lines; within-gene R² and the calibration slope
+  are read beside the selector as equals.
 - **Scoring.** The tail outputs `z`; the scorer receives GeneEffect `m_g + σ_g · z` and re-centres it on the protocol's
   377-line mean `μ_g` as every prediction is; it never receives `z`. The base is a row of its own (its within-gene R²
   is that of `m_g − μ_g`). One Task 3 row trains the winning family around the 377-line mean instead (target
   `GeneEffect − μ_g`, prediction `μ_g + σ_g · z`): without per-gene parameters the main rows must learn each gene's
   offset `μ_g − m_g`, which moves within-gene R², RMSE and calibration but not selective Spearman.
 - **Metric.** The final split's (protocol §6): selective genes (4,323) and residual SD fitted on the 377 lines.
-  Headline: selective Spearman and within-gene R² (protocol §14). Beside them: AUPR lift, residual Pearson, per-line
-  absolute Pearson, RMSE and the calibration slope (measured residual regressed on predicted, pooled over selective
-  genes). Contrasts carry 95% paired line-bootstrap intervals (1,000 resamples).
-- **Training.** AdamW, warmup then cosine; `best.pt` chosen on validation selective Spearman only and scored once on
-  test; one seed (0); train-versus-validation gaps are reported for every run.
+  Headline and selector (decided 2026-10-21): the **per-line residual Spearman**, each held-out line's predicted
+  against measured residuals across the selective genes, averaged over lines (protocol §6). Stage two reads one
+  held-out line at a time against measured training lines, so the line is the unit; the order of held-out lines within
+  a gene, which selective Spearman scores, is never consumed. Beside it: selective Spearman and within-gene R²
+  (protocol §14), AUPR lift, residual Pearson, per-line absolute Pearson, RMSE and the calibration slope (measured
+  residual regressed on predicted, pooled over selective genes). Contrasts carry 95% paired line-bootstrap intervals
+  (1,000 resamples).
+- **Training.** AdamW, warmup then cosine; `best.pt` chosen on the validation per-line residual Spearman only and
+  scored once on test; one seed (0); train-versus-validation gaps are reported for every run.
 
 ### 4.2 Cells per line
 

@@ -223,6 +223,56 @@ src.data.prepare.cellosaurus_context --out DIR`, with `OPENAI_API_KEY` and optio
 command line only; a SOCKS `ALL_PROXY` in the shell needs `--with socksio`) and copied to `ladder/context_text/` with a
 SHA-256 check.
 
+## The stage-one model
+
+Task 3 of the stage-one design ([protocol §16](../docs/03-geneeffect-protocol.md#16-stage-one-model)) trains the
+architecture arms on the ladder inputs, one config per run under `configs/stage_one/architecture/`. Training, the
+queue and the report run in `.venv-pie` (re-sync it after a pull that changes `third_party/pie/uv.lock`:
+`hpc/pie/setup.sh` syncs the `geneeffect` group, scikit-learn, which the project scorer reads); the prior reference runs
+in the project environment. A run directory is `outputs/stage_one/<task>/<config stem>[__fold<K>]/` (`--run-id`
+overrides the stem); a run whose `row.json` exists is skipped, an interrupted one resumes from `last.pt`, and a run
+directory refuses another config.
+
+```bash
+A=configs/stage_one/architecture
+.venv-pie/bin/python -c "import src.eval.geneeffect, src.eval.metrics, src.context_prior.targets"   # import check
+hpc/run.sh stage-one-prior $A/prior_reference.yaml --run-id prior_reference_seed0        # CPU; components_reader needs it
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one $A/film_dH.yaml [--fold K]                    # one run, 1 GPU
+setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3 --folds main,0,1,2,3,4 $A/*.yaml \
+  > outputs/launches/stage_one_3a.log 2>&1 < /dev/null &                                 # skips prior_reference and report_3a
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one-report $A/report_3a.yaml                      # results.md; the dH ridge on 1 GPU
+```
+
+Each run holds its delta on the GPU in bf16 (ΔH is 28 GB, ΔE 19 GB), copied by gene chunk from the memory-mapped
+fp32 file, so one run fits one H20. The exceptions are `film_dE_full` and `multi_dE_full`, which stream the
+full-panel predicted change (~311 GB under `pie/full/`) from its memory maps every epoch: they want it in the host
+page cache (1.5 TB on the H20; the frame-mean pass at their start fills it), and each epoch's `epoch_seconds` in the
+log shows whether they read from memory (about 1–1.5 min) or from disk. The queue logs each run to `outputs/stage_one/<task>/logs/<run>.log`, where the
+epoch-0 line (before any update) shows validation within-gene R² equal to the base row's in the report, and the
+base's per-line residual Spearman, the selector (protocol §6).
+
+## The cell states
+
+Task 8 of the stage-one design ([protocol §17](../docs/03-geneeffect-protocol.md#17-cell-states),
+[data card](../docs/data/cell-states.md)) writes `states/` (the frozen PIE's state outputs under `states/pie/`) beside the stage-one inputs from
+`configs/stage_one/states/telemetry.yaml`. The cNMF, starCAT and scVI fits run in `.venv-states` (`hpc/states/setup.sh`:
+cnmf 1.7.1, starcatpy 1.0.10, scvi-tools 1.4.2, torch 2.10.0 cu128), which the project environment's `fit` step calls
+through `STATES_PYTHON` (default `.venv-states/bin/python`); the two exchange files only. `fit` needs one GPU visible
+for scVI; the rest of `fit`, `project` and `inputs` is CPU. Every step skips what exists.
+
+```bash
+hpc/states/setup.sh                                                                        # once
+CFG=configs/stage_one/states/telemetry.yaml
+CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=32 hpc/run.sh cell-states $CFG --steps fit,project,inputs
+for i in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$i nohup hpc/run.sh pie-precompute $CFG --steps states --set ALL --shard $i/4 > outputs/launches/states_$i.log 2>&1 & done
+wait                                                                                        # every shard has exited
+hpc/run.sh pie-precompute $CFG --steps assemble_states --set ALL
+hpc/run.sh cell-states $CFG --steps report                                                 # results.md
+```
+
+`--set ALL` runs the real sets and permutation seed 0 before seeds 1 and 2; a shard can be stopped there and the others
+assembled by name (`--set cycle,programs,…`). A one-set trial before the queue: `--steps states --set cycle --shard 0/16`.
+
 ## The `prior` command
 
 `hpc/run.sh prior CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear context prior

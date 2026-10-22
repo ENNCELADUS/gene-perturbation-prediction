@@ -1,7 +1,10 @@
 # PIE stage-one ladder after Task 2 (Tasks 3–9): Implementation Plan
 
 **Spec:** [the PIE stage-one design](2026-10-16-pie-geneeffect-ladder-design.md), as revised 2026-10-17. **Status:** approved
-2026-10-17; Wave 0 done 2026-10-17 ([record](../../results/ladder_inputs/README.md)).
+2026-10-17; Wave 0 done 2026-10-17 ([record](../../results/ladder_inputs/README.md)); Wave 1A built 2026-10-17
+on `feat/stage-one` (protocol §16), Task 3 run and reported 2026-10-22
+([record](../../results/stage_one_architecture/README.md)); Wave 1B (Task 8) run and reported 2026-10-22
+([record](../../results/state_telemetry_seed0/README.md)).
 
 ## Context
 
@@ -65,14 +68,14 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
   and the selective genes stay the protocol's; selection stays on validation.
 - **State pseudo-contexts in `pie_precompute`.**
   - Name each context `ACH-x|<set>|<k>`, with a map from name to owning line; context text is looked up by owner.
-  - Reuse the main `pie/dataset`; write outputs to `ladder/pie_states/<set>/`.
+  - Reuse the main `pie/dataset`; write outputs to `ladder/states/pie/<set>/` (under the state inputs, with a fingerprint of them; revised 2026-10-17 after review).
   - Run context-major batches of 64, each running its reference pass inside the batch and evicting its cache entries
     afterwards. Pad the last batch so `torch.compile` doesn't recompile.
   - Run the encoder once per owner (exact, because the latents read no expression).
   - Each set includes a `|whole` context per line as a bf16 noise floor.
   - Centre state deltas on the main pass's `frame_means`.
 - **New tracked tables.**
-  - `configs/benchmarks/single_cell_source_chemistry.csv`: the assay per deposit, for scVI's nuisance and Task 5's
+  - `configs/benchmarks/single_cell_source_chemistry.csv`: the assay per deposit (per line or arm where a deposit mixes kits), for scVI's nuisance and Task 5's
     covariate.
   - `configs/context_prior/reference/kinker_programs.tsv`: Kinker's 12 programs, with provenance.
   - Task 5's ambient score doesn't exist; it is reported as unavailable.
@@ -242,10 +245,14 @@ hpc/run.sh stage-one-report configs/stage_one/architecture/report_3a.yaml
 
 **Launch:**
 ```
-STATES_PYTHON=.venv-states/bin/python hpc/run.sh cell-states configs/stage_one/states/telemetry.yaml --steps fit,project,inputs
-for i in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$i nohup hpc/run.sh pie-precompute configs/stage_one/states/telemetry.yaml --steps states --set ALL --shard $i/4 > outputs/launches/states_$i.log 2>&1 & done
-hpc/run.sh cell-states configs/stage_one/states/telemetry.yaml --steps report
+CFG=configs/stage_one/states/telemetry.yaml
+CUDA_VISIBLE_DEVICES=0 STATES_PYTHON=.venv-states/bin/python hpc/run.sh cell-states $CFG --steps fit,project,inputs
+for i in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$i nohup hpc/run.sh pie-precompute $CFG --steps states --set ALL --shard $i/4 > outputs/launches/states_$i.log 2>&1 & done
+wait   # every shard has exited (from another shell: until no pie_precompute process is left)
+hpc/run.sh pie-precompute $CFG --steps assemble_states --set ALL
+hpc/run.sh cell-states $CFG --steps report
 ```
+`hpc/README.md` ("The cell states") gives the same recipe.
 Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each take their own GPU ids, set at launch.
 
 ## Waves 2–5 (outline)

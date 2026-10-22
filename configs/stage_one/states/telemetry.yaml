@@ -1,0 +1,70 @@
+# State telemetry (PIE stage-one design §3.5 and Task 8; plan docs/specs/2026-10-17-pie-stage-one-plan.md, Wave 1B):
+# frozen cell-state vocabularies fitted on the single-cell training lines, projected on the lines with cells, the
+# state masses and inputs in PIE's input space with their controls, the frozen PIE on those inputs, and the report
+# people read before choosing the vocabularies Task 9 precomputes. Nothing is chosen in code; no model is trained on
+# GeneEffect. Protocol §17.
+#   STATES_PYTHON=.venv-states/bin/python hpc/run.sh cell-states CONFIG --steps fit,project,inputs
+#   hpc/run.sh pie-precompute CONFIG --steps states --set ALL --shard I/N      (one GPU per shard)
+#   hpc/run.sh pie-precompute CONFIG --steps assemble_states --set ALL
+#   hpc/run.sh cell-states CONFIG --steps report
+seed: 0
+# The stage-one inputs this reads (lines, cells, PIE's input, the frozen PIE's pass) and, through it, the prior's and
+# the noise diagnosis's configs (split, raw cells, prepared space, second deposits).
+ladder_config: configs/stage_one/ladder_inputs.yaml
+output_root: outputs/stage_one/state_telemetry
+fit:
+  # At most this many distinct cells per training line, drawn without replacement: a line with fewer cells contributes
+  # all of them once and weighs less (copies would let a full-covariance mixture spend components on them).
+  cells_per_line: 500
+  # The first seed's fit is the one projected into state inputs and read by PIE; the others are stability telemetry.
+  seeds: [0, 1, 2]
+  cycle_states: 3
+  mixture_counts: [4, 6, 8]
+  mixture_inits: 4
+  # Principal components of the line-centred HVG cells and Tx1 embeddings the mixtures sit on.
+  components: 50
+programs:
+  # Consensus NMF per training line (cNMF), at every K, then robust, non-redundant programs per line, cycle programs
+  # set aside, and the rest clustered across lines into recurrent programs (the Kinker and Gavish construction).
+  ks: [4, 6, 8]
+  iterations: 20
+  density_threshold: 0.5
+  highly_variable: 2000
+  top_genes: 50
+  # Of a program's top genes: shared with a program at another K of the same line (robust), with a kept program of
+  # the line (redundant), with Tirosh's S and G2/M genes (cycle), and with another line's program (linked across lines).
+  robust_overlap: 35
+  redundant_overlap: 10
+  cycle_overlap: 10
+  cluster_overlap: 10
+  # A cluster of programs from at least this many training lines is a recurrent program.
+  min_lines: 5
+scvi:
+  latent: 10
+  hidden: 128
+  layers: 1
+  max_epochs: 200
+  batch_size: 1024
+project:
+  # Test lines are added (train_cells, val, test) after the vocabulary choice is recorded.
+  roles: [train_cells, val]
+inputs:
+  merge_effective_count: 10
+  permutation_seeds: [0, 1, 2]
+  cycling_floor: 0.05
+references:
+  kinker: configs/context_prior/reference/kinker_programs.tsv
+  gavish: configs/context_prior/reference/meta_programs.tsv
+  hallmarks: configs/context_prior/reference/hallmark.tsv
+  tirosh: configs/context_prior/reference/cell_cycle.tsv
+  chemistry: configs/benchmarks/single_cell_source_chemistry.csv
+pie:
+  # The Task 2 pilot's genes (pie_precompute.pilot_genes at the ladder config's seed).
+  genes: 200
+  contexts_per_batch: 64
+report:
+  permutations: 1000
+  recurrence_mass: 0.05
+  clr_floor: 1.0e-4
+  # Cells per line drawn (seed 0) for matching states across fitting seeds.
+  stability_cells: 200

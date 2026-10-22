@@ -102,7 +102,19 @@ Task 2 (2026-10-17, [record](results/ladder_inputs/README.md)): every stage-one 
 masked; masking costs PIE 0.27 → 0.11 Spearman LFC on unseen Replogle perturbations). The 2026-10-17 revision adds
 **cell states** (design §3.5, Tasks 8 and 9): shared state vocabularies, each state's own expression read through the
 frozen PIE, the line's prediction a mixture of model-implied state scores, against permuted-membership and QC-state
-controls; the next builds are Task 3 and Task 8, in parallel.
+controls; the next builds are Task 3 and Task 8, in parallel. Task 3's shared stack (plan Wave 1A: the ladder
+reader, the FiLM, multi-encoder and direct-readout arms with Cilantro's tail, the trainer, the frame-refitted prior
+reference, the report; protocol §16) is built on `feat/stage-one` and ran on 2026-10-20/22
+([record](results/stage_one_architecture/README.md)). Three changes came out of its trials: the tail's ReLUs are leaky
+(Cilantro's ReLU tail died and returned the base), every run adds the BCE of the dependency call to the MSE (stage one
+hands stage two **calibrated context effects**), and the stage-one selector is the **per-line residual Spearman**
+(protocol §6: each held-out line's residuals across the selective genes, since stage two reads one line at a time;
+selective Spearman is reported beside it). On the main split no arm reaches the frame-refitted prior (validation
+per-line 0.215; best arm `film_dE_selective` 0.177); of PIE's deltas ΔE carries the line signal (above ΔL and its
+permuted and no-Δ controls), ΔH no more than a per-gene ridge on it. Task 8's state telemetry ran on 2026-10-22
+([record](results/state_telemetry_seed0/README.md)): deposit explains much of every vocabulary's state masses, and
+the frozen PIE's state gap (mixing states against reading the mixed input) is at most 0.019 of the whole-line ΔE's
+across-line spread, close to the permuted control's; which vocabularies Task 9 precomputes is for people to choose.
 The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.
@@ -128,6 +140,8 @@ hpc/run.sh prior-export CONFIG --run-id ID                  # the reference row 
 hpc/run.sh prior-stack CONFIG --run-id ID                   # single-cell q_sc statistics stacked on a prior export, CPU: single_cell_stack/ (protocol §13)
 hpc/run.sh prior-noise CONFIG --run-id ID [--sections A,B]  # noise diagnosis against a prior run, CPU: noise/ (protocol §14)
 hpc/run.sh pie-reproduce --run-id ID                        # PIE's released checkpoints re-scored by the vendored PIE in .venv-pie (hpc/pie/setup.sh), 1 GPU
+hpc/run.sh stage-one CONFIG [--fold K]                      # one stage-one run (configs/stage_one/), .venv-pie, 1 GPU; stage-one-queue --gpus ... CONFIG... runs many
+hpc/run.sh stage-one-report CONFIG                          # a stage-one report (results.md); stage-one-prior CONFIG --run-id ID: the frame-refitted prior, CPU
 uv run python -m src.experiments.compare_runs RUN_A RUN_B --split val   # paired line bootstrap of selective Spearman, A minus B
 uv run python -m src.evaluate --checkpoint <best.pt> --split val   # --split train for checkpoint diagnostics
 ```

@@ -21,7 +21,8 @@ is SL evidence. §10 specifies the linear context prior, a CPU control that the 
 compared against, §12 the single-cell correction that stacks the joint head on it, §13 the
 linear single-cell statistics stack, the first test of whether single-cell resolution adds to
 pseudo-bulk, and §14 the noise diagnosis, which measures what limits the default prior before any
-denoising model is built.
+denoising model is built. §15 holds the inputs of the PIE-based stage-one model and §16 the model, its
+training and its report.
 
 ## 1. Objective and prediction unit
 
@@ -306,7 +307,32 @@ pairs and the same train-defined variable-gene and selective-gene sets. Let $y_{
 fitted training gene mean, $r_{cg}=y_{cg}-\mu_g$ the target residual and $\hat r_{cg}$
 the predicted residual.
 
-### Selective-gene Spearman ↑ (selection criterion)
+### Per-line residual Spearman ↑ (selection criterion of stage one)
+
+For each evaluated line, the Spearman correlation across the selective genes between the predicted and measured
+residuals, over the genes labelled in that line, averaged over the lines with a defined value (lines scored are
+counted):
+
+$$
+\rho^{\mathrm{L}}_c=\operatorname{Spearman}_{g\in\mathcal G_{\mathrm{sel}}}(r_{cg},\hat r_{cg}),\qquad
+\rho^{\mathrm{L}}=\frac{1}{|C_{\mathrm L}|}\sum_{c\in C_{\mathrm L}}\rho^{\mathrm L}_c .
+$$
+
+Residuals are in scoring units (centred on $\mu_g$, divided by $\sigma_g$), so the gene mean, which a context-blind
+model already knows, is removed: in each line the metric asks which genes that line needs more or less than usual.
+It is `val_line_spearman`, the stage-one selector (§16, adopted 2026-10-21); contrasts resample lines in a paired
+bootstrap over the lines defined on both sides (`src/eval/geneeffect.py` `line_spearmans`, `line_spearman_gain`).
+Out of fold it is pooled over every line, since each line is compared with its own truth.
+
+**Why this metric.** Stage two is scored one held-out line at a time (blueprint §3.7, Task B: AUPRC over the line's
+pairs), and definition 1 compares a line with the *training* lines, whose GeneEffect is measured, never with other
+held-out lines' predictions. What stage two consumes is therefore each held-out line's own vector of context effects,
+comparable across genes; the line is the unit. Selective Spearman (below) takes the transposed view, the gene as unit
+and the order of the held-out lines within it, which accurate per-line effects imply but stage two never uses. On the
+first Task 3 rows the two pick the same winner, and the per-line metric is the stricter on controls: the
+line-permuted ΔE control scored 0.067 selective Spearman but 0.014 per line, the base's level (§16).
+
+### Selective-gene Spearman ↑ (selection criterion of the joint model and the correction runs)
 
 A gene is **selective** when it has a dependent tail among the labeled training lines but is
 not essential almost everywhere. With dependent meaning $y_{cg}<-0.5$, let $n_g$ be the number
@@ -327,7 +353,8 @@ excluded ([design](specs/2026-10-03-geneeffect-revision-design.md) §2). The per
 constant, so $\rho^{\mathrm S}_g$ is the rank correlation of the predicted and observed
 GeneEffect of gene $g$ across lines (the centring rules below apply). Undefined correlations are
 excluded and counted. This quantity is the selection criterion of §5
-(`val_selective_spearman`).
+(`val_selective_spearman`) for the joint model and the correction runs; stage one reports it beside its own selector,
+the per-line residual Spearman.
 
 **Why this metric.** Stage two reasons by the blueprint's definition 1
 ([§3.1](01-blueprint.md#31-synthetic-lethality-two-operational-definitions)), as cohort-based
@@ -1030,3 +1057,210 @@ in code.
   `pilot` (200 random panel genes), `basis` (the components and `pilot/pilot.md`: timing, the variance across lines
   within a gene against the variance between genes per delta, the variance the basis keeps) are read before `full`;
   `assemble` centres every delta within its gene on the frame lines' mean (`frame_means.npz`) into gene × line arrays.
+
+## 16. Stage-one model
+
+Task 3 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) (plan
+[2026-10-17](specs/2026-10-17-pie-stage-one-plan.md), Wave 1A) trains the architecture arms on the §15 inputs, one
+config per run (`configs/stage_one/architecture/`, `kind: train`), with `hpc/run.sh stage-one CONFIG [--fold K]`
+(`src/experiments/stage_one.py`, `.venv-pie`; the queue `stage-one-queue` runs every config and fold, one per GPU) and
+reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config). Nothing is chosen in code.
+
+- **Target and base.** `z = (GeneEffect − m_g) / σ_g` on the 981 frame lines, `m_g` their mean, `σ_g` the §6 residual SD;
+  the labelled pairs come from `src/data/ladder_reader.py` `training_targets`, which refuses any line but a
+  fit-eligible single-cell training line or a labelled bulk-only line. The loss is the mean squared error in `σ_g`
+  units over the labelled pairs plus `train.dependency_weight` (1) times the §5 `dependency_classification`
+  cross-entropy over the labelled pairs of selective genes (`src/training/stage_one_trainer.py`): stage one hands
+  stage two calibrated context effects (design §4.1). Every arm ends in Cilantro's tail (`FiLMNet128`'s `→ 64 → act → 32 → act → 1`) with a zero-initialised output,
+  so the untrained model predicts the base; no module holds a per-gene parameter (a gene enters through its sources).
+  The activation is a leaky ReLU of slope 0.01, not Cilantro's ReLU (`src/model/stage_one.py` `TAIL_SLOPE`). On the
+  H20 (2026-10-20, `outputs/stage_one_debug/`, learning rate 1e-3, 30 epochs) the ReLU tail died: 30 of the 32
+  viability units were never active by epoch 1 and all 32 by epoch 6 in `film_dH`, so z became one constant and
+  `lineage_only` and `film_dH` returned the base, with a selective Spearman read off near-constant outputs. GELU and
+  SiLU died the same way on `lineage_only` (constant predictions), as did ReLU with an RMSNorm after FiLM; the leaky
+  tail stayed alive on both (validation selective Spearman 0.106 and within-gene R² +0.017 for `lineage_only`,
+  0.073 for `film_dH`).
+  The 180 GeneEffect genes outside the decode panel predict the base.
+- **Scoring.** The scorer receives `(m_g − μ_g) / σ_g + z` and re-centres on the §6 377-line mean `μ_g`
+  (`src/eval/geneeffect.py` `wide_accuracy`): the per-line residual Spearman over the 4,323 selective genes (§6, the
+  selector); selective Spearman (4,323 genes) and, beside it, over the 4,269 in the panel; within-gene R² pooled over the selective genes (§14); AUPR lift, residual Pearson, per-line absolute Pearson,
+  RMSE; the calibration slope (`src/eval/metrics.py`: the measured residual on the predicted, pooled over the selective
+  genes with each gene's own offset removed; undefined for a prediction constant within every gene).
+- **Arms** (`src/model/stage_one.py`). *Virtual cell + FiLM*: the pair input → Linear 256 → ReLU → FiLM
+  (`[γ, β] = Linear(gene encoder)`) → tail. The pair input is `[Δ centred within gene ; frame mean Δ̄_g]` for ΔH and
+  ΔL, and for ΔE `[E(after) − E(before)` minus its value at the frame-mean states `; E(shift_g) − E(0)]` with the state
+  encoder E trained, the before-state `(x_c − x̄_frame) Cᵀ` read from PIE's input, the after-state
+  `before + dE + frame_mean_dE[g] + μ_Δ Cᵀ`; the change is computed in fp32 outside bf16 autocast, from E's first
+  layer's pre-activations (before, and before plus the step), so a step of ~1% of the state is not lost to
+  rounding, and the tail's output layer runs in fp32 too. ΔH and ΔE rows append the own-gene slots `own_dp` (g's predicted change)
+  and `own_x` (its basal value), each `[centred ; frame mean]`; ΔL, which reads no expression, has none. *Multi-encoder*:
+  the FiLM condition is the gene encoder ⊕ a context encoder (learned queries attending the line's tokens and its
+  Cellosaurus text, one attention per channel, outputs summed). A line token is one per gene in the panel ∪ the mean
+  channel's space: its gene encoding plus an embedding of both values (PIE's input, the mean of `log1p` CP10K, where
+  the source lists the gene; the mean channel, `log1p` of the pseudo-bulk mean in the prior's space). *Direct readout*:
+  a PIE-architecture trunk from fresh weights (`third_party/pie/src/pie/model/geneeffect.py`): the latents
+  cross-attend each channel (tokens; text) with its own masked attention, exact over key chunks; processor blocks;
+  each gene's query (gene encoder plus its own evidence, PIE's control-mean features of `x_cg`, zero where the
+  source does not list g) decodes `h(c, g)` → Linear 256 → ReLU → tail; tokens are dropped at `train.token_dropout`,
+  own evidence at `train.evidence_dropout`. Its warm row loads PIE's latents, norms, blocks, gene query MLP, control
+  evidence encoder and text projection by an explicit, strict name map (the token channel's attention starts fresh).
+  The gene encoder in Task 3 is a projection of `gene_text` (PIE's `gene_query_mlp` shape). Each gene source is
+  centred on its mean over the panel genes it covers (`data.centre_gene_sources`; label-free, over the gene axis,
+  not a per-gene parameter; the line tokens' gene vectors take the same mean): `gene_text` vectors have a mean
+  pairwise cosine of 0.51 and half their energy along their mean, and uncentred the FiLM arms' gene conditions
+  were nearly equal across genes, so the first H20 trials learned almost nothing gene-specific (the components
+  reader at validation selective Spearman ~0.02; centred, ~0.17 in its first epoch). The warm direct readout keeps
+  them uncentred, as PIE's gene query MLP was trained on.
+- **Hybrid** (`hybrid_dE`, added 2026-10-21 once the first queue had read ΔE best in both FiLM families):
+  `[direct readout features ; FiLM(ΔE) features]` → Linear 256 → ReLU → tail, the direct part with the cold
+  `direct_readout` row's trunk and training settings, the FiLM part with `film_dE`'s, on the panel genes;
+  `report_3a` contrasts it with both and with the prior. It trains after the per-line selector, so its `best.pt` is
+  chosen on per-line residual Spearman.
+- **Full-panel profile delta** (design §3.2's check of the compression). `data.genes: selective_full` restricts a run
+  to the selective genes in the panel with a full-panel predicted change (`pie/full/<gene>.npy`, lines × panel,
+  uncentred; `row.json` reports how many of the 4,269 have one and which lack it); every other gene predicts the base,
+  and `V.npy` covers the run's genes. `data.input: dE_full` reads ΔE on the full panel: before `x_c − x̄_frame` (PIE's
+  input), after plus `Δ̂(c, g)`, through the state encoder's fp32 change path with a 17,607-wide first layer. `Δ̂`
+  stays in its memory maps (`ladder_reader.FullStream`): each batch copies its genes' rows for its lines, centred on the
+  gene's frame mean (computed in one pass at the start, which also fills the host page cache), to the GPU in bf16.
+  Matched rows (`film_dE_selective`/`film_dE_full`, `multi_dE_selective`/`multi_dE_full`) share genes and steps;
+  `report_3a` contrasts full minus 512-component on the genes defined on both sides. Every epoch logs its update time
+  (`epoch_seconds`), and the full rows' `row.json` the frame-mean pass's seconds and bytes. Cost (an estimate until the
+  first epochs are logged): the files hold ~311 GB (4,269 × 1,036 × 17,607 fp32); an epoch reads ~295 GB of frame rows
+  (host gather and transfer, about 1–1.5 min from page cache, several minutes from disk) and ~1.1 × 10¹⁴ fp32 FLOP in
+  the first layer; 30 epochs are about 0.5–1 h per run, so the two full families × (main + 5 folds) take roughly
+  6–10 GPU-hours, plus the start pass per run; the 512-component selective rows cost about a quarter of a panel row.
+- **Controls and reference rows.** No-Δ FiLM (the multi-encoder with a learned constant for Δ); line-permuted Δ (per
+  gene, the delta, its slots and the before-state read from a seeded permutation of all lines); the shared components
+  reader, lineage only (one-hot over the training lines' lineages), Cellosaurus text only and own expression only, each
+  through the FiLM head; untrained in the report: the base, the default prior refitted on the frame
+  (`hpc/run.sh stage-one-prior`, `src/experiments/stage_one_prior.py`, project environment: its reference row on the
+  981 lines' mean channel with components fitted on the frame rows; validation and test from the whole frame, out of
+  fold from the frame folds with the components refitted outside each fold, the scores the components reader's fold
+  runs read; it writes the 128 component scores, fitted on the frame and outside each fold), and a
+  per-gene ridge on the line-centred ΔH (no intercept, solved in its dual on the GPU at the report's penalties).
+- **Training** (`src/training/stage_one_trainer.py`, one GPU, no accelerate). An update is a block of genes by a block
+  of training lines; AdamW, linear warmup then cosine (`src/training/schedule.py`); EMA weights when `train.ema_decay`
+  is set, which are then validated and saved. Validation runs before the first update (epoch 0) and after every
+  epoch; `best.pt` and early stopping follow the validation per-line residual Spearman alone (`val_line_spearman`,
+  from 2026-10-21; the first Task 3 queue selected on selective Spearman, and picked the same winner). Epoch 0 is the
+  base, a candidate when its score is defined (it usually is: the base varies across genes); its within-gene R² is
+  the base row's. The delta lives on the GPU in bf16, copied by gene chunk from its
+  memory map; checkpoints record the split membership and load strictly; a resume or a run directory refuses another
+  config. `last.pt` is written before `best.pt`, and a resume rewrites a `best.pt` that lags the recorded best epoch.
+- **Outputs.** `outputs/stage_one/<task>/<config stem>[__fold<k>]/`: `best.pt`, `last.pt`, `predictions.parquet` (every
+  line × every gene, scoring units), `V.npy` (the 32-d viability embedding, Cilantro's `l3` output before its activation,
+  every line × panel gene, fp16; `V.json` marks the lines trained on as in-sample) and `row.json`. A main run scores
+  validation, test once, and its single-cell training lines in-sample (the train-versus-validation gap); a fold run
+  (`--fold k`: fold k dropped, `m_g` refitted without it; `μ_g`, `σ_g` and the selective genes stay §6's; selection stays
+  on validation) scores its fold's single-cell training lines out of fold.
+- **Report.** Validation, test and out-of-fold tables (the five folds' predictions over the 377 single-cell training
+  lines, telemetry) of every row, with the per-line residual Spearman (and the lines scored), selective Spearman over
+  the 4,323 genes (and the count defined) and over the
+  4,269 in the panel. Out of fold each fold's lines are predicted around their own `m_g` without the fold, which
+  moves with the fold's labels, so pooled rank metrics are anti-correlated with the truth by construction (a base
+  scores below zero): selective Spearman, AUPR lift, residual Pearson and the calibration slope are scored within
+  each fold and averaged (per-fold counts kept), the per-line residual Spearman, within-gene R², RMSE and per-line
+  Pearson pooled. Each listed contrast's per-line residual Spearman difference (over the lines defined on both sides),
+  selective-Spearman difference (over the selective genes defined on both sides, counted; a row predicts
+  the base outside the panel) and within-gene-R² difference, with 95% paired line-bootstrap intervals (1,000
+  resamples) on validation and test; each trained row's selected epoch and training-to-validation gap. The report
+  and the queue read or skip a finished run only after checking its `run_config.json` against the config and fold,
+  and a run or prior reads the report's ladder config; a prior counts once its `row.json` exists; the ridge's cache
+  is keyed by a fingerprint of the ladder config, labels, lines, panel and `dH.npy`, and refused on a mismatch.
+  `outputs/stage_one/<task>/<report config stem>/results.md`.
+- **Scope.** Single-gene dependency on held-out lines; not SL evidence.
+
+## 17. Cell states
+
+Task 8 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) (§3.5; plan
+[2026-10-17](specs/2026-10-17-pie-stage-one-plan.md), Wave 1B): frozen cell-state vocabularies, the state inputs they
+give PIE and their controls, the frozen PIE on those inputs, and a telemetry report people read before choosing the
+vocabularies Task 9 precomputes. No model is trained on GeneEffect and nothing is chosen in code.
+`configs/stage_one/states/telemetry.yaml` names the stage-one inputs config (§15), whose ladder root holds `states/`,
+the frozen PIE's state outputs under `states/pie/` ([data card](data/cell-states.md)). `hpc/run.sh cell-states CONFIG --steps fit,project,inputs`, then
+`hpc/run.sh pie-precompute CONFIG --steps states --set ALL --shard I/N` and `--steps assemble_states --set ALL`, then
+`hpc/run.sh cell-states CONFIG --steps report` (`src/experiments/state_telemetry.py`, `src/data/cell_states.py`;
+`src/data/prepare/state_programs.py` in `.venv-states`, built by `hpc/states/setup.sh`). Every step skips what exists;
+`states/manifest.json` records the settings and refuses a root written under others (the projected roles may grow);
+moving `states/` aside moves the frozen PIE's state outputs with it.
+
+- **Fit scope.** Every vocabulary is fitted on the 377 labelled single-cell training lines alone (`fit_sample` runs
+  `assert_fit_eligible` and refuses any other role), on at most 500 distinct cells per line per fitting seed, drawn
+  without replacement: a line with fewer cells contributes each of them once and so weighs less. (Padding small lines
+  with copies, tried first, let a full-covariance mixture on 50 components spend whole components on one small line's
+  copies in a null simulation; the mixtures, the HVG and Tx1 principal components, scVI and cNMF all read distinct
+  cells.) Three fitting seeds (0, 1, 2) change the draw and every random start; seed 0's fit is the one projected into
+  state inputs.
+- **Vocabularies.** *Cycle*: a three-component Gaussian mixture (full covariances) on each cell's S and G2/M program
+  scores (§14, Task 2's `qc` columns), components named non-cycling (lowest on both), S and G2/M. *Recurrent programs*:
+  consensus NMF (cNMF 1.7.1) per training line on its drawn cells (each once), at K = 4, 6 and 8, 20 replicates, on the
+  line's 2,000 most overdispersed panel genes; robust programs (35 of the top 50 genes shared with a program at another
+  K), kept greedily unless they share 10 top genes with a kept one; a program sharing 10 top genes with Tirosh's S and
+  G2/M genes is a cycle program and set aside; the rest clustered across lines (average linkage on shared top genes, cut
+  at 10 of 50) and a cluster spanning 5 training lines is a recurrent program. The reference holds the recurrent programs,
+  the two cycle phases and a background program (the pooled sample's mean TPM profile): cNMF TPM spectra renormalised to
+  10⁶, averaged per line then over lines, divided by each gene's TPM SD over the pooled sample (starCAT's variance
+  normalisation with the SD fixed by the fit), on the pooled sample's overdispersed genes and the programs' top genes.
+  A cell's usages are starCAT's non-negative least squares of its scaled TPM on the fixed spectra, solved exactly per
+  cell (starCAT rescales by the query's own SD, which would make a cell's usages depend on the cells projected with it);
+  its memberships are its recurrent and background usages, cycle usages dropped, normalised to one (all background when
+  none): program-weighted pseudo-contexts, not exclusive states. *scVI* (scvi-tools 1.4.2, 10 latent dimensions) on the
+  pooled sample over STATE's HVGs, each cell's chemistry as the categorical nuisance
+  (`configs/benchmarks/single_cell_source_chemistry.csv`: a row per deposit, and for a deposit whose libraries mix kits
+  a row per line or per arm, the arm read from the cell's h5ad obs; the most specific matching row wins and a cell of
+  such a deposit matching none stops the step), the whole-library UMI as the size factor and the S and G2/M scores as
+  continuous covariates;
+  its encoder reads neither, so a cell's latent mean needs no category the fit saw; then a Gaussian mixture at K = 4, 6
+  and 8 on the latent, line-centred and absolute. *Baselines*: the same mixtures (line-centred) on the leading 50
+  principal components of the line-centred HVG cells and of the line-centred Tx1-3B embeddings. *QC states*: the same
+  mixtures on line-centred log UMI, genes detected and mitochondrial fraction, standardised by the pooled sample's SD.
+  Line-centring subtracts the line's mean over all of its cells.
+- **Projection.** Every cell of the lines in `project.roles` (training and validation lines; test lines are added after
+  the vocabulary choice is recorded) and of their second deposits (the noise diagnosis's, §14; no Tx1 there) under every
+  vocabulary and fitting seed: responsibilities computed row by row from the stored parameters, so projecting a line
+  twice, or with other cells, gives identical memberships (`memberships/`, `second/`).
+- **State inputs.** For line c with per-cell `u_i = log1p(CP10K_i)` recomputed from its raw h5ad as §15 computes PIE's
+  input (whole-library denominator, upper-case symbols, duplicates summed; an unlisted gene takes PIE's input value,
+  the frame mean) and memberships `q_ik`: mass `π_ck = Σ_i q_ik / n_c`, input `x_ck = Σ_i q_ik u_i / Σ_i q_ik`, so
+  `Σ_k π_ck x_ck` is the line's PIE input; the step stops if any set misses it by more than 10⁻⁴. A state of effective
+  cell count `(Σ_i q_ik)² / Σ_i q_ik²` below 10 is merged, smallest first, into the state whose input is nearest, its
+  membership column added (mass and weighted expression kept); a line can end with one state. Sets, at fitting seed 0:
+  every vocabulary; the cycling-weighted input (each cell weighted by its S plus G2/M membership plus 0.05, normalised;
+  a sensitivity row for proliferation weighting, not a growth model); and every vocabulary but the QC states with its
+  merged memberships permuted across the line's cells at seeds 0, 1 and 2 (the merge runs once, on the real
+  memberships, so every permuted set has the real set's states, masses, effective counts and overlap, and the line
+  input; the link to expression is broken). Each set also holds the line's whole-line input as a `|whole`
+  context. Per (line, state) the step also stores the membership-weighted mean of the cells' line-centred reference
+  program scores (Kinker's 12 recurrent programs, Gavish's 41 meta-programs, MSigDB hallmarks, Tirosh's S and G2/M, scored
+  as §14 scores programs over the panel; a program with no panel gene among its symbols, such as an outdated alias,
+  is not scored) and of their line-centred QC values.
+- **The frozen PIE on states.** Each (line, state) is a PIE context of its own, `<ModelID>|<set>|<state>`, with the
+  state's input as control mean, its line's Cellosaurus text and the masked sources of §15, on the dataset and
+  checkpoint of §15, for the pilot's 200 genes. Batches of 64 contexts, context-major: a batch runs its own reference
+  pass, then every gene, and its cached context tokens and control encodings are evicted after it; the encoder (which
+  reads no expression) runs once per distinct line in a batch; the last batch is padded with copies of its last context.
+  Stored per (gene, context): `dH` and `dE` (on the §15 basis) and the own feature (float16), the own predicted change
+  and own input (float32), with the fingerprint (SHA-256) of the line's state contexts, inputs and masses; a line's
+  pass of another fingerprint is refused, as is an assembly or a report over one. `assemble_states` centres them on the
+  main pass's frame means of the gene and records every line's fingerprint; an assembled set is skipped by the pass
+  and by assembly. The agreement check of §15 runs before each pass.
+- **Report** (`outputs/stage_one/state_telemetry/<config stem>/results.md`, `report.json`). Per vocabulary, on the
+  training lines at seed 0: each state's identity (the three highest reference programs and each group's best); the
+  share of each state's mass across lines explained by deposit (η² against deposit labels permuted within lineage,
+  deposits with under 5 lines pooled; the mean over states beside it) and by the lines' median log UMI, genes
+  detected and mitochondrial fraction (R²), and each state's within-line QC shift
+  in pooled within-line SD units; recurrence (the share of lines holding a state with mass ≥ 0.05) and each state's
+  spread across lines; the shares of variance of the singular values of the line × state masses in centred log-ratio
+  form (floor 10⁻⁴), its K − 1 contrasts; agreement of masses between a line's two deposits (per-state Pearson across
+  lines, per-line total-variation distance beside that between different lines); stability across fitting seeds (states
+  matched by the Hungarian method on their memberships' correlation over a fixed draw of 200 cells per training line,
+  the matched correlations and the training lines' masses' total-variation distance, a state left unmatched when the
+  fits' state counts differ counted against zero mass, and the unmatched mass per line). Validation lines from
+  deposits no training line comes from are projected again and compared. The frozen PIE's gap `Σ_k π_ck Δ(x_ck, g) − Δ(x̄_c, g)` for dH, dE and the own feature and own predicted
+  change (dL reads no expression), against the set's `|whole` context: pooled over genes and the role's lines, its energy
+  and its spread across lines within a gene, each over the whole-line delta's spread across lines within the gene; the
+  noise floor is the `|whole` context against the main pass on the same scale; per-shard seconds per context.
+- **Reading.** People choose which vocabularies Task 9 precomputes. A gap no larger than the permuted control's is not
+  by itself a reason to stop (design §5, Task 8). The per-state scores Task 9 produces are model-implied, never measured
+  per-state GeneEffects (design §3.5).

@@ -1,0 +1,41 @@
+# Task 3 of the PIE stage-one design (docs/specs/2026-10-16-pie-geneeffect-ladder-design.md §3.3, §5;
+# protocol §16): the hybrid, [direct readout features ; virtual cell + FiLM on ΔE] -> Linear 256 -> ReLU -> tail.
+# ΔE is the delta the first half of Task 3 read best in both FiLM families. The direct part is the
+# direct_readout row's trunk from fresh weights, with its training settings; the FiLM part is film_dE's.
+# Matched rows on the panel: direct_readout and film_dE (are the two complementary?).
+# `hpc/run.sh stage-one CONFIG [--fold K]`, or every config through `hpc/run.sh stage-one-queue`.
+kind: train
+task: architecture
+seed: 0
+output_root: outputs/stage_one
+data:
+  ladder_config: configs/stage_one/ladder_inputs.yaml
+  gene_sources: [gene_text]
+  centre_gene_sources: true
+  input: dE
+  own_slots: [own_dp, own_x]
+  permuted: false
+  prior_run: null
+  genes: panel
+model:
+  arm: hybrid
+  gene_width: 128
+  hidden: 256
+  state_width: 256
+  context: null
+  trunk: {d_model: 128, n_latents: 64, n_encoder_layers: 1, n_processor_layers: 2, n_decoder_layers: 1, num_heads: 4, ff_mult: 2, dropout: 0.1, attention_chunk: 32768, warm_start: null}
+train:
+  max_epochs: 30
+  patience: 5
+  warmup_epochs: 1
+  learning_rate: 3.0e-4
+  weight_decay: 0.05
+  ema_decay: 0.999
+  dependency_weight: 1.0
+  lines_per_step: 32
+  genes_per_step: 512
+  token_dropout: 0.4
+  evidence_dropout: 0.1
+eval:
+  lines_per_chunk: 32
+  genes_per_chunk: 1024

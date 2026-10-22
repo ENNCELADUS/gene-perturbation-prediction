@@ -1,0 +1,41 @@
+# Task 3 of the PIE stage-one design (docs/specs/2026-10-16-pie-geneeffect-ladder-design.md §3.3, §5;
+# protocol §16): the direct readout at PIE's width with its shared modules
+# warm-started from the frozen checkpoint (latents, norms, encoder/processor/decoder blocks, gene query MLP,
+# control-mean evidence encoder, the text projection); the token channel's attention starts fresh.
+# `hpc/run.sh stage-one CONFIG [--fold K]`, or every config through `hpc/run.sh stage-one-queue`.
+kind: train
+task: architecture
+seed: 0
+output_root: outputs/stage_one
+data:
+  ladder_config: configs/stage_one/ladder_inputs.yaml
+  gene_sources: [gene_text]
+  # Off for the warm row: PIE's gene query MLP was trained on the uncentred vectors.
+  centre_gene_sources: false
+  input: none
+  own_slots: []
+  permuted: false
+  prior_run: null
+  genes: panel
+model:
+  arm: direct_readout
+  gene_width: 768
+  hidden: 256
+  state_width: null
+  context: null
+  trunk: {d_model: 768, n_latents: 512, n_encoder_layers: 1, n_processor_layers: 2, n_decoder_layers: 1, num_heads: 8, ff_mult: 2, dropout: 0.1, attention_chunk: 32768, warm_start: data/pie/released/PIE_replogle_xdataset@f6da9607226139a1040b6992736118c9b5c7c313/best_auprc.ckpt}
+train:
+  max_epochs: 10
+  patience: 3
+  warmup_epochs: 1
+  learning_rate: 3.0e-4
+  weight_decay: 0.05
+  ema_decay: 0.999
+  dependency_weight: 1.0
+  lines_per_step: 8
+  genes_per_step: 256
+  token_dropout: 0.4
+  evidence_dropout: 0.1
+eval:
+  lines_per_chunk: 8
+  genes_per_chunk: 1024

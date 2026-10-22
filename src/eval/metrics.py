@@ -672,3 +672,30 @@ def paired_line_bootstrap(
         else (math.nan, math.nan)
     )
     return {"difference": observed, "interval": [float(low), float(high)]}
+
+
+def calibration_slope(predicted: np.ndarray, measured: np.ndarray) -> float:
+    """OLS slope of the measured residual on the predicted residual, pooled over
+    the columns (genes) of two lines x genes arrays, each gene's own offset removed.
+
+    Each column is centred on its own mean over the pairs where both values are
+    finite (a gene fixed effect), so the slope reads how the line-to-line spread of
+    the prediction scales against the truth's: 1 is calibrated, above 1 shrunk.
+    Undefined (NaN) when the prediction is constant within every gene, as a
+    context-blind prediction is.
+    """
+    predicted = np.asarray(predicted, dtype=np.float64)
+    measured = np.asarray(measured, dtype=np.float64)
+    if predicted.shape != measured.shape or predicted.ndim != 2:
+        raise ValueError("predicted and measured must be lines x genes of one shape")
+    valid = np.isfinite(predicted) & np.isfinite(measured)
+    count = valid.sum(axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        x_mean = np.where(valid, predicted, 0.0).sum(axis=0) / count
+        y_mean = np.where(valid, measured, 0.0).sum(axis=0) / count
+    x = np.where(valid, predicted - x_mean, 0.0)
+    y = np.where(valid, measured - y_mean, 0.0)
+    spread = float((x * x).sum())
+    if not spread > _RANK_VARIANCE_FLOOR:
+        return math.nan
+    return float((x * y).sum() / spread)
