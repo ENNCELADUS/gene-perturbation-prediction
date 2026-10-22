@@ -10,41 +10,9 @@ import pandas as pd
 import pytest
 
 from src.context_prior.bridge import fit_bridge
-from src.context_prior.bridge import BridgeBase, bridge_diagnostics, oof_bridged
+from src.context_prior.bridge import bridge_diagnostics, oof_bridged
 from src.context_prior.remedies import affine
-
-GENES = [f"G{i}" for i in range(12)]
-
-
-def base(seed=0):
-    rng = np.random.default_rng(seed)
-    sc = [f"S{i}" for i in range(20)]  # S18, S19 have no bulk row
-    paired = sc[:18]
-    extras = [f"E{i}" for i in range(10)]
-    signal = rng.normal(size=(len(sc) + 12, 12))
-    pseudo = pd.DataFrame(
-        signal + 0.3 * rng.normal(size=signal.shape),
-        index=[*sc, *[f"V{i}" for i in range(6)], *[f"T{i}" for i in range(6)]],
-        columns=GENES,
-    )
-    bulk = pd.DataFrame(
-        np.vstack([2 * signal[:18] + 1, rng.normal(size=(10, 12))]),
-        index=[*paired, *extras],
-        columns=GENES,
-    )
-    oracle = pd.DataFrame(
-        rng.normal(size=(6, 12)), index=[f"V{i}" for i in range(6)], columns=GENES
-    )
-    return BridgeBase(
-        bulk=bulk,
-        oracle=oracle,
-        pseudobulk=pseudo,
-        paired=tuple(paired),
-        single_cell_train=tuple(sc),
-        val=tuple(f"V{i}" for i in range(6)),
-        test=tuple(f"T{i}" for i in range(6)),
-        folds={m: i % 4 for i, m in enumerate(sc)},
-    )
+from tests.fixtures.prior import GENES, base
 
 
 def test_oof_rows_come_from_bridges_fitted_without_their_fold():

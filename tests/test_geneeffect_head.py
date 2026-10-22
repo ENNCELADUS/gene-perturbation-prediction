@@ -354,7 +354,7 @@ def _released_state(path: Path, hvg_order) -> Path:
 def prepared(tmp_path_factory):
     pytest.importorskip("state.tx.models.state_transition")
     from src.data.prepared import load_inputs
-    from tests.test_joint_data import make_prepared_fixture
+    from tests.fixtures.prepared import make_prepared_fixture
 
     root = tmp_path_factory.mktemp("joint_model")
     config = make_prepared_fixture(root, hvg_width=HVG)

@@ -8,10 +8,10 @@ import time
 import numpy as np
 import pytest
 
-import test_prepare as base
+from tests.fixtures import prepare as base
 from src.data import response as response_streaming
 from src.data.response import prefetched, read_xatlas_response_cells
-from test_prepare_equivalence import CAPPED, _write_xatlas, naive_xatlas_cells
+from tests.fixtures.xatlas import CAPPED, naive_xatlas_cells, write_xatlas
 
 
 # --- prefetched -----------------------------------------------------------
@@ -62,7 +62,7 @@ def _read(source: dict, caps: dict, seed: int):
 )
 def test_reservoir_matches_whole_cell_reference(tmp_path, caps) -> None:
     """Several shards, rejected rows, duplicate and unknown tokens, two caps."""
-    source = _write_xatlas(tmp_path, seed=300)
+    source = write_xatlas(tmp_path, seed=300)
     cells = _read(source, caps, seed=11)
     labels, sizes, aligned = naive_xatlas_cells(source, base.HVG, caps, seed=11)
     np.testing.assert_array_equal(cells.labels, labels)
@@ -73,7 +73,7 @@ def test_reservoir_matches_whole_cell_reference(tmp_path, caps) -> None:
 
 
 def test_only_rows_a_reservoir_keeps_are_converted(tmp_path, monkeypatch) -> None:
-    source = _write_xatlas(tmp_path, seed=300)
+    source = write_xatlas(tmp_path, seed=300)
     converted = []
     original = response_streaming.xatlas_token_rows
 
@@ -90,7 +90,7 @@ def test_only_rows_a_reservoir_keeps_are_converted(tmp_path, monkeypatch) -> Non
 
 
 def test_unknown_tokens_of_kept_cells_are_reported(tmp_path, caplog) -> None:
-    source = _write_xatlas(tmp_path, seed=300)
+    source = write_xatlas(tmp_path, seed=300)
     with caplog.at_level("WARNING", logger="src.data.response"):
         _read(source, CAPPED, seed=0)
     assert [r.message for r in caplog.records if "missing from" in r.message] == [

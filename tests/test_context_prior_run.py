@@ -7,14 +7,12 @@ from __future__ import annotations
 import copy
 import math
 import threading
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
 
-from src.context_prior.reference import Reference
 from src.context_prior.space import quantile_reference
 from src.context_prior.targets import Definitions
 from src.data.splits import FixedSplit
@@ -24,10 +22,8 @@ from src.experiments.prior import context_prior as run
 from src.data.io import jsonable, read_json
 from src.experiments.run_dir import bind, locked
 from src.experiments.prior.config import validate_prior_config
-from tests.test_context_prior_bridging import GENES, base
-
-CONFIG = yaml.safe_load(Path("configs/context_prior/bridge_remedies.yaml").read_text())
-TARGETS = GENES[:8]
+from tests.fixtures.prior import GENES
+from tests.fixtures.prior import CONFIG, synthetic_base, tiny_config
 
 
 def test_prior_config_is_strict():
@@ -254,75 +250,6 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
 # ----------------------------------------------------------------------------
 # The runner on synthetic lines
 # ----------------------------------------------------------------------------
-
-
-def tiny_config(tmp_path: Path) -> dict:
-    config = copy.deepcopy(CONFIG)
-    config["output_root"] = str(tmp_path / "out")
-    config["prior"] = {
-        "components": 4,
-        "folds": 4,
-        "bootstrap_repeats": 20,
-        "selected_genes": 2,
-    }
-    config["experiments"] = {
-        "affine": copy.deepcopy(CONFIG["experiments"]["affine"]),
-        "affine_again": {
-            "kind": "affine",
-            "settings": [{}],
-            "block_sets": ["components", "selected"],
-        },
-    }
-    return validate_prior_config(config)
-
-
-def synthetic_base(config) -> prior_base.RunBase:
-    """The bridging test's lines; labels follow expression with noise."""
-    bridge = base()
-    extras = [m for m in bridge.bulk.index if m not in set(bridge.paired)]
-    expression = pd.concat([bridge.pseudobulk, bridge.bulk.loc[extras]])
-    lines = list(expression.index)
-    rng = np.random.default_rng(1)
-    effect = (
-        -0.5
-        + 0.5 * expression.loc[:, GENES[1:9]].to_numpy()
-        + 0.2 * rng.normal(size=(len(lines), len(TARGETS)))
-    )
-    gene_effect = pd.DataFrame(effect, index=lines, columns=TARGETS)
-    gene_effect.iloc[0, 0] = np.nan  # a missing training label
-    definitions = Definitions(
-        genes=tuple(TARGETS),
-        gene_means=pd.Series(-0.5, index=TARGETS),
-        selective=tuple(TARGETS[:6]),
-        variable=tuple(TARGETS),
-        residual_scale=pd.Series(0.5, index=TARGETS),
-    )
-    side = pd.Index(list(bridge.bulk.index), name="model_id")
-    reference = Reference(
-        paralogs=pd.DataFrame(
-            {"gene": ["G0", "G2"], "paralog": ["G1", "G3"], "identity": [50.0, 40.0]}
-        ),
-        complexes=pd.DataFrame({"complex_id": [1, 1], "gene": ["G4", "G5"]}),
-        hallmark=pd.DataFrame({"gene_set": ["S"], "gene": ["G7"]}),
-        progeny=pd.DataFrame({"pathway": ["P"], "gene": ["G8"], "weight": [1.0]}),
-        drivers=pd.DataFrame({"KRAS": 0}, index=side),
-        msi=pd.Series(0.0, index=side),
-    )
-    return prior_base.RunBase(
-        config=config,
-        split=FixedSplit(
-            train=bridge.single_cell_train, val=bridge.val, test=bridge.test
-        ),
-        gene_effect=gene_effect,
-        definitions=definitions,
-        labelled=(*bridge.paired, *extras),
-        models=pd.DataFrame({"patient_id": lines, "lineage": "Lung"}, index=lines),
-        reference=reference,
-        bridge=bridge,
-        filled_lines=0,
-        profile=quantile_reference(bridge.bulk),
-        pseudobulk_fill=bridge.pseudobulk.loc[list(bridge.single_cell_train)].mean(),
-    )
 
 
 def test_run_setting_scores_every_block_set_and_penalty(tmp_path):

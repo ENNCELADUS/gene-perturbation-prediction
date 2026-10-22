@@ -195,15 +195,15 @@ def test_failed_export_is_retryable_without_changing_fit_status(tmp_path, monkey
 
 
 def test_prepared_fit_and_evaluation_restore_without_refitting(tmp_path, monkeypatch):
-    import test_joint
+    from tests.fixtures import joint as joint_world
 
     # Ten training bags of 16 cells support K64.
-    monkeypatch.setattr(test_joint, "CELLS", 16)
+    monkeypatch.setattr(joint_world, "CELLS", 16)
     monkeypatch.setattr(
-        test_joint, "TRAIN", (*test_joint.ANCHORS, *(f"ACH-T{i}" for i in range(6)))
+        joint_world, "TRAIN", (*joint_world.ANCHORS, *(f"ACH-T{i}" for i in range(6)))
     )
-    config = test_joint.make_config(tmp_path)
-    inputs = test_joint.make_inputs()
+    config = joint_world.make_config(tmp_path)
+    inputs = joint_world.make_inputs()
     calls = []
 
     def load_inputs(config, *, preprocessing=None, include_test=False):

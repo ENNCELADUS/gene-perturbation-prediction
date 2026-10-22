@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+import pytest
+
 # MPS fallback guard for torch tests. Some losses use
 # torch.cdist, whose backward is unimplemented on the MPS backend; the energy
 # distance therefore needs the CPU fallback. This env var must be set before
@@ -27,3 +29,12 @@ try:  # noqa: SIM105
     import xgboost  # noqa: F401
 except ImportError:
     pass
+
+
+@pytest.fixture
+def cpu(monkeypatch):
+    """Keep Accelerate off a visible MPS device, on one torch thread."""
+    import torch  # after xgboost, above
+
+    monkeypatch.setenv("ACCELERATE_USE_CPU", "true")
+    torch.set_num_threads(1)

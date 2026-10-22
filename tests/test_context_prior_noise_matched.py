@@ -11,7 +11,7 @@ from src.context_prior.prior import PriorInputs, PriorSpec, Stage, fit_prior, to
 from src.context_prior.reference import Reference
 from src.context_prior.remedies import affine, noise_matched
 from src.context_prior.views import fit_expression_components
-from tests.test_context_prior_bridging import GENES, base
+from tests.fixtures.prior import GENES, base
 
 
 def test_inputs_are_the_affine_remedy_s_plus_gene_rows():

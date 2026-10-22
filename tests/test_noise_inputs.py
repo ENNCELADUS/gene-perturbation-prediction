@@ -19,7 +19,7 @@ from src.experiments.prepare import (
     prepare_noise_inputs,
     prepare_second_source,
 )
-from tests.test_prepare import CELLS_PER_LINE, SOURCE_GENES, TRAIN, build_world
+from tests.fixtures.prepare import CELLS_PER_LINE, SOURCE_GENES, TRAIN, build_world
 
 
 def test_halves_split_the_cells_and_draws_nest():

@@ -11,7 +11,7 @@ from src.eval.accuracy import score
 from src.experiments.prior import base as run
 from src.experiments.prior import data_selected_analysis as analysis
 from src.experiments.prior.config import validate_prior_config
-from tests.test_context_prior_run import synthetic_base, tiny_config
+from tests.fixtures.prior import synthetic_base, tiny_config
 
 
 def gene_level_config(tmp_path, block_set="all"):

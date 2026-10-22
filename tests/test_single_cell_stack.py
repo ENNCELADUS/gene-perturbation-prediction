@@ -19,7 +19,7 @@ from src.context_prior.single_cell import (
 )
 from src.experiments.prior import single_cell_stack as stack
 from src.experiments.prior.config import validate_stack_config
-from tests.test_context_prior_run import TARGETS, synthetic_base, tiny_config
+from tests.fixtures.prior import TARGETS, synthetic_base, tiny_config
 
 CONFIG = yaml.safe_load(
     Path("configs/context_prior/single_cell_stack.yaml").read_text()
