@@ -1,60 +1,6 @@
-"""The frozen PIE's deltas for every line x panel gene (PIE stage-one design §3.2,
-Task 2), run in PIE's environment (``.venv-pie``).
-
-``python -m src.experiments.stage_one.pie_precompute CONFIG --steps STEPS [--shard I/N]
-[--device cuda]`` (``hpc/run.sh pie-precompute``) reads the ladder root that
-``src.experiments.stage_one.ladder_inputs`` wrote (``lines.parquet``, ``genes.parquet``,
-``mean/pie_input.parquet``) and the Cellosaurus ``context_text`` source. Steps,
-each skipping what exists:
-
-- ``rescore``: PIE_replogle_xdataset re-scored on Replogle ``test_seen`` and
-  ``test_unseen`` with its DepMap source masked, beside Task 1's unmasked
-  numbers (what masking costs PIE on its own task).
-- ``pilot``: the gene pass (below) on ``pie.pilot_genes`` random panel genes,
-  every line, keeping each pair's full predicted change.
-- ``basis``: the ``pie.components`` principal components of the pilot's
-  frame-line predicted changes (the profile delta's basis); the pilot report
-  ``pilot.md`` (timing, variance across lines within a gene against variance
-  between genes per delta, the basis's variance kept, and agreement with PIE's
-  own data path). People read it before ``full`` runs.
-- ``full``: the gene pass on every panel gene (``--shard I/N`` takes every
-  N-th), projecting each predicted change on the basis.
-- ``assemble``: every delta centred within its gene on the frame lines' mean
-  (the means stored) into gene x line arrays under ``pie/``.
-
-On a states config (``configs/stage_one/states/``, which names the ladder
-config), ``--steps states|assemble_states --set NAME[,NAME]|ALL`` (design §3.5,
-Task 8; ``src.experiments.states.state_telemetry`` writes the inputs):
-
-- ``states``: the frozen PIE on every (line, state) pseudo-context of the sets
-  (``<ModelID>|<set>|<state>``, the line's Cellosaurus text, the state's input
-  as control mean, the set's ``|whole`` context among them) for the pilot's
-  genes; ``--shard I/N`` takes every N-th line. Per line
-  ``states/pie/<set>/lines/<ModelID>.npz`` (with the line's state-input
-  fingerprint), skipped when present with the same fingerprint, refused with
-  another; an assembled set is skipped.
-- ``assemble_states``: per set, genes x contexts arrays centred on the main
-  pass's frame means, ``states/pie/<set>/``, with each line's fingerprint.
-
-The gene pass, for gene g and every line c: PIE's inputs are the line's control
-mean on the decode panel (``pie_input``), its Cellosaurus text where a record
-exists, g's perturbation sources and g's same-perturbation evidence from the
-checkpoint's training data (our dataset is not in that evidence, so nothing is
-excluded and the same-context blocks are empty). PIE's ``depmap_gene_effect``
-token is never served. The reference pass of each line has the same context and
-no perturbation source or response evidence. Per pair:
-
-- ``dH``: last decoder-layer gene features pooled over the panel, knockdown
-  minus reference;
-- ``dE``: the predicted change in mean expression (softmax expectation over the
-  delta-p bin centres at PIE's temperature), as basis coordinates; the full
-  panel is kept for the selective genes and the pilot;
-- ``dL``: the mean-pooled latent array, knockdown minus reference;
-- ``own``: g's own decoder feature, its own predicted change and its control
-  mean.
-
-It reports and decides nothing.
-"""
+"""The frozen PIE's deltas for every line x panel gene, and on the cell-state
+pseudo-contexts (PIE stage-one design §3.2, §3.5; protocol §15), in ``.venv-pie``,
+with PIE's ``depmap_gene_effect`` token never served."""
 
 from __future__ import annotations
 
@@ -99,30 +45,6 @@ STATE_STEPS: Final[tuple[str, ...]] = ("states", "assemble_states")
 TASK_ONE_RUN: Final[Path] = (
     REPO_ROOT / "outputs/pie_reproduction/pie_reproduction_20261016"
 )
-
-
-# --- paths ------------------------------------------------------------------------
-
-
-# --- the ladder's tables ------------------------------------------------------------
-
-
-# --- PIE --------------------------------------------------------------------------
-
-
-# --- the decode, as PIE runs it, with what does not change hoisted --------------
-#
-# PieModel._decode_group step for step (third_party/pie/src/pie/model/pie.py,
-# trunk.py, evidence.py), with three exact hoists: the decoder's memory keys and
-# values once per batch, not per gene chunk; the control-mean encoding once per
-# line batch and chunk for the whole run (it depends on the line, not on the
-# perturbation); the evidence-block encoders on one row, then expanded (the
-# blocks are the perturbation's, the same on every line). Under bf16 the chunk
-# runs through torch.compile, which fuses the norms, casts and the delta-p
-# expectation; the agreement check holds it to PIE's own forward.
-
-
-# --- the masked re-score ----------------------------------------------------------
 
 
 def rescore(out: Layout, device: str) -> dict[str, Any]:
@@ -180,9 +102,6 @@ def rescore(out: Layout, device: str) -> dict[str, Any]:
         }
         for row_set in ROW_SETS
     }
-
-
-# --- the basis and the pilot report -----------------------------------------------
 
 
 def fit_basis(
@@ -314,9 +233,6 @@ def write_pilot_report(out: Layout, report: Mapping[str, Any]) -> None:
     (out.pilot / "pilot.md").write_text("\n".join(lines))
 
 
-# --- assembly ---------------------------------------------------------------------
-
-
 def assemble(out: Layout, tables: Tables) -> dict[str, Any]:
     """Gene x line arrays under ``pie/``, each delta centred within its gene on
     the frame lines' mean (``<name>_frame_mean``); pilot genes, computed before
@@ -372,21 +288,6 @@ def assemble(out: Layout, tables: Tables) -> dict[str, Any]:
         },
     )
     return {"genes": len(genes), "lines": n_lines}
-
-
-# --- state pseudo-contexts (design §3.5, Task 8) ------------------------------------
-#
-# Each (line, state) is a context of its own, named ``<ModelID>|<set>|<state>``
-# (``src.data.cell_states``), whose control mean is the state's input and whose
-# Cellosaurus text is its owner line's. The main dataset and checkpoint are
-# reused. The pass is context-major: a batch of contexts runs its own reference
-# pass, then every gene, and its cached context tokens and control encodings
-# are evicted after it. The encoder reads no expression, so it runs once per
-# distinct owner in a batch (exact). The last batch is padded with copies of its
-# last context so the compiled decode sees one batch size.
-
-
-# --- entry point ------------------------------------------------------------------
 
 
 def run(

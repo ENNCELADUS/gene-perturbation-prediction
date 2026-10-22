@@ -123,7 +123,7 @@ def test_fold_summary_is_the_mean_and_sample_sd_of_the_all_rows():
         fold: metrics_table([(fold, 4, 0.0, 0.0), ("all", 4, auprc, lfc)])
         for fold, (auprc, lfc) in values.items()
     }
-    summary = reproduction.fold_summary(tables, METRICS).set_index("metric")
+    summary = reproduction.fold_summary(tables).set_index("metric")
     # binary_auprc: mean 0.4, deviations ±0.2 and 0, sample variance 0.08 / 2.
     assert summary.loc["binary_auprc", "mean"] == pytest.approx(0.4)
     assert summary.loc["binary_auprc", "sd"] == pytest.approx(np.sqrt(0.04))

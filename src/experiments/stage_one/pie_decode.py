@@ -1,5 +1,6 @@
-"""PIE's decode as it runs it, with what does not change across genes hoisted, the
-gene pass over every line, and the check that it agrees with PIE's own data path."""
+"""PIE's decode as it runs it (``PieModel._decode_group``, step for step), with what
+does not change across genes hoisted, the gene pass over every line, and the check
+that it agrees with PIE's own data path."""
 
 from __future__ import annotations
 
@@ -162,6 +163,9 @@ def _chunk_function(pie: Pie, mixed: bool) -> Any:
     return pie.cache["compiled"]
 
 
+# The hoists are exact: the decoder's memory keys and values depend on the batch, not
+# the gene chunk; the control encoding on the line, not the perturbation; the evidence
+# blocks on the perturbation alone, so they are encoded on one row and expanded.
 def forward_tensors(
     pie: Pie,
     batch: Any,

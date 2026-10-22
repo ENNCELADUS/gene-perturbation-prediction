@@ -1,34 +1,5 @@
-"""Stage-one runs on the ladder inputs (PIE stage-one design §3.3, §4, Task 3;
-protocol §16), in ``.venv-pie``.
-
-``python -m src.experiments.stage_one run CONFIG [--run-id ID] [--fold K]
-[--device cuda]`` (``hpc/run.sh stage-one``) trains one config (``kind: train``):
-the target is ``GeneEffect - m_g`` over the frame's 981 lines in units of
-``sigma_g`` (``--fold K`` drops fold K from training and refits ``m_g`` without
-it); ``best.pt`` is chosen on validation per-line residual Spearman; then every line is
-predicted once by ``best.pt``: ``predictions.parquet`` (every line x every gene, in
-scoring units ``(m_g - mu_g) / sigma_g + z``; the 180 genes outside the decode
-panel predict the base), ``V.npy`` (lines x panel genes x 32, fp16: the viability
-embedding, ``V.json`` marks the lines trained on as in-sample) and ``row.json``
-(validation; test once, in the main run only; the fold's single-cell training lines
-out of fold, in a fold run; the training lines in-sample). A run directory
-``<output_root>/<task>/<run id>[__fold<k>]`` belongs to one config; a run whose
-``row.json`` exists is skipped, and ``last.pt`` resumes an interrupted one.
-
-``queue --gpus 0,1,2,3 [--folds main,0,1,2,3,4] CONFIG...``
-(``hpc/run.sh stage-one-queue``) runs every training config and fold, one process
-per GPU, skipping configs of another kind and runs whose ``row.json`` exists.
-
-``report CONFIG [--device cuda]`` (``hpc/run.sh stage-one-report``) scores the rows
-a report config lists, trained and untrained (the base; the default prior refitted
-on the frame, ``src.experiments.stage_one.prior_reference``; a per-gene ridge on the
-line-centred decoder-feature delta, solved in its dual on the device), on
-validation and test and out of fold over the single-cell training lines, with
-the listed contrasts' 95% paired line-bootstrap intervals: ``results.md`` and
-``results.json`` in ``<output_root>/<task>/<report config stem>/``.
-
-Nothing is chosen in code: people read the report.
-"""
+"""Stage-one training runs, their queue over GPUs, and the report entry point (PIE
+stage-one design §3.3, §4, Task 3; protocol §16), in ``.venv-pie``."""
 
 from __future__ import annotations
 
@@ -46,7 +17,6 @@ import numpy as np
 import pandas as pd
 import torch
 
-from src.context_prior.targets import Definitions
 from src.data import ladder_reader as reader
 from src.data.io import read_json, write_json
 from src.experiments.run_dir import assert_bound, bind, locked
@@ -57,7 +27,6 @@ log = logging.getLogger(__name__)
 
 SPLITS = ("val", "test")
 ROW = "row.json"
-#: The metrics of the report's tables, in order.
 REPORTED = (
     ("line_spearman", "Per-line residual Spearman"),
     ("line_spearman_scored", "Lines scored"),
@@ -71,9 +40,6 @@ REPORTED = (
     ("rmse", "RMSE"),
     ("calibration_slope", "Calibration slope"),
 )
-
-
-# --- setup -------------------------------------------------------------------------
 
 
 def run_directory(config: Mapping[str, Any], run_id: str, fold: int | None) -> Path:
@@ -131,12 +97,6 @@ def bind_genes(run_dir: Path, genes: Sequence[str]) -> None:
         write_json(path, list(genes))
 
 
-# --- inputs on the device ------------------------------------------------------------
-
-
-# --- one run -------------------------------------------------------------------------
-
-
 def make_model(config: Mapping[str, Any], resident: Resident) -> torch.nn.Module:
     from src.model.stage_one import build_model, direct_readouts
 
@@ -174,6 +134,7 @@ def warm_start_trunk(
 
 
 def run(config_path: Path, run_id: str | None, fold: int | None, device: str) -> Path:
+    from src.eval.accuracy import wide_accuracy
     from src.experiments.stage_one.config import load_stage_one_config
     from src.training.stage_one_trainer import TrainingData, fit, load_strict, predict
 
@@ -227,11 +188,11 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
 
     def validate(module: torch.nn.Module) -> dict[str, Any]:
         z = predict(module, resident.batch, val_positions, len(genes), config)
-        scores = wide_scores(
+        scores = wide_accuracy(
             predictions_frame(setup, targets.m_g, z, val, genes),
             val_truth,
             definitions,
-            panel,
+            panel=panel,
         )
         return {f"val_{key}": value for key, value in scores.items()}
 
@@ -280,8 +241,8 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
         m for m in ladder.role_lines("train_cells") if m in in_sample
     ]
     scores = {
-        name: wide_scores(
-            predictions.loc[group], setup.truth(group), definitions, panel
+        name: wide_accuracy(
+            predictions.loc[group], setup.truth(group), definitions, panel=panel
         )
         for name, group in scored.items()
     }
@@ -309,20 +270,6 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
         scores["val"]["line_spearman"],
     )
     return run_dir
-
-
-def wide_scores(
-    prediction: pd.DataFrame,
-    truth: pd.DataFrame,
-    definitions: Definitions,
-    panel: Sequence[str],
-) -> dict[str, Any]:
-    from src.eval.accuracy import wide_accuracy
-
-    return wide_accuracy(prediction, truth, definitions, panel=panel)
-
-
-# --- the queue ---------------------------------------------------------------------
 
 
 def queue(configs: Sequence[Path], gpus: Sequence[str], folds: Sequence[str]) -> int:
@@ -380,15 +327,6 @@ def queue(configs: Sequence[Path], gpus: Sequence[str], folds: Sequence[str]) ->
         time.sleep(5)
     print(f"queue finished; failed: {failed or 'none'}", flush=True)
     return len(failed)
-
-
-# --- the per-gene ridge on the decoder-feature delta --------------------------------
-
-
-# --- the report -----------------------------------------------------------------------
-
-
-# --- entry point --------------------------------------------------------------------
 
 
 def main(argv: Sequence[str] | None = None) -> int:

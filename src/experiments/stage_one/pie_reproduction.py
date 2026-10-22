@@ -1,30 +1,6 @@
-"""PIE reproduction: PIE's released checkpoints, run through the vendored code on
-PIE's own data, splits and sources, against the metrics PIE released with them.
-
-``hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps
-fetch,download,evaluate,compare]`` (in ``.venv-pie``)
-covers ``PIE_replogle_xdataset`` on Replogle ``test_seen`` and ``test_unseen`` and the
-four ``PIE_replogle_wdataset`` folds on their ``unseen_ctx`` test splits. Steps, each
-skipped when its outputs exist, so rerunning with the same id resumes:
-
-- ``fetch``: the pinned checkpoints, their configs and data stats, and the released
-  ``metrics_best_auprc.csv`` and ``granular_best_auprc.csv`` into
-  ``$PIE_DATA_ROOT/released/<repo>@<revision>/``; the released tables copied to
-  ``released/<experiment>/<row set>/``; ``runs/<experiment>/`` holds links to the
-  checkpoint files only (``pie eval`` refuses to overwrite an existing ``eval/``);
-- ``download``: every split, dataset and source the checkpoints pin, through PIE's
-  own resolver into ``$PIE_DATA_ROOT/hf/``, each retried until it is complete
-  (``downloaded.json``);
-- ``evaluate``: ``pie.evaluate.run_eval`` per target, writing
-  ``runs/<experiment>/eval/<row set>/``;
-- ``compare``: released against reproduced, per context and per (context,
-  perturbation) pair, into ``comparison.csv``, ``granular_comparison.csv`` and
-  ``results.md``, with the wdataset fold summary beside the model card's.
-
-Everything goes into ``outputs/pie_reproduction/<run id>/``, with ``run.json``
-recording the pins, the environment and each step's times. It reports and
-decides nothing.
-"""
+"""PIE reproduction (PIE stage-one design Task 1): PIE's released checkpoints, run
+through the vendored code on PIE's own data, splits and sources, against the metrics
+PIE released with them, into ``outputs/pie_reproduction/<run id>/``."""
 
 from __future__ import annotations
 
@@ -209,18 +185,16 @@ def compare_granular(released: pd.DataFrame, reproduced: pd.DataFrame) -> pd.Dat
     return pd.DataFrame(rows)
 
 
-def fold_summary(
-    tables: Mapping[str, pd.DataFrame], metrics: Sequence[str] = FOLD_METRICS
-) -> pd.DataFrame:
+def fold_summary(tables: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
     """Mean and SD of each metric over the folds' ``all`` rows. The SD is the sample
     SD (ddof=1): it regenerates the wdataset model card's 0.0286 and 0.0411 from the
     four released ``all`` rows, where ddof=0 gives 0.0248 and 0.0356."""
-    values = {metric: [] for metric in metrics}
+    values = {metric: [] for metric in FOLD_METRICS}
     for fold, table in tables.items():
         overall = table[table["context"] == ALL_CONTEXT]
         if len(overall) != 1:
             raise ValueError(f"fold {fold}: expected one {ALL_CONTEXT!r} row")
-        for metric in metrics:
+        for metric in FOLD_METRICS:
             values[metric].append(float(overall[metric].iloc[0]))
     return pd.DataFrame(
         [
@@ -329,9 +303,6 @@ def results_markdown(
         )
     lines.append("")
     return "\n".join(lines)
-
-
-# --- steps -------------------------------------------------------------------------
 
 
 def _released_table(run_dir: Path, target: Target, kind: str) -> Path:
@@ -564,9 +535,6 @@ def compare(run_dir: Path, run_id: str) -> None:
         results_markdown(run_id, comparisons, granular, folds)
     )
     log.info("PIE reproduction: %s", run_dir / "results.md")
-
-
-# --- record ------------------------------------------------------------------------
 
 
 def environment() -> dict[str, object]:

@@ -25,14 +25,10 @@ def centred(vectors: np.ndarray, present: np.ndarray, mean: np.ndarray) -> np.nd
 
 
 class Resident:
-    """The inputs a training config reads, on the device: gene sources on the
-    panel; the delta (bf16 on CUDA, by gene chunk from its memory map) with its
-    frame mean and the own-gene slots; the profile delta's states; a line-level
-    input; the line tokens and Cellosaurus text; PIE's input as each gene's own
-    evidence; the full-panel profile delta streamed by gene chunk (``FullStream``).
-    ``batch(genes, lines)`` assembles a ``PairBatch`` from positions in ``genes``
-    (the run's genes) and line positions; a permuted control reads, for each gene,
-    another line's delta and slots (a fixed permutation of the lines, seeded)."""
+    """The inputs a training config reads, on the device. ``batch(genes, lines)``
+    assembles a ``PairBatch`` from positions in the run's genes and line positions;
+    a permuted control reads, for each gene, another line's delta and slots (a
+    fixed, seeded permutation of the lines)."""
 
     def __init__(
         self,
