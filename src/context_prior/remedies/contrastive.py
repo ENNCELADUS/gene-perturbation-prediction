@@ -11,7 +11,7 @@ import pandas as pd
 
 from src.context_prior.alignment import fit_alignment
 from src.context_prior.bridge import fit_bridge
-from src.context_prior.bridging import BridgeBase, BridgeInputs
+from src.context_prior.bridge import BridgeBase, BridgeInputs
 from src.context_prior.remedies import affine
 
 #: The setting's keys: directions of pseudo-bulk-excess and bulk-excess variance.

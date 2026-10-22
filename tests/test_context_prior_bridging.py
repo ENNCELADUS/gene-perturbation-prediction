@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from src.context_prior.bridge import fit_bridge
-from src.context_prior.bridging import BridgeBase, bridge_diagnostics, oof_bridged
+from src.context_prior.bridge import BridgeBase, bridge_diagnostics, oof_bridged
 from src.context_prior.remedies import affine
 
 GENES = [f"G{i}" for i in range(12)]

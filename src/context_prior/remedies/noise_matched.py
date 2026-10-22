@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
-from src.context_prior.bridging import BridgeBase, BridgeInputs, oof_bridged
+from src.context_prior.bridge import BridgeBase, BridgeInputs, oof_bridged
 from src.context_prior.remedies import affine
 
 

@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.context_prior.bridging import BridgeBase, BridgeInputs
+from src.context_prior.bridge import BridgeBase, BridgeInputs
 from src.context_prior.remedies import affine
 from src.data.context_pca import fit_context_pca
 

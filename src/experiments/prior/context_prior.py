@@ -23,7 +23,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.context_prior.bridging import bridge_diagnostics
+from src.context_prior.bridge import bridge_diagnostics
 from src.eval.accuracy import gain
 from src.data.io import read_json, write_json, write_text
 from src.experiments.prior.config import load_prior_config

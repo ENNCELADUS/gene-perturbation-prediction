@@ -40,7 +40,7 @@ import numpy as np
 import pandas as pd
 
 from src.context_prior.bridge import Bridge, bridge_quality, fit_bridge
-from src.context_prior.bridging import oof_bridged
+from src.context_prior.bridge import oof_bridged
 from src.context_prior.folds import training_side_folds
 from src.context_prior.noise import (
     cluster_proportions,
