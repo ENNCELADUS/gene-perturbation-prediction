@@ -16,6 +16,9 @@ import yaml
 
 from src.context_prior import noise
 from src.experiments.prior import noise_diagnosis as run
+from src.experiments.prior import diagnosis as nd_base
+from src.experiments.prior import noise_report as nd_report
+from src.experiments.prior import noise_sections as nd_sections
 from src.experiments.prior.config import validate_noise_config, validate_prior_config
 from src.experiments.prior.prior_export import export_predictions
 from tests.test_context_prior_run import synthetic_base, tiny_config
@@ -137,7 +140,7 @@ def test_config_programs_are_pinned_and_none_has_a_cell_line_study():
     assert programs[:2] == ["S", "G2M"]
     assert set(programs[2:]) == clean
     base = type("Base", (), {"config": {"paths": {"reference": str(root)}}})()
-    members = run.program_members(base, CONFIG)
+    members = nd_base.program_members(base, CONFIG)
     assert list(members) == programs
     assert len(members["S"]) == 43 and len(members["G2M"]) == 54
     assert all(len(genes) >= 48 for name, genes in members.items() if name[:2] == "MP")
@@ -148,7 +151,7 @@ def test_config_programs_are_pinned_and_none_has_a_cell_line_study():
 # ----------------------------------------------------------------------------
 
 
-class SyntheticDiagnosis(run.Diagnosis):
+class SyntheticDiagnosis(nd_base.Diagnosis):
     """A diagnosis whose prepared files are frames held in memory."""
 
     raw: pd.DataFrame
@@ -235,7 +238,7 @@ def diagnosis(tmp_path) -> SyntheticDiagnosis:
 
 
 def test_cell_sampling_reports_reliability_and_every_draw(diagnosis, tmp_path):
-    result = run.cell_sampling(diagnosis, tmp_path)
+    result = nd_sections.cell_sampling(diagnosis, tmp_path)
     genes = pd.read_csv(tmp_path / "cell_sampling_genes.csv", index_col="gene")
     assert list(genes.index) == list(diagnosis.base.bridge.pseudobulk.columns)
     assert genes["reliability"].median() > 0.5  # halves differ by small noise
@@ -263,14 +266,14 @@ def test_agreement_readings_leave_unmeasured_values_missing(diagnosis):
 
 
 def test_the_reference_fit_must_reproduce_the_export(diagnosis):
-    run.reference_fit(diagnosis)
+    nd_base.reference_fit(diagnosis)
     diagnosis.export.loc[list(diagnosis.base.bridge.val)] += 0.01
     with pytest.raises(ValueError, match="differ from the export"):
-        run.reference_fit(diagnosis)
+        nd_base.reference_fit(diagnosis)
 
 
 def test_learning_curve_ends_at_the_prior_itself(diagnosis, tmp_path):
-    section = run.learning_curve(diagnosis, tmp_path)
+    section = nd_sections.learning_curve(diagnosis, tmp_path)
     rows = section["rows"]
     assert [row["fraction"] for row in rows] == [0.5, 0.75, 1.0]
     sizes = [row["training_side_lines"] for row in rows]
@@ -287,7 +290,7 @@ def test_learning_curve_ends_at_the_prior_itself(diagnosis, tmp_path):
         # The synthetic lines carry context the prior reads.
         assert full["r2_over_gene_mean"]["difference"] > 0
         assert full["prior"]["absolute_pearson"] > 0
-    markdown = "\n".join(run._learning_curve_md(section))
+    markdown = "\n".join(nd_report._learning_curve_md(section))
     assert "Within-gene R²" in markdown and "Cilantro R² over gene mean" in markdown
 
 
@@ -295,7 +298,7 @@ def test_cilantro_rows_score_only_the_pairs_stage_one_covers(diagnosis, tmp_path
     base = diagnosis.base
     path = tmp_path / "stage_one.csv"
     rows, covered = _stage_one(base, path)
-    result = run.cilantro_rows(diagnosis, path)
+    result = nd_sections.cilantro_rows(diagnosis, path)
     for split in ("val", "test"):
         entry = result[split]
         split_lines = list(getattr(base.bridge, split))
@@ -306,13 +309,15 @@ def test_cilantro_rows_score_only_the_pairs_stage_one_covers(diagnosis, tmp_path
         assert entry["prior_over_cilantro"]["difference"] < 0
         assert entry["cilantro_over_gene_mean"]["difference"] > 0
     section = {
-        "rows": run.learning_curve(diagnosis, tmp_path)["rows"],
+        "rows": nd_sections.learning_curve(diagnosis, tmp_path)["rows"],
         "cilantro": result,
     }
-    assert "Cilantro R² over gene mean" in "\n".join(run._learning_curve_md(section))
+    assert "Cilantro R² over gene mean" in "\n".join(
+        nd_report._learning_curve_md(section)
+    )
     rows.iloc[[0, 0]].to_csv(path, index=False)
     with pytest.raises(ValueError, match="duplicate"):
-        run.cilantro_rows(diagnosis, path)
+        nd_sections.cilantro_rows(diagnosis, path)
 
 
 def test_within_gene_r2_sums_and_paired_gain():
@@ -334,8 +339,8 @@ def test_deposit_confound_reports_both_groupings(diagnosis, tmp_path, monkeypatc
         ["big"] * 10 + ["mid"] * 6 + ["tiny"] * 2 + ["mid"] * (len(train) - 18),
         index=train,
     )
-    monkeypatch.setattr(run, "_deposits", lambda found: deposits)
-    result = run.deposit_confound(diagnosis, tmp_path)
+    monkeypatch.setattr(nd_sections, "_deposits", lambda found: deposits)
+    result = nd_sections.deposit_confound(diagnosis, tmp_path)
     assert result["pooled_as_other"] == ["tiny"]
     assert set(result["per_deposit"]) == {"big", "mid", "other"}
     for of in ("error", "residual"):
@@ -351,7 +356,7 @@ def test_one_deposit_under_two_names_is_one_group(tmp_path):
         }
     ).to_csv(split.with_suffix(".csv"), index=False)
     found = SimpleNamespace(joint={"paths": {"split": str(split)}})
-    deposits = run._deposits(found)
+    deposits = nd_sections._deposits(found)
     assert deposits.to_dict() == {
         "ACH-1": "tahoe100m",
         "ACH-2": "tahoe100m",
@@ -369,12 +374,12 @@ def test_deposit_swap_reads_each_line_four_ways(diagnosis, tmp_path, monkeypatch
         lambda joint, genes, root: tmp_path / "second" / "manifest.json",
     )
     monkeypatch.setattr(
-        run, "_deposits", lambda found: pd.Series("d0", index=diagnosis.train)
+        nd_sections, "_deposits", lambda found: pd.Series("d0", index=diagnosis.train)
     )
     monkeypatch.setattr(
-        run.Diagnosis, "pseudobulk_genes", lambda self: list(self.raw.columns)
+        nd_base.Diagnosis, "pseudobulk_genes", lambda self: list(self.raw.columns)
     )
-    result = run.deposit_swap(diagnosis, tmp_path)
+    result = nd_sections.deposit_swap(diagnosis, tmp_path)
     assert result["lines"] == 12
     assert set(result["scores"]) == {"primary", "second", "half_a", "half_b"}
     assert result["scores"]["primary"]["gain"]["difference"] == 0.0
@@ -387,7 +392,7 @@ def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypa
     rng = np.random.default_rng(5)
     every = [*diagnosis.train, *diagnosis.base.bridge.val, *diagnosis.base.bridge.test]
     monkeypatch.setattr(
-        run,
+        nd_sections,
         "_program_scores",
         lambda found, lines: (
             {m: rng.normal(size=(40, 3)) for m in lines},
@@ -403,13 +408,13 @@ def test_cell_states_stack_every_arm_on_the_export(diagnosis, tmp_path, monkeypa
         ),
     )
     monkeypatch.setattr(
-        run,
+        nd_sections,
         "_context_cells",
         lambda found, lines: {
             m: rng.normal(size=(30, 8)).astype(np.float32) for m in lines
         },
     )
-    result = run.cell_states(diagnosis, tmp_path)
+    result = nd_sections.cell_states(diagnosis, tmp_path)
     assert set(result["arms"]) == {
         "program_fractions",
         "program_means",
@@ -435,7 +440,7 @@ def test_main_writes_sections_and_skips_finished_ones(diagnosis, tmp_path, monke
         run.RUNNERS,
         "learning_curve",
         lambda found, out: (
-            calls.append("learning_curve") or run.learning_curve(found, out)
+            calls.append("learning_curve") or nd_sections.learning_curve(found, out)
         ),
     )
     config = copy.deepcopy(diagnosis.config)
