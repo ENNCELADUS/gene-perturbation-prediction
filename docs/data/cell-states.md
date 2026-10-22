@@ -1,9 +1,9 @@
 # Cell-state telemetry inputs
 
 **Status:** code built 2026-10-17 (Wave 1B of the [stage-one plan](../specs/2026-10-17-pie-stage-one-plan.md), Task 8 of
-the [PIE stage-one design](../specs/2026-10-16-pie-geneeffect-ladder-design.md)); not yet run on the H20. Definitions
-are in [protocol §17](../03-geneeffect-protocol.md#17-cell-states); the run record will be
-`results/state_telemetry_seed0/README.md`.
+the [PIE stage-one design](../specs/2026-10-16-pie-geneeffect-ladder-design.md)); run on the H20 2026-10-21/22. Definitions
+are in [protocol §17](../03-geneeffect-protocol.md#17-cell-states); the run record is
+[`results/state_telemetry_seed0/README.md`](../../results/state_telemetry_seed0/README.md).
 
 ## Role
 

@@ -3,7 +3,8 @@
 **Spec:** [the PIE stage-one design](2026-10-16-pie-geneeffect-ladder-design.md), as revised 2026-10-17. **Status:** approved
 2026-10-17; Wave 0 done 2026-10-17 ([record](../../results/ladder_inputs/README.md)); Wave 1A built 2026-10-17
 on `feat/stage-one` (protocol §16), Task 3 run and reported 2026-10-22
-([record](../../results/stage_one_architecture/README.md)).
+([record](../../results/stage_one_architecture/README.md)); Wave 1B (Task 8) run and reported 2026-10-22
+([record](../../results/state_telemetry_seed0/README.md)).
 
 ## Context
 
