@@ -1,16 +1,80 @@
-"""Single-device, fixed-cache readout-head optimization with ordinary early stopping."""
+"""The readout head on the frozen joint backbone's cached features: the head
+itself, its fit with ordinary early stopping, and its evaluation and export."""
 
+from copy import deepcopy
+import torch
+from torch import nn
+from src.data.batches import FeatureBatch
+from src.model.head import (
+    GeneEffectBlockConfig,
+    GeneEffectFeatureDims,
+    GeneEffectMLP,
+)
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
-
-import torch
 from torch.nn import functional as F
-
-from src.eval.readout import evaluate_head, export_checkpoint
-from src.model.readout import make_readout
 from src.model.normalization import BlockStandardizer
 from src.training.checkpoint import TrainState, record_validation
+import pandas as pd
+import numpy as np
+from src.eval.accuracy import EvalResult, aggregate_geneeffect
+
+
+ARMS = ("A0", "A1", "A2", "A3")
+
+
+class FixedReadout(nn.Module):
+    """Consume standardized features and optionally add per-gene PCA slopes."""
+
+    def __init__(self, mlp: GeneEffectMLP, n_genes: int, explicit: bool):
+        super().__init__()
+        self.mlp = mlp
+        self.slopes = nn.Parameter(torch.zeros(n_genes, 8)) if explicit else None
+
+    def forward(self, features: FeatureBatch, gene_indices, contexts):
+        response = self.mlp.blocks.use_s
+        prediction = self.mlp(
+            delta_proj=features.delta_proj if response else None,
+            s=features.s if response else None,
+            hvg_panel_mask=features.hvg_panel_mask if response else None,
+            own_gene_shift_mask=features.own_gene_shift_mask if response else None,
+            q_sc=features.q_sc,
+            q_sc_mask=features.q_sc_mask,
+            e_g=features.e_g,
+            z_c=features.z_c,
+        )
+        if self.slopes is not None:
+            prediction = prediction + (self.slopes[gene_indices] * contexts).sum(-1)
+        return prediction
+
+    def regularization(self):
+        """Sum over eight slopes, mean over all covered genes, lambda 0.01."""
+        if self.slopes is None:
+            return next(self.parameters()).new_zeros(())
+        return 0.01 * self.slopes.square().sum(dim=1).mean()
+
+
+def make_readout(
+    arm: str, dims: GeneEffectFeatureDims, n_genes: int, *, seed: int = 0
+) -> FixedReadout:
+    """Seeded canonical MLP; copy common columns when removing the response block."""
+    if arm not in ARMS or n_genes < 1:
+        raise ValueError("require A0-A3 and at least one training-covered gene")
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(seed)
+        canonical = GeneEffectMLP(dims)
+        if arm in {"A1", "A3"}:
+            mlp = canonical
+        else:
+            mlp = GeneEffectMLP(
+                dims, GeneEffectBlockConfig(use_delta_proj=False, use_s=False)
+            )
+            state = deepcopy(canonical.state_dict())
+            offset = dims.delta_proj + dims.s + 2
+            state["net.0.weight"] = state["net.0.weight"][:, offset:].clone()
+            mlp.load_state_dict(state)
+    return FixedReadout(mlp, n_genes, arm in {"A2", "A3"})
 
 
 @dataclass(frozen=True)
@@ -198,3 +262,89 @@ def fit_readout(
         status()
         raise
     return export_checkpoint(cache, out_dir / "best.pt", device=device)
+
+
+def evaluate_head(
+    model, cache, split, *, device="cpu", standardizer=None, batch_size=1024
+):
+    """Evaluate all finite cached rows, retaining the tail and undefined metrics."""
+    if split not in {"train", "val"}:
+        raise ValueError("P1-A evaluates train and val only")
+    frame = cache.labels(split)
+    predictions = np.empty(len(frame), dtype=np.float32)
+    model.eval()
+    with torch.no_grad():
+        for start in range(0, len(frame), batch_size):
+            indices = slice(start, start + batch_size)
+            feature, genes, contexts, _ = cache.batch(
+                split, indices, device, standardizer=standardizer
+            )
+            predictions[indices] = model(feature, genes, contexts).float().cpu().numpy()
+    frame["residual_prediction"] = predictions
+    frame["geneeffect_prediction"] = (
+        predictions.astype(float) + cache.splits[split]["gene_mean"]
+    )
+    metrics, lines, genes = aggregate_geneeffect(
+        frame,
+        model_ids=cache.metadata["split_lines"][split],
+        genes=cache.genes,
+        variable_genes=cache.variable_genes,
+        selective_genes=cache.selective_genes,
+    )
+    return EvalResult(
+        {f"{split}_{key}": value for key, value in metrics.items()},
+        frame,
+        lines,
+        genes,
+        pd.DataFrame(),
+    )
+
+
+def evaluate_readout(cache, saved, split, *, device="cpu"):
+    """Restore a diagnostic head and its fitted scaler, without any fitting."""
+    if saved["cache_metadata"] != cache.metadata:
+        raise ValueError("checkpoint and feature cache identities differ")
+    model = make_readout(saved["arm"], cache.dims, len(cache.genes)).to(device)
+    model.load_state_dict(saved["model_state"])
+    scaler = BlockStandardizer.from_state(saved["standardizer"])
+    return evaluate_head(model, cache, split, device=device, standardizer=scaler)
+
+
+def export_checkpoint(cache, checkpoint, *, device="cpu"):
+    """Export/retry evaluation and persist its state without changing training."""
+    checkpoint = Path(checkpoint)
+    run_path = checkpoint.parent / "run.json"
+    record = json.loads(run_path.read_text())
+    record.update(evaluation="running", evaluation_checkpoint=checkpoint.stem)
+    record.pop("error", None)
+
+    def status():
+        run_path.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+
+    status()
+    try:
+        saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
+        for split in ("train", "val"):
+            result = evaluate_readout(cache, saved, split, device=device)
+            export_readout(
+                result, checkpoint.parent / "evaluation" / checkpoint.stem / split
+            )
+        record["evaluation"] = "completed"
+        if checkpoint.stem == "best":
+            record["best_step"] = saved["train_state"]["global_step"]
+        status()
+    except Exception as exc:
+        record.update(evaluation="failed", error=f"{type(exc).__name__}: {exc}")
+        status()
+        raise
+    return record
+
+
+def export_readout(result, destination):
+    destination.mkdir(parents=True, exist_ok=True)
+    result.predictions.to_parquet(destination / "predictions.parquet", index=False)
+    result.per_line.to_csv(destination / "per_line.csv", index=False)
+    result.per_gene.to_csv(destination / "per_gene.csv", index=False)
+    (destination / "metrics.json").write_text(
+        json.dumps(result.metrics, indent=2, allow_nan=False) + "\n"
+    )

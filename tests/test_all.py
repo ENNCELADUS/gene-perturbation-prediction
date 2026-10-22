@@ -260,7 +260,7 @@ def test_all_resumes_and_skips(tmp_path, monkeypatch, cpu):
     # A finished run only rewrites its summary.
     monkeypatch.setattr(trainer, "fit", refuse)
     monkeypatch.setattr(response_comparison, "_run_trained", refuse)
-    monkeypatch.setattr("src.experiments.joint.readout.extract_cache", refuse)
+    monkeypatch.setattr("src.experiments.joint.readout.run.extract_cache", refuse)
     pipeline.run_all(config_path, run_id="resume")
 
     # The run directory refuses a different config instead of mixing experiments.
