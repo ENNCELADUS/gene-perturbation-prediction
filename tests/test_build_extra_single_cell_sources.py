@@ -17,15 +17,9 @@ from scipy import sparse
 from scipy.io import mmwrite
 
 from src.data.build.build_extra_single_cell_lines import MAP_COLUMNS
-from src.data.build.build_extra_single_cell_sources import (
-    Library,
-    _identify,
-    assign_pool,
-    call_hashtags,
-    knee,
-    read_library,
-    run,
-)
+from src.data.build.build_extra_single_cell_sources import run
+from src.data.build.demultiplex import assign_pool, call_hashtags, identify, knee
+from src.data.build.single_cell_readers import Library, read_library
 
 GENES = [f"ENSG{i:011d}" for i in range(1, 41)]
 SYMBOLS = [f"G{i}" for i in range(1, 40)] + ["MT-CO1"]
@@ -402,7 +396,7 @@ def test_tahoe_reader_keeps_the_listed_lines_cells(tmp_path):
 def test_barcode_identity_reads_line_and_arm_from_cell_ids():
     cells = ["SUM149PT_AAAC", "SUM159PT_GGTA", "AAAC-1_C.R1", "AAAG-2_T.R1", "odd"]
     library = Library(sparse.csr_matrix((5, 1)), cells, ["g"], None, None, [], None)
-    lines, arms, report = _identify(
+    lines, arms, report = identify(
         library,
         {
             "kind": "barcode",
@@ -416,7 +410,7 @@ def test_barcode_identity_reads_line_and_arm_from_cell_ids():
     )
     assert lines == ["SUM149PT", "SUM159PT", None, None, None]
     assert report == {"matched_cells": 2}
-    lines, arms, _ = _identify(
+    lines, arms, _ = identify(
         library,
         {
             "kind": "barcode",
@@ -430,7 +424,7 @@ def test_barcode_identity_reads_line_and_arm_from_cell_ids():
     )
     assert lines == [None, None, "huH-1", "2", None]
     assert arms == [None, None, "C.R1", "T.R1", None]
-    lines, arms, _ = _identify(
+    lines, arms, _ = identify(
         library,
         {
             "kind": "barcode",
@@ -463,7 +457,7 @@ def test_table_and_labels_skip_comment_header_lines(tmp_path):
         },
     )
     assert library.cells == ["11", "12"] and library.genes == ["G1", "G2"]
-    lines, _, _ = _identify(
+    lines, _, _ = identify(
         library,
         {
             "kind": "labels",
@@ -526,7 +520,7 @@ def test_label_table_cell_ids_may_be_its_unnamed_first_column(tmp_path):
     library = Library(
         sparse.csr_matrix((2, 1)), ["GGTA", "AAAC"], ["g"], None, None, [], None
     )
-    lines, _, _ = _identify(
+    lines, _, _ = identify(
         library,
         {
             "kind": "labels",
@@ -575,7 +569,7 @@ def test_mixed_species_mtx_keeps_prefixed_genes_and_hashtags_take_a_suffix(tmp_p
     )
     (hto / "barcodes.tsv").write_text("c0\nc1\nc2\n")
     hto_spec = {**_library("hto", {}), "reader": "tenx_mtx"}
-    lines, _, report = _identify(
+    lines, _, report = identify(
         library,
         {
             "kind": "hashtag",
@@ -600,7 +594,7 @@ def test_r_written_label_table_keeps_its_row_names_as_cell_ids(tmp_path):
     library = Library(
         sparse.csr_matrix((3, 1)), ["TTTG", "AAAC", "GGTA"], ["g"], None, None, [], None
     )
-    lines, _, _ = _identify(
+    lines, _, _ = identify(
         library,
         {
             "kind": "labels",
@@ -622,7 +616,7 @@ def test_r_written_label_table_keeps_its_row_names_as_cell_ids(tmp_path):
 
 
 def test_lognorm_counts_recover_integers_and_refuse_other_values():
-    from src.data.build.build_extra_single_cell_sources import lognorm_counts
+    from src.data.build.single_cell_readers import lognorm_counts
 
     rng = np.random.default_rng(4)
     counts = rng.poisson(2.0, size=(6, 30)).astype(np.int64)
@@ -705,7 +699,7 @@ def test_triplets_reader_and_rt_hash_identity_follow_the_authors_maps(tmp_path):
     np.testing.assert_array_equal(
         library.counts.toarray(), [[3, 1, 0], [0, 0, 5], [2, 0, 0], [0, 0, 1]]
     )
-    lines, arms, report = _identify(
+    lines, arms, report = identify(
         library,
         {
             "kind": "rt_hash",
@@ -741,7 +735,7 @@ def test_mtx_names_reader_takes_names_from_r_vectors(tmp_path):
     )
     assert library.cells == ["1", "2", "3"] and library.genes == SYMBOLS
     np.testing.assert_array_equal(library.counts.toarray(), counts)
-    lines, _, _ = _identify(
+    lines, _, _ = identify(
         library,
         {
             "kind": "labels",
