@@ -1,27 +1,6 @@
-"""Build the final cell-line split from the 226 split and the two extra-line files.
-
-Writes ``configs/benchmarks/cell_line_geneeffect_split.json`` and its table (the same
-path with ``.csv``), which every fit and score reads. Each line has one role:
-
-- ``train``: the single-cell training lines, the 226's training lines then the built
-  single-cell extras (``unlabeled_train``: the 226's training lines without
-  GeneEffect);
-- ``val``, ``test``: the 226's, unchanged;
-- ``bulk_labelled``, ``bulk_unlabelled``: training-side lines read through bulk RNA
-  only, the bulk file's lines without built single cells, with or without 26Q1
-  GeneEffect;
-- ``excluded``: lines sharing a patient with a validation or test line, never read.
-
-The table lists every single-cell line's split, patient, lineage and expression
-source. The three input files stay as this split's provenance; nothing else reads
-them for a fit.
-
-uv run python -m src.data.builders.build_cell_line_geneeffect_split \
-    --split-226 configs/benchmarks/cell_line_geneeffect_226_split.json \
-    --single-cell configs/benchmarks/extra_single_cell_lines_26Q1.json \
-    --bulk configs/benchmarks/extra_bulk_lines_26Q1.json \
-    --out configs/benchmarks/cell_line_geneeffect_split.json
-"""
+"""Build the final cell-line split (docs/data/cell-line-geneeffect-split.md), its JSON
+and ``.csv`` table, from the 226 split and the two extra-line files, which stay its
+provenance and enter no fit."""
 
 from __future__ import annotations
 
@@ -106,9 +85,7 @@ def build_split(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--split-226", type=Path, required=True)
     parser.add_argument("--single-cell", type=Path, required=True)
     parser.add_argument("--bulk", type=Path, required=True)

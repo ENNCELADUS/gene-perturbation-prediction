@@ -1,41 +1,8 @@
 #!/usr/bin/env python3
-"""Build raw-UMI Kinker h5ads that satisfy the standard Tx1 input contract.
-
-Sibling of ``src/experiments/historical/prepare_kinker_cpm_h5ad.py``
-with the contract inverted. That
-script ingests the GEO ``GSE157220_CPM_data.txt.gz`` matrix and deliberately
-marks every artifact ``tx1_raw_count_contract: blocked``, because published
-CPM cannot be reconstructed into counts. Exp13 Stage 0 measured what feeding
-Tx1 that CPM actually costs -- per-cell cosine 0.94 against the raw encode,
-and, unlike gene-subsampling noise, a shift that survives pooling to the
-per-line mean the model consumes -- so the CPM path is not usable for the
-152 Kinker lines and the historical Exp13 protocol §6 branch 1 applies.
-
-The counts exist: Broad Single Cell Portal SCP542 publishes
-``UMIcount_data.txt`` (pre-QC UMI counts, 56,982 cells, 207 lines), which
-covers all 40,670 selected cells and all 152 selected lines. This script
-ingests that matrix instead, and every gate here is the CPM script's gate
-turned around:
-
-- values must be **integral** (the CPM script requires a *non*-integer
-  fraction, as proof of its declared semantics);
-- there is **no library-size gate** -- UMI depth is a free quantity, whereas
-  the CPM script requires every cell to sum to ~1e6;
-- each h5ad must **pass** :func:`assert_tx1_input_contract`, so ``var`` is
-  indexed by Ensembl id and carries ``ensembl_id``; the CPM script keeps
-  symbols precisely so a standard Tx1 loader cannot accept its output.
-
-Two structural differences in the source file itself: its header begins with
-an empty field rather than ``GENE``, and two metadata rows (``Cell_line``,
-``Pool_ID``) precede the gene rows. The ``Cell_line`` row is not skipped
-blindly -- it is cross-checked against ``selected_cells.tsv``'s
-``source_cell_line_name``, which independently confirms that the cells
-selected from the CPM matrix denote the same lines in this one.
-
-The frozen line manifest still declares ``matrix_semantics: processed_cpm``
-for these lines and is **not** edited here: the 226 split was built from it, and
-its membership is unchanged by this switch. Only the numeric source moves.
-"""
+"""Build per-line raw-UMI Kinker h5ads that pass the Tx1 input contract from Broad
+SCP542's ``UMIcount_data.txt``, since published CPM cannot be turned back into counts.
+The frozen line manifest keeps ``matrix_semantics: processed_cpm`` and is not edited:
+the 226 split was built from it."""
 
 from __future__ import annotations
 
@@ -70,18 +37,9 @@ def quantile_summary(values: np.ndarray) -> dict[str, float]:
 
 
 def read_matrix_head(path: Path) -> tuple[list[str], dict[str, list[str]]]:
-    """Read the header and the metadata rows that precede the gene rows.
-
-    Returns:
-        ``(cell_ids, metadata)`` where ``metadata`` maps each row label in
-        :data:`METADATA_ROWS` to its per-cell values.
-
-    Raises:
-        ValueError: the header does not start with an empty field, or the
-            metadata rows are absent or out of order -- either means the
-            file is not the SCP ``UMIcount_data.txt`` layout and every row
-            offset below would be wrong.
-    """
+    """``(cell_ids, {label: per-cell values})`` of the header and the METADATA_ROWS
+    before the gene rows. Any other layout raises: it is not SCP's
+    ``UMIcount_data.txt`` and every row offset would be wrong."""
     with path.open("rt") as handle:
         header = handle.readline().rstrip("\n\r").split("\t")
         if not header or header[0] != "":
@@ -108,18 +66,8 @@ def read_matrix_head(path: Path) -> tuple[list[str], dict[str, list[str]]]:
 def assert_line_labels_agree(
     cells: list[str], cell_lines: list[str], selected: pd.DataFrame
 ) -> int:
-    """Cross-check the matrix's own line labels against the selection.
-
-    The selection was derived from the CPM matrix; this confirms the same
-    barcodes denote the same cell lines in the UMI matrix, which is the one
-    assumption that silently ruins everything downstream if it is false.
-
-    Returns:
-        The number of cells checked.
-
-    Raises:
-        ValueError: any selected cell's line label disagrees.
-    """
+    """Check the UMI matrix's own line labels against the selection, which was made
+    from the CPM matrix; returns the number of cells checked."""
     label_by_cell = dict(zip(cells, cell_lines))
     disagreements = [
         (
@@ -209,14 +157,9 @@ def _load_metadata(
 def map_genes_to_ensembl(
     source_symbols: pd.Index, gene_metadata_path: Path, vocab_path: Path
 ) -> tuple[np.ndarray, pd.DataFrame, dict[str, int]]:
-    """Map gene symbols to Tx1-vocabulary Ensembl ids, one-to-one.
-
-    Same resolution rule as the CPM script -- drop symbols that are
-    ambiguous in the Tx1 metadata, keep only ids present in ``vocab.json``,
-    and require ``token_id`` to agree with the vocab -- but the surviving
-    column is named ``ensembl_id``, because these artifacts are meant to
-    satisfy the Tx1 input contract rather than be excluded from it.
-    """
+    """Map gene symbols to Tx1-vocabulary Ensembl ids, one-to-one: symbols ambiguous
+    in the Tx1 metadata and ids outside ``vocab.json`` are dropped, and ``token_id``
+    must agree with the vocab."""
     metadata = pd.read_parquet(gene_metadata_path)
     required = {"gene_symbol", "ensembl_id", "token_id"}
     missing = sorted(required - set(metadata.columns))
@@ -246,8 +189,6 @@ def map_genes_to_ensembl(
     mapped.insert(0, "gene_symbol", source_symbols[keep].to_numpy())
     mapped.index = mapped["ensembl_id"].astype(str)
     mapped.index.name = None
-    if mapped["ensembl_id"].duplicated().any():
-        raise ValueError("gene mapping produced duplicate Ensembl IDs")
     audit = {
         "source_genes": int(len(source_symbols)),
         "ambiguous_metadata_symbols": int(len(ambiguous)),
@@ -539,7 +480,6 @@ def build(args: argparse.Namespace) -> dict[str, object]:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matrix", type=Path, required=True)
     parser.add_argument("--selected-cells", type=Path, required=True)

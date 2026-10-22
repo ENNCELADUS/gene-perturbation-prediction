@@ -1,6 +1,4 @@
-"""The final split: one role per line, the single-cell extras as training lines,
-bulk-only lines without built cells, the held-out lines unchanged; and the tracked
-file is what the builder writes from the tracked inputs."""
+"""The final split: one role per line; the tracked file is what the builder writes."""
 
 from __future__ import annotations
 

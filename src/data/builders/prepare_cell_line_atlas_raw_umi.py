@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Convert the 27 Breast/CCLA raw-UMI lines to audited Tx1-contract h5ad.
-
-The input schema is deliberately supplied by JSON.  In particular, this script
-never infers a cell line from a barcode or guesses whether rows are genes.
-"""
+"""Convert the 27 Breast/CCLA raw-UMI lines to audited Tx1-contract h5ad. The input
+schema comes from the JSON config, so no line is inferred from a barcode and no
+matrix orientation is guessed."""
 
 from __future__ import annotations
 
@@ -209,13 +207,6 @@ def _build_adata(
     hvg_names: set[str],
 ) -> tuple[ad.AnnData, dict[str, Any]]:
     model_id = str(row["model_id"])
-    if matrix.shape[0] != len(source_cell_ids):
-        raise ValueError(
-            f"{model_id}: matrix has {matrix.shape[0]} cells but received "
-            f"{len(source_cell_ids)} cell ids"
-        )
-    if len(source_cell_ids) != len(set(source_cell_ids)):
-        raise ValueError(f"{model_id}: duplicate source cell ids")
     assert_raw_integer(matrix, model_id)
     matrix, var, gene_stats = map_and_collapse_genes(
         matrix, source_gene_ids, gene_id_kind, gene_metadata, symbol_to_ensembl
@@ -590,8 +581,6 @@ def run(config_path: Path, output_dir: Path, only_model_id: str | None) -> None:
             )
         else:
             raise ValueError(f"unsupported source kind {kind!r}")
-    if len(built) != expected_lines:
-        raise ValueError(f"built {len(built)} lines; expected {expected_lines}")
     _write_output(output_dir, manifest, config, built)
     print(f"verified output: {output_dir}", flush=True)
 

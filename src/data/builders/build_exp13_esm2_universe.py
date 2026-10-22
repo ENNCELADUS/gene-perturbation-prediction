@@ -1,4 +1,5 @@
-"""data / prepare / build exp13 esm2 universe."""
+"""The Exp13 ESM2 gene universe: GeneEffect genes covered on every split side, joined
+with the response vocabulary, and the supplied ESM2 table's coverage of it."""
 
 from __future__ import annotations
 
@@ -157,7 +158,7 @@ def inspect_npz_coverage(
 
 
 def write_embedding_union(*, scored_symbols, response_symbols, esm2_path, output_dir):
-    """Record dependency/response union and supplied table coverage, without seals."""
+    """Record dependency/response union and supplied table coverage."""
     from src.data.embeddings import load_esm2_embeddings
 
     union = build_embedding_union(tuple(scored_symbols), tuple(response_symbols))

@@ -1,21 +1,6 @@
-"""Plan one second deposit per labelled single-cell training line, for the noise
-diagnosis's deposit swap (protocol §14).
-
-A line's primary deposit is the final split table's ``expression_source`` (the
-226's names map to the identity map's source keys through ``PRIMARY_KEYS``). Its
-second deposit is chosen, by the membership policy (condition class, raw counts,
-most cells, source name), among the identity map's accepted raw-count rows of the
-line from sources the extras spec builds, other than the primary and from another
-accession than the primary's. Lines without one are left out. Reads tracked files
-only; writes ``configs/data/second_source_lines_26Q1.json``, which
-``build_extra_single_cell_sources --second-source`` builds into its own directory.
-
-uv run python -m src.data.builders.plan_second_sources \
-    --candidates configs/benchmarks/single_cell_atlas_candidates.csv \
-    --split configs/benchmarks/cell_line_geneeffect_split.json \
-    --spec configs/data/extra_single_cell_sources_26Q1.json \
-    --out configs/data/second_source_lines_26Q1.json
-"""  # noqa: E501
+"""Plan one second deposit per labelled single-cell training line for the noise
+diagnosis's deposit swap (protocol §14), from tracked files only; the plan is what
+``build_extra_single_cell_sources --second-source`` builds."""
 
 from __future__ import annotations
 
@@ -82,9 +67,7 @@ def primary_sources(table: pd.DataFrame, lines: Collection[str]) -> dict[str, st
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidates", type=Path, required=True)
     parser.add_argument("--split", type=Path, required=True)
     parser.add_argument("--spec", type=Path, required=True)

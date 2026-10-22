@@ -1,24 +1,7 @@
-"""Re-count the extra single-cell libraries whose deposits hold no raw counts.
-
-A source of the spec (``configs/data/extra_single_cell_sources_26Q1.json``)
-with a ``recount`` entry names, per library, its SRA runs (``<run>.sra`` among
-the source's files), its kb technology and which ``fasterq-dump`` reads are the
-barcode read and the cDNA read. ``index`` builds the kallisto index and
-transcript-to-gene map from the spec's reference genome and GTF (kb's standard
-workflow) once. ``count`` dumps each library's runs (technical reads included),
-counts them with ``kb count`` against that index and keeps kb's unfiltered gene
-matrix in Cell Ranger layout at
-``<raw_root>/<source>/kb/<library>/counts_unfiltered/cellranger/``, which the
-source builder then reads like a deposit. The dumped FASTQ are deleted; a
-library whose ``kb/<library>/done.json`` exists is skipped, and an interrupted
-library's partial output is removed before it is counted again.
-
-uv run python -m src.data.builders.recount_extra_single_cell_sources \
-    --spec configs/data/extra_single_cell_sources_26Q1.json --wave 2 index
-uv run python -m src.data.builders.recount_extra_single_cell_sources \
-    --spec configs/data/extra_single_cell_sources_26Q1.json --wave 2 count \
-    [--sources gse142750_recount] [--kb kb] [--fasterq-dump fasterq-dump]
-"""  # noqa: E501
+"""Re-count the extra single-cell libraries whose deposits hold no raw counts: ``index``
+builds kb's standard kallisto index once, ``count`` runs each library's SRA runs
+through ``kb count`` and keeps the unfiltered Cell Ranger-layout matrix under
+``<raw_root>/<source>/kb/<library>/``, which the source builder reads like a deposit."""
 
 from __future__ import annotations
 
@@ -195,9 +178,7 @@ def count(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--wave", type=int, required=True)
     parser.add_argument("--kb", default="kb")

@@ -1,20 +1,6 @@
-"""Fetch and pin the reference tables of the linear context prior.
-
-Runs on the Mac: the H20 host has no internet, so the small tables are committed
-under configs/context_prior/reference/ and reach it through git. Line tables hold
-training-side lines only: validation and test lines and every line sharing their
-patients never enter one.
-
-uv run python -m src.data.builders.build_context_reference \
-    --split configs/benchmarks/cell_line_geneeffect_226_split.json \
-    --extra-lines configs/benchmarks/extra_bulk_lines_26Q1.json \
-    --hotspot data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv \
-    --damaging data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixDamaging.csv \
-    --out configs/context_prior/reference
-
-After a split change, ``--line-tables-only`` rebuilds drivers.tsv and msi.tsv and keeps
-the fetched gene tables and their provenance.
-"""  # noqa: E501
+"""Fetch and pin the linear context prior's reference tables, committed under
+configs/context_prior/reference/ because the H20 cannot fetch them. Line tables hold
+training-side lines only: no validation or test line, nor one sharing their patients."""
 
 from __future__ import annotations
 

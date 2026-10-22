@@ -1,30 +1,7 @@
-"""The frozen single-cell identity map and the extra single-cell membership.
-
-``configs/benchmarks/single_cell_atlas_candidates.csv`` maps each source's own
-spelling of a line (``identifier``) to a DepMap ModelID once, with the review of
-that mapping; nothing joins lines by name at run time. Two steps:
-
-``propose`` (Mac) gives every map row without a review a ModelID: the source's own
-ModelID or RRID, else a Model.csv name (``StrippedCellLineName`` or
-``CellLineName``, case and punctuation ignored), else an exact Cellosaurus name or
-synonym whose accession is a Model.csv RRID. Rows it cannot settle are flagged
-(``ambiguous``, ``no_match``, ``problematic``, ``derived``) for review by hand.
-
-uv run python -m src.data.builders.build_extra_single_cell_lines propose \
-    --candidates configs/benchmarks/single_cell_atlas_candidates.csv \
-    --model data/sl_dependency_v0/raw/depmap/Model.csv
-
-``build`` (H20) writes the membership file from the reviewed map, the 26Q1 files
-and the built sources' QC reports (``<basal_raw_umi>/qc/<source>.json``).
-
-uv run python -m src.data.builders.build_extra_single_cell_lines build \
-    --candidates configs/benchmarks/single_cell_atlas_candidates.csv \
-    --model data/sl_dependency_v0/raw/depmap/Model.csv \
-    --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
-    --split configs/benchmarks/cell_line_geneeffect_226_split.json \
-    --qc-dir data/sl_dependency_v0/processed/basal_raw_umi/qc \
-    --out configs/benchmarks/extra_single_cell_lines_26Q1.json
-"""  # noqa: E501
+"""The frozen single-cell identity map and the extra single-cell membership built from
+it (docs/data/single-cell-atlas-search.md). The map,
+``configs/benchmarks/single_cell_atlas_candidates.csv``, reviews each source's spelling
+of a line into a ModelID once, so nothing joins lines by name at run time."""
 
 from __future__ import annotations
 
@@ -314,7 +291,6 @@ def _get(url: str) -> dict[str, Any]:
 
 @cache
 def cellosaurus_search(name: str) -> list[dict[str, Any]]:
-    """Cellosaurus cell lines a free-text search for ``name`` returns."""
     query = urllib.parse.urlencode(
         {"q": name, "fields": "ac,id,sy,hi,cc", "format": "json", "rows": 20}
     )
@@ -323,7 +299,6 @@ def cellosaurus_search(name: str) -> list[dict[str, Any]]:
 
 @cache
 def cellosaurus_entry(accession: str) -> dict[str, Any] | None:
-    """One Cellosaurus cell line by accession."""
     entries = _cellosaurus_entries(
         _get(f"{_CELLOSAURUS}/cell-line/{accession}?fields=ac,id,sy,hi,cc&format=json")
     )
@@ -331,9 +306,7 @@ def cellosaurus_entry(accession: str) -> dict[str, Any] | None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
     steps = parser.add_subparsers(dest="step", required=True)
     proposing = steps.add_parser("propose")
     building = steps.add_parser("build")
@@ -376,10 +349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "split": args.split,
         **{f"qc/{source}": args.qc_dir / f"{source}.json" for source in sorted(qc)},
     }
-    payload = {
-        **payload,
-        "inputs": {k: {"path": str(p)} for k, p in inputs.items()},
-    }
+    payload["inputs"] = {k: {"path": str(p)} for k, p in inputs.items()}
     args.out.write_text(json.dumps(payload, indent=2) + "\n")
     print(
         f"{len(payload['labelled'])} labelled, {len(payload['pending'])} pending, "

@@ -1,5 +1,4 @@
-"""Single-cell identity map and membership: one source per line, admission, the
-proposer's matches and flags."""
+"""Single-cell identity map and membership: source choice, admission, proposals."""
 
 import json
 

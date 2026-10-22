@@ -1,12 +1,4 @@
-"""Cellosaurus context text: line selection, reuse of PIE's vectors, the written source.
-
-Runs only in PIE's environment (``uv run --isolated --no-project --python 3.12
---with-editable 'third_party/pie[sources]' --with pytest python -m pytest
-tests/test_cellosaurus_context.py``); the project suite, which lacks PIE, skips it.
-Records are PIE's synthetic Cellosaurus fixtures in an offline cache, PIE's released
-source is a fake with two basal keys (one accession, one name) and a stimulated one, and
-the embedder is a fake, so nothing touches the network or needs a real key.
-"""
+"""Cellosaurus context text, offline against PIE's fixtures and a fake embedder."""
 
 from __future__ import annotations
 
@@ -144,7 +136,7 @@ def setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return tmp_path, released, embedder
 
 
-def _build(root: Path, released: Path, lines: dict, monkeypatch) -> Path:
+def _build(root: Path, released: Path, lines: dict) -> Path:
     split_path, models_path = _write_inputs(root, lines)
     out = root / "out"
     client = _offline_client(out / "cellosaurus")
@@ -188,11 +180,9 @@ def test_released_keys_skip_stimulations_and_prefer_the_accession(setup) -> None
         cc.released_keys({"unmapped": "Context Name: unmapped"})
 
 
-def test_reused_lines_copy_pie_and_only_the_rest_are_embedded(
-    setup, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_reused_lines_copy_pie_and_only_the_rest_are_embedded(setup) -> None:
     root, released, embedder = setup
-    out = _build(root, released, LINES, monkeypatch)
+    out = _build(root, released, LINES)
     source = read_source(out / "context_text")
     assert source.meta.name == "context_text"
     assert source.meta.layout == "dense"
@@ -216,9 +206,9 @@ def test_reused_lines_copy_pie_and_only_the_rest_are_embedded(
     assert y003.startswith("Context Name: CVCL_Y003 ;\n")
 
 
-def test_provenance_records_each_line(setup, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provenance_records_each_line(setup) -> None:
     root, released, _ = setup
-    out = _build(root, released, LINES, monkeypatch)
+    out = _build(root, released, LINES)
     provenance = json.loads((out / cc.PROVENANCE).read_text(encoding="utf-8"))
     assert provenance["counts"] == {
         "lines": 6,
@@ -245,7 +235,7 @@ def test_endpoint_check_is_recorded_and_refuses_another_model(
 ) -> None:
     root, released, embedder = setup
     monkeypatch.setenv("OPENAI_BASE_URL", "https://relay.example/v1")
-    out = _build(root, released, LINES, monkeypatch)
+    out = _build(root, released, LINES)
     check = json.loads((out / "provenance.json").read_text())["endpoint_check"]
     assert check["endpoint_host"] == "relay.example"
     assert check["keys"] == ["CVCL_Y001", "translineb"]
@@ -266,7 +256,7 @@ def test_all_lines_reused_needs_no_key(setup, monkeypatch: pytest.MonkeyPatch) -
     lines = {
         model: LINES[model] for model in ("ACH-000001", "ACH-000002", "ACH-000003")
     }
-    out = _build(root, released, lines, monkeypatch)
+    out = _build(root, released, lines)
     assert embedder.calls == []
     assert read_source(out / "context_text").meta.keys == ["ACH-000001", "ACH-000002"]
 
@@ -283,18 +273,16 @@ def test_missing_key_stops_before_any_fetch(
     assert embedder.calls == []
 
 
-def test_key_never_reaches_a_file(setup, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_key_never_reaches_a_file(setup) -> None:
     root, released, _ = setup
-    out = _build(root, released, LINES, monkeypatch)
+    out = _build(root, released, LINES)
     for path in out.rglob("*"):
         if path.is_file():
             assert FAKE_KEY.encode() not in path.read_bytes(), path
 
 
-def test_existing_source_is_never_overwritten(
-    setup, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_existing_source_is_never_overwritten(setup) -> None:
     root, released, _ = setup
-    out = _build(root, released, LINES, monkeypatch)
+    out = _build(root, released, LINES)
     with pytest.raises(FileExistsError):
         cc.build_context_text(out, root / "split.json", root / "Model.csv", released)

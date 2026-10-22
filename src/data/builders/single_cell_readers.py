@@ -21,7 +21,7 @@ from src.data.builders.prepare_cell_line_atlas_raw_umi import (
     assert_raw_integer,
 )
 
-#: Keys each reader and each identity kind takes (all required).
+#: Keys each reader takes (all required).
 READERS = {
     "tenx_mtx": ("matrix", "features", "barcodes", "header", "gene_id_prefix"),
     "tenx_h5": ("h5",),

@@ -32,13 +32,13 @@ EXPECTED_SOURCE_SEMANTICS = {
 }
 
 
-def require_manifest(frame: pd.DataFrame, expected_lines: int) -> pd.DataFrame:
+def require_manifest(frame: pd.DataFrame) -> pd.DataFrame:
     missing = sorted(set(REQUIRED_COLUMNS) - set(frame.columns))
     if missing:
         raise ValueError(f"manifest is missing columns: {missing}")
     frame = frame.copy()
-    if len(frame) != expected_lines:
-        raise ValueError(f"expected {expected_lines} manifest rows, found {len(frame)}")
+    if len(frame) != 179:
+        raise ValueError(f"expected 179 manifest rows, found {len(frame)}")
     for column in ("model_id", "patient_id", "source", "lineage"):
         if (
             frame[column].isna().any()
@@ -52,13 +52,10 @@ def require_manifest(frame: pd.DataFrame, expected_lines: int) -> pd.DataFrame:
     if not normalized.isin({"true", "false"}).all():
         raise ValueError("same_patient_as_excluded must contain only true/false")
     frame["same_patient_as_excluded"] = normalized == "true"
-    if expected_lines == 179:
-        observed = frame.groupby("source")["matrix_semantics"].unique().to_dict()
-        expected = {key: [value] for key, value in EXPECTED_SOURCE_SEMANTICS.items()}
-        if observed != expected:
-            raise ValueError(
-                f"source/matrix semantics mismatch: {observed} != {expected}"
-            )
+    observed = frame.groupby("source")["matrix_semantics"].unique().to_dict()
+    expected = {key: [value] for key, value in EXPECTED_SOURCE_SEMANTICS.items()}
+    if observed != expected:
+        raise ValueError(f"source/matrix semantics mismatch: {observed} != {expected}")
     return frame
 
 
@@ -175,9 +172,8 @@ def assign_splits(
         split: np.asarray([source_targets[split][name] for name in source_names])
         for split in ("val", "test")
     }
-    # Balance lineage within each evidence source. Absolute deviations are
-    # linearized, so scipy's MILP solver proves the primary optimum instead of
-    # depending on a finite random search.
+    # Balance lineage within each source; absolute deviations are linearized so
+    # the MILP proves the optimum.
     strata = sorted(
         set(zip(manifest["source"].astype(str), manifest["lineage"].astype(str)))
     )
@@ -421,7 +417,7 @@ def build(
     if output_dir.exists():
         raise FileExistsError(f"refusing to overwrite {output_dir}")
 
-    atlas = require_manifest(pd.read_csv(atlas_manifest_path), 179)
+    atlas = require_manifest(pd.read_csv(atlas_manifest_path))
     selection_audit = require_selection_audit(selection_audit_path, atlas)
     assignment, source_targets, optimizer = assign_splits(
         atlas,
