@@ -111,7 +111,10 @@ hands stage two **calibrated context effects**), and the stage-one selector is t
 (protocol §6: each held-out line's residuals across the selective genes, since stage two reads one line at a time;
 selective Spearman is reported beside it). On the main split no arm reaches the frame-refitted prior (validation
 per-line 0.215; best arm `film_dE_selective` 0.177); of PIE's deltas ΔE carries the line signal (above ΔL and its
-permuted and no-Δ controls), ΔH no more than a per-gene ridge on it.
+permuted and no-Δ controls), ΔH no more than a per-gene ridge on it. Task 8's state telemetry ran on 2026-10-22
+([record](results/state_telemetry_seed0/README.md)): deposit explains much of every vocabulary's state masses, and
+the frozen PIE's state gap (mixing states against reading the mixed input) is at most 0.019 of the whole-line ΔE's
+across-line spread, close to the permuted control's; which vocabularies Task 9 precomputes is for people to choose.
 The SL pair head is **unimplemented**.
 One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test; there is
 no multi-seed stage. Nothing here is SL evidence.
