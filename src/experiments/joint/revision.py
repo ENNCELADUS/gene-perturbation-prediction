@@ -30,7 +30,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-from src.experiments.joint.all import (
+from src.experiments.joint.pipeline import (
     BASELINE_NAMES,
     PRIOR_CONTROLS,
     Job,

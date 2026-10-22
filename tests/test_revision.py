@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 import torch
 
-from src.experiments.joint import all as pipeline
+from src.experiments.joint import pipeline as joint_pipeline
 from src.experiments.joint import revision
 
 SELECTIVE = ["G1", "G2"]
@@ -346,7 +346,7 @@ def world(tmp_path, monkeypatch):
     prepared = []
     monkeypatch.setattr(revision, "load_config", lambda path: config)
     monkeypatch.setattr(revision, "visible_gpus", lambda: ())
-    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0)
+    monkeypatch.setattr(joint_pipeline, "POLL_SECONDS", 0)
     monkeypatch.setattr(
         "src.experiments.prepare.prepare_inputs", lambda cfg: prepared.append(cfg)
     )
@@ -462,7 +462,7 @@ def test_run_directory_refuses_a_different_config(world, monkeypatch):
 
 
 def test_training_uses_every_chosen_gpu(tmp_path, monkeypatch):
-    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0)
+    monkeypatch.setattr(joint_pipeline, "POLL_SECONDS", 0)
     started = []
 
     def launch(argv, gpus, log):

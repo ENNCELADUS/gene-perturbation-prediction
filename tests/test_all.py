@@ -27,6 +27,7 @@ pytest.importorskip("state.tx.models.state_transition")
 
 import test_prepare  # noqa: E402
 from src.experiments.joint import all as pipeline  # noqa: E402
+from src.experiments.joint import pipeline as joint_pipeline
 from src.model.state import build_state  # noqa: E402
 
 VOCABULARY = ("GA", "GC", "non-targeting")
@@ -171,8 +172,8 @@ def test_all_end_to_end_writes_summary(finished):
     # Without a prior export the prior controls are not run and not listed.
     ladder = {
         method: name
-        for method, name in pipeline.BASELINE_NAMES.items()
-        if method not in pipeline.PRIOR_CONTROLS
+        for method, name in joint_pipeline.BASELINE_NAMES.items()
+        if method not in joint_pipeline.PRIOR_CONTROLS
     }
     rows = [
         "Joint model",
@@ -186,8 +187,8 @@ def test_all_end_to_end_writes_summary(finished):
     }
     for row in rows:
         assert row in table and "not produced" not in table[row][-1], row
-    for method in pipeline.PRIOR_CONTROLS:
-        assert pipeline.BASELINE_NAMES[method] not in table
+    for method in joint_pipeline.PRIOR_CONTROLS:
+        assert joint_pipeline.BASELINE_NAMES[method] not in table
     # Gene mean is constant per gene across lines: undefined, never 0.
     columns = list(pipeline.VALIDATION_COLUMNS)
     for column in (
@@ -316,7 +317,7 @@ def fake_comparison(monkeypatch):
     """Twelve pending trained jobs; summarise and in-process training refuse."""
     from src.experiments.joint import response_comparison, train
 
-    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0)
+    monkeypatch.setattr(joint_pipeline, "POLL_SECONDS", 0)
     monkeypatch.setattr(
         response_comparison,
         "pending_trained_jobs",
@@ -380,7 +381,7 @@ def test_every_gpu_step_uses_every_chosen_gpu(tmp_path, fake_comparison):
 
 
 def test_chosen_gpus_restrict_every_step(tmp_path, fake_comparison):
-    gpus = pipeline.choose_gpus(("1", "3"), ("0", "1", "2", "3"))
+    gpus = joint_pipeline.choose_gpus(("1", "3"), ("0", "1", "2", "3"))
     assert gpus == ("1", "3")
     _, launcher = _plan(tmp_path, gpus)
     untrained, train, *jobs = launcher.started
@@ -393,13 +394,13 @@ def test_chosen_gpus_restrict_every_step(tmp_path, fake_comparison):
 
 def test_choose_gpus_defaults_to_every_visible_and_rejects_others():
     visible = ("4", "5", "6")
-    assert pipeline.choose_gpus(None, visible) == visible
-    assert pipeline.choose_gpus(None, ()) == ()
+    assert joint_pipeline.choose_gpus(None, visible) == visible
+    assert joint_pipeline.choose_gpus(None, ()) == ()
     for wrong in (("7",), ("4", "4"), ("",)):
         with pytest.raises(ValueError, match="visible ones 4,5,6"):
-            pipeline.choose_gpus(wrong, visible)
+            joint_pipeline.choose_gpus(wrong, visible)
     with pytest.raises(ValueError, match="no CUDA GPU"):
-        pipeline.choose_gpus(("0",), ())
+        joint_pipeline.choose_gpus(("0",), ())
 
 
 def test_one_gpu_trains_in_one_process(tmp_path, fake_comparison):
@@ -436,16 +437,19 @@ def test_resume_on_another_gpu_count_is_refused(tmp_path, fake_comparison):
 def test_failed_pool_job_lets_running_jobs_finish_and_starts_no_more(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0)
+    monkeypatch.setattr(joint_pipeline, "POLL_SECONDS", 0)
     launcher = FakeLauncher(
         polls=lambda step: {"slow": 3, "broken": 0}.get(step, 0),
         codes=lambda step: 3 if step == "broken" else 0,
     )
     jobs = [
-        pipeline.Job(step, ("true",)) for step in ("slow", "broken", "next", "last")
+        joint_pipeline.Job(step, ("true",))
+        for step in ("slow", "broken", "next", "last")
     ]
     with pytest.raises(RuntimeError) as error:
-        pipeline.run_pool(jobs, [("0",), ("1",)], tmp_path / "logs", start=launcher)
+        joint_pipeline.run_pool(
+            jobs, [("0",), ("1",)], tmp_path / "logs", start=launcher
+        )
     assert [entry[0] for entry in launcher.started] == ["slow", "broken"]
     assert launcher.started[0][3].done
     message = str(error.value)
@@ -455,12 +459,12 @@ def test_failed_pool_job_lets_running_jobs_finish_and_starts_no_more(
 
 
 def test_processes_see_their_gpus_and_log_output(tmp_path, monkeypatch):
-    monkeypatch.setattr(pipeline, "POLL_SECONDS", 0.01)
+    monkeypatch.setattr(joint_pipeline, "POLL_SECONDS", 0.01)
     show = "import os; print(os.environ['CUDA_VISIBLE_DEVICES'])"
-    ok = pipeline.Job("comparison_untrained", (sys.executable, "-c", show))
-    bad = pipeline.Job("train", (sys.executable, "-c", show + "; exit(3)"))
+    ok = joint_pipeline.Job("comparison_untrained", (sys.executable, "-c", show))
+    bad = joint_pipeline.Job("train", (sys.executable, "-c", show + "; exit(3)"))
     with pytest.raises(RuntimeError, match="train failed with exit code 3") as error:
-        pipeline.run_pool([ok, bad], [("7",), ("0", "1", "2", "3")], tmp_path)
+        joint_pipeline.run_pool([ok, bad], [("7",), ("0", "1", "2", "3")], tmp_path)
     assert "comparison_untrained" not in str(error.value)
     assert (tmp_path / "train.log").read_text().strip() == "0,1,2,3"
     assert (tmp_path / "comparison_untrained.log").read_text().strip() == "7"
@@ -471,7 +475,7 @@ def test_sigterm_terminates_child_process_groups(tmp_path):
     group_file = tmp_path / "group"
     script = f"""
 from pathlib import Path
-from src.experiments.joint import all as pipeline
+from src.experiments.joint import pipeline
 pipeline.POLL_SECONDS = 0.05
 child = pipeline.Job("sleeper", ("sh", "-c", "sleep 60 & echo $$ > {group_file}; wait"))
 with pipeline.sigterm_raises():
