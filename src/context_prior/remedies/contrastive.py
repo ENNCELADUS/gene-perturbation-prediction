@@ -18,10 +18,9 @@ SETTING_KEYS = ("pseudo_components", "bulk_components")
 
 
 def build(base: BridgeBase, setting: Mapping[str, Any]) -> BridgeInputs:
-    """The alignment fitted on the paired lines, applied to every bulk, oracle and
-    pseudo-bulk row; then the affine bridge on the aligned sources. Out-of-fold
-    rows refit the alignment as well as the bridge without each fold and are
-    compared with the held lines' bulk in that fold's aligned space."""
+    """The alignment is fitted on the paired lines and applied to every row.
+    Out-of-fold rows refit the alignment as well as the bridge without each fold
+    and are compared with the held lines' bulk in that fold's aligned space."""
     if set(setting) != set(SETTING_KEYS):
         raise ValueError(
             f"the contrastive remedy takes exactly {list(SETTING_KEYS)}, "

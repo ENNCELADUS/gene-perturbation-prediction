@@ -1,18 +1,6 @@
-"""Per-gene single-cell statistics of a line's basal cells, stacked on the prior.
-
-The statistics are the ``q_sc`` summaries preparation caches for every line of the
-226 (over all of a line's source cells): the log-space mean, the detected fraction
-and the log-space variance of each gene. ``normalize_statistics`` puts every line on
-one scale; ``stack_predictions`` fits, on the training lines only, a two-stage ridge
-of what the prior leaves on chosen statistics, in residual-SD units:
-
-1. **own**: the gene's own statistics, weights pooled over genes plus a per-gene
-   deviation shrunk toward them (the prior's knowledge-block ridge);
-2. **selected**: per gene, the ``count`` columns of the statistics pool (every
-   candidate gene's chosen statistics, the gene's own left out) most correlated
-   with what the own stage leaves, then a per-gene ridge on them (the prior's
-   data-selected ridge).
-"""
+"""Per-gene single-cell statistics of a line's basal cells (the prepared ``q_sc``
+caches: log-space mean, detected fraction, log-space variance) stacked on the prior
+as a two-stage ridge (protocol §13)."""
 
 from __future__ import annotations
 
@@ -141,11 +129,12 @@ def stack_predictions(
     (own shrinkage, selected penalty), fitted on ``target``'s rows only.
 
     ``target`` is what the prior leaves on the training lines (lines x genes,
-    residual-SD units); a missing label counts as zero, as in the prior.
+    residual-SD units); a missing label counts as zero, as in the prior. The own
+    stage reads the gene's own statistics (pooled weights plus shrunk per-gene
+    deviations); the selected stage, per gene, the ``count`` pool columns (every
+    gene's chosen statistics, its own left out) most correlated with what the own
+    stage leaves.
     """
-    unknown = set(chosen) - set(STATISTICS)
-    if not chosen or unknown:
-        raise ValueError(f"chosen statistics must come from {STATISTICS}: {chosen}")
     train, genes = list(target.index), list(target.columns)
     remaining = np.where(np.isfinite(target.to_numpy()), target.to_numpy(), 0.0)
 

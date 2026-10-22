@@ -1,17 +1,6 @@
-"""Linear context prior experiments.
-
-``hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]``
-runs every listed experiment: for each bridge setting it builds the bridged inputs
-(``src.context_prior.remedies.<kind>.build``), fits the prior for every block set
-and penalty, and scores validation and test (and the bulk-input oracle on
-validation). Each setting writes ``rows/<experiment>__<n>.json`` and is skipped when
-it exists, so a rerun resumes; ``results.md`` tabulates every row present. A
-gene-level block set gives one row per components and gene penalty pair; nothing is
-chosen here. Gains are measured against the reference row the config pins.
-
-A run directory belongs to one config (``run_config.json``); processes running
-different experiments may share it, since rows are per setting.
-"""
+"""Linear context prior experiments: every bridge setting of the listed experiments,
+fitted for every block set and penalty and scored on validation and test (and the
+bulk-input oracle on validation) against the reference row the config pins."""
 
 from __future__ import annotations
 
@@ -36,7 +25,7 @@ from src.experiments.prior.base import (
     stages,
 )
 from src.experiments.prior.config import load_prior_config
-from src.experiments.run_dir import bind, locked, number
+from src.experiments.run_dir import bind, interval, locked, number
 
 
 def run_setting(
@@ -124,11 +113,6 @@ def _facts(base: RunBase) -> dict:
     }
 
 
-# ----------------------------------------------------------------------------
-# Files and results.md
-# ----------------------------------------------------------------------------
-
-
 def _row_path(run_dir: Path, experiment: str, index: int) -> Path:
     return run_dir / "rows" / f"{experiment}__{index}.json"
 
@@ -139,11 +123,6 @@ def _label(setting: Mapping[str, Any]) -> str:
 
 def _penalty(value: float | None) -> str:
     return "-" if value is None else f"{value:g}"
-
-
-def _gain(entry: Mapping[str, Any]) -> str:
-    low, high = entry["interval"]
-    return f"{number(entry['difference'])} [{number(low)}, {number(high)}]"
 
 
 def _counts(entry: Mapping[str, Any]) -> str:
@@ -219,8 +198,8 @@ def _write_results(run_dir: Path) -> Path:
                     _penalty(row["gene_penalty"]),
                     number(row["val"]["selective_spearman"]),
                     number(row["test"]["selective_spearman"]),
-                    _gain(row["val_gain"]),
-                    _gain(row["test_gain"]),
+                    interval(row["val_gain"]),
+                    interval(row["test_gain"]),
                     number(row["val"]["selective_aupr_lift"]),
                     number(row["test"]["selective_aupr_lift"]),
                     number(row["val"]["residual_pearson_macro_per_gene"]),
@@ -254,11 +233,6 @@ def _write_results(run_dir: Path) -> Path:
     path = run_dir / "results.md"
     write_text(path, "\n".join(out) + "\n")
     return path
-
-
-# ----------------------------------------------------------------------------
-# The run
-# ----------------------------------------------------------------------------
 
 
 def main(argv: Sequence[str] | None = None) -> int:

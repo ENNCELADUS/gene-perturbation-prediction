@@ -1,10 +1,6 @@
-"""The bridge from quantile-normalised pseudo-bulk to bulk, and what every bridge
-remedy shares: the quantile-normalised sources, out-of-fold bridging, and diagnostics
-of how well bridged pseudo-bulk tracks bulk.
-
-3' UMI counts carry no gene-length normalisation and TPM does, so the offset and
-slope differ by gene; one least-squares line per gene, fitted on lines with both.
-"""
+"""The per-gene affine bridge from quantile-normalised pseudo-bulk to bulk, and what
+every bridge remedy shares. 3' UMI counts lack TPM's gene-length normalisation, so
+offset and slope differ by gene."""
 
 from __future__ import annotations
 

@@ -1,11 +1,6 @@
-"""Closed-form ridge stages of the linear context prior.
-
-Each stage predicts lines x genes and is fitted to what earlier stages left.
-Penalties are multiplied by the number of fitted lines, so one grid serves every
-training-set size. Features are standardised with the fitted lines' statistics; a
-constant column gets scale 1 and contributes nothing. Every stage has a per-gene
-intercept.
-"""
+"""Closed-form ridge stages of the linear context prior, each with a per-gene
+intercept. Penalties are multiplied by the number of fitted lines, so one grid
+serves every training-set size."""
 
 from __future__ import annotations
 
@@ -15,16 +10,16 @@ from dataclasses import dataclass
 import numpy as np
 
 
-def column_scale(values: np.ndarray, axis: int = 0) -> tuple[np.ndarray, np.ndarray]:
-    """Mean and SD along ``axis``; a constant column gets scale 1.
+def column_scale(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Column mean and SD; a constant column gets scale 1.
 
     Constancy is tested on the range, not the SD: the float mean of a constant
     column can miss the constant by rounding, leaving an SD of ~1e-17 that would
     blow a query off the constant up to ~1e17.
     """
-    center = values.mean(axis=axis)
-    scale = values.std(axis=axis)
-    varies = (np.ptp(values, axis=axis) > 0) & (scale > 0)
+    center = values.mean(axis=0)
+    scale = values.std(axis=0)
+    varies = (np.ptp(values, axis=0) > 0) & (scale > 0)
     return center, np.where(varies, scale, 1.0)
 
 
@@ -151,11 +146,7 @@ def selected_ridge(
     chunk: int = 128,
 ) -> list[SelectedFit]:
     """One ridge per gene on its selected expression columns, which the caller
-    standardises on the fitted lines (mean zero), so the intercept is the mean.
-
-    Selected columns are gathered as rows of the transposed expression and each
-    chunk's Gram matrices are one batched BLAS product.
-    """
+    standardises on the fitted lines (mean zero), so the intercept is the mean."""
     n = expression.shape[0]
     genes, count = selection.shape
     intercept = targets.mean(axis=0)

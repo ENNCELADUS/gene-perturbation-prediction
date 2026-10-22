@@ -1,14 +1,7 @@
-"""The linear context prior: a stagewise ridge over context views and gene features.
-
-``fit_prior`` fits the stages of a :class:`PriorSpec` in order, each on the residual
-the earlier stages leave, from training-side bulk rows. ``FittedPrior.predict`` maps
-any expression rows (bulk, or bridged pseudo-bulk) to per-stage predictions in units
-of the per-gene residual SD, keyed by the rows given. A missing training label
-counts as the residual's expected value, zero, in fitting. Everything that reads
-labels is fitted on the rows it is given, so cross-fitting is ``fit_prior`` on the
-rows outside a fold; the expression components are label-free and fitted once,
-outside.
-"""
+"""The linear context prior: a stagewise ridge over context views and gene features,
+in residual-SD units, each stage fitted on what the earlier ones leave. A missing
+training label counts as zero; everything that reads labels is fitted on the rows
+given, so cross-fitting is ``fit_prior`` on the rows outside a fold."""
 
 from __future__ import annotations
 
@@ -310,8 +303,6 @@ def fit_prior(
             stages.append((stage.block, features, model))
             continue
         if gene_remaining is None:
-            # Gene-level blocks fit on their own rows: what the context stages
-            # leave on those rows (the same rows as the context stages by default).
             if gene_rows is None:
                 gene_remaining = remaining
             else:

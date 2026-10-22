@@ -9,8 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.context_prior.bridge import fit_bridge
-from src.context_prior.bridge import bridge_diagnostics, oof_bridged
+from src.context_prior.bridge import bridge_diagnostics, fit_bridge, oof_bridged
 from src.context_prior.remedies import affine
 from tests.fixtures.prior import GENES, base
 

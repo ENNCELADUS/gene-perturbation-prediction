@@ -1,24 +1,6 @@
-"""What the data-selected stage of the reference prior carries.
-
-``python -m src.experiments.prior.data_selected_analysis CONFIG --run-id ID`` fits the
-config's reference row (it must include data-selected genes) on the labelled
-training lines as the runner does, and writes ``data_selected/`` into the run
-directory:
-
-- ``targets.csv``: per selective gene, the validation and test Spearman of the
-  prior with and without its data-selected stage, and its five heaviest features.
-  Stages are fitted in order, so the prior without its last stage is the prior
-  fitted without it.
-- ``features.csv``: per expression gene, how the stage uses it over the selective
-  targets (times selected, summed absolute weight on the standardised feature,
-  times it is a paralog or complex partner of the target), and over the fit lines
-  the share of its variance that lineage and the expression components explain.
-- ``ablation.json`` and ``summary.md``: the stage kept to, or stripped of, its top
-  features (ranked by summed absolute weight, a training-side quantity), scored on
-  validation and test with the gain over the reference row.
-
-It reports and chooses nothing. Nothing here is synthetic-lethality evidence.
-"""
+"""What the data-selected stage of the reference prior carries: feature use,
+per-target gains, and the stage kept to or stripped of its top features. Stages are
+fitted in order, so the prior without its last stage is the prior fitted without it."""
 
 from __future__ import annotations
 
@@ -32,8 +14,7 @@ import pandas as pd
 from src.context_prior.gene_features import partner_index
 from src.context_prior.prior import PriorSpec, fit_prior, total
 from src.context_prior.ridge import SelectedFit
-from src.data.io import jsonable as jsonable
-from src.data.io import write_json, write_text
+from src.data.io import jsonable, write_json, write_text
 from src.eval.accuracy import aggregate_geneeffect, gain, long_frame, score
 from src.experiments.prior.base import (
     SCORED,
@@ -44,7 +25,7 @@ from src.experiments.prior.base import (
     stages,
 )
 from src.experiments.prior.config import load_prior_config
-from src.experiments.run_dir import bind, number
+from src.experiments.run_dir import bind, interval, number
 
 #: Feature counts the ablation keeps or strips.
 TOP = (10, 50, 200, 1000)
@@ -129,7 +110,6 @@ def analyse(base: RunBase) -> dict:
     selective = list(base.definitions.selective)
     rows = [genes.index(g) for g in selective]
 
-    # Feature use over the selective targets, on the standardised features.
     weight = np.abs(model.coef[rows])
     chosen = model.selection[rows]
     selected_count = np.bincount(chosen.ravel(), minlength=len(space))
@@ -175,7 +155,6 @@ def analyse(base: RunBase) -> dict:
     rank = {gene: i for i, gene in enumerate(features_table["gene"])}
     order = np.array([rank[g] for g in space])
 
-    # Predictions: without the stage, with it, and with it masked.
     truth = {name: base.truth(list(inputs.queries[name].index)) for name in SCORED}
     without, full, variants = {}, {}, {}
     for name in SCORED:
@@ -269,11 +248,6 @@ def concentration(targets: pd.DataFrame) -> dict:
     return out
 
 
-def _gain_text(entry: Mapping) -> str:
-    low, high = entry["interval"]
-    return f"{number(entry['difference'])} [{number(low)}, {number(high)}]"
-
-
 def summary_lines(result: Mapping, spread: Mapping, run_id: str) -> list[str]:
     ablation = result["ablation"]
     features = result["features"]
@@ -295,8 +269,8 @@ def summary_lines(result: Mapping, spread: Mapping, run_id: str) -> list[str]:
         out.append(
             f"| {label} | {number(scores['val']['selective_spearman'])} "
             f"| {number(scores['test']['selective_spearman'])} "
-            f"| {_gain_text(scores['val']['gain'])} "
-            f"| {_gain_text(scores['test']['gain'])} |"
+            f"| {interval(scores['val']['gain'])} "
+            f"| {interval(scores['test']['gain'])} |"
         )
     out += [
         "",

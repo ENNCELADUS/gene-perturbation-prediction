@@ -1,15 +1,6 @@
-"""Cilantro-SL's input reductions on the prior's input: Geneformer's rank-value
-encoding and its top-k truncation, applied to bulk and pseudo-bulk alike before the
-affine bridge.
-
-A line's values go back to linear scale (``expm1`` of the quantile-normalised log
-values), are divided by each gene's median over the training-side bulk rows where
-it is nonzero (Geneformer's normalisation by corpus medians), and are ranked within
-the line, highest first. ``encoding: rank_value`` gives a gene ``1 - rank / G``, or
-``max(0, 1 - rank / k)`` with ``top_k``; ``encoding: expression`` (needs ``top_k``)
-keeps the normalised expression of the same top ``k`` genes and zeroes the rest, so
-the two encodings differ only in what the kept genes carry.
-"""
+"""Cilantro-SL's input reductions as a bridge remedy: Geneformer's rank-value encoding
+and its top-k truncation, applied to bulk and pseudo-bulk alike before the affine
+bridge."""
 
 from __future__ import annotations
 
@@ -42,7 +33,11 @@ def nonzero_medians(bulk: pd.DataFrame) -> pd.Series:
 def encode(
     frame: pd.DataFrame, medians: pd.Series, encoding: str, top_k: int | None
 ) -> pd.DataFrame:
-    """One line per row, encoded as the module describes."""
+    """One line per row: linear values (``expm1``) over each gene's nonzero bulk
+    median (Geneformer's corpus medians), ranked within the line, highest first.
+    ``rank_value`` gives a gene ``1 - rank / G``, or ``max(0, 1 - rank / k)`` with
+    ``top_k``; ``expression`` keeps the normalised expression of the same top ``k``
+    genes and zeroes the rest, so the two differ only in what the kept genes carry."""
     values = frame.to_numpy(dtype=np.float64)
     relative = np.expm1(values) / medians.loc[frame.columns].to_numpy()
     rank = rankdata(-relative, axis=1, method="average") - 1.0  # 0 is the top
@@ -51,10 +46,8 @@ def encode(
         encoded = (
             1.0 - rank / genes if top_k is None else np.maximum(0.0, 1.0 - rank / top_k)
         )
-    elif encoding == "expression":
-        encoded = np.where(rank < top_k, values, 0.0)
     else:
-        raise ValueError(f"encoding must be one of {ENCODINGS}, got {encoding!r}")
+        encoded = np.where(rank < top_k, values, 0.0)
     return pd.DataFrame(encoded, index=frame.index, columns=frame.columns)
 
 

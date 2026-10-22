@@ -22,8 +22,7 @@ from src.experiments.prior import context_prior as run
 from src.data.io import jsonable, read_json
 from src.experiments.run_dir import bind, locked
 from src.experiments.prior.config import validate_prior_config
-from tests.fixtures.prior import GENES
-from tests.fixtures.prior import CONFIG, synthetic_base, tiny_config
+from tests.fixtures.prior import CONFIG, GENES, synthetic_base, tiny_config
 
 
 def test_prior_config_is_strict():
@@ -127,10 +126,6 @@ def test_shared_files_wait_for_the_run_directory_lock(tmp_path):
     assert (tmp_path / "results.md").is_file()
     assert len(errors) == 1
 
-
-# ----------------------------------------------------------------------------
-# The run data
-# ----------------------------------------------------------------------------
 
 SPACE = [f"E{i}" for i in range(16)]
 
@@ -245,11 +240,6 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
     assert "Z0" not in loaded.gene_effect.index
     assert "XB0" not in loaded.gene_effect.index
     assert loaded.definitions.genes == ("E0", "E1", "Q")
-
-
-# ----------------------------------------------------------------------------
-# The runner on synthetic lines
-# ----------------------------------------------------------------------------
 
 
 def test_run_setting_scores_every_block_set_and_penalty(tmp_path):

@@ -1,22 +1,6 @@
-"""Single-cell statistics stacked on the default prior: does a line's basal
-single-cell distribution add to what its pseudo-bulk already gives the prior?
-
-``python -m src.experiments.prior.single_cell_stack CONFIG --run-id ID`` reads the prior
-run named by ``prior_run`` (its bound config and its ``export/``), fits each arm's
-two-stage ridge (``src.context_prior.single_cell``) on what the export leaves on the
-single-cell training lines (out of fold, so the stack learns at the prior's
-deployment error), and adds it to the export on validation and test. Arms differ
-only in the statistics they read; the ``mean`` arm (the log-space mean, close to
-pseudo-bulk) is the like-for-like control for arms that add the detected fraction
-and variance. Writes into ``<output_root>/<run id>/single_cell_stack/``:
-
-- ``rows/<arm>.json``: per (own shrinkage, selected penalty), validation and test
-  metrics, the selective-Spearman gain over the prior alone, and over the ``mean``
-  arm at the same penalties, each with its 95% paired line-bootstrap interval;
-- ``facts.json`` and ``results.md``.
-
-It reports and chooses nothing. Nothing here is synthetic-lethality evidence.
-"""
+"""Single-cell statistics stacked on a prior run's export (protocol §13): does a line's
+basal single-cell distribution add to what its pseudo-bulk already gives the prior?
+The ``mean`` arm, close to pseudo-bulk, is the like-for-like control."""
 
 from __future__ import annotations
 
@@ -37,11 +21,7 @@ from src.data.prepared import read_manifest
 from src.data.prior_offsets import checked_prior, read_prior_offsets
 from src.eval.accuracy import gain, score
 from src.experiments.joint.config import load_config
-from src.experiments.prior.base import (
-    SCORED,
-    RunBase,
-    load_base,
-)
+from src.experiments.prior.base import SCORED, RunBase, load_base
 from src.experiments.prior.config import load_stack_config
 from src.experiments.run_dir import bind, number
 

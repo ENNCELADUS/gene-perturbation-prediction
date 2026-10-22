@@ -1,14 +1,6 @@
-"""Export the reference row of a prior config for the single-cell correction.
-
-``python -m src.experiments.prior.prior_export CONFIG --run-id ID`` writes
-``<output_root>/<run id>/export/{prior.npz, prior.json}``: the prior's residual
-prediction in residual-SD units for every labelled single-cell training line out of
-fold (the bridge and every stage refitted without the line's fold; extras sharing a
-patient with a line of the fold are held with it) and for the validation and test
-lines from the fit on every labelled training-side line. ``prior.json`` records the
-run id and reference row (the identity a correction checkpoint records) and the
-export's own selective-Spearman scores. Nothing is chosen here.
-"""
+"""Export of a prior config's reference row for the single-cell correction: residual-SD
+predictions out of fold on the labelled single-cell training lines and from the full
+fit on validation and test."""
 
 from __future__ import annotations
 
@@ -23,8 +15,7 @@ import pandas as pd
 from src.context_prior.bridge import oof_bridged
 from src.context_prior.folds import training_side_folds
 from src.context_prior.prior import PriorSpec, crossfit, fit_prior, total
-from src.data.io import jsonable as jsonable
-from src.data.io import write_json
+from src.data.io import jsonable, write_json
 from src.eval.accuracy import score
 from src.experiments.prior.base import (
     SCORED,

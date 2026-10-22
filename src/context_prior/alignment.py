@@ -1,12 +1,7 @@
-"""Contrastive alignment of pseudo-bulk and bulk before the bridge.
-
-Celligner's contrastive PCA adapted to paired profiles: on lines measured both
-ways, the directions with more variance in one source than in the other are the
-top eigenvectors of the difference of their covariance matrices. Their union is
-projected out of every row of both sources, each about its own paired mean. Both
-covariances are over the same lines, so no cluster-mean removal or nearest-
-neighbour matching is needed. Reads no label; fitted once on the paired lines.
-"""
+"""Celligner's contrastive PCA on paired profiles: directions with more variance in
+one source than the other are removed from pseudo-bulk and bulk before the bridge.
+Both covariances are over the same lines, so Celligner's cluster-mean removal and
+nearest-neighbour matching are not needed."""
 
 from __future__ import annotations
 
