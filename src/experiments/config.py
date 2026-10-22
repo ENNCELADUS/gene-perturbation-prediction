@@ -257,7 +257,8 @@ STAGE_ONE_ARMS = ("film", "multi_encoder", "direct_readout", "hybrid")
 #: Arms with the direct readout's trunk.
 STAGE_ONE_TRUNK_ARMS = ("direct_readout", "hybrid")
 #: The pair input before the FiLM layer: a frozen-PIE delta, a learned constant
-#: (``none``), or a line-level reference input.
+#: (``none``), a line-level reference input, or the prior's prediction alone
+#: (``prior``).
 #: ``dE_full``: the profile delta on the full decode panel (``pie/full/``), kept
 #: for the selective genes only.
 STAGE_ONE_DELTAS = ("dH", "dE", "dL", "dE_full")
@@ -265,7 +266,15 @@ STAGE_ONE_PROFILES = ("dE", "dE_full")
 #: The genes a run trains on and predicts: the decode panel, or the selective
 #: genes in it with a full-panel profile delta (the matched profile rows).
 STAGE_ONE_GENE_SETS = ("panel", "selective_full")
-STAGE_ONE_INPUTS = (*STAGE_ONE_DELTAS, "none", "components", "lineage", "text", "own_x")
+STAGE_ONE_INPUTS = (
+    *STAGE_ONE_DELTAS,
+    "none",
+    "components",
+    "lineage",
+    "text",
+    "own_x",
+    "prior",
+)
 STAGE_ONE_OWN_SLOTS = ("own_h", "own_dp", "own_x")
 STAGE_ONE_GENE_SOURCES = (
     "gene_text",
@@ -340,9 +349,20 @@ def _validate_stage_one_data(data: Mapping[str, Any]) -> None:
         raise ValueError(f"data.genes must be one of {STAGE_ONE_GENE_SETS}")
     if data["input"] == "dE_full" and data["genes"] != "selective_full":
         raise ValueError("data.input dE_full exists for data.genes selective_full only")
-    if (data["input"] == "components") != isinstance(data["prior_run"], str):
+    # prior_run: the components input reads its component scores; every other
+    # input reads its prediction as a pair feature (``prior`` alone, or beside a
+    # delta).
+    if data["input"] in ("components", "prior") and not isinstance(
+        data["prior_run"], str
+    ):
+        raise ValueError(f"data.prior_run: required for input {data['input']}")
+    if data["prior_run"] is not None and data["input"] not in (
+        "components",
+        "prior",
+        *STAGE_ONE_DELTAS,
+    ):
         raise ValueError(
-            "data.prior_run: the prior reference run for components, else null"
+            "data.prior_run: for components, prior or a frozen-PIE delta, else null"
         )
 
 

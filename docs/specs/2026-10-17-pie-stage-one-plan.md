@@ -34,7 +34,7 @@ The plan is executed wave by wave.
 | 0 | `feat/ladder-inputs` | Close Task 2: last Tx1 shard, doc fixes, two precompute guards, merge | `results/ladder_inputs/README.md` |
 | 1A | `feat/stage-one` | Shared stage-one stack and Task 3's independent rows | Task 3 results: the hybrid's Δ, the leading family |
 | 1B (parallel) | `feat/state-telemetry` | Task 8 | which vocabularies Task 9 precomputes |
-| 2 | `feat/stage-one` | Task 3's hybrid and winner rows, then Task 4 | architecture; gene query |
+| 2 | `feat/stage-one-prior-input` | The prior-input rows (protocol §16) first; Task 3's second half and Task 4 wait on their reading | whether ΔE adds to the prior; architecture; gene query |
 | 3 | `feat/data-ladder`, `feat/cell-states` | Task 5, alongside Task 9's frozen-state pilot and planted state effects | ladder contrasts; states pilot, before fine-tuned states are built |
 | 4 | same | Task 6, Task 7, Task 9 fine-tuned states | planted recovery, cell-count curve, drift; before end-to-end states are built |
 | 5 | `feat/cell-states` | Task 9 end-to-end states | final per-state account |
@@ -81,7 +81,10 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
   - Task 5's ambient score doesn't exist; it is reported as unavailable.
 - **V(c, g).** Every run writes the 32-d V for all lines × panel genes in fp16, with training lines marked as in-sample.
 - **Recorded by people, never computed by a rule:** the hybrid's Δ, the winning family, the gene query, Task 8's
-  vocabulary list, and the go-ahead for fine-tuned and end-to-end states.
+  vocabulary list, and the go-ahead for fine-tuned and end-to-end states. Recorded 2026-10-22, after Tasks 3 and 8:
+  the hybrid's Δ is ΔE and the leading family FiLM; since no row reached the prior, FiLM reads the prior's prediction
+  as an input (not as the base: the final model is one network) before the rest of Wave 2; Task 9 precomputes the
+  cycle, recurrent programs, line-centred scVI K 6 and HVG K 8 vocabularies, with QC K 8 as its control.
 
 ## Wave 0: close Task 2
 

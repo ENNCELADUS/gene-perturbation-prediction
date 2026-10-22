@@ -1139,6 +1139,11 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   fold from the frame folds with the components refitted outside each fold, the scores the components reader's fold
   runs read; it writes the 128 component scores, fitted on the frame and outside each fold), and a
   per-gene ridge on the line-centred ΔH (no intercept, solved in its dual on the GPU at the report's penalties).
+- **Prior input** (decided 2026-10-22, `configs/stage_one/prior_input/`). `data.prior_run` with any input but
+  `components` appends that prior reference's prediction minus the run's base (z units; frame lines out of fold,
+  validation and test from the whole-frame fit) to FiLM's pair input, never permuted; `input: prior` reads it alone.
+  Rows: FiLM on the prior, on prior + ΔE, on prior + line-permuted ΔE (`report_prior_input`). A fold run's training
+  lines read predictions fitted with the held-out fold's labels, so its out-of-fold telemetry is slightly optimistic.
 - **Training** (`src/training/stage_one_trainer.py`, one GPU, no accelerate). An update is a block of genes by a block
   of training lines; AdamW, linear warmup then cosine (`src/training/schedule.py`); EMA weights when `train.ema_decay`
   is set, which are then validated and saved. Validation runs before the first update (epoch 0) and after every

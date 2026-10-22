@@ -1,0 +1,22 @@
+# The prior-input stage's report (protocol §16; decided 2026-10-22): FiLM reading the frame-refitted
+# prior's prediction alone, beside ΔE, and beside line-permuted ΔE, against the prior itself and
+# Task 3's FiLM on ΔE. `hpc/run.sh stage-one-report CONFIG` -> outputs/stage_one/prior_input/report_prior_input/.
+# People read it; nothing is chosen in code.
+kind: report
+task: prior_input
+output_root: outputs/stage_one
+ladder_config: configs/stage_one/ladder_inputs.yaml
+bootstrap_repeats: 1000
+rows:
+  - {name: base, kind: base}
+  - {name: prior, kind: prior, run: outputs/stage_one/architecture/prior_reference_seed0}
+  - {name: film dE, kind: run, config: configs/stage_one/architecture/film_dE.yaml}
+  - {name: film prior, kind: run, config: configs/stage_one/prior_input/film_prior.yaml}
+  - {name: film prior dE, kind: run, config: configs/stage_one/prior_input/film_prior_dE.yaml}
+  - {name: permuted film prior dE, kind: run, config: configs/stage_one/prior_input/permuted_film_prior_dE.yaml}
+contrasts:
+  - [film prior dE, film prior]
+  - [film prior dE, permuted film prior dE]
+  - [film prior dE, prior]
+  - [film prior, prior]
+  - [film prior dE, film dE]

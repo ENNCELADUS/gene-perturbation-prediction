@@ -1,0 +1,38 @@
+# The prior-input stage (protocol §16; decided 2026-10-22): FiLM reads the frame-refitted prior's
+# prediction (z units, frame lines out of fold) as a pair feature, beside ΔE on the 512-component basis and its own-gene slots.
+# `hpc/run.sh stage-one-queue --gpus ... configs/stage_one/prior_input/*.yaml`.
+kind: train
+task: prior_input
+seed: 0
+output_root: outputs/stage_one
+data:
+  ladder_config: configs/stage_one/ladder_inputs.yaml
+  gene_sources: [gene_text]
+  centre_gene_sources: true
+  input: dE
+  own_slots: [own_dp, own_x]
+  permuted: false
+  prior_run: outputs/stage_one/architecture/prior_reference_seed0
+  genes: panel
+model:
+  arm: film
+  gene_width: 128
+  hidden: 256
+  state_width: 256
+  context: null
+  trunk: null
+train:
+  max_epochs: 30
+  patience: 5
+  warmup_epochs: 1
+  learning_rate: 1.0e-3
+  weight_decay: 0.01
+  ema_decay: null
+  dependency_weight: 1.0
+  lines_per_step: 64
+  genes_per_step: 256
+  token_dropout: 0.0
+  evidence_dropout: 0.0
+eval:
+  lines_per_chunk: 64
+  genes_per_chunk: 2048
