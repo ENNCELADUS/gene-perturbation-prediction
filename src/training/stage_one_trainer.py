@@ -185,7 +185,7 @@ def fit(
     run_dir.mkdir(parents=True, exist_ok=True)
     # On CUDA the step runs as CUDA graphs and AdamW as one fused kernel: the model is
     # small, so per-kernel launch cost, not arithmetic, sets the step time. A PIE
-    # trunk stays eager: its RMSNorm breaks the graph, and compiled it ran slower.
+    # trunk stays eager: its RMSNorm breaks the graph, and compiled it gained nothing.
     compiled = device.type == "cuda" and config["model"]["trunk"] is None
     step = (
         torch.compile(training_step, mode="reduce-overhead", dynamic=False)
