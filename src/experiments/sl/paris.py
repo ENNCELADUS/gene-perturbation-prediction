@@ -277,6 +277,13 @@ def load_config(path: Path) -> dict[str, Any]:
     return config
 
 
+def reference_lines(ladder: Any, pairs: pd.DataFrame) -> list[str]:
+    """The stage-one frame minus every line of the SL benchmark: PARIS fits on them,
+    and stage two's context-ablated control averages over them."""
+    screened = set(pairs["model_id"].dropna())
+    return [m for m in ladder.frame if m not in screened]
+
+
 def inputs(config: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Dependency (GeneEffect units) and expression on the reference lines: the
     stage-one frame minus every line of the SL benchmark, so no validation or test
@@ -287,8 +294,7 @@ def inputs(config: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
     setup = load_setup(config["ladder_config"])
     ladder = setup.ladder
     pairs = pd.read_parquet(config["benchmark"])
-    screened = set(pairs["model_id"].dropna())
-    lines = [m for m in ladder.frame if m not in screened]
+    lines = reference_lines(ladder, pairs)
     if set(lines) & set(ladder.role_lines("val", "test")):
         raise ValueError("a validation or test line is among the reference lines")
     labelled = pairs[pairs["label"].notna()]
@@ -348,12 +354,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--genes", type=int, help="the first N dependency genes (pilot)"
     )
-    parser.add_argument("--mode", choices=MODES, help="overrides the config's mode")
     args = parser.parse_args(argv)
-    config = load_config(args.config)
-    if args.mode:
-        config["mode"] = args.mode
-    run(config, args.run_id, args.genes)
+    run(load_config(args.config), args.run_id, args.genes)
     return 0
 
 
