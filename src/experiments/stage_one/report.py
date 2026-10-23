@@ -50,7 +50,7 @@ def finished_run(
     return run_dir
 
 
-def _row_predictions(
+def row_predictions(
     setup: Setup,
     row: Mapping[str, Any],
     ridge: Mapping[float, pd.DataFrame],
@@ -182,7 +182,7 @@ def report(config_path: Path, device: str) -> Path:
     )
     ridge = cached_ridge(setup, config["ladder_config"], penalties, out, device)
     predictions = {
-        row["name"]: _row_predictions(setup, row, ridge, config["ladder_config"])
+        row["name"]: row_predictions(setup, row, ridge, config["ladder_config"])
         for row in config["rows"]
     }
     scores = {

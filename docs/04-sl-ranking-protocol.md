@@ -317,24 +317,37 @@ its integrity checks pass.
 
 `src/experiments/sl/stage_two.py`, `configs/sl/stage_two.yaml`, `hpc/run.sh sl-stage-two`. It follows the
 2026-10-09 decisions above and blueprint §3.7 on the screen benchmark, and replaces §5–§6's backbone and features
-with the stage-one backbone (GeneEffect protocol §16) and Cilantro-SL's design: the pair is read through stage one's
-viability embedding V(c, g), the 32-d layer before its output (chosen 2026-10-23).
+with the stage-one backbone (GeneEffect protocol §16). Two heads, chosen 2026-10-23, share one MLP
+(`[inputs] → Linear 64 → ReLU → Linear 1`, standardised on the training rows, binary cross-entropy with each
+(screen, line) weighing 1 split equally between its positives and negatives; AdamW, lr 1e-3, weight decay 1e-4,
+batches of 1,024, at most 50 epochs, the epoch kept with the highest mean AUPRC lift over the validation
+(screen, line) contexts). No pair label is an input.
 
-- **Arms.** One per stage-one run, each with its own head: FiLM on the prior and ΔE, and FiLM on ΔE. A training
-  line reads V from the fold run that left its fold out; a validation or test line reads the main run. The linear
-  prior and the measured GeneEffect have no V, so they are not arms.
-- **Rows.** Training: the labelled rows of the single-cell stratum (the 29 screened training lines) whose two genes
-  stage one decodes (the decode panel). Held out: the validation and test rows of decoded genes whose pair was
-  labelled in a training line of the same screen, so every scorer, pair identity included, ranks one universe; the
-  rest are counted.
-- **Head.** `[V_A + V_B ; |V_A − V_B| ; screen one-hot]` (67, order-free), standardised on the training rows →
-  Linear 64 → ReLU → Linear 1, binary cross-entropy with each (screen, line) weighing 1, split equally between its
-  positives and negatives; AdamW (lr 1e-3, weight decay 1e-4), batches of 1,024, at most 50 epochs, the epoch kept
-  with the highest mean AUPRC lift over the validation (screen, line) contexts. No pair label is an input.
-- **Scored**, per split, screen, held-out line and arm: the head; the context-ablated head (each gene's V averaged
-  over the reference lines, the frame lines no screen tested, out of fold); pan-essentiality (the two genes' summed
-  frame mean GeneEffect); A-blind (their summed predicted GeneEffect in the line); pair identity (the pair's hit rate
-  in the screen's training lines). AUPRC and its ratio to the positive rate, AUROC, precision and recall at the top
-  20, on all pairs and on the pairs whose call varies between the screen's training lines. The head's AUPRC
-  differences from each control carry a two-way dyadic bootstrap interval (§7).
+- **PARIS head.** PARIS (Benfatto et al. 2021), ported to Python from its official R code
+  (`third_party/paris/`, `src/experiments/sl/paris.py`), fitted on the reference lines (the stage-one frame lines
+  no screen tested): for each screened gene B, a random forest of B's measured GeneEffect on the mean-channel
+  expression of every other gene, and the expression genes A it selects, with their importance and Pearson r.
+  Input: the pair's PARIS evidence in both directions, order-free (larger and summed importance, summed r and its
+  gap, directions selected; an unselected direction reads 0), the arm's GeneEffect of A and B in the line (sum,
+  gap, minimum) and the screen. Arms, given as stage-one report rows and read as the report reads them: the
+  frame-refitted default prior, FiLM on the prior and ΔE, FiLM on ΔE, and the measured GeneEffect as a
+  reference, never a bar. A training line reads the arm out of fold (the prior's fold export, or the stage-one
+  run that left its fold out); a held-out line reads the main fit. PARIS runs in its `Ginicorrected` mode:
+  a 20-gene pilot of the Boruta mode finished no gene in 32 minutes.
+- **Viability-embedding head** (stage-one arms only). Input `[V_A + V_B ; |V_A − V_B| ; screen]` (67), with V from
+  the run's main fit for every line. Out-of-fold V cannot be used: each fold run is another network, whose V
+  correlates with the main run's at a median of 0.3 per dimension (a linear map explains about 45%), so a head
+  fitted on fold V and scored on main-run V reads two coordinate systems. A training line's V is therefore in
+  sample for stage one (fitted on its GeneEffect, never on SL labels).
+- **Rows.** Training: the labelled rows of the single-cell stratum (the 29 screened training lines) with both
+  genes in the decode panel. Held out: the validation and test rows of panel genes whose pair was labelled in a
+  training line of the same screen, so every scorer ranks one universe; the rest are counted. A row whose arm
+  GeneEffect is missing (measured arm only) scores missing.
+- **Scored**, per split, screen, held-out line and arm: both heads; each head's context-ablated control (the
+  PARIS head without the line's GeneEffect; the V head with each gene's V averaged over the reference lines);
+  PARIS alone (the larger importance, label-free and the same in every line); pan-essentiality (the two genes'
+  summed frame mean GeneEffect); A-blind (their summed GeneEffect in the line); pair identity (the pair's hit
+  rate in the screen's training lines). AUPRC and its ratio to the positive rate, AUROC, precision and recall at
+  the top 20, on all pairs and on the pairs whose call varies between the screen's training lines. Each head's
+  AUPRC differences from the controls carry a two-way dyadic bootstrap interval (§7).
 - **Not yet:** the bulk-stratum complementary model, MiT4SL's A549 test, and per-gene shares of the positives.
