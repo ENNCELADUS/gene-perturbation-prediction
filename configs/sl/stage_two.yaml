@@ -1,16 +1,20 @@
-# SL stage two, first run (SL protocol §10): a viability-embedding head (an MLP over stage one's
-# V(c, A) and V(c, B), out of fold on training lines) per stage-one run, scored per held-out line and
-# screen of the SL screen benchmark. `hpc/run.sh sl-stage-two configs/sl/stage_two.yaml --run-id ID`
-# (CPU, .venv-pie).
+# SL stage two, first run (SL protocol §10): per arm, a PARIS head (PARIS's pair evidence beside the
+# arm's predicted GeneEffect of A and B in the line, out of fold on training lines) and, for a stage-one
+# run, a viability-embedding head (an MLP over its main run's V(c, A) and V(c, B)), scored per held-out
+# line and screen of the SL screen benchmark.
+# `hpc/run.sh sl-stage-two configs/sl/stage_two.yaml --run-id ID` (CPU, .venv-pie), after `sl-paris`.
 kind: sl_stage_two
 seed: 0
 output_root: outputs/sl
 task: stage_two
 ladder_config: configs/stage_one/ladder_inputs.yaml
 benchmark: data/sl_screens/benchmark/pairs.parquet
-arms:
-  film_prior_dE: outputs/stage_one/prior_input/film_prior_dE
-  film_dE: outputs/stage_one/architecture/film_dE
+paris: outputs/sl/paris/paris_seed0/pairs.parquet
+arms:  # stage-one report rows (prior, run) or the measured GeneEffect
+  linear_prior: {kind: prior, run: outputs/stage_one/architecture/prior_reference_seed0}
+  film_prior_dE: {kind: run, config: configs/stage_one/prior_input/film_prior_dE.yaml}
+  film_dE: {kind: run, config: configs/stage_one/architecture/film_dE.yaml}
+  measured: {kind: measured}
 head: {hidden: 64, learning_rate: 1.0e-3, weight_decay: 1.0e-4, batch_size: 1024, max_epochs: 50}
 top_k: 20
 bootstrap: 1000

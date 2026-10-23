@@ -5,8 +5,10 @@ import pytest
 from src.experiments.sl.stage_two import (
     context_weights,
     dyadic_difference,
+    effect_features,
     fit_head,
     head_input,
+    paris_features,
     pair_identity,
     ranking_metrics,
     varying_pairs,
@@ -90,3 +92,30 @@ def test_dyadic_difference_is_zero_for_one_score_and_brackets_a_real_gap():
     gap = dyadic_difference(label, good, noise, gene_a, gene_b, 200, rng)
     low, high = gap["interval"]
     assert 0 < low <= gap["difference"] <= high
+
+
+def test_paris_features_ignore_the_pairs_order_and_read_unselected_as_zero():
+    selected = pd.DataFrame(
+        {
+            "dependency_gene": ["B", "A", "C"],
+            "feature_gene": ["A", "B", "D"],
+            "importance": [2.0, 0.5, 1.0],
+            "r": [0.4, -0.1, 0.3],
+        }
+    )
+    rows = pd.DataFrame(
+        {"gene_a": ["A", "B", "C", "E"], "gene_b": ["B", "A", "D", "F"]}
+    )
+    out = paris_features(selected, rows)
+    np.testing.assert_allclose(out[0], [2.0, 2.5, 0.3, 0.5, 2])
+    np.testing.assert_allclose(out[1], out[0])
+    np.testing.assert_allclose(out[2], [1.0, 1.0, 0.3, 0.3, 1])  # D's for C only
+    np.testing.assert_allclose(out[3], [0, 0, 0, 0, 0])
+
+
+def test_effect_features_read_the_rows_line():
+    effects = pd.DataFrame(
+        [[-1.0, -0.2], [0.1, -0.5]], index=["L0", "L1"], columns=["A", "B"]
+    )
+    rows = pd.DataFrame({"model_id": ["L1"], "gene_a": ["B"], "gene_b": ["A"]})
+    np.testing.assert_allclose(effect_features(effects, rows), [[-0.4, 0.6, -0.5]])

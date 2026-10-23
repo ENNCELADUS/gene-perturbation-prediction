@@ -169,7 +169,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 
 ### `experiments/sl/`
 
-- `stage_two`: Stage two, first run (SL protocol §10): a viability-embedding head, an MLP over stage one's V(c, A) and V(c, B), scored per held-out line and screen of the SL screen benchmark against its controls.
+- `stage_two`: Stage two, first run (SL protocol §10): a PARIS head and a viability-embedding head, scored per held-out line and screen of the SL screen benchmark against their controls.
 
 ### `experiments/states/`
 
