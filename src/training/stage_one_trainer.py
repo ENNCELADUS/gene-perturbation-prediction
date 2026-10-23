@@ -126,12 +126,18 @@ def dependency_term(
 
 
 def training_step(
-    model: nn.Module, data: TrainingData, genes: Tensor, lines: Tensor, weight: float
+    model: nn.Module,
+    batch: Any,
+    target: Tensor,
+    genes: Tensor,
+    data: TrainingData,
+    weight: float,
 ) -> tuple[Tensor, Tensor]:
-    """One block's loss and its dependency term: the part compiled on CUDA."""
-    target = data.targets[lines][:, genes].T
+    """One gathered block's loss and its dependency term: the part compiled on CUDA.
+    The batch and target are gathered outside it, as a CUDA graph copies every
+    array it reads on each replay (the resident deltas are many GB)."""
     with autocast(target.device):
-        z, _ = model(data.batch(genes, lines))
+        z, _ = model(batch)
     call = dependency_term(z, target, genes, data)
     return masked_mse(z, target) + weight * call, call
 
@@ -311,7 +317,14 @@ def fit(
                 continue
             if compiled:
                 torch.compiler.cudagraph_mark_step_begin()
-            loss, call = step(model, data, genes, lines, train["dependency_weight"])
+            loss, call = step(
+                model,
+                data.batch(genes, lines),
+                data.targets[lines][:, genes].T,
+                genes,
+                data,
+                train["dependency_weight"],
+            )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
