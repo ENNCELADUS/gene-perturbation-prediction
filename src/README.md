@@ -167,6 +167,10 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `run`: Stage-one training runs, their queue over GPUs, and the report entry point (PIE stage-one design §3.3, §4, Task 3; protocol §16), in ``.venv-pie``.
 - `setup`: A ladder config and everything it names.
 
+### `experiments/sl/`
+
+- `stage_two`: Stage two, first run (SL protocol §10): a viability-embedding head, an MLP over stage one's V(c, A) and V(c, B), scored per held-out line and screen of the SL screen benchmark against its controls.
+
 ### `experiments/states/`
 
 - `config`: The cell-state telemetry's config (protocol §17).

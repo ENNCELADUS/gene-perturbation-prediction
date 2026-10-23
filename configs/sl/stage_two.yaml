@@ -1,0 +1,16 @@
+# SL stage two, first run (SL protocol §10): a viability-embedding head (an MLP over stage one's
+# V(c, A) and V(c, B), out of fold on training lines) per stage-one run, scored per held-out line and
+# screen of the SL screen benchmark. `hpc/run.sh sl-stage-two configs/sl/stage_two.yaml --run-id ID`
+# (CPU, .venv-pie).
+kind: sl_stage_two
+seed: 0
+output_root: outputs/sl
+task: stage_two
+ladder_config: configs/stage_one/ladder_inputs.yaml
+benchmark: data/sl_screens/benchmark/pairs.parquet
+arms:
+  film_prior_dE: outputs/stage_one/prior_input/film_prior_dE
+  film_dE: outputs/stage_one/architecture/film_dE
+head: {hidden: 64, learning_rate: 1.0e-3, weight_decay: 1.0e-4, batch_size: 1024, max_epochs: 50}
+top_k: 20
+bootstrap: 1000
