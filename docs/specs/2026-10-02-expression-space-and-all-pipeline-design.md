@@ -155,8 +155,7 @@ zero-initialised MLP arms returning exactly no-change; zero-key checkpoint loads
 
 Blueprint reduced to the task description (its model equations, learning rates, metric and result tables move to
 the protocol); protocol §3.4 expression space, §4–§5 the new wiring, rates and single validation split, §9 the
-comparison and the `all` run, §8 kept as the diagnostics record; `docs/figures/geneeffect_architecture.svg` (log HVG
-into STATE, Tx1 to the head); `AGENTS.md`, `CLAUDE.md`, `hpc/README.md` (commands, deleted diagnostics,
+comparison and the `all` run, §8 kept as the diagnostics record; `AGENTS.md`, `CLAUDE.md`, `hpc/README.md` (commands, deleted diagnostics,
 silent-failure list); the Tahoe-x1 literature note's lines 37–38 (Fig. 5 separability values reported as
 perturbation-prediction numbers) replaced by Fig. 6 values.
 
