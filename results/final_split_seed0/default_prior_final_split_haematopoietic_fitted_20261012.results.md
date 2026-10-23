@@ -1,4 +1,4 @@
-# Linear context prior experiments, run default_prior_final_split_20261012
+# Linear context prior experiments, run default_prior_final_split_haematopoietic_fitted_20261012
 
 Shared expression space: 8737 genes (201 training lines took the training mean for some). The prior fits 975 labelled lines of 1427 training-side lines with bulk RNA; 371 of the 377 labelled single-cell training lines have bulk RNA and fit the bridge. 4323 selective genes.
 

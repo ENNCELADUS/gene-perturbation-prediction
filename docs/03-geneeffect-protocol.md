@@ -125,27 +125,17 @@ $$
 
 ## 4. Model
 
-![](figures/geneeffect_architecture.svg)
-
-*Figure 1. (a) Frozen Tx1-3B encodes the sampled basal cells of line $c$ from raw counts into
-cell embeddings that are moment-pooled into a context embedding; frozen ESM-2 encodes gene $g$.
-Both are computed once and cached. The same cells in log-normalised HVG expression (§3.4) are
-STATE's basal input. (b) A trainable adapter turns the gene embedding into a perturbation
-token. The STATE transition model, initialised from a published Replogle checkpoint, reads the
-log-normalised basal cells through its own released basal encoder and predicts the line's
-post-perturbation expression (STATE settings below). Response replay to measured Perturb-seq is
-drawn dashed: it is off in the current runs. Response descriptors summarise how predicted
-expression differs from basal expression. (c) The nested low-rank head (below); the training gene
-mean is added to $\hat\delta$ for the GeneEffect prediction. Tx1 feeds only the head; it does not enter
-STATE. Arrows carry the tensors passed between modules, shaped for one gene–line condition
-(cells × features, no batch dimension); boxes state the width change inside each module. The
-adapter emits 2024 values because that is the width of STATE's perturbation vocabulary; STATE
-projects it, like the 2000-wide expression input, to its hidden size of 328. Notation: $H_c$,
-Tx1 cell embeddings of line $c$; $e_g$ and $p_g$, the gene embedding and the perturbation token;
-$X_c$ and $\hat Y_{g,c}$, basal and predicted post-perturbation log expression; $\Delta$ and $s$,
-the projected expression shift and scalar response summaries; $q_{g,c}$, basal statistics of $g$
-in $c$; $z_c$, the pooled context embedding; $\mu_{\text{train}}(g)$, the training gene mean;
-$\hat\delta$, the predicted residual. The training protocol is Figure 2 in §5.*
+Frozen Tx1-3B encodes the sampled basal cells of line $c$ from raw counts into cell embeddings
+$H_c$, moment-pooled into the context embedding $z_c$; frozen ESM-2 encodes gene $g$ as $e_g$.
+Both are computed once and cached. The same cells in log-normalised HVG expression $X_c$ (§3.4)
+are STATE's basal input. A trainable adapter turns $e_g$ into the perturbation token $p_g$, 2024
+values wide because that is the width of STATE's perturbation vocabulary. The STATE transition
+model, initialised from a published Replogle checkpoint, projects $p_g$ and the 2000-wide
+expression input to its hidden size of 328, reads $X_c$ through its released basal encoder and
+predicts the line's post-perturbation log expression $\hat Y_{g,c}$ (STATE settings below).
+Response descriptors summarise how $\hat Y_{g,c}$ differs from $X_c$. The nested low-rank head
+(below) predicts the residual $\hat\delta$, and the training gene mean $\mu_{\text{train}}(g)$ is
+added to it for the GeneEffect prediction. Tx1 feeds only the head; it does not enter STATE.
 
 The head uses five feature blocks: pooled
 expression change $\Delta$ (projected), response dispersion statistics $s$, gene-specific basal
@@ -208,15 +198,6 @@ individual control and perturbed cells. Covariates that are unavailable for a ge
 are masked, never zero-filled.
 
 ## 5. Training and selection
-
-![](figures/geneeffect_training_protocol.svg)
-
-*Figure 2. Training protocol. Preparation fits the gene means, the selective genes and the
-per-gene residual SD on training lines once; Tx1-3B and ESM-2 stay frozen throughout. The
-objective screen trains the adapter and head with STATE frozen; the STATE screen compares STATE
-frozen, STATE fine-tuned and no STATE (head only) under the winning objective. Every run is one
-config at seed 0: train, validate each epoch, keep the best checkpoint, then score it once on
-test.*
 
 A single joint training loop runs. Every update minimizes one GeneEffect objective
 (`train.objective`) on $\hat\delta$ against $r_{cg}=y_{cg}-\mu_{\text{train}}(g)$, with
@@ -475,7 +456,7 @@ All result figures are drawn from tracked evidence by
 
 ![](figures/geneeffect_readout_learning_curves.svg)
 
-*Figure 2. Readout training on the frozen backbone, head seed 0, one point per epoch. (a)
+*Figure 1. Readout training on the frozen backbone, head seed 0, one point per epoch. (a)
 Validation GeneEffect Huber loss, the selection criterion of that run; the ring marks the selected
 epoch. (b) Residual Pearson over the 4,447 train-defined variable genes, validation
 (solid) and training (dashed); the dotted line is the eight-component context-PCA ridge
@@ -492,7 +473,7 @@ holds.
 
 ![](figures/geneeffect_validation_comparison.svg)
 
-*Figure 3. Four methods on the same 479,084 observed cell-line/gene pairs over the 27
+*Figure 2. Four methods on the same 479,084 observed cell-line/gene pairs over the 27
 validation lines; the readouts consume identical cached features. (a) Residual Pearson;
 open circles are two further head initialisations. (b) Differences in residual Pearson
 from the explicit slope, 1,000 paired bootstrap resamples of the 27 lines, 95%
@@ -523,7 +504,7 @@ library (§3.4).
 
 ![](figures/geneeffect_interface_transfer.svg)
 
-*Figure 4. Four interfaces between the Tx1 context and the response model, each adapted on
+*Figure 3. Four interfaces between the Tx1 context and the response model, each adapted on
 three anchor lines and scored on the fourth. The x axis is the response loss on the
 held-out line divided by the no-change reference; below 1 beats no-change. Markers are
 held-out lines; the black tick is the pooled ratio, whose 95% interval is narrower than
@@ -616,7 +597,7 @@ per-lineage table (the mean over a lineage's lines of the per-line residual Spea
 selective genes), then the best epoch with its training-diagnostic and validation selective
 Spearman; a best epoch before the first update is reported as the prior alone. The lineages come
 from the split table next to the split file (`cell_line_geneeffect_split.csv`). One
-config is one experiment at seed 0 (Figure 2); there is no multi-seed stage. Runs are screened
+config is one experiment at seed 0; there is no multi-seed stage. Runs are screened
 one at a time: the three objectives under frozen STATE, then the winning objective with
 trainable STATE and with no STATE. A winner has the highest `val_selective_spearman` at its
 `best.pt`; when two settings differ by less than the 27-line paired bootstrap interval, the
