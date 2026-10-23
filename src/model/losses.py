@@ -117,10 +117,22 @@ def dependency_loss(
     rows = selective.bool()
     if not bool(rows.any()):
         return prediction.sum() * 0.0
-    absolute = gene_mean[rows] + prediction[rows]
-    logit = (DEPENDENCY_THRESHOLD - absolute) / scale[rows]
-    label = ((gene_mean[rows] + target[rows]) < DEPENDENCY_THRESHOLD).float()
+    logit, label = dependency_logits(
+        prediction[rows], target[rows], scale[rows], gene_mean[rows]
+    )
     return F.binary_cross_entropy_with_logits(logit, label)
+
+
+def dependency_logits(
+    prediction: torch.Tensor,
+    target: torch.Tensor,
+    scale: torch.Tensor,
+    gene_mean: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``dependency_loss``'s logit and measured label, elementwise."""
+    logit = (DEPENDENCY_THRESHOLD - (gene_mean + prediction)) / scale
+    label = ((gene_mean + target) < DEPENDENCY_THRESHOLD).float()
+    return logit, label
 
 
 def geneeffect_loss(
