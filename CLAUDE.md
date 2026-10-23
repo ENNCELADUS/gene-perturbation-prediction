@@ -30,8 +30,12 @@ Replace this section on every update; history lives in `results/` and the protoc
   ([record](results/state_telemetry_seed0/README.md)).
 - **Next**: the GPU-efficiency pass (`perf/gpu`), then the rest of Wave 2 and Task 9 (five vocabularies). The
   whole-repo trim is merged; H20 artifacts written before it were migrated once, so pre-trim code cannot read them.
-- The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
-  **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
+- **Stage two** (SL protocol §10) ran on the screen benchmark: a PARIS head and a viability-embedding (V) head. Pair
+  identity wins everywhere. Predicted GeneEffect, and even measured GeneEffect, adds nothing over each gene's mean
+  GeneEffect, and the V head falls below its gene-mean-V ablation ([record](results/sl_stage_two_seed0/README.md)).
+  Nothing here is SL context evidence.
+- One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test;
+  there is no multi-seed stage.
 
 ## Commands
 

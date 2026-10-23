@@ -351,4 +351,6 @@ batches of 1,024, at most 50 epochs, the epoch kept with the highest mean AUPRC 
   rate in the screen's training lines). AUPRC and its ratio to the positive rate, AUROC, precision and recall at
   the top 20, on all pairs and on the pairs whose call varies between the screen's training lines. Each head's
   AUPRC differences from the controls carry a two-way dyadic bootstrap interval (§7).
+- **Result** ([record](../results/sl_stage_two_seed0/README.md)): pair identity wins everywhere. No arm's PARIS
+  head beats its gene-mean ablation, measured GeneEffect included. The V head falls below its own ablation.
 - **Not yet:** the bulk-stratum complementary model, MiT4SL's A549 test, and per-gene shares of the positives.
