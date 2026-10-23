@@ -344,7 +344,8 @@ batches of 1,024, at most 50 epochs, the epoch kept with the highest mean AUPRC 
   training line of the same screen, so every scorer ranks one universe; the rest are counted. A row whose arm
   GeneEffect is missing (measured arm only) scores missing.
 - **Scored**, per split, screen, held-out line and arm: both heads; each head's context-ablated control (the
-  PARIS head without the line's GeneEffect; the V head with each gene's V averaged over the reference lines);
+  PARIS head reading each gene's frame mean GeneEffect in every line, one fit shared by the arms; the V head
+  with each gene's V averaged over the reference lines);
   PARIS alone (the larger importance, label-free and the same in every line); pan-essentiality (the two genes'
   summed frame mean GeneEffect); A-blind (their summed GeneEffect in the line); pair identity (the pair's hit
   rate in the screen's training lines). AUPRC and its ratio to the positive rate, AUROC, precision and recall at
