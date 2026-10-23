@@ -20,10 +20,11 @@ from typing import Any
 import numpy as np
 import torch
 from torch import Tensor, nn
+from torch.nn import functional as F
 from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
 from src.data.splits import FixedSplit, assert_same_membership, membership
-from src.model.losses import dependency_loss
+from src.model.losses import dependency_logits
 from src.training.checkpoint import (
     TrainState,
     capture_rng_state,
@@ -98,11 +99,9 @@ def updates_per_epoch(data: TrainingData, config: Mapping[str, Any]) -> int:
     )
 
 
-def masked_mse(z: Tensor, target: Tensor) -> Tensor | None:
-    """Mean squared error over the finite targets; None when there is none."""
+def masked_mse(z: Tensor, target: Tensor) -> Tensor:
+    """Mean squared error over the finite targets (a block has at least one)."""
     keep = torch.isfinite(target)
-    if not bool(keep.any()):
-        return None
     error = torch.where(keep, z.float() - torch.nan_to_num(target), 0.0)
     return error.square().sum() / keep.sum()
 
@@ -111,17 +110,30 @@ def dependency_term(
     z: Tensor, target: Tensor, genes: Tensor, data: TrainingData
 ) -> Tensor:
     """The dependency call's cross-entropy over the finite targets of selective
-    genes in a (genes x lines) block, in GeneEffect units; zero without such a pair."""
+    genes in a (genes x lines) block, in GeneEffect units; zero without such a pair.
+    Masked rather than indexed, so a step's shapes are static and it never waits on
+    the device."""
     keep = torch.isfinite(target) & data.selective[genes].unsqueeze(1)
-    gene = genes.unsqueeze(1).expand_as(target)[keep]
-    sigma = data.sigma_g[gene]
-    return dependency_loss(
-        z.float()[keep] * sigma,
-        target[keep] * sigma,
+    sigma = data.sigma_g[genes].unsqueeze(1)
+    logit, label = dependency_logits(
+        z.float() * sigma,
+        torch.nan_to_num(target) * sigma,
         sigma,
-        data.m_g[gene],
-        torch.ones_like(sigma, dtype=torch.bool),
+        data.m_g[genes].unsqueeze(1),
     )
+    loss = F.binary_cross_entropy_with_logits(logit, label, reduction="none")
+    return torch.where(keep, loss, 0.0).sum() / keep.sum().clamp(min=1)
+
+
+def training_step(
+    model: nn.Module, data: TrainingData, genes: Tensor, lines: Tensor, weight: float
+) -> tuple[Tensor, Tensor]:
+    """One block's loss and its dependency term: the part compiled on CUDA."""
+    target = data.targets[lines][:, genes].T
+    with autocast(target.device):
+        z, _ = model(data.batch(genes, lines))
+    call = dependency_term(z, target, genes, data)
+    return masked_mse(z, target) + weight * call, call
 
 
 def _checkpoint(path: Path, payload: Mapping[str, Any]) -> None:
@@ -165,10 +177,20 @@ def fit(
     train = config["train"]
     record = json.loads(json.dumps(config))
     run_dir.mkdir(parents=True, exist_ok=True)
+    # On CUDA the step runs as CUDA graphs and AdamW as one fused kernel: the model is
+    # small, so per-kernel launch cost, not arithmetic, sets the step time.
+    compiled = device.type == "cuda"
+    step = (
+        torch.compile(training_step, mode="reduce-overhead", dynamic=False)
+        if compiled
+        else training_step
+    )
+    finite = torch.isfinite(data.targets)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=train["learning_rate"],
         weight_decay=train["weight_decay"],
+        fused=compiled,
     )
     scheduler = make_scheduler(optimizer, config, updates_per_epoch(data, config))
     ema = None
@@ -279,16 +301,17 @@ def fit(
         model.train()
         started = time.monotonic()
         losses, dependency = [], []
-        for genes, lines in epoch_steps(data, config, generator):
-            target = data.targets[lines][:, genes].T
-            with autocast(device):
-                z, _ = model(data.batch(genes, lines))
-            loss = masked_mse(z, target)
-            if loss is None:
+        steps = list(epoch_steps(data, config, generator))
+        # One device sync per epoch: a block without a training label is skipped.
+        labelled = torch.stack(
+            [finite[lines][:, genes].any() for genes, lines in steps]
+        ).tolist()
+        for (genes, lines), has_label in zip(steps, labelled):
+            if not has_label:
                 continue
-            call = dependency_term(z, target, genes, data)
-            loss = loss + train["dependency_weight"] * call
-            dependency.append(float(call.detach()))
+            if compiled:
+                torch.compiler.cudagraph_mark_step_begin()
+            loss, call = step(model, data, genes, lines, train["dependency_weight"])
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
@@ -296,10 +319,16 @@ def fit(
             if ema is not None:
                 ema.update_parameters(model)
             state.global_step += 1
-            losses.append(float(loss.detach()))
+            # Cloned: a CUDA graph overwrites its outputs on the next replay.
+            losses.append(loss.detach().clone())
+            dependency.append(call.detach().clone())
         metrics = {
-            "train_loss": float(np.mean(losses)) if losses else None,
-            "train_dependency": float(np.mean(dependency)) if dependency else None,
+            "train_loss": torch.stack(losses).double().mean().item()
+            if losses
+            else None,
+            "train_dependency": (
+                torch.stack(dependency).double().mean().item() if dependency else None
+            ),
             # The updates alone, without validation: a streamed input's I/O shows here.
             "epoch_seconds": time.monotonic() - started,
         }
