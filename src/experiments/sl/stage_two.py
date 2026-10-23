@@ -414,18 +414,29 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "label",
     ]
     varying = varying_pairs(training, evaluated)
+    tables = {"training": training, "validation": validation, "held": evaluated}
+    # Every line reads each gene's frame mean GeneEffect: the PARIS head with no line
+    # in it, the same for every arm.
+    lines = pd.unique(pd.concat([t["model_id"] for t in tables.values()]))
+    blind = pd.DataFrame(
+        np.tile(gene_mean.to_numpy(), (len(lines), 1)),
+        index=lines,
+        columns=gene_mean.index,
+    )
+    shared["paris_head_context_ablated"] = fit(
+        "paris_head_context_ablated",
+        {
+            k: np.c_[paris[k], effect_features(blind, t), screen_onehot(screens[k])]
+            for k, t in tables.items()
+        },
+    )
     for name, arm in config["arms"].items():
         effects = arm_effects(setup, arm, config["ladder_config"])
-        tables = {"training": training, "validation": validation, "held": evaluated}
         ge = {k: effect_features(effects, t) for k, t in tables.items()}
         held_scores = dict(shared) | {"a_blind": -ge["held"][:, 0]}
         held_scores["paris_head"] = fit(
             f"{name}/paris_head",
             {k: np.c_[paris[k], ge[k], screen_onehot(screens[k])] for k in tables},
-        )
-        held_scores["paris_head_context_ablated"] = fit(
-            f"{name}/paris_head_context_ablated",
-            {k: np.c_[paris[k], screen_onehot(screens[k])] for k in tables},
         )
         if arm["kind"] == "run":
             viability = Viability(arm["config"], config["ladder_config"])
