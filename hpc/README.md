@@ -17,6 +17,7 @@ prints every command's arguments.
 | `ladder-inputs`, `gene-sources`, `pie-precompute` | the stage-one inputs and the frozen PIE's deltas | CPU; Tx1, ESM and PIE on GPUs | [Stage-one inputs](#the-stage-one-inputs) |
 | `stage-one`, `stage-one-queue`, `stage-one-report`, `stage-one-prior` | stage-one runs, their queue and report, the prior reference | one GPU per run (`.venv-pie`); the prior on CPU | [Stage-one model](#the-stage-one-model) |
 | `cell-states`, `pie-precompute --steps states` | the cell-state telemetry and the frozen PIE on its states | CPU; scVI and PIE on GPUs | [Cell states](#the-cell-states) |
+| `sl-stage-two` | SL stage two on stage one's GeneEffect (`sl.stage_two`) | CPU, `.venv-pie` | [SL stage two](#sl-stage-two) |
 
 Direct entry points, `python -m src.<module>` from the repository root (`.venv-tx1` unless noted):
 
@@ -305,6 +306,18 @@ hpc/run.sh cell-states $CFG --steps report                                      
 
 `--set ALL` runs the real sets and permutation seed 0 before seeds 1 and 2; a shard can be stopped there and the others
 assembled by name (`--set cycle,programs,…`). A one-set trial before the queue: `--steps states --set cycle --shard 0/16`.
+
+## SL stage two
+
+`sl-stage-two` (`src.experiments.sl.stage_two`, SL protocol §10) reads the SL screen benchmark
+(`data/sl_screens/benchmark/pairs.parquet`) and each arm's finished stage-one run with its five fold runs (`V.npy`,
+`predictions.parquet`). It fits one viability-embedding head per arm on the single-cell SL training lines and writes
+`scores.parquet`, `metrics.json` and `results.md` to `outputs/sl/stage_two/<run id>/`, in a few minutes on the CPU. The
+run directory refuses another config.
+
+```bash
+hpc/run.sh sl-stage-two configs/sl/stage_two.yaml --run-id stage_two_seed0
+```
 
 ## The `prior` command
 

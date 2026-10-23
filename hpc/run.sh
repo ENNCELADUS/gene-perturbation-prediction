@@ -19,6 +19,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh stage-one-queue --gpus 0,1,2,3 [--folds main,0,1,2,3,4] CONFIG...   (stage-one runs, one per listed GPU)
        hpc/run.sh stage-one-report CONFIG [--device cuda]   (a stage-one report over runs, 1 GPU)
        hpc/run.sh stage-one-prior CONFIG --run-id ID   (the default prior refitted on the stage-one frame, CPU)
+       hpc/run.sh sl-stage-two CONFIG --run-id ID   (SL stage two on stage one's GeneEffect, CPU, .venv-pie)
        hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
        hpc/run.sh pie-precompute CONFIG --steps states|assemble_states --set NAME[,NAME]|ALL [--shard I/N]   (frozen PIE on state inputs, GPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment; pie-reproduce,
@@ -74,7 +75,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior|cell-states) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior|sl-stage-two|cell-states) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -117,6 +118,7 @@ case "$command" in
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.stage_one report "$@" ;;
   stage-one-prior) exec "$python_bin" -m src.experiments.stage_one.prior_reference "$@" ;;
+  sl-stage-two) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.stage_two "$@" ;;
   gene-sources)
     step=$1; shift
     case "$step" in

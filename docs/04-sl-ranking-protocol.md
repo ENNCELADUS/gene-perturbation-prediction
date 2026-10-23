@@ -1,9 +1,9 @@
 # Experiment Protocol: Held-Out-Cell-Line SL Ranking
 
-Updated 2026-10-02. This is the **separate, unimplemented SL-pair protocol** under
+Updated 2026-10-23. This is the **separate SL-pair protocol** under
 [the research blueprint](01-blueprint.md); its rules are in §8. It builds on the backbone defined by the
-[GeneEffect protocol](03-geneeffect-protocol.md) (§4). No SL head, out-of-fold SL
-feature set or SL performance result exists.
+[GeneEffect protocol](03-geneeffect-protocol.md) (§4). The first stage-two run, on the screen benchmark with the
+stage-one backbone, is §10; §2–§6 and §9 describe the earlier, unbuilt design.
 
 **Superseded in part (2026-10-09, benchmark 2026-10-11).** The [research blueprint](01-blueprint.md#3-task-formulation) now fixes
 the SL task differently, and this protocol is rewritten to match before stage two is implemented:
@@ -312,3 +312,29 @@ and projection seeds. `sl_scores.csv` records context ModelID, canonical pair, a
 score, label, endpoint-seen stratum and every exclusion reason. Planned metrics are not
 results; a claim enters [`results/`](../results/) only after the frozen run completes and
 its integrity checks pass.
+
+## 10. Stage two, first run (2026-10-23)
+
+`src/experiments/sl/stage_two.py`, `configs/sl/stage_two.yaml`, `hpc/run.sh sl-stage-two`. It follows the
+2026-10-09 decisions above and blueprint §3.7 on the screen benchmark, and replaces §5–§6's backbone and features
+with the stage-one backbone (GeneEffect protocol §16) and Cilantro-SL's design: the pair is read through stage one's
+viability embedding V(c, g), the 32-d layer before its output (chosen 2026-10-23).
+
+- **Arms.** One per stage-one run, each with its own head: FiLM on the prior and ΔE, and FiLM on ΔE. A training
+  line reads V from the fold run that left its fold out; a validation or test line reads the main run. The linear
+  prior and the measured GeneEffect have no V, so they are not arms.
+- **Rows.** Training: the labelled rows of the single-cell stratum (the 29 screened training lines) whose two genes
+  stage one decodes (the decode panel). Held out: the validation and test rows of decoded genes whose pair was
+  labelled in a training line of the same screen, so every scorer, pair identity included, ranks one universe; the
+  rest are counted.
+- **Head.** `[V_A + V_B ; |V_A − V_B| ; screen one-hot]` (67, order-free), standardised on the training rows →
+  Linear 64 → ReLU → Linear 1, binary cross-entropy with each (screen, line) weighing 1, split equally between its
+  positives and negatives; AdamW (lr 1e-3, weight decay 1e-4), batches of 1,024, at most 50 epochs, the epoch kept
+  with the highest mean AUPRC lift over the validation (screen, line) contexts. No pair label is an input.
+- **Scored**, per split, screen, held-out line and arm: the head; the context-ablated head (each gene's V averaged
+  over the reference lines, the frame lines no screen tested, out of fold); pan-essentiality (the two genes' summed
+  frame mean GeneEffect); A-blind (their summed predicted GeneEffect in the line); pair identity (the pair's hit rate
+  in the screen's training lines). AUPRC and its ratio to the positive rate, AUROC, precision and recall at the top
+  20, on all pairs and on the pairs whose call varies between the screen's training lines. The head's AUPRC
+  differences from each control carry a two-way dyadic bootstrap interval (§7).
+- **Not yet:** the bulk-stratum complementary model, MiT4SL's A549 test, and per-gene shares of the positives.
