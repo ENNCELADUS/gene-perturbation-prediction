@@ -998,7 +998,8 @@ environment) and `--steps tx1 --shard I/N` (one GPU per shard); `hpc/run.sh pie-
 Task 3 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) (plan
 [2026-10-17](specs/2026-10-17-pie-stage-one-plan.md), Wave 1A) trains the architecture arms on the §15 inputs, one
 config per run (`configs/stage_one/architecture/`, `kind: train`), with `hpc/run.sh stage-one CONFIG [--fold K]`
-(`src/experiments/stage_one/run.py`, `.venv-pie`; the queue `stage-one-queue` runs every config and fold, one per GPU) and
+(`src/experiments/stage_one/run.py`, `.venv-pie`; the queue `stage-one-queue` runs every config and fold, one per listed
+GPU, so a GPU listed twice runs two) and
 reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config).
 
 - **Target and base.** `z = (GeneEffect − m_g) / σ_g` on the 981 frame lines, `m_g` their mean, `σ_g` the §6 residual SD;
@@ -1080,7 +1081,9 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   Rows: FiLM on the prior, on prior + ΔE, on prior + line-permuted ΔE (`report_prior_input`). A fold run's training
   lines read predictions fitted with the held-out fold's labels, so its out-of-fold telemetry is slightly optimistic.
 - **Training** (`src/training/stage_one_trainer.py`, one GPU, no accelerate). An update is a block of genes by a block
-  of training lines; AdamW, linear warmup then cosine (`src/training/schedule.py`); EMA weights when `train.ema_decay`
+  of training lines; AdamW (fused on CUDA), linear warmup then cosine (`src/training/schedule.py`). Without a PIE
+  trunk the step (model and loss on a block gathered before it) runs as CUDA graphs through `torch.compile`; rows
+  trained from 2026-10-23 on differ from earlier ones at rounding level. EMA weights when `train.ema_decay`
   is set, which are then validated and saved. Validation runs before the first update (epoch 0) and after every
   epoch; `best.pt` and early stopping follow the validation per-line residual Spearman alone (`val_line_spearman`,
   from 2026-10-21; the first Task 3 queue selected on selective Spearman, and picked the same winner). Epoch 0 is the

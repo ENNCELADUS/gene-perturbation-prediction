@@ -16,7 +16,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh pie-precompute CONFIG --steps rescore|pilot|basis|full|assemble [--shard I/N] [--device cuda]   (frozen-PIE deltas, GPU)
        hpc/run.sh gene-sources proteins|afdb|esm|align ARGS   (the gene encoder's sources)
        hpc/run.sh stage-one CONFIG [--run-id ID] [--fold K] [--device cuda]   (one stage-one run, 1 GPU)
-       hpc/run.sh stage-one-queue --gpus 0,1,2,3 [--folds main,0,1,2,3,4] CONFIG...   (stage-one runs, one per GPU)
+       hpc/run.sh stage-one-queue --gpus 0,1,2,3 [--folds main,0,1,2,3,4] CONFIG...   (stage-one runs, one per listed GPU)
        hpc/run.sh stage-one-report CONFIG [--device cuda]   (a stage-one report over runs, 1 GPU)
        hpc/run.sh stage-one-prior CONFIG --run-id ID   (the default prior refitted on the stage-one frame, CPU)
        hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
@@ -54,7 +54,8 @@ environment).
 outputs/stage_one/<task>/<run id, default the config stem>[__fold<K>]/ (best.pt,
 predictions.parquet, V.npy, row.json); --fold K trains without frame fold K.
 `stage-one-queue` runs every training config x fold lacking row.json, one
-process per listed GPU (other kinds of config are skipped); `stage-one-report`
+process per listed GPU, a GPU listed twice running two (other kinds of config are
+skipped); `stage-one-report`
 scores a report config's rows into outputs/stage_one/<task>/<config stem>/
 (results.md); `stage-one-prior` writes the prior reference the report and the
 components reader read.

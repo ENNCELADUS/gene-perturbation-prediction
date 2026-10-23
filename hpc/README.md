@@ -262,17 +262,22 @@ A=configs/stage_one/architecture
 .venv-pie/bin/python -c "import src.eval.accuracy, src.eval.metrics, src.context_prior.targets"   # import check
 hpc/run.sh stage-one-prior $A/prior_reference.yaml --run-id prior_reference_seed0        # CPU; components_reader needs it
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one $A/film_dH.yaml [--fold K]                    # one run, 1 GPU
-setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3 --folds main,0,1,2,3,4 $A/*.yaml \
-  > outputs/launches/stage_one_3a.log 2>&1 < /dev/null &                                 # skips prior_reference and report_3a
+setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3,0,1,2,3 --folds main,0,1,2,3,4 $A/*.yaml \
+  > outputs/launches/stage_one_3a.log 2>&1 < /dev/null &   # two runs per GPU; skips prior_reference and report_3a
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one-report $A/report_3a.yaml                      # results.md; the dH ridge on 1 GPU
-P=configs/stage_one/prior_input   # protocol §16's prior input; listing a GPU twice runs two jobs on it
+P=configs/stage_one/prior_input   # protocol §16's prior input
 setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3,0,1,2,3 --folds main,0,1,2,3,4 $P/*.yaml \
   > outputs/launches/stage_one_prior_input.log 2>&1 < /dev/null &
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one-report $P/report_prior_input.yaml
 ```
 
 Each run holds its delta on the GPU in bf16 (ΔH is 28 GB, ΔE 19 GB), copied by gene chunk from the memory-mapped
-fp32 file, so one run fits one H20. The exceptions are `film_dE_full` and `multi_dE_full`, which stream the
+fp32 file. A run peaks at about 21 GB on ΔE, 30 GB on ΔH and 35 GB on ΔH with the multi-encoder, so two share an
+H20 and three ΔH runs do not; listing a GPU twice in `--gpus` runs two jobs on it. A training step is a few ms of
+kernel launches, so a lone run leaves its GPU mostly idle through setup, validation and the final writes; a second
+run fills them. Without a PIE trunk the step runs as CUDA graphs (`torch.compile`, `reduce-overhead`) on the block
+gathered before it, and the first epoch carries the compilation (about 20 s, a few once the inductor cache under
+`/tmp` holds it); a trunk arm trains eager. The exceptions are `film_dE_full` and `multi_dE_full`, which stream the
 full-panel predicted change (~311 GB under `pie/full/`) from its memory maps every epoch: they want it in the host
 page cache (1.5 TB on the H20; the frame-mean pass at their start fills it), and each epoch's `epoch_seconds` in the
 log shows whether they read from memory (about 1–1.5 min) or from disk. The queue logs each run to `outputs/stage_one/<task>/logs/<run>.log`, where the
