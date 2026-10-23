@@ -36,25 +36,51 @@ that was never labelled in training.
 showed only that GeneEffect helps, not that the line does, so it is superseded. The control now gives every line
 each gene's frame mean GeneEffect.
 
-## AUPRC lift, mean over held-out contexts
+## Results
 
-Lift is AUPRC divided by the positive rate. The varying columns keep only pairs whose call differs between the
-screen's training lines. There are three validation contexts and five test contexts.
+**Table 1.** AUPRC (average precision; higher is better) for ranking SL pairs in each held-out test line, one
+column per screen benchmark and line. The header gives the number of pairs and SL hits. The mean is over the five
+columns, and AUROC is the mean over the same columns. The best value in each column is in bold. A random
+ranking's AUPRC equals the hit rate: 0.07, 0.12, 0.04, 0.05 and 0.06.
 
-| Arm | Scorer | Val | Test | Val varying | Test varying |
-| --- | --- | ---: | ---: | ---: | ---: |
-| any | pair identity | 13.25 | 9.04 | 2.12 | 2.13 |
-| any | pan-essentiality | 7.61 | 4.17 | 1.61 | 1.45 |
-| any | PARIS alone | 3.47 | 2.86 | 1.51 | 1.38 |
-| any | PARIS head, gene-mean GeneEffect (context-ablated) | 10.03 | 6.15 | 2.18 | 1.73 |
-| linear prior | PARIS head | 10.64 | 5.84 | 2.21 | 1.68 |
-| FiLM on the prior and ΔE | PARIS head | 10.80 | 5.80 | 2.18 | 1.69 |
-| FiLM on ΔE | PARIS head | 10.79 | 5.74 | 2.17 | 1.68 |
-| measured | PARIS head | 13.13 | 6.51 | 2.27 | 1.82 |
-| FiLM on the prior and ΔE | V head | 5.55 | 3.59 | 1.88 | 1.34 |
-| FiLM on the prior and ΔE | V head, gene-mean V (context-ablated) | 7.99 | 7.32 | 1.86 | 1.98 |
-| FiLM on ΔE | V head | 7.85 | 4.88 | 2.20 | 1.48 |
-| FiLM on ΔE | V head, gene-mean V (context-ablated) | 8.44 | 7.56 | 1.94 | 1.92 |
+| Model | Harle 2025 A549 (340/23) | Harle 2025 SK-MES-1 (326/40) | Ito 2021 A549 (4,272/156) | Klingbeil 2024 A549 (2,224/108) | Klingbeil 2024 MDA-MB-231 (2,172/134) | Mean AUPRC | Mean AUROC |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| *Controls* | | | | | | | |
+| Pair identity (the pair's hit rate in the screen's training lines) | **0.735** | **0.844** | **0.320** | **0.530** | **0.480** | **0.582** | 0.886 |
+| Pan-essentiality (the two genes' summed mean GeneEffect) | 0.109 | 0.226 | 0.193 | 0.335 | 0.323 | 0.237 | 0.762 |
+| PARIS alone | 0.256 | 0.365 | 0.090 | 0.167 | 0.102 | 0.196 | 0.644 |
+| *PARIS head, by GeneEffect input* | | | | | | | |
+| Each gene's mean GeneEffect (context-ablated) | 0.367 | 0.555 | 0.248 | 0.398 | 0.358 | 0.385 | 0.842 |
+| Linear prior | 0.319 | 0.490 | 0.251 | 0.378 | 0.361 | 0.360 | 0.838 |
+| FiLM on the prior and ΔE | 0.313 | 0.475 | 0.242 | 0.386 | 0.368 | 0.357 | 0.837 |
+| FiLM on ΔE | 0.333 | 0.514 | 0.240 | 0.364 | 0.339 | 0.358 | 0.827 |
+| Measured GeneEffect (reference) | 0.404 | 0.551 | 0.296 | 0.370 | 0.392 | 0.403 | 0.838 |
+| *Viability-embedding head, by stage-one run* | | | | | | | |
+| FiLM on the prior and ΔE | 0.210 | 0.355 | 0.106 | 0.206 | 0.298 | 0.235 | 0.785 |
+| FiLM on the prior and ΔE, each gene's mean V (context-ablated) | 0.713 | 0.829 | 0.187 | 0.388 | 0.381 | 0.500 | **0.899** |
+| FiLM on ΔE | 0.261 | 0.415 | 0.182 | 0.304 | 0.363 | 0.305 | 0.818 |
+| FiLM on ΔE, each gene's mean V (context-ablated) | 0.700 | 0.763 | 0.199 | 0.389 | 0.480 | 0.506 | 0.887 |
+
+**Table 2.** Validation AUPRC, laid out as Table 1. The validation results were used only to choose each head's
+epoch. Random AUPRC is 0.13, 0.015 and 0.03.
+
+| Model | Harle 2025 NCI-H1299 (312/39) | Ito 2021 PA-TU-8988S (4,281/64) | Klingbeil 2024 NCI-H1299 (2,225/76) | Mean AUPRC | Mean AUROC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pair identity | **0.880** | 0.308 | **0.412** | **0.534** | 0.883 |
+| Pan-essentiality | 0.227 | 0.236 | 0.179 | 0.214 | 0.795 |
+| PARIS alone | 0.383 | 0.071 | 0.090 | 0.181 | 0.633 |
+| PARIS head, each gene's mean GeneEffect | 0.538 | 0.288 | 0.222 | 0.349 | 0.850 |
+| PARIS head, linear prior | 0.509 | 0.320 | 0.220 | 0.350 | 0.849 |
+| PARIS head, FiLM on the prior and ΔE | 0.504 | 0.329 | 0.217 | 0.350 | 0.844 |
+| PARIS head, FiLM on ΔE | 0.504 | 0.329 | 0.217 | 0.350 | 0.843 |
+| PARIS head, measured GeneEffect | 0.484 | **0.416** | 0.262 | 0.387 | 0.863 |
+| V head, FiLM on the prior and ΔE | 0.386 | 0.137 | 0.151 | 0.225 | 0.832 |
+| V head, FiLM on the prior and ΔE, each gene's mean V | 0.836 | 0.150 | 0.247 | 0.411 | 0.903 |
+| V head, FiLM on ΔE | 0.437 | 0.212 | 0.202 | 0.284 | 0.865 |
+| V head, FiLM on ΔE, each gene's mean V | 0.857 | 0.149 | 0.290 | 0.432 | **0.908** |
+
+The full report has the same metrics on the varying pairs, those whose SL call differs between the screen's
+training lines. Every scorer's lift over random falls to 1.3–2.3 there.
 
 ## Contrasts on test
 
