@@ -1,0 +1,11 @@
+# PARIS (Benfatto et al. 2021) on the stage-one reference lines: per dependency gene, a random
+# forest of its GeneEffect on the expression of the other genes; selected pairs go to stage two.
+# `.venv-pie/bin/python -m src.experiments.sl.paris configs/sl/paris.yaml --run-id ID [--genes N]
+# [--mode raw|Ginicorrected]` (CPU; OMP_NUM_THREADS=1). See third_party/paris/PROVENANCE.md.
+ladder_config: configs/stage_one/ladder_inputs.yaml
+benchmark: data/sl_screens/benchmark/pairs.parquet
+output_root: outputs/sl
+task: paris
+mode: raw  # raw (Boruta) or Ginicorrected (ranger impurity_corrected)
+seed: 43
+n_jobs: 190
