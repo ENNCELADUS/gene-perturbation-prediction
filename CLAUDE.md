@@ -18,7 +18,7 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-10-22)
+## Current state (2026-10-23)
 
 Replace this section on every update; history lives in `results/` and the protocol.
 
@@ -28,8 +28,8 @@ Replace this section on every update; history lives in `results/` and the protoc
   (0.199–0.203) but not all, and ΔE beside the prior adds nothing that line-permuted ΔE does not
   ([record](results/stage_one_prior_input/README.md)). Cell-state telemetry (Task 8) ran
   ([record](results/state_telemetry_seed0/README.md)).
-- **Next**: the rest of Wave 2 and Task 9 (five vocabularies), after the whole-repo trim (`refactor/trim`) and the
-  GPU-efficiency pass that follows it.
+- **Next**: the GPU-efficiency pass (`perf/gpu`), then the rest of Wave 2 and Task 9 (five vocabularies). The
+  whole-repo trim is merged; H20 artifacts written before it were migrated once, so pre-trim code cannot read them.
 - The SL pair head is **unimplemented**. One config is one experiment at seed 0: train, select `best.pt` on
   **validation**, then score it once on test; there is no multi-seed stage. Nothing here is SL evidence.
 
