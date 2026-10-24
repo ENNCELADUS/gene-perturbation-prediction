@@ -7,7 +7,8 @@ masked in every pass (§3.2) and Task 4's GeneEffect profile masked by fold, not
 981-line frame (§4.1), a line with cells always read through its cells (pseudo-bulk from per-cell CP10K, §4.3), and
 the Cellosaurus text read by every arm as PIE does (no text-off rows); 2026-10-17, after a literature survey of
 learned cell states (local notes, "Learned cell states for GeneEffect"), cell states read through the frozen PIE
-(§3.5, Tasks 8 and 9). Evidence it starts from: the [noise diagnosis](2026-10-12-noise-diagnosis-design.md) (its §6
+(§3.5, Tasks 8 and 9); 2026-10-23, Task 4's GeneEffect profile row dropped: GeneEffect enters only as the
+training target. Evidence it starts from: the [noise diagnosis](2026-10-12-noise-diagnosis-design.md) (its §6
 lists the open corrections) and its records ([noise diagnosis](../../results/noise_diagnosis_seed0/README.md),
 [learning curve](../../results/noise_lines_seed0/README.md)).
 PIE: Arc Institute's "Perturbation is Everything" (bioRxiv, 5 October 2026), code
@@ -86,7 +87,7 @@ expression never reaches the latents: it enters only as each decoded gene's own 
   line's by exactly its label at that column (leave-one-out target encoding), a label channel present in training
   and absent on held-out lines that a head knowing the line through Δ can learn. And with the source in, part of Δ is
   g's GeneEffect pattern across lines, which the base and the prior already hold, not the simulated knockdown in line
-  c. GeneEffect from other lines enters stage one only through Task 4's fold-masked profile. PIE saw this source for
+  c. GeneEffect enters stage one only as the training target. PIE saw this source for
   about 97% of its training perturbations, so masking moves its input; the pilot measures what it costs PIE.
 - **Context.** For line `c`: PIE's control-mean evidence on one decode panel shared by every line (the protocol's
   GeneEffect genes with a `gene_text` entry): for a line with cells, its definition (the mean over cells of `log1p`
@@ -372,8 +373,7 @@ manifest recording the expression space:
   through their bulk profile) and the 55 held-out lines, about 1,036 × 17,900 = 18.5M pairs (about 17 hours on
   4 × H20 in bf16 by a FLOP estimate), after the pilot of §3.2;
 - the base `m_g` (§4.1);
-- five patient-grouped folds of the 981 frame lines (seed 0), which the mean channel's out-of-fold bridge and Task
-  4's profile row use, and Task 3's out-of-fold scores use on the 377 single-cell lines.
+- five patient-grouped folds of the 981 frame lines (seed 0), which the mean channel's out-of-fold bridge uses, and Task 3's out-of-fold scores use on the 377 single-cell lines.
 
 **Reading.** Coverage per source, per line and per gene (genes with same-perturbation evidence among the selective
 genes) is reported; nothing is chosen from it.
@@ -412,12 +412,7 @@ it needs no expression (gene identity and line text). The hybrid against both: a
 **Question.** Which gene sources should the gene encoder keep?
 
 **Definition.** On the Task 3 architecture: `gene_text`; then + ESM C; + ESM3-open; + STRING; + Gene2vec; then
-`gene_text` with the best two of ESM C, STRING and Gene2vec (ESM3-open only ever swaps for ESM C). One more row:
-`gene_text` + g's GeneEffect profile over the 981 frame lines, masked by fold: a training line in fold k reads
-the profile with fold k's columns zeroed, so every line of a fold reads the same input and none reads its own label or
-a gap left by it (masking line c's own column would, as §3.2 describes); held-out lines and their patient siblings
-never enter, and a held-out line's prediction is the mean of its five predictions, one per fold mask. It is how the
-prior specialises per gene.
+`gene_text` with the best two of ESM C, STRING and Gene2vec (ESM3-open only ever swaps for ESM C).
 
 **Reading.** The query best on validation is kept for Tasks 5–7, `gene_text` alone included.
 
@@ -654,9 +649,7 @@ sources as gene sources; any change to the split, the metric or the default prio
 Stage two (its own design) needs, from stage one: out-of-fold `V(c, g)` and predictions for training lines (in-sample
 values for training lines would leak into the SL classifier, as the prior's export avoids), and predictions on edited
 contexts (gene A's expression set to zero, or the after-state of knocking A down) for the SL definition's "B's
-dependency with A lost"; the gene-only virtual-cell arm cannot provide the latter. An out-of-fold run for outer fold
-k removes fold k's columns from every row's GeneEffect profile (Task 4) before the inner fold masks: otherwise the
-training rows' inputs carry the held-out fold's labels.
+dependency with A lost"; the gene-only virtual-cell arm cannot provide the latter.
 
 Out of scope for the cell states (§3.5): a mechanistic growth model of states (state growth and switching rates need
 measurements no input supplies). TODO, after the SL model works end to end: validate state scores against

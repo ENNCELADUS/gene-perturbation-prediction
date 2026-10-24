@@ -248,8 +248,7 @@ Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each ta
 - **Wave 2.**
   - Task 3's second half: the hybrid with the recorded Δ; the winner's bulk-encoder, 377-line and protocol-mean rows; a
     separate bulk encoder over `mean/pseudobulk.parquet` and the bulk profiles, aligned on the 343 paired lines.
-  - Task 4 (`configs/stage_one/gene_query/`): each source added to `gene_text`; the fold-masked GeneEffect profile (five
-    masks; held-out lines average the five; the outer fold removed in out-of-fold runs, spec §8); then the best two.
+  - Task 4 (`configs/stage_one/gene_query/`): each source added to `gene_text`; then the best two.
 - **Wave 3.**
   - **Task 5:** `CellBank` channels (HVG, shuffled HVG, QC, Tx1 real and shuffled), per-gene spread evidence, and the
     gene-to-cell block only if the direct readout or the hybrid wins; the nine contrasts with per-line QC covariates.
@@ -283,6 +282,5 @@ Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each ta
   - stale control cache;
   - `reference.npz` or dataset reuse;
   - an out-of-fold base containing the fold's labels;
-  - the profile row seeing its own or the outer fold;
   - the Δ index order against `lines.parquet` and the panel;
   - the `|whole` noise floor.

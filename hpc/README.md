@@ -19,6 +19,22 @@ prints every command's arguments.
 | `cell-states`, `pie-precompute --steps states` | the cell-state telemetry and the frozen PIE on its states | CPU; scVI and PIE on GPUs | [Cell states](#the-cell-states) |
 | `sl-paris`, `sl-stage-two` | PARIS (`sl.paris`) and SL stage two on stage one's GeneEffect (`sl.stage_two`) | CPU, `.venv-pie` | [SL stage two](#sl-stage-two) |
 
+GPU use, measured on 30838 in October 2026 (one H20 per job unless noted; SM is `nvidia-smi dmon`'s busy share):
+
+| Command, job | Before | After | GPU while computing |
+| --- | --- | --- | --- |
+| `stage-one`, `film_prior_dE` for 3 epochs | 258 s; a training epoch 14.9 s, its validation ~14 s of pandas | 114 s; a training epoch 2.2 s (the first 22 s, compiling), validation 2.3 s | a step 2.0 ms, 1.6 ms of it on the GPU (was ~12 ms of launches against ~0.4 ms) |
+| `stage-one`, a PIE-trunk arm (`direct_readout`) | 109 s an epoch | unchanged, eager (106 s compiled) | GPU-bound |
+| `stage-one`, a full-panel arm (`film_dE_full`) | frame-mean pass 1058–1349 s; 134–163 s an epoch | pass 46–53 s; 151 s an epoch, streaming from the page cache | |
+| `stage-one-queue`, four 3-epoch runs on one GPU | 417 s, one at a time | 227 s, two at a time | |
+| `ladder-inputs --steps tx1`, row T1 | | unchanged | SM 96% mean, ≥85% in 1163 of 1211 s |
+| `pie-precompute --steps states`, cycle shard 0/16 (94 contexts) | | unchanged: 1.79 s a context after 136 s of setup a process | SM 97–100% |
+| `cell-states --steps fit` | scVI minutes, cNMF hours of CPU holding no GPU | unchanged | |
+
+Validation scoring in one pass and the threaded frame-mean pass leave every number as it was; the CUDA-graph step,
+fused AdamW and the masked dependency term move them at rounding level, so the stage-one rows trained before
+2026-10-23 were rerun (`results/stage_one_architecture/`, `results/stage_one_prior_input/`).
+
 Direct entry points, `python -m src.<module>` from the repository root (`.venv-tx1` unless noted):
 
 | Module | Does | Documented in |
