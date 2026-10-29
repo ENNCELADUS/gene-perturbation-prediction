@@ -35,7 +35,7 @@ Replace this section on every update; history lives in `results/` and the protoc
   mean ([record](results/sl_stage_two_seed0/README.md)). Not SL context evidence. Both: [status](results/status.html).
 - **SL benchmark redesign** ([design](docs/specs/2026-10-29-multi-study-sl-benchmark-design.md)): per-(study, line)
   lists from every study on a new lineage split that stage one follows. [Inventory](docs/data/sl-study-inventory.md):
-  90 kept screens, 116 lines with scRNA or a candidate. Next: review its ModelIDs and scRNA rows, fetch the tables.
+  90 kept screens; after review, 93 screened lines have basal scRNA. Next: per-line tables (H20 `data/sl_studies/raw/`).
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands
