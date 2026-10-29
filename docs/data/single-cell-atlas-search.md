@@ -26,7 +26,7 @@ source can produce has a row, lines of the 226 included, so the builder can reso
 | `model_id`, `identifier_kind` | The ModelID and how it was found: `model_id`, `rrid`, `ccle_name`, `name` (Model.csv `StrippedCellLineName` or `CellLineName`, case and punctuation ignored) or `synonym` (an exact Cellosaurus name or synonym whose accession is a Model.csv RRID) |
 | `cells`, `raw_counts`, `condition`, `size_gb` | Expected basal cells, whether the deposit holds integer counts, the basal arm(s), the source's download size |
 | `condition_class` | `basal_2d` (untreated or vehicle 2D), `control_guide` (non-targeting or safe-targeting guide), `cutting_control` (Cas9 cut at an unexpressed locus), `other` |
-| `review` | `ok`, a flag (`ambiguous`, `no_match`, `problematic`, `derived`) or `dropped: <reason>` |
+| `review` | `ok`, a flag (`ambiguous`, `no_match`, `problematic`, `derived`) or `dropped: <reason>`; empty on the 41 rows of the 2026-10-29 search for screened SL lines ([inventory](sl-study-inventory.md)), which `propose` has not reviewed yet |
 | `wave` | `1` or `2` when the source is ingested, empty when not |
 | `note` | Evidence: Cellosaurus accession, GSM ids, the reviewer's reason |
 
