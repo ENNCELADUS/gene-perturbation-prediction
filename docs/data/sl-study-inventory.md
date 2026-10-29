@@ -11,6 +11,7 @@ yet. The line rows and scRNA rows of the kept screens were reviewed on 2026-10-2
 | --- | ---: | --- |
 | `configs/benchmarks/sl_studies.csv` | 2,261 | One row per study: `kind`, `platform`, per-line score, authors' call, data location, licence, `in_synlethdb3`, `in_slkb`, `found_via`, `curation_status`. For a curated row, `note` holds `decision=` |
 | `configs/benchmarks/sl_study_lines.csv` | 896 | One row per (study, line): the line as the source spells it, `engineered_genotype`, `proposed_model_id`, `match_evidence`; for kept screens also `model_review`, the reviewed `model_id`, `cellosaurus`, `screened` and `review_evidence` (see Review) |
+| `configs/benchmarks/sl_study_tables.csv` | 518 | One row per result file of a kept screen: URL, bytes, SHA-256, H20 path, route, status and a summary of its sheets and columns (see Per-line tables) |
 | `configs/benchmarks/single_cell_atlas_candidates.csv` | +41 | The basal scRNA sources found for the screened lines, reviewed by `propose` and then by hand (see Review); the review evidence is at the end of each `note` |
 
 The search scripts, full-text pulls and per-line search logs are local only, in
@@ -96,6 +97,29 @@ After the review, 156 lines were screened (`screened = yes`) in 65 studies. 93 o
 
 These 93 lines form 172 (study, line) lists, and 29 lines have two or more studies. The 116 lines in Counts above
 include lines used only for validation.
+
+## Per-line tables (2026-10-29)
+
+The files that hold each kept screen's per-line results (scores, FDR, calls) are on the H20 in
+`data/sl_studies/raw/<study_id>/`: 471 files, 2.54 GB. The earlier copies of Harle, Ito and Klingbeil in
+`data/sl_screens/raw/` are used as they are. Every tabular supplement was fetched, library and oligo tables included;
+the `content` column tells them apart. No file was parsed, labelled or filtered. The SHA-256 of all 476 files on the
+H20 matches `sl_study_tables.csv`. Files that the H20 could not reach, or reached too slowly, came through the Mac and
+were deleted there after the check.
+
+- **Complete (61 studies):** a per-line score or call table is on the H20. `per_line_score_found` was read from the
+  sheet headers, not from the values.
+- **Partial (18):** only part of the data is there, for example only the shared SLKB dump (Wong 2016, Han 2017,
+  Tang 2022), only BioGRID ORCS files (Mengwasser 2019, Liang 2020, Liu 2019), only read counts, or only PDF tables.
+  Neggers 2020's screen data is probably in a RAR file that was not opened.
+- **None (11):** Magesh 2024 and Park 2026 have raw reads only (39.8 GB and 9.4 GB in SRA, not fetched).
+  Boettcher 2017, Doberstein 2018 and Hayward 2026 have no supplement on bioRxiv. Zhao 2017, Krishnamoorthy 2025,
+  Knoll 2025 and Wang 2020 are behind the PMC browser check or a publisher's 403. Chatr-aryamontri 2025's data site
+  answers 403, and Guo 2019 is closed access.
+
+Not opened: the SLKB SQL dump (241 MB, shared by its 11 studies), Alborzinia 2023's `.7z`, van 2023's `.xlsb` and
+Neggers 2020's RAR. Shen 2017's `MOESM2_ESM.xlsx` is a PDF. Zhao 2018's DOI was corrected to
+10.1016/j.molcel.2018.01.017 (PMID 29452643).
 
 ## Pitfalls
 
