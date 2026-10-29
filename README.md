@@ -14,7 +14,7 @@
 
 Stage one predicts DepMap GeneEffect for held-out cell lines; stage two ranks SL partners against experimental SL-database labels ([blueprint](docs/01-blueprint.md), §3). The generalization axis is the **cell line**; genes are not held out.
 
-**Status.** Stage one is under way: no architecture yet beats the linear context prior refitted on the stage-one frame ([stage-one record](results/stage_one_architecture/README.md), [prior-input record](results/stage_one_prior_input/README.md)). The SL pair head is not implemented, and nothing here is SL evidence. The GeneEffect track's results are in [protocol §7](docs/03-geneeffect-protocol.md#7-results) and [`results/`](results/).
+**Status.** Stage one is under way: no architecture yet beats the linear context prior refitted on the stage-one frame ([stage-one record](results/stage_one_architecture/README.md), [prior-input record](results/stage_one_prior_input/README.md)). Stage two ran on the screen benchmark: pair identity wins, and predicted GeneEffect adds nothing over each gene's mean ([stage-two record](results/sl_stage_two_seed0/README.md)), so nothing here is SL context evidence. Both stages are summarised on the [status page](results/status.html); the GeneEffect track's results are in [protocol §7](docs/03-geneeffect-protocol.md#7-results) and [`results/`](results/).
 
 ## Quick start
 
@@ -34,7 +34,7 @@ Running the pipeline needs the raw single-cell data, DepMap labels and model wei
 - [`docs/03-geneeffect-protocol.md`](docs/03-geneeffect-protocol.md) and [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md): the executable protocols and their rules. [`docs/specs/`](docs/specs/): live designs and plans.
 - [`docs/data/`](docs/data/): one card per dataset; read it before using the data.
 - [`src/README.md`](src/README.md): one line per module. [`hpc/README.md`](hpc/README.md): every command, run on the H20 host.
-- [`results/`](results/): one record per finished run, with its numbers, run ids and commands.
+- [`results/`](results/): one record per finished run (`summary.html`; older runs have a `README.md`), and the [status page](results/status.html).
 - [`CLAUDE.md`](CLAUDE.md): rules and the current state, for coding agents.
 
 ## Data roles

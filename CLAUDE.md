@@ -18,7 +18,7 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-10-23)
+## Current state (2026-10-29)
 
 Replace this section on every update; history lives in `results/` and the protocol.
 
@@ -28,12 +28,13 @@ Replace this section on every update; history lives in `results/` and the protoc
   (0.199–0.203) but not all, and ΔE beside the prior adds nothing that line-permuted ΔE does not
   ([record](results/stage_one_prior_input/README.md)). Cell-state telemetry (Task 8) ran
   ([record](results/state_telemetry_seed0/README.md)).
-- **Next**: the GPU-efficiency pass (`perf/gpu`), then the rest of Wave 2 and Task 9 (five vocabularies). The
-  whole-repo trim is merged; H20 artifacts written before it were migrated once, so pre-trim code cannot read them.
+- **Next**: the rest of Wave 2, then Task 9 (five vocabularies). The GPU-efficiency pass is merged (`hpc/README.md`);
+  the stage-one rows were rerun after it, and their records still show the earlier runs. The whole-repo trim is
+  merged; H20 artifacts written before it were migrated once, so pre-trim code cannot read them.
 - **Stage two** (SL protocol §10) ran on the screen benchmark: a PARIS head and a viability-embedding (V) head. Pair
   identity wins everywhere. Predicted GeneEffect, and even measured GeneEffect, adds nothing over each gene's mean
   GeneEffect, and the V head falls below its gene-mean-V ablation ([record](results/sl_stage_two_seed0/README.md)).
-  Nothing here is SL context evidence.
+  Nothing here is SL context evidence. Both stages are on one page: [status](results/status.html).
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, then score it once on test;
   there is no multi-seed stage.
 
@@ -62,8 +63,9 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
 
 ## Project rules
 
-- When a change alters behaviour a doc describes, update that doc in the same change.
-- Experiment code reports results; decisions are made by reading them, not in code.
+- When a change alters behaviour a doc describes, update that doc in the same change. Update this file and
+  `README.md` in every conversation: replace old text, and keep both short (this file under 120 lines).
+- Experiment code reports results (format: `.claude/skills/results-report`); decisions are made by reading them, not in code.
 - No formalism gates: do not add digest pinning, contract verifiers, eligibility ceremony or any check that blocks a run on
   model quality. Record provenance and proceed; model-quality signals are telemetry. The existing guards against silent wrong
   artifacts (below) fail closed and stay.
@@ -72,7 +74,7 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
 - Sync code between machines through Git only: commit, push, then pull on the H20 checkout. Never rsync/scp/tar working trees.
 - Work done on its own branch or worktree is merged into `main` as soon as the feature is established as working — suite and
   lint pass, any requested review is adjudicated, and an asset-dependent path has run on the H20 host — then `main` is pushed and the branch
-  deleted. Do not leave finished work on a side branch.
+  deleted. Do not leave finished work on a side branch. These pushes of `main`, and the push before GPU work, are approved.
 - Commits use Conventional Commits (`feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `chore`).
 - Codex review is optional and runs **only when the user asks**. Then run it from Bash (the slash commands are
   `disable-model-invocation`) in a fresh `CODEX_HOME` holding only `auth.json` and a `config.toml` with `model = "gpt-6.1-sol"`,
