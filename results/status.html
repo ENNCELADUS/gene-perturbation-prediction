@@ -106,43 +106,48 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 <header>
   <span class="eyebrow">Research status · 2026-10-29</span>
   <h1>Context-specific synthetic lethality from basal single-cell profiles</h1>
-  <p class="prose">Where the project stands across both stages. Numbers come from the run records under
-  <code>results/</code>, last written on 2026-10-23; the repository is at <code>963b554</code>. Every run is one
-  config at seed 0: <code>best.pt</code> chosen on validation, then scored once on test.</p>
+  <div class="prose" style="display:grid;gap:8px">
+    <p>This page shows the status of the two stages of the project. All numbers come from the run records in
+    <code>results/</code>. The last record is from 2026-10-23, and the code is at <code>c8df967</code>.</p>
+    <p>Each run is one config at seed 0. The run selects <code>best.pt</code> on validation. Then it scores
+    <code>best.pt</code> one time on test.</p>
+  </div>
 </header>
 
 <section>
   <div class="ledger" role="list">
     <div role="listitem"><span class="what">Stage one: GeneEffect</span><span class="chip neg">Below the prior</span>
-      <span>No trained architecture reaches the default linear prior refitted on the frame (0.215 validation / 0.228 test per-line residual Spearman). Reading the prior's prediction brings FiLM to 0.199–0.203, still short.</span></div>
-    <div role="listitem"><span class="what">Cell-state telemetry</span><span class="chip pos">Done</span>
-      <span>17 state vocabularies built and read through the frozen PIE. Deposit dominates most of them, and mixing states adds little over the line's mean input.</span></div>
+      <span>No trained architecture is better than the default linear prior refitted on the frame (0.215 validation, 0.228 test). When FiLM reads the prior's prediction, it gets 0.199–0.203. This is still below the prior.</span></div>
+    <div role="listitem"><span class="what">Cell-state telemetry</span><span class="chip pos">Complete</span>
+      <span>The run built 17 state vocabularies and read them through the frozen PIE. The deposit of origin controls most vocabularies. A mix of states adds little to the line's mean input.</span></div>
     <div role="listitem"><span class="what">Stage two: SL ranking</span><span class="chip flat">No context signal</span>
-      <span>Pair identity wins on every benchmark. Predicted, and even measured, GeneEffect adds nothing over each gene's mean GeneEffect.</span></div>
-    <div role="listitem"><span class="what">Next</span><span class="chip next">Wave 2</span>
-      <span>Rest of Wave 2 (stage-one second half, gene query), then the ladder and the frozen-state pilot.</span></div>
+      <span>Pair identity is best on all benchmarks. Predicted GeneEffect adds nothing to each gene's mean GeneEffect. Measured GeneEffect also adds almost nothing.</span></div>
+    <div role="listitem"><span class="what">Next</span><span class="chip next">Planned</span>
+      <span>Finish stage one: the bulk-encoder rows and the gene query. Then the data ladder and the frozen-state pilot.</span></div>
   </div>
 </section>
 
 <section>
   <h2>The task</h2>
   <div class="prose" style="display:grid;gap:12px">
-    <p>A cell line is seen only through its basal, unperturbed single-cell transcriptome, read with a single-cell
-    foundation model. No GeneEffect, perturbation response or SL label of a held-out line is ever an input.</p>
-    <p><b>Stage one</b> predicts DepMap (Chronos) GeneEffect for every gene in a held-out line. <b>Stage two</b>
-    ranks candidate SL partners B for a gene A lost in that line, scored against experimental SL-screen labels in
-    named lines. A held-out DepMap line simulates a new tumour that has a cheap single-cell profile but no CRISPR
-    screen.</p>
+    <p>The model sees a cell line only through its basal single-cell transcriptome. A single-cell foundation model
+    reads this profile. The model never gets GeneEffect, perturbation response or SL labels of a held-out line as
+    input.</p>
+    <p><b>Stage one</b> predicts DepMap (Chronos) GeneEffect for each gene in a held-out line. <b>Stage two</b>
+    ranks candidate SL partners B for a gene A that the line lost. Its ground truth is experimental SL-screen labels
+    in named lines.</p>
+    <p>A held-out DepMap line is a model of a new tumour. The tumour has a basal single-cell profile, but it has no
+    CRISPR screen.</p>
   </div>
   <figure>
-    <figcaption><b>Table 1.</b> The final cell-line split (<code>configs/benchmarks/cell_line_geneeffect_split.json</code>), the only membership authority. Gene means, selective genes and residual scales fit on the 377 labelled training lines.</figcaption>
+    <figcaption><b>Table 1.</b> The final cell-line split (<code>configs/benchmarks/cell_line_geneeffect_split.json</code>). Only this file sets the role of each line. Gene means, selective genes and residual scales are fit on the 377 labelled training lines.</figcaption>
     <div class="scroll"><table>
       <thead><tr><th>Role</th><th>Lines</th><th style="text-align:left">What they are</th></tr></thead>
       <tbody>
-        <tr><td>Single-cell training</td><td>379</td><td class="l">377 with 26Q1 GeneEffect (PC9 and HeLa have none)</td></tr>
-        <tr><td>Validation</td><td>27</td><td class="l">selects checkpoints</td></tr>
-        <tr><td>Test</td><td>28</td><td class="l">scored once per config; A549 since 2026-10-11</td></tr>
-        <tr><td>Bulk-only, labelled</td><td>713</td><td class="l">join the prior's training side through bulk RNA</td></tr>
+        <tr><td>Single-cell training</td><td>379</td><td class="l">377 have 26Q1 GeneEffect (PC9 and HeLa have none)</td></tr>
+        <tr><td>Validation</td><td>27</td><td class="l">select checkpoints</td></tr>
+        <tr><td>Test</td><td>28</td><td class="l">scored one time for each config; A549 since 2026-10-11</td></tr>
+        <tr><td>Bulk-only, labelled</td><td>713</td><td class="l">add bulk RNA to the training data of the prior</td></tr>
         <tr><td>Bulk-only, unlabelled</td><td>576</td><td class="l">encoder rows only</td></tr>
         <tr><td>Excluded</td><td>12</td><td class="l">share a patient with a held-out line</td></tr>
       </tbody>
@@ -151,24 +156,29 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 </section>
 
 <section>
-  <h2>Stage one: predicting GeneEffect</h2>
-  <p class="prose">The metric is the per-line residual Spearman: within each held-out line, the Spearman correlation
-  between predicted and measured GeneEffect after each gene's training mean is removed, averaged over lines. It
-  asks whether the model ranks a line's genes by what is special about that line. Within-gene R² asks the same
-  across lines for each gene. Trained rows use the frozen PIE's per-line deltas: ΔE (expression), ΔH (hidden
-  state) and ΔL (Cellosaurus text). Each trained row ran on the 981 frame lines as a main run plus five folds.</p>
+  <h2>Stage one: GeneEffect prediction</h2>
+  <div class="prose" style="display:grid;gap:12px">
+    <p>The metric is the per-line residual Spearman. For each held-out line, subtract the mean of each gene from the
+    predicted and the measured GeneEffect. Then calculate the Spearman correlation over genes, and average it over
+    lines. The metric shows if a model ranks genes by what is specific to the line. Within-gene R² measures the
+    same thing across lines, for each gene.</p>
+    <p>The trained rows read deltas from the frozen PIE: ΔE (expression), ΔH (hidden state) and ΔL (Cellosaurus
+    text). Each trained row has a main run and five folds on the 981 frame lines.</p>
+    <p>After the GPU changes on 2026-10-23, the stage-one rows were run again. The changes moved the results only at
+    the rounding level. The records here still show the first runs.</p>
+  </div>
 
   <figure>
-    <figcaption><b>Table 2.</b> Stage-one GeneEffect on the held-out lines of the final split (27 validation, 28 test). Per-line residual Spearman and within-gene R², higher is better; best in each column in bold. Selected rows; every row is in the linked records.</figcaption>
+    <figcaption><b>Table 2.</b> Stage-one GeneEffect on the held-out lines of the final split (27 validation, 28 test). Metrics: per-line residual Spearman and within-gene R²; higher is better. The best value in each column is bold. The table shows selected rows; the linked records have all rows.</figcaption>
     <div class="scroll"><table>
       <thead><tr><th>Model</th><th>Val per-line</th><th>Test per-line</th><th>Val within-gene R²</th><th>Test within-gene R²</th></tr></thead>
       <tbody>
-        <tr class="group"><td colspan="5">Context-blind and prior controls</td></tr>
+        <tr class="group"><td colspan="5">Prior and context-blind controls</td></tr>
         <tr><td>Default linear prior refitted on the frame</td><td><b>0.2146</b></td><td><b>0.2283</b></td><td><b>0.0462</b></td><td><b>0.0474</b></td></tr>
         <tr><td>Lineage only</td><td>0.1090</td><td>0.1433</td><td>0.0041</td><td>0.0087</td></tr>
         <tr><td>Own expression only</td><td>0.0301</td><td>0.0455</td><td class="neg-n">−0.0130</td><td class="neg-n">−0.0155</td></tr>
         <tr><td>Base (no line input)</td><td>0.0098</td><td>0.0475</td><td class="neg-n">−0.0024</td><td>0.0017</td></tr>
-        <tr class="group"><td colspan="5">FiLM reading the prior's prediction</td></tr>
+        <tr class="group"><td colspan="5">FiLM that reads the prior's prediction</td></tr>
         <tr><td>FiLM on the prior and ΔE</td><td>0.2033</td><td>0.1954</td><td>0.0452</td><td>0.0335</td></tr>
         <tr><td>FiLM on the prior</td><td>0.1988</td><td>0.2144</td><td>0.0373</td><td>0.0375</td></tr>
         <tr><td>FiLM on the prior and line-permuted ΔE</td><td>0.1972</td><td>0.2122</td><td>0.0368</td><td>0.0366</td></tr>
@@ -187,7 +197,7 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
   </figure>
 
   <figure>
-    <figcaption><b>Table 3.</b> Contrasts on the per-line residual Spearman, left minus right, with 95% paired line-bootstrap intervals.</figcaption>
+    <figcaption><b>Table 3.</b> Contrasts on the per-line residual Spearman: left minus right, with 95% paired line-bootstrap intervals.</figcaption>
     <div class="scroll"><table>
       <thead><tr><th>Contrast</th><th>Validation</th><th>Test</th></tr></thead>
       <tbody>
@@ -205,24 +215,26 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 
   <h3>Reading</h3>
   <ul class="reading">
-    <li><b>Nothing beats the linear prior.</b> Every contrast with it is below zero on both splits (Table 3).</li>
-    <li><b>ΔE carries real line signal on its own.</b> It beats ΔL, its line-permuted and no-Δ controls, and own expression only.</li>
-    <li><b>Beside the prior, ΔE adds nothing.</b> FiLM on the prior and ΔE is indistinguishable from the same model on line-permuted ΔE.</li>
-    <li><b>PIE's warm start hurts.</b> The direct readout falls by 0.07–0.09 when it starts from PIE's weights.</li>
-    <li><b>The trained rows overfit.</b> ΔE rows reach training selective Spearman 0.35–0.40 against 0.13–0.16 on validation.</li>
+    <li><b>No trained row is better than the linear prior.</b> All contrasts with the prior are below zero on the two splits (Table 3).</li>
+    <li><b>ΔE alone has real line signal.</b> It is better than ΔL, its line-permuted and no-Δ controls, and own expression only.</li>
+    <li><b>ΔE adds nothing to the prior.</b> FiLM on the prior and ΔE is equal to the same model on line-permuted ΔE.</li>
+    <li><b>PIE's warm start makes the direct readout worse,</b> by 0.07–0.09.</li>
+    <li><b>The trained rows overfit.</b> The ΔE rows get a training selective Spearman of 0.35–0.40, but only 0.13–0.16 on validation.</li>
   </ul>
   <p class="sources">Records: <a href="stage_one_architecture/README.md">architecture arms</a> (code <code>f5fefbe</code>, 2026-10-22) ·
-  <a href="stage_one_prior_input/README.md">FiLM reading the prior</a> (code <code>0c47b7f</code>, 2026-10-22).</p>
+  <a href="stage_one_prior_input/README.md">FiLM that reads the prior</a> (code <code>0c47b7f</code>, 2026-10-22).</p>
 </section>
 
 <section>
   <h2>Cell-state telemetry</h2>
-  <p class="prose">Frozen cell-state vocabularies fitted on the 377 labelled training lines and read through the frozen
-  PIE, to choose which states the state-mixture model will precompute. The gap is what reading each state through
-  PIE and mixing adds over reading the line's mean input, relative to the whole-line delta's spread across lines,
-  over 200 pilot genes. No model is trained on GeneEffect here.</p>
+  <div class="prose" style="display:grid;gap:12px">
+    <p>Frozen cell-state vocabularies are fit on the 377 labelled training lines and read through the frozen PIE.
+    The results tell which states the state-mixture model will precompute. No model trains on GeneEffect here.</p>
+    <p>The gap is what a per-state reading through PIE adds to a reading of the line's mean input. The gap is
+    relative to the across-line spread of the whole-line delta, over 200 pilot genes.</p>
+  </div>
   <figure>
-    <figcaption><b>Table 4.</b> The frozen PIE's state-mixing gap on ΔE, training lines (validation in brackets), against the same vocabulary with memberships permuted within line. Larger means states matter more to PIE; no direction is better. The noise floor is 0.0000.</figcaption>
+    <figcaption><b>Table 4.</b> The frozen PIE's state-mix gap on ΔE, on training lines (validation in brackets). The permuted column uses memberships permuted within the line. A larger gap means that states have more effect on PIE; no direction is better. The noise floor is 0.0000.</figcaption>
     <div class="scroll"><table>
       <thead><tr><th>Vocabulary</th><th>ΔE gap, real</th><th>ΔE gap, permuted (seeds 0–2)</th><th>Deposit η² (null q95)</th></tr></thead>
       <tbody>
@@ -238,48 +250,75 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
   </figure>
   <h3>Reading</h3>
   <ul class="reading">
-    <li><b>The gap is small.</b> At most 0.019 of the across-line spread for ΔE; PIE treats a mixture of states almost like the mixed input.</li>
-    <li><b>Real memberships beat permuted ones by little.</b> 0.0004–0.005 over every permuted seed.</li>
-    <li><b>The QC states give as large a gap as any biological vocabulary,</b> so gap size alone does not mark biology.</li>
-    <li><b>Deposit is the largest structure,</b> and absolute scVI states encode the line itself, not a state within it.</li>
+    <li><b>The gap is small.</b> For ΔE, it is at most 0.019 of the across-line spread. PIE reads a mix of states almost the same as the mean input.</li>
+    <li><b>Real memberships are only a little above permuted ones:</b> 0.0004–0.005 above each permuted seed.</li>
+    <li><b>The QC states give a gap as large as any biological vocabulary.</b> Thus a large gap alone does not show biology.</li>
+    <li><b>The deposit is the largest structure.</b> The absolute scVI states show the line itself, not a state in the line.</li>
   </ul>
   <p class="sources">Record: <a href="state_telemetry_seed0/README.md">cell-state telemetry</a> (code <code>f5fefbe</code>, 2026-10-22).</p>
 </section>
 
 <section>
-  <h2>Stage two: ranking SL partners</h2>
-  <p class="prose">Two heads are fitted on the 29 screened single-cell training lines and rank held-out pairs from the
-  Ito 2021, Klingbeil 2024 and Harle 2025 combinatorial screens. The PARIS head reads PARIS evidence plus both
-  genes' GeneEffect in the line; the viability-embedding head reads stage one's embedding V of both genes. Each
-  context-ablated control gives every line each gene's frame mean instead. The metric is AUPRC: a random ranking
-  scores the hit rate.</p>
+  <h2>Stage two: SL partner ranking</h2>
+  <div class="prose" style="display:grid;gap:12px">
+    <p>Two heads are fit on the 29 screened single-cell training lines. They rank held-out pairs from three
+    combinatorial screens: Ito 2021, Klingbeil 2024 and Harle 2025.</p>
+    <p>The PARIS head reads PARIS evidence and the GeneEffect of the two genes in the line. The viability-embedding
+    head reads the stage-one embedding V of the two genes. Each context-ablated control gives all lines the frame
+    mean of each gene.</p>
+    <p>The metric is AUPRC. A random ranking gets the hit rate.</p>
+  </div>
 
   <figure>
-    <figcaption><b>Table 5.</b> AUPRC on the test lines, one column per screen and line (pairs / SL hits), higher is better; random equals the hit rate (0.07, 0.12, 0.04, 0.05, 0.06). Best in each column in bold.</figcaption>
+    <figcaption><b>Table 5.</b> AUPRC on the test lines, one column for each screen and line (pairs / SL hits); higher is better. Random AUPRC equals the hit rate (0.07, 0.12, 0.04, 0.05, 0.06). The best value in each column is bold.</figcaption>
     <div class="scroll"><table>
       <thead><tr><th>Model</th><th>Harle A549<br>340/23</th><th>Harle SK-MES-1<br>326/40</th><th>Ito A549<br>4,272/156</th><th>Klingbeil A549<br>2,224/108</th><th>Klingbeil MDA-MB-231<br>2,172/134</th><th>Mean AUPRC</th><th>Mean AUROC</th></tr></thead>
       <tbody>
         <tr class="group"><td colspan="8">Controls</td></tr>
         <tr><td>Pair identity (the pair's hit rate in training lines)</td><td><b>0.735</b></td><td><b>0.844</b></td><td><b>0.320</b></td><td><b>0.530</b></td><td><b>0.480</b></td><td><b>0.582</b></td><td>0.886</td></tr>
-        <tr><td>Pan-essentiality (summed mean GeneEffect)</td><td>0.109</td><td>0.226</td><td>0.193</td><td>0.335</td><td>0.323</td><td>0.237</td><td>0.762</td></tr>
+        <tr><td>Pan-essentiality (sum of mean GeneEffect)</td><td>0.109</td><td>0.226</td><td>0.193</td><td>0.335</td><td>0.323</td><td>0.237</td><td>0.762</td></tr>
         <tr><td>PARIS alone</td><td>0.256</td><td>0.365</td><td>0.090</td><td>0.167</td><td>0.102</td><td>0.196</td><td>0.644</td></tr>
         <tr class="group"><td colspan="8">PARIS head, by GeneEffect input</td></tr>
-        <tr><td>Each gene's mean GeneEffect (context-ablated)</td><td>0.367</td><td>0.555</td><td>0.248</td><td>0.398</td><td>0.358</td><td>0.385</td><td>0.842</td></tr>
+        <tr><td>Mean GeneEffect of each gene (context-ablated)</td><td>0.367</td><td>0.555</td><td>0.248</td><td>0.398</td><td>0.358</td><td>0.385</td><td>0.842</td></tr>
         <tr><td>Linear prior</td><td>0.319</td><td>0.490</td><td>0.251</td><td>0.378</td><td>0.361</td><td>0.360</td><td>0.838</td></tr>
         <tr><td>FiLM on the prior and ΔE</td><td>0.313</td><td>0.475</td><td>0.242</td><td>0.386</td><td>0.368</td><td>0.357</td><td>0.837</td></tr>
         <tr><td>FiLM on ΔE</td><td>0.333</td><td>0.514</td><td>0.240</td><td>0.364</td><td>0.339</td><td>0.358</td><td>0.827</td></tr>
         <tr><td>Measured GeneEffect (reference)</td><td>0.404</td><td>0.551</td><td>0.296</td><td>0.370</td><td>0.392</td><td>0.403</td><td>0.838</td></tr>
         <tr class="group"><td colspan="8">Viability-embedding head, by stage-one run</td></tr>
         <tr><td>FiLM on the prior and ΔE</td><td>0.210</td><td>0.355</td><td>0.106</td><td>0.206</td><td>0.298</td><td>0.235</td><td>0.785</td></tr>
-        <tr><td>… each gene's mean V (context-ablated)</td><td>0.713</td><td>0.829</td><td>0.187</td><td>0.388</td><td>0.381</td><td>0.500</td><td><b>0.899</b></td></tr>
+        <tr><td>… mean V of each gene (context-ablated)</td><td>0.713</td><td>0.829</td><td>0.187</td><td>0.388</td><td>0.381</td><td>0.500</td><td><b>0.899</b></td></tr>
         <tr><td>FiLM on ΔE</td><td>0.261</td><td>0.415</td><td>0.182</td><td>0.304</td><td>0.363</td><td>0.305</td><td>0.818</td></tr>
-        <tr><td>… each gene's mean V (context-ablated)</td><td>0.700</td><td>0.763</td><td>0.199</td><td>0.389</td><td>0.480</td><td>0.506</td><td>0.887</td></tr>
+        <tr><td>… mean V of each gene (context-ablated)</td><td>0.700</td><td>0.763</td><td>0.199</td><td>0.389</td><td>0.480</td><td>0.506</td><td>0.887</td></tr>
       </tbody>
     </table></div>
   </figure>
 
   <figure>
-    <figcaption><b>Table 6.</b> Test contrasts in AUPRC: mean over the five test contexts, and how many contexts have a 95% two-way dyadic bootstrap interval above or below zero.</figcaption>
+    <figcaption><b>Table 6.</b> AUPRC on the validation lines, with the same layout as Table 5; higher is better. Validation only selected the epoch of each head. Random AUPRC is 0.13, 0.015 and 0.03. The best value in each column is bold.</figcaption>
+    <div class="scroll"><table>
+      <thead><tr><th>Model</th><th>Harle NCI-H1299<br>312/39</th><th>Ito PA-TU-8988S<br>4,281/64</th><th>Klingbeil NCI-H1299<br>2,225/76</th><th>Mean AUPRC</th><th>Mean AUROC</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="6">Controls</td></tr>
+        <tr><td>Pair identity</td><td><b>0.880</b></td><td>0.308</td><td><b>0.412</b></td><td><b>0.534</b></td><td>0.883</td></tr>
+        <tr><td>Pan-essentiality</td><td>0.227</td><td>0.236</td><td>0.179</td><td>0.214</td><td>0.795</td></tr>
+        <tr><td>PARIS alone</td><td>0.383</td><td>0.071</td><td>0.090</td><td>0.181</td><td>0.633</td></tr>
+        <tr class="group"><td colspan="6">PARIS head, by GeneEffect input</td></tr>
+        <tr><td>Mean GeneEffect of each gene (context-ablated)</td><td>0.538</td><td>0.288</td><td>0.222</td><td>0.349</td><td>0.850</td></tr>
+        <tr><td>Linear prior</td><td>0.509</td><td>0.320</td><td>0.220</td><td>0.350</td><td>0.849</td></tr>
+        <tr><td>FiLM on the prior and ΔE</td><td>0.504</td><td>0.329</td><td>0.217</td><td>0.350</td><td>0.844</td></tr>
+        <tr><td>FiLM on ΔE</td><td>0.504</td><td>0.329</td><td>0.217</td><td>0.350</td><td>0.843</td></tr>
+        <tr><td>Measured GeneEffect (reference)</td><td>0.484</td><td><b>0.416</b></td><td>0.262</td><td>0.387</td><td>0.863</td></tr>
+        <tr class="group"><td colspan="6">Viability-embedding head, by stage-one run</td></tr>
+        <tr><td>FiLM on the prior and ΔE</td><td>0.386</td><td>0.137</td><td>0.151</td><td>0.225</td><td>0.832</td></tr>
+        <tr><td>… mean V of each gene (context-ablated)</td><td>0.836</td><td>0.150</td><td>0.247</td><td>0.411</td><td>0.903</td></tr>
+        <tr><td>FiLM on ΔE</td><td>0.437</td><td>0.212</td><td>0.202</td><td>0.284</td><td>0.865</td></tr>
+        <tr><td>… mean V of each gene (context-ablated)</td><td>0.857</td><td>0.149</td><td>0.290</td><td>0.432</td><td><b>0.908</b></td></tr>
+      </tbody>
+    </table></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>Table 7.</b> Test contrasts in AUPRC: the mean over the five test contexts, and the number of contexts where the 95% two-way dyadic bootstrap interval is above or below zero.</figcaption>
     <div class="scroll"><table>
       <thead><tr><th>Contrast</th><th>Mean</th><th>Above 0</th><th>Below 0</th></tr></thead>
       <tbody>
@@ -297,25 +336,26 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 
   <h3>Reading</h3>
   <ul class="reading">
-    <li><b>Pair identity wins everywhere,</b> on test and validation, and even on pairs whose SL call varies between lines.</li>
-    <li><b>Predicted GeneEffect adds nothing over the gene mean.</b> All three predicted arms match the context-ablated head.</li>
-    <li><b>Measured GeneEffect is nearly as flat</b> (+0.017, no interval excludes zero): even a perfect stage one would barely move this head on this benchmark.</li>
-    <li><b>The line's V hurts the viability-embedding head;</b> per-gene V carries its signal.</li>
-    <li><b>Nothing here is SL context evidence</b> (SL protocol §8).</li>
+    <li><b>Pair identity is best on all benchmarks,</b> on test and on validation. It is also best on pairs whose SL call changes between lines.</li>
+    <li><b>Predicted GeneEffect adds nothing to the gene mean.</b> The three predicted rows are equal to the context-ablated head.</li>
+    <li><b>Measured GeneEffect adds almost nothing</b> (+0.017; no interval excludes zero). A perfect stage one would not change this head much on this benchmark.</li>
+    <li><b>The line's V makes the viability-embedding head worse.</b> The signal is in the per-gene V.</li>
+    <li><b>Nothing here is evidence of SL context</b> (SL protocol §8).</li>
   </ul>
   <p class="sources">Record: <a href="sl_stage_two_seed0/README.md">SL stage two</a> (PARIS at <code>186c242</code>, stage two at <code>9e1c251</code>, 2026-10-23).</p>
 </section>
 
 <section>
-  <h2>What runs next</h2>
-  <p class="prose">From the stage-one plan (<code>docs/specs/2026-10-17-pie-stage-one-plan.md</code>), in order:</p>
+  <h2>Next steps</h2>
+  <p class="prose">The stage-one plan (<code>docs/specs/2026-10-17-pie-stage-one-plan.md</code>) gives this sequence:</p>
   <ol class="next">
-    <li><b>Rest of Wave 2.</b> Stage one's second half (the best arm's bulk-encoder, 377-line and protocol-mean rows; a separate bulk encoder on the 343 paired lines) and the gene query, each source added to the gene text.</li>
-    <li><b>Wave 3.</b> The data ladder's cell-bank channels with per-line QC covariates; the frozen-state pilot of the state-mixture model on the chosen vocabularies (about 55M pairs, about 50 h); planted state effects.</li>
-    <li><b>Waves 4–5.</b> Planted marginal and joint terms, cell-count draws, then fine-tuned and end-to-end states.</li>
+    <li><b>Finish stage one.</b> Add the bulk-encoder, 377-line and protocol-mean rows for the best arm. Add a separate bulk encoder on the 343 paired lines. Then add each gene-text source to the gene query.</li>
+    <li><b>Data ladder and state pilot.</b> Add the cell-bank channels with per-line QC covariates. Run the frozen-state pilot of the state-mixture model on the selected vocabularies (about 55M pairs, about 50 h). Then test planted state effects.</li>
+    <li><b>Later.</b> Planted marginal and joint terms, and draws with fewer cells. Then fine-tuned states, and at the end, end-to-end states.</li>
   </ol>
-  <p class="prose">The GPU-efficiency pass is in: CUDA-graph training steps, fused AdamW and one-pass validation
-  scoring landed on 2026-10-22–23 (a three-epoch FiLM run fell from 258 s to 114 s; <code>hpc/README.md</code>).</p>
+  <p class="prose">The GPU-efficiency pass is complete. CUDA-graph training steps, fused AdamW and one-pass validation
+  scores came in on 2026-10-22 and 2026-10-23. A three-epoch FiLM run went from 258 s to 114 s
+  (<code>hpc/README.md</code>).</p>
 </section>
 
 </main>
