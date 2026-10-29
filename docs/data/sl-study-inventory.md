@@ -2,15 +2,16 @@
 
 **Status:** discovery inventory built 2026-10-29 for the
 [multi-study SL benchmark](../specs/2026-10-29-multi-study-sl-benchmark-design.md). Nothing is downloaded or labelled
-yet. Every ModelID and every kind on a `candidate` row is a proposal for review. Nothing here is SL evidence.
+yet. The line rows and scRNA rows of the kept screens were reviewed on 2026-10-29 (see Review). The kind on each
+`candidate` row is still a proposal. Nothing here is SL evidence.
 
 ## Files
 
 | File | Rows | Content |
 | --- | ---: | --- |
 | `configs/benchmarks/sl_studies.csv` | 2,261 | One row per study: `kind`, `platform`, per-line score, authors' call, data location, licence, `in_synlethdb3`, `in_slkb`, `found_via`, `curation_status`. For a curated row, `note` holds `decision=` |
-| `configs/benchmarks/sl_study_lines.csv` | 846 | One row per (study, line): the line as the source spells it, `engineered_genotype`, `proposed_model_id`, `match_evidence` |
-| `configs/benchmarks/single_cell_atlas_candidates.csv` | +41 | The basal scRNA sources found for the screened lines, appended with an empty `review` and `wave`, so the builder's `propose` step reviews them before use |
+| `configs/benchmarks/sl_study_lines.csv` | 896 | One row per (study, line): the line as the source spells it, `engineered_genotype`, `proposed_model_id`, `match_evidence`; for kept screens also `model_review`, the reviewed `model_id`, `cellosaurus`, `screened` and `review_evidence` (see Review) |
+| `configs/benchmarks/single_cell_atlas_candidates.csv` | +41 | The basal scRNA sources found for the screened lines, reviewed by `propose` and then by hand (see Review); the review evidence is at the end of each `note` |
 
 The search scripts, full-text pulls and per-line search logs are local only, in
 `docs/notes/2026-10-29-sl-inventory/`.
@@ -64,13 +65,42 @@ or more lines. Basal scRNA coverage of these 174 lines:
 So 116 kept-screen lines have basal scRNA or a raw-count candidate, against 34 lines in the three-screen benchmark. They
 form 247 (study, line) lists, and 43 lines have two or more studies.
 
+## Review (2026-10-29)
+
+One Codex agent (gpt-6.1-sol) checked each line row of the kept screens against Model.csv, Cellosaurus and the
+full text, and each new scRNA row against GEO. Claude adjudicated the verdicts and applied them.
+
+- **Line rows** (414 of the kept screens). `model_review`: 325 `correct`, 1 `wrong` (corrected), 71 `not_in_depmap`
+  (for example 293T, HeLa S3, generic RPE1), 13 `not_a_line` (text tokens such as author initials, and empty
+  placeholders) and 4 `unsure`. `model_id` is set only for `correct` and `wrong` rows. `screened`: 222 `yes`, 105
+  `validation_only`, 35 `no` and 52 `unsure`. The hand-read panels of Ito, Flister and CHyMErA were set to `yes`.
+- **Lines the table lacked.** The review named 50 screened lines that the table did not have, for example 34 lines of
+  Wang 2017's leukaemia panel. They were added with `model_review = added_unreviewed`. A ModelID is proposed only when
+  exactly one Model.csv name matches (44 rows). Harle's COLO-792 and WM3702 have `screened = qc_excluded`, because the
+  authors removed them in QC.
+- **scRNA rows** (41). The `review` values are now 14 `ok`, 9 `ambiguous`, 5 `derived`, 1 `no_match` and 12
+  `dropped`. Rows were dropped for 3D or differentiated culture, sorted fractions, knockouts, or values that are not
+  counts (RPKM, FPKM, scaled). `condition_class` and `raw_counts` were corrected. HEL in GSE319999 was re-mapped to
+  HEL 92.1.7 (ACH-000005) and stays `ambiguous`.
+
+After the review, 156 lines were screened (`screened = yes`) in 65 studies. 93 of them have basal scRNA:
+
+| scRNA status | Lines |
+| --- | ---: |
+| Training line of the final split | 67 |
+| Validation line | 3 |
+| Test line | 7 |
+| Other split line (PC9, HeLa) | 2 |
+| Built extra line or reviewed atlas row (`ok`) | 8 |
+| New scRNA row reviewed `ok` | 6 |
+
+These 93 lines form 172 (study, line) lists, and 29 lines have two or more studies. The 116 lines in Counts above
+include lines used only for validation.
+
 ## Pitfalls
 
-- **Overcounted lines.** For the 65 kept studies outside the 25 hand-read ones, the lines are every human line that the
-  full text names at least twice, not the screen panel the paper states. Validation-only lines are therefore included,
-  and a line named once can be missing. `match_evidence` records the mention count.
-- **ModelIDs are proposals.** They come from hand alias lists. A source's spelling becomes a ModelID only through a
-  reviewed row.
+- **Use `screened` and `model_id`, not `proposed_model_id`.** The proposals include lines used only for validation and
+  near-names. The 50 added rows and the 17 rows still `unsure` are not reviewed.
 - **Lines without scRNA.** After two searches, these screened lines have no public basal scRNA: every uveal melanoma line
   except MP41, every head-and-neck line, most of Flister's extra lines, and lines such as SiHa, MV4-11, RT112, OV90 and
   KYSE150. They cannot be scored until a source exists.

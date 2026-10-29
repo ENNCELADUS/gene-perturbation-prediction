@@ -57,9 +57,10 @@ used as label sources.
 ## 3. Discovery result
 
 The [data card](../data/sl-study-inventory.md) has the files and counts. Of 2,261 studies, 90 combinatorial or
-anchor screens are kept after a full-text pass. Their 174 lines include 116 with basal scRNA or a raw-count candidate
-(16 of them current validation or test lines), which form 247 (study, line) lists. The three-screen benchmark has 34
-lines. scRNA, not SL labels, now limits the line count: 57 screened lines have no basal source.
+anchor screens are kept after a full-text pass. After the review of 2026-10-29, 156 lines were screened in them, and 93
+of these have basal scRNA (10 of them current validation or test lines). They form 172 (study, line) lists. The
+three-screen benchmark has 34 lines. scRNA, not SL labels, limits the line count: 63 screened lines have no basal
+source.
 
 ## 4. Not yet decided
 
