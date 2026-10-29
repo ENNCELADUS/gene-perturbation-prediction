@@ -101,21 +101,22 @@ include lines used only for validation.
 ## Per-line tables (2026-10-29)
 
 The files that hold each kept screen's per-line results (scores, FDR, calls) are on the H20 in
-`data/sl_studies/raw/<study_id>/`: 471 files, 2.54 GB. The earlier copies of Harle, Ito and Klingbeil in
+`data/sl_studies/raw/<study_id>/`: 509 files, 2.64 GB. The earlier copies of Harle, Ito and Klingbeil in
 `data/sl_screens/raw/` are used as they are. Every tabular supplement was fetched, library and oligo tables included;
-the `content` column tells them apart. No file was parsed, labelled or filtered. The SHA-256 of all 476 files on the
-H20 matches `sl_study_tables.csv`. Files that the H20 could not reach, or reached too slowly, came through the Mac and
-were deleted there after the check.
+the `content` column tells them apart. No file was parsed, labelled or filtered. The SHA-256 of every file on the H20
+matches `sl_study_tables.csv`. Files that the H20 could not reach, or reached too slowly, came through the Mac and were
+deleted there after the check. 38 files behind the PMC browser check or a publisher's 403 were downloaded by hand in a
+browser (`route = manual_browser`).
 
-- **Complete (61 studies):** a per-line score or call table is on the H20. `per_line_score_found` was read from the
+- **Complete (68 studies):** a per-line score or call table is on the H20. `per_line_score_found` was read from the
   sheet headers, not from the values.
-- **Partial (18):** only part of the data is there, for example only the shared SLKB dump (Wong 2016, Han 2017,
-  Tang 2022), only BioGRID ORCS files (Mengwasser 2019, Liang 2020, Liu 2019), only read counts, or only PDF tables.
-  Neggers 2020's screen data is probably in a RAR file that was not opened.
-- **None (11):** Magesh 2024 and Park 2026 have raw reads only (39.8 GB and 9.4 GB in SRA, not fetched).
-  Boettcher 2017, Doberstein 2018 and Hayward 2026 have no supplement on bioRxiv. Zhao 2017, Krishnamoorthy 2025,
-  Knoll 2025 and Wang 2020 are behind the PMC browser check or a publisher's 403. Chatr-aryamontri 2025's data site
-  answers 403, and Guo 2019 is closed access.
+- **Partial (16):** only part of the data is there, for example only the shared SLKB dump (Wong 2016, Tang 2022),
+  only BioGRID ORCS files, only read counts, or only PDF tables (Wang 2020, Guo 2019, Shao 2025, Pinault 2025,
+  Zhao 2019, Ragupathi 2025, Ramadan 2026). Zhao 2017's supplements hold ChIP-seq and expression tables, not its
+  screen. Neggers 2020's screen data is probably in a RAR file that was not opened.
+- **None (6):** Magesh 2024 and Park 2026 have raw reads only (39.8 GB and 9.4 GB in SRA, not fetched).
+  Boettcher 2017, Doberstein 2018 and Hayward 2026 have no supplement on bioRxiv. Chatr-aryamontri 2025's data site
+  gave no file.
 
 Not opened: the SLKB SQL dump (241 MB, shared by its 11 studies), Alborzinia 2023's `.7z`, van 2023's `.xlsb` and
 Neggers 2020's RAR. Shen 2017's `MOESM2_ESM.xlsx` is a PDF. Zhao 2018's DOI was corrected to
