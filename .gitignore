@@ -51,6 +51,9 @@ wheels/
 # Pinned single-cell atlas candidates (accession, ModelID, identifier per line), small provenance.
 !configs/benchmarks/single_cell_atlas_candidates.csv
 !configs/benchmarks/sl_screen_lines.csv
+# SL study inventory (one row per study; one per study and line), small provenance.
+!configs/benchmarks/sl_studies.csv
+!configs/benchmarks/sl_study_lines.csv
 # Reviewed chemistry of each single-cell deposit (cell-state telemetry), small provenance.
 !configs/benchmarks/single_cell_source_chemistry.csv
 # Hand-authored provenance CSVs for paper tables (small, source-of-truth; not data dumps)
