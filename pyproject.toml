@@ -30,6 +30,7 @@ dependencies = [
     "umap-learn==0.5.9.post2",
     "openpyxl>=3.1",
     "httpx[socks]>=0.28.1",
+    "pyxlsb>=1.0.10",
 ]
 
 [project.optional-dependencies]
