@@ -44,7 +44,7 @@ Running the pipeline needs the raw single-cell data, DepMap labels and model wei
 | Basal single-cell atlases | Context input: the basal cells of every single-cell line ([split card](docs/data/cell-line-geneeffect-split.md), [atlas search](docs/data/single-cell-atlas-search.md)). |
 | DepMap 26Q1 | GeneEffect labels and bulk expression, joined by ModelID ([card](docs/data/depmap-public-26q1.md)). |
 | Perturb-seq anchors | Response supervision for the joint model (K562, HepG2, Jurkat, HCT116). |
-| Multi-line SL screens | Stage-two labels ([benchmark card](docs/data/sl-screen-benchmark.md)); the multi-study benchmark that will replace it is at the inventory stage ([design](docs/specs/2026-10-29-multi-study-sl-benchmark-design.md), [inventory](docs/data/sl-study-inventory.md)). |
+| Multi-line SL screens | Stage-two labels ([benchmark card](docs/data/sl-screen-benchmark.md)); the multi-study benchmark that replaces it has labels, a split and baselines ([design](docs/specs/2026-10-29-multi-study-sl-benchmark-design.md), [card](docs/data/sl-study-inventory.md), [baselines](results/sl_study_benchmark/summary.html)). |
 
 Single-gene GeneEffect predictions and DepMap-derived dependency patterns are not SL labels; a cross-line SL claim needs experimental SL labels in the named lines.
 
