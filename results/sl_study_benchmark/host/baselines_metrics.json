@@ -1,0 +1,108 @@
+{
+  "run_id": "benchmark_baselines_seed0",
+  "rows": {
+    "training": 695784,
+    "held": 589697,
+    "rows_line_not_in_split": 1297072,
+    "rows_gene_without_score": 75014
+  },
+  "lists_without_both_classes": 12,
+  "summary": [
+    {
+      "split": "test",
+      "scorer": "measured_geneeffect",
+      "lines": 12,
+      "lists": 37,
+      "auprc_lift": 2.7724398105238564,
+      "interval": [
+        2.123082833924296,
+        3.5157762431016133
+      ],
+      "auroc": 0.6326679891678207
+    },
+    {
+      "split": "test",
+      "scorer": "pair_identity",
+      "lines": 10,
+      "lists": 29,
+      "auprc_lift": 56.622239462945515,
+      "interval": [
+        6.825438557658209,
+        149.472371799565
+      ],
+      "auroc": 0.8090675886099428
+    },
+    {
+      "split": "test",
+      "scorer": "pan_essentiality",
+      "lines": 12,
+      "lists": 37,
+      "auprc_lift": 2.8235301845190404,
+      "interval": [
+        2.2525474903977583,
+        3.460315219178982
+      ],
+      "auroc": 0.6567364937853926
+    },
+    {
+      "split": "test",
+      "scorer": "prior_a_blind",
+      "lines": 12,
+      "lists": 37,
+      "auprc_lift": 2.94773996151577,
+      "interval": [
+        2.3578514426472403,
+        3.575436509721963
+      ],
+      "auroc": 0.6580909866800261
+    },
+    {
+      "split": "val",
+      "scorer": "measured_geneeffect",
+      "lines": 12,
+      "lists": 16,
+      "auprc_lift": 8.25057197287015,
+      "interval": [
+        5.129218014792297,
+        11.507213880777527
+      ],
+      "auroc": 0.7784142074667789
+    },
+    {
+      "split": "val",
+      "scorer": "pair_identity",
+      "lines": 12,
+      "lists": 15,
+      "auprc_lift": 18.199939900608964,
+      "interval": [
+        11.613369216499,
+        26.024715448422157
+      ],
+      "auroc": 0.8715632670441757
+    },
+    {
+      "split": "val",
+      "scorer": "pan_essentiality",
+      "lines": 12,
+      "lists": 16,
+      "auprc_lift": 5.776012091043054,
+      "interval": [
+        3.79109663325611,
+        8.146294965908485
+      ],
+      "auroc": 0.7825303143404438
+    },
+    {
+      "split": "val",
+      "scorer": "prior_a_blind",
+      "lines": 12,
+      "lists": 16,
+      "auprc_lift": 5.825328386922298,
+      "interval": [
+        3.894714262224891,
+        8.148768745498625
+      ],
+      "auroc": 0.7830797572882243
+    }
+  ]
+}

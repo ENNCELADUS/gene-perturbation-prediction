@@ -1,0 +1,436 @@
+{
+  "schema_version": "sl-study-benchmark-v1",
+  "inputs": {
+    "rules": "configs/benchmarks/sl_label_rules.csv",
+    "gene_effect": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
+    "hgnc": "data/sl_screens/raw/hgnc/hgnc_complete_set.txt"
+  },
+  "rows": 2718058,
+  "renamed_symbols": 147607,
+  "studies": {
+    "Alborzinia2023": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 5,
+      "negative": 825,
+      "unlabelled": 0
+    },
+    "Amitzi2024": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 367,
+      "negative": 17418,
+      "unlabelled": 0
+    },
+    "Aregger2020": {
+      "lists": 8,
+      "lists_without_model_id": 0,
+      "positive": 1131,
+      "negative": 141149,
+      "unlabelled": 0
+    },
+    "Baxter2023": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 174,
+      "negative": 17789,
+      "unlabelled": 0
+    },
+    "Benslimane2021": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 193,
+      "negative": 36783,
+      "unlabelled": 0
+    },
+    "Chai2020": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 13,
+      "negative": 20312,
+      "unlabelled": 0
+    },
+    "Chan2025": {
+      "lists": 10,
+      "lists_without_model_id": 2,
+      "positive": 326,
+      "negative": 3618,
+      "unlabelled": 1196
+    },
+    "Clements2020": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 7,
+      "negative": 38171,
+      "unlabelled": 0
+    },
+    "Dede2020": {
+      "lists": 3,
+      "lists_without_model_id": 0,
+      "positive": 57,
+      "negative": 1152,
+      "unlabelled": 0
+    },
+    "Drainas2020": {
+      "lists": 1,
+      "lists_without_model_id": 1,
+      "positive": 2,
+      "negative": 20754,
+      "unlabelled": 0
+    },
+    "Ebright2026": {
+      "lists": 12,
+      "lists_without_model_id": 0,
+      "positive": 11095,
+      "negative": 112457,
+      "unlabelled": 0
+    },
+    "EsmaeiliAnvar2024": {
+      "lists": 4,
+      "lists_without_model_id": 0,
+      "positive": 644,
+      "negative": 12269,
+      "unlabelled": 0
+    },
+    "Feng2022": {
+      "lists": 13,
+      "lists_without_model_id": 13,
+      "positive": 475,
+      "negative": 209126,
+      "unlabelled": 24841
+    },
+    "Feng2024_2": {
+      "lists": 1,
+      "lists_without_model_id": 1,
+      "positive": 13,
+      "negative": 17583,
+      "unlabelled": 0
+    },
+    "Fielden2025": {
+      "lists": 1,
+      "lists_without_model_id": 1,
+      "positive": 5131,
+      "negative": 144656,
+      "unlabelled": 0
+    },
+    "Flister2025_genomewide": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 168,
+      "negative": 70032,
+      "unlabelled": 0
+    },
+    "Flister2025_hybrid": {
+      "lists": 20,
+      "lists_without_model_id": 0,
+      "positive": 1959,
+      "negative": 100361,
+      "unlabelled": 0
+    },
+    "Fong2024": {
+      "lists": 7,
+      "lists_without_model_id": 0,
+      "positive": 714,
+      "negative": 59519,
+      "unlabelled": 22689
+    },
+    "GonatopoulosPournatzis2020": {
+      "lists": 2,
+      "lists_without_model_id": 1,
+      "positive": 318,
+      "negative": 1018,
+      "unlabelled": 40
+    },
+    "Han2017": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 30,
+      "negative": 20761,
+      "unlabelled": 0
+    },
+    "Harle2025": {
+      "lists": 27,
+      "lists_without_model_id": 1,
+      "positive": 882,
+      "negative": 8580,
+      "unlabelled": 3282
+    },
+    "Hill2019": {
+      "lists": 5,
+      "lists_without_model_id": 0,
+      "positive": 1,
+      "negative": 94766,
+      "unlabelled": 0
+    },
+    "Horlbeck2018": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 1897,
+      "negative": 173309,
+      "unlabelled": 0
+    },
+    "Ito2021": {
+      "lists": 11,
+      "lists_without_model_id": 0,
+      "positive": 1562,
+      "negative": 50599,
+      "unlabelled": 0
+    },
+    "Jung2022": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 43,
+      "negative": 2913,
+      "unlabelled": 0
+    },
+    "Klingbeil2024": {
+      "lists": 22,
+      "lists_without_model_id": 0,
+      "positive": 2554,
+      "negative": 49688,
+      "unlabelled": 0
+    },
+    "Knoll2025": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 227,
+      "negative": 15065,
+      "unlabelled": 0
+    },
+    "Koferle2022": {
+      "lists": 22,
+      "lists_without_model_id": 0,
+      "positive": 2,
+      "negative": 40,
+      "unlabelled": 7
+    },
+    "Ku2020": {
+      "lists": 3,
+      "lists_without_model_id": 0,
+      "positive": 207,
+      "negative": 5495,
+      "unlabelled": 31
+    },
+    "Liang2020": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 58,
+      "negative": 18873,
+      "unlabelled": 0
+    },
+    "Liu2019": {
+      "lists": 1,
+      "lists_without_model_id": 1,
+      "positive": 137,
+      "negative": 18665,
+      "unlabelled": 0
+    },
+    "Mengwasser2019": {
+      "lists": 4,
+      "lists_without_model_id": 0,
+      "positive": 279,
+      "negative": 815,
+      "unlabelled": 0
+    },
+    "Najm2018": {
+      "lists": 8,
+      "lists_without_model_id": 0,
+      "positive": 22,
+      "negative": 2770,
+      "unlabelled": 0
+    },
+    "Najm2023": {
+      "lists": 11,
+      "lists_without_model_id": 0,
+      "positive": 504,
+      "negative": 86544,
+      "unlabelled": 0
+    },
+    "Nebenfuehr2026": {
+      "lists": 2,
+      "lists_without_model_id": 2,
+      "positive": 14802,
+      "negative": 193438,
+      "unlabelled": 0
+    },
+    "Neggers2020": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 26,
+      "negative": 19065,
+      "unlabelled": 1001
+    },
+    "Park2023": {
+      "lists": 2,
+      "lists_without_model_id": 2,
+      "positive": 2222,
+      "negative": 33581,
+      "unlabelled": 16
+    },
+    "Parrish2021": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 157,
+      "negative": 1903,
+      "unlabelled": 0
+    },
+    "Rosenbluh2016": {
+      "lists": 4,
+      "lists_without_model_id": 0,
+      "positive": 1642,
+      "negative": 3502,
+      "unlabelled": 0
+    },
+    "Schick2019": {
+      "lists": 22,
+      "lists_without_model_id": 0,
+      "positive": 42,
+      "negative": 574,
+      "unlabelled": 638
+    },
+    "SeguraBayona2026": {
+      "lists": 2,
+      "lists_without_model_id": 2,
+      "positive": 29,
+      "negative": 38157,
+      "unlabelled": 0
+    },
+    "Shen2017": {
+      "lists": 3,
+      "lists_without_model_id": 1,
+      "positive": 168,
+      "negative": 7716,
+      "unlabelled": 0
+    },
+    "Tang2022": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 274,
+      "negative": 951,
+      "unlabelled": 0
+    },
+    "Thompson2021": {
+      "lists": 3,
+      "lists_without_model_id": 1,
+      "positive": 141,
+      "negative": 2058,
+      "unlabelled": 1359
+    },
+    "Tuano2023": {
+      "lists": 10,
+      "lists_without_model_id": 10,
+      "positive": 99,
+      "negative": 19426,
+      "unlabelled": 0
+    },
+    "Vichas2021": {
+      "lists": 3,
+      "lists_without_model_id": 0,
+      "positive": 520,
+      "negative": 52404,
+      "unlabelled": 5102
+    },
+    "Vizeacoumar2013": {
+      "lists": 5,
+      "lists_without_model_id": 0,
+      "positive": 200,
+      "negative": 626,
+      "unlabelled": 236
+    },
+    "Wong2016": {
+      "lists": 1,
+      "lists_without_model_id": 0,
+      "positive": 52,
+      "negative": 1173,
+      "unlabelled": 0
+    },
+    "Zhang2023": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 501,
+      "negative": 35475,
+      "unlabelled": 4
+    },
+    "Zhang2026": {
+      "lists": 5,
+      "lists_without_model_id": 0,
+      "positive": 25,
+      "negative": 447102,
+      "unlabelled": 23
+    },
+    "Zhao2018": {
+      "lists": 2,
+      "lists_without_model_id": 0,
+      "positive": 40,
+      "negative": 2494,
+      "unlabelled": 16
+    },
+    "Zimmermann2018": {
+      "lists": 3,
+      "lists_without_model_id": 1,
+      "positive": 231,
+      "negative": 46116,
+      "unlabelled": 10
+    },
+    "van2021": {
+      "lists": 4,
+      "lists_without_model_id": 4,
+      "positive": 258,
+      "negative": 71191,
+      "unlabelled": 0
+    },
+    "van2023_2": {
+      "lists": 3,
+      "lists_without_model_id": 3,
+      "positive": 204,
+      "negative": 53910,
+      "unlabelled": 0
+    }
+  },
+  "rules_not_ready": {
+    "Adhikari2018": "needs_decision",
+    "Alborzinia2023": "unusable",
+    "Boettcher2017": "unusable",
+    "Bowden2020_2": "needs_decision",
+    "Burgold2025": "needs_parsing",
+    "Chatraryamontri2025": "unusable",
+    "Chen2024": "needs_decision",
+    "Chen2024_3": "unusable",
+    "Clements2020": "unusable",
+    "Dhoonmoon2020": "needs_decision",
+    "Diehl2021": "needs_parsing",
+    "Doberstein2018": "unusable",
+    "Drainas2020": "unusable",
+    "Du2017": "needs_parsing",
+    "Feng2024_2": "needs_decision",
+    "Fielden2025": "needs_decision",
+    "Ford2023": "needs_decision",
+    "Gier2020": "unusable",
+    "Guna2023": "needs_decision",
+    "Guo2019": "needs_parsing",
+    "Hayward2026": "unusable",
+    "Hong2025": "unusable",
+    "Jung2022": "unusable",
+    "Knoll2025": "needs_decision",
+    "Krieg2024": "unusable",
+    "Krishnamoorthy2025": "unusable",
+    "Kuehnle2023": "unusable",
+    "Lo2025": "unusable",
+    "Magesh2024": "unusable",
+    "Park2022_2": "unusable",
+    "Park2026": "unusable",
+    "Pinault2025": "unusable",
+    "Ragupathi2025": "unusable",
+    "Ramadan2026": "needs_parsing",
+    "Shao2025": "unusable",
+    "Tang2022": "unusable",
+    "Wang2017_2": "needs_decision",
+    "Wang2020_5": "needs_parsing",
+    "Xu2021": "needs_decision",
+    "Yang2021": "needs_decision",
+    "Zhao2017": "unusable",
+    "Zhao2019": "unusable",
+    "Zhao2021": "unusable",
+    "Zimon2020": "unusable"
+  }
+}

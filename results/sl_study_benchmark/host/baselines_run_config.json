@@ -1,0 +1,14 @@
+{
+  "config": {
+    "kind": "sl_benchmark_baselines",
+    "seed": 0,
+    "output_root": "outputs/sl",
+    "task": "benchmark_baselines",
+    "labels": "data/sl_studies/benchmark/labels.parquet",
+    "split": "configs/benchmarks/cell_line_sl_split.json",
+    "gene_effect": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
+    "prior": "outputs/context_prior/default_prior_sl_split_seed0/export",
+    "top_k": 20,
+    "bootstrap": 1000
+  }
+}

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Study SL Benchmark</title>
+<style>
+/* Layout: one reading column, a verdict ledger up top, then one section per stage with paper-style tables. */
+:root {
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --ink: #1b2420;
+  --muted: #5b6862;
+  --rule: #d5dbd7;
+  --accent: #1f5f73;
+  --accent-soft: #e3eef1;
+  --neg: #9a3b2c;
+  --neg-soft: #f6e6e2;
+  --pos: #2e6b3f;
+  --pos-soft: #e3f0e6;
+  --flat: #6d6420;
+  --flat-soft: #f2efd9;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121715; --surface: #1a211e; --ink: #e3e9e5; --muted: #9aa8a1; --rule: #2f3a35;
+    --accent: #7fbfd1; --accent-soft: #1d3138; --neg: #e59a8b; --neg-soft: #3a2420;
+    --pos: #8fcf9f; --pos-soft: #1f3325; --flat: #d8cb7a; --flat-soft: #34301a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121715; --surface: #1a211e; --ink: #e3e9e5; --muted: #9aa8a1; --rule: #2f3a35;
+  --accent: #7fbfd1; --accent-soft: #1d3138; --neg: #e59a8b; --neg-soft: #3a2420;
+  --pos: #8fcf9f; --pos-soft: #1f3325; --flat: #d8cb7a; --flat-soft: #34301a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 980px; margin: 0 auto; display: grid; gap: 48px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 2.1rem; }
+h2 { font-size: 1.5rem; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+h3 { font-size: 1.1rem; }
+p { margin: 0; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font: 0.86em var(--mono); background: var(--accent-soft); padding: 1px 4px; border-radius: 3px; }
+section { display: grid; gap: 18px; min-width: 0; }
+section > *, header > * { min-width: 0; }
+.eyebrow { font: 600 0.72rem/1 var(--body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 12px; }
+.meta { color: var(--muted); font-size: 0.88rem; }
+
+/* verdict ledger */
+.ledger { display: grid; border-top: 1px solid var(--rule); }
+.ledger > div {
+  display: grid; grid-template-columns: 11rem 7.5rem 1fr; gap: 16px; align-items: baseline;
+  padding: 12px 0; border-bottom: 1px solid var(--rule);
+}
+.ledger .what { font-weight: 600; }
+.chip { justify-self: start; font: 600 0.72rem/1 var(--body); letter-spacing: 0.04em; padding: 5px 8px; border-radius: 3px; white-space: nowrap; }
+.chip.neg { color: var(--neg); background: var(--neg-soft); }
+.chip.pos { color: var(--pos); background: var(--pos-soft); }
+.chip.flat { color: var(--flat); background: var(--flat-soft); }
+.chip.next { color: var(--accent); background: var(--accent-soft); }
+@media (max-width: 640px) {
+  .ledger > div { grid-template-columns: 1fr; gap: 6px; }
+}
+
+/* tables */
+figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+figcaption { font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
+figcaption b { color: var(--ink); }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 15rem; }
+thead th { font-weight: 600; color: var(--muted); font-size: 0.78rem; vertical-align: bottom; border-bottom: 1.5px solid var(--ink); }
+tbody tr:last-child td { border-bottom: none; }
+tr.group td { font-style: italic; color: var(--muted); background: var(--bg); padding-top: 8px; }
+td.l { text-align: left; }
+.neg-n { color: var(--neg); }
+.reading { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; max-width: 80ch; }
+.reading li { padding-left: 14px; border-left: 2px solid var(--rule); }
+ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 80ch; }
+.sources { font-size: 0.86rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+
+.nl { font-weight: 400; color: var(--muted); font-size: 0.72rem; }
+thead th { white-space: normal; min-width: 4.2rem; }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <span class="eyebrow">Run record · SL stage two · 2026-10-30</span>
+  <h1>Multi-study SL benchmark: labels, split and baselines</h1>
+  <div class="prose" style="display:grid;gap:8px">
+    <p>This page records the first build of the multi-study SL benchmark and its first baselines. Every number
+    comes from the host files copied to <a href="host/"><code>results/sl_study_benchmark/host/</code></a>.
+    Seed 0. Nothing here is SL context evidence.</p>
+  </div>
+</header>
+
+<section>
+  <h2>The question</h2>
+  <div class="prose" style="display:grid;gap:12px">
+    <p>Stage two ranks SL partners in a held-out cell line. The three-screen benchmark has few lines. This benchmark
+    takes per-line labels from every kept SL screen study instead
+    (<a href="../../docs/specs/2026-10-29-multi-study-sl-benchmark-design.md">design</a>,
+    <a href="../../docs/data/sl-study-inventory.md#labels-and-split-2026-10-30">data card</a>).</p>
+    <p>The unit is a <b>list</b>: the pairs that one study tested in one line, or in one anchor comparison of one
+    line. Labels are never merged across studies. The baselines show how much of a list's ranking comes from
+    context-blind knowledge before any model reads the line's profile.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The benchmark</h2>
+  <figure>
+    <figcaption><b>Table 1.</b> Label rules in <code>configs/benchmarks/sl_label_rules.csv</code>, one row per
+    study comparison or screen, for the 90 kept studies. A study can have rows in more than one status.</figcaption>
+    <div class="scroll"><table>
+      <thead><tr><th>Status</th><th>Rule rows</th><th>Studies</th></tr></thead>
+      <tbody><tr><td>Ready: a reader applies the rule</td><td>136</td><td>54</td></tr><tr><td>Needs a decision: score only, no stated cut</td><td>17</td><td>12</td></tr><tr><td>Needs parsing: PDF or hit-only tables</td><td>6</td><td>6</td></tr><tr><td>Unusable: no viability table, mouse lines, reporter screens</td><td>26</td><td>26</td></tr></tbody>
+    </table></div>
+  </figure>
+  <figure>
+    <figcaption><b>Table 2.</b> How the ready rules call a positive. Negatives are the other pairs or genes that
+    the study tested in that list. A pair whose gene is depleted alone, by the study's own flag, is unlabelled.</figcaption>
+    <div class="scroll"><table>
+      <thead><tr><th>Rule</th><th>Ready rule rows</th></tr></thead>
+      <tbody><tr><td>The authors&#x27; per-line call</td><td>74</td></tr><tr><td>The authors&#x27; stated threshold on the published score</td><td>49</td></tr><tr><td>Project default: FDR &lt; 0.05 in the SL direction</td><td>11</td></tr><tr><td>The rule of the three-screen benchmark (core screens)</td><td>2</td></tr></tbody>
+    </table></div>
+  </figure>
+  <figure>
+    <figcaption><b>Table 3.</b> The built labels, <code>data/sl_studies/benchmark/</code> on the H20 (also on the
+    Mac). Lists without a ModelID are cell models with no DepMap entry (RPE1, HEK293A, HMEC, eHAP and others).</figcaption>
+    <div class="scroll"><table>
+      <thead><tr><th>Quantity</th><th>Value</th></tr></thead>
+      <tbody><tr><td>Studies with labelled lists</td><td>54</td></tr><tr><td>Lists (study × line × comparison)</td><td>294</td></tr><tr><td>Anchor lists / combinatorial lists</td><td>126 / 168</td></tr><tr><td>(list, pair) rows</td><td>2,718,058</td></tr><tr><td>Positives / negatives / unlabelled</td><td>52,830 / 2,604,737 / 60,491</td></tr><tr><td>Lists with a DepMap ModelID (lines)</td><td>247 (115)</td></tr><tr><td>Lists with both classes and a ModelID (lines)</td><td>209 (110)</td></tr></tbody>
+    </table></div>
+  </figure>
+  <figure>
+    <figcaption><b>Table 4.</b> The SL split (<code>configs/benchmarks/cell_line_sl_split.json</code>) against the
+    final split, in single-cell lines. The final split's held-out lines keep their side. Screened training lines
+    move, drawn across lineages, until validation and test each hold 20% of the 61 single-cell lines with a
+    two-class list. Six lines that share a patient with a moved line are excluded.</figcaption>
+    <div class="scroll"><table>
+      <thead><tr><th>Side</th><th>Final split</th><th>SL split</th><th>Lines with a two-class list</th><th>Two-class lists</th></tr></thead>
+      <tbody><tr><td>Training</td><td>379</td><td>361</td><td>37</td><td>94</td></tr><tr><td>Validation</td><td>27</td><td>37</td><td>12</td><td>16</td></tr><tr><td>Test</td><td>28</td><td>36</td><td>12</td><td>37</td></tr></tbody>
+    </table></div>
+  </figure>
+</section>
+
+<section>
+  <h2>The rows</h2>
+  <div class="prose" style="display:grid;gap:12px">
+    <p>Each row gives one score per pair, and a higher score means a more likely SL pair. For a combinatorial list
+    the score sums both genes. An anchor list is ranked by gene B alone, because gene A (a gene or a drug) is the
+    same for the whole list.</p>
+    <p><b>Pan-essentiality</b> and <b>pair identity</b> are context-blind controls. Pair identity is undefined
+    for a study with no training line, so it scores fewer lists. The <b>default linear prior</b> predicts the
+    line's GeneEffect from its expression, refitted on the SL split's training side. <b>Measured GeneEffect</b> is
+    the line's own CRISPR screen. It is a reference, not a model, because the task gives a held-out line no
+    screen.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What ran</h2>
+  <p class="prose">All steps ran on the H20 container on port 30838, on the CPU, from branch
+  <code>feat/sl-study-benchmark</code>.</p>
+  <figure>
+    <div class="scroll"><table>
+      <thead><tr><th>Step</th><th>Code</th><th style="text-align:left">Output</th><th>Finished (UTC)</th></tr></thead>
+      <tbody>
+        <tr><td>Labels (<code>build_sl_study_benchmark</code>)</td><td><code>1b0e58f</code></td><td class="l"><code>data/sl_studies/benchmark/</code></td><td>2026-10-30 05:23</td></tr>
+        <tr><td>SL split (<code>build_sl_split</code>)</td><td><code>1b0e58f</code></td><td class="l"><code>configs/benchmarks/cell_line_sl_split.json</code></td><td>2026-10-30 05:27</td></tr>
+        <tr><td>Prior refit (<code>prior</code>)</td><td><code>5719b88</code></td><td class="l"><code>outputs/context_prior/default_prior_sl_split_seed0/</code></td><td>2026-10-30 05:39</td></tr>
+        <tr><td>Prior export (<code>prior-export</code>)</td><td><code>5719b88</code></td><td class="l"><code>…/default_prior_sl_split_seed0/export/</code></td><td>2026-10-30 05:41</td></tr>
+        <tr><td>Baselines (<code>sl-baselines</code>)</td><td><code>17559ab</code></td><td class="l"><code>outputs/sl/benchmark_baselines/benchmark_baselines_seed0/</code></td><td>2026-10-30 05:42</td></tr>
+      </tbody>
+    </table></div>
+    <figcaption>Host report: <a href="host/baselines_results.md">baselines_results.md</a>,
+    <a href="host/baselines_metrics.json">metrics.json</a>, <a href="host/baselines_lists.csv">per-list metrics</a>,
+    <a href="host/benchmark_lists.csv">benchmark lists</a>, <a href="host/benchmark_manifest.json">benchmark manifest</a>.
+    The baselines scored 589,697 held-out (list, pair) rows. 75,014
+    rows in split lines had a gene that a scorer cannot read and were left out.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Results</h2>
+  <p class="prose">The metric is the AUPRC of a list's ranking divided by the list's positive rate (1 is a random
+  ranking). The headline averages the lists of each line, then averages the lines, so a line that many studies
+  tested counts once.</p>
+  <figure>
+    <figcaption><b>Table 5.</b> AUPRC lift on the <b>validation</b> lines of the SL split, per line and as the mean
+    over lines; higher is better. Interval: 95%, from resampling lines. Bold: the best model row per column (the
+    measured-GeneEffect reference is not ranked). A dash: pair identity has no training line of that study.</figcaption>
+    <div class="scroll"><table><thead><tr><th>Row</th><th>NCI-H1299<br><span class='nl'>4 lists</span></th><th>LK-2<br><span class='nl'>2 lists</span></th><th>PA-TU-8988S<br><span class='nl'>1 list</span></th><th>T3M-4<br><span class='nl'>1 list</span></th><th>KP-4<br><span class='nl'>1 list</span></th><th>Capan-1<br><span class='nl'>1 list</span></th><th>NCI-H211<br><span class='nl'>1 list</span></th><th>A2058<br><span class='nl'>1 list</span></th><th>NCI-H2087<br><span class='nl'>1 list</span></th><th>NCI-H1048<br><span class='nl'>1 list</span></th><th>COLO 205<br><span class='nl'>1 list</span></th><th>SUM-149PT<br><span class='nl'>1 list</span></th><th>Mean over lines</th><th>95% interval</th><th>Lines</th><th>Lists</th><th>AUROC</th></tr></thead><tbody><tr><td>Pan-essentiality (each gene&#x27;s mean GeneEffect over training lines)</td><td>5.49</td><td>3.92</td><td>15.60</td><td>7.35</td><td>2.17</td><td>1.65</td><td>7.09</td><td>1.74</td><td>9.01</td><td>6.87</td><td>2.27</td><td>6.14</td><td>5.78</td><td>[3.79, 8.15]</td><td>12</td><td>16</td><td>0.783</td></tr><tr><td>Pair identity (the pair&#x27;s hit rate in the study&#x27;s training lines)</td><td><b>54.52</b></td><td><b>22.91</b></td><td><b>20.73</b></td><td><b>14.74</b></td><td><b>7.80</b></td><td><b>7.49</b></td><td><b>12.41</b></td><td><b>9.38</b></td><td><b>19.71</b></td><td><b>13.73</b></td><td>1.79</td><td><b>33.18</b></td><td><b>18.20</b></td><td>[11.61, 26.02]</td><td>12</td><td>15</td><td>0.872</td></tr><tr><td>Default linear prior refitted on the SL split (predicted GeneEffect)</td><td>5.66</td><td>4.54</td><td>16.01</td><td>7.40</td><td>2.17</td><td>1.59</td><td>6.98</td><td>1.86</td><td>8.12</td><td>7.01</td><td><b>2.29</b></td><td>6.29</td><td>5.83</td><td>[3.89, 8.15]</td><td>12</td><td>16</td><td>0.783</td></tr><tr class='group'><td colspan='18'>Reference</td></tr><tr><td>Measured GeneEffect in the line (reference, not a model)</td><td>3.37</td><td>16.19</td><td>16.84</td><td>8.11</td><td>2.06</td><td>1.25</td><td>7.96</td><td>1.90</td><td>20.46</td><td>8.76</td><td>6.48</td><td>5.64</td><td>8.25</td><td>[5.13, 11.51]</td><td>12</td><td>16</td><td>0.778</td></tr></tbody></table></div>
+  </figure>
+  <figure>
+    <figcaption><b>Table 6.</b> AUPRC lift on the <b>test</b> lines of the SL split, scored one time; same layout
+    as Table 5.</figcaption>
+    <div class="scroll"><table><thead><tr><th>Row</th><th>A549<br><span class='nl'>11 lists</span></th><th>A-375<br><span class='nl'>5 lists</span></th><th>MDA-MB-231<br><span class='nl'>5 lists</span></th><th>K-562<br><span class='nl'>4 lists</span></th><th>HT-29<br><span class='nl'>4 lists</span></th><th>JURKAT<br><span class='nl'>2 lists</span></th><th>Panc 02.03<br><span class='nl'>1 list</span></th><th>HT-1080<br><span class='nl'>1 list</span></th><th>SNU-410<br><span class='nl'>1 list</span></th><th>SK-MES-1<br><span class='nl'>1 list</span></th><th>NCI-H1568<br><span class='nl'>1 list</span></th><th>LS 180<br><span class='nl'>1 list</span></th><th>Mean over lines</th><th>95% interval</th><th>Lines</th><th>Lists</th><th>AUROC</th></tr></thead><tbody><tr><td>Pan-essentiality (each gene&#x27;s mean GeneEffect over training lines)</td><td>3.62</td><td>2.19</td><td>3.41</td><td>2.53</td><td>2.50</td><td><b>1.64</b></td><td>3.84</td><td>2.37</td><td>5.32</td><td>1.82</td><td>1.49</td><td>3.14</td><td>2.82</td><td>[2.25, 3.46]</td><td>12</td><td>37</td><td>0.657</td></tr><tr><td>Pair identity (the pair&#x27;s hit rate in the study&#x27;s training lines)</td><td><b>468.82</b></td><td><b>34.86</b></td><td><b>6.36</b></td><td><b>11.55</b></td><td><b>14.78</b></td><td>–</td><td>2.92</td><td>–</td><td>4.24</td><td><b>6.81</b></td><td><b>8.33</b></td><td><b>7.54</b></td><td><b>56.62</b></td><td>[6.83, 149.47]</td><td>10</td><td>29</td><td>0.809</td></tr><tr><td>Default linear prior refitted on the SL split (predicted GeneEffect)</td><td>3.56</td><td>2.24</td><td>3.43</td><td>2.58</td><td>2.64</td><td>1.64</td><td><b>4.02</b></td><td><b>2.43</b></td><td><b>5.80</b></td><td>1.86</td><td>1.51</td><td>3.67</td><td>2.95</td><td>[2.36, 3.58]</td><td>12</td><td>37</td><td>0.658</td></tr><tr class='group'><td colspan='18'>Reference</td></tr><tr><td>Measured GeneEffect in the line (reference, not a model)</td><td>2.93</td><td>2.28</td><td>3.13</td><td>2.17</td><td>3.14</td><td>1.41</td><td>4.33</td><td>1.67</td><td>5.80</td><td>1.49</td><td>1.37</td><td>3.54</td><td>2.77</td><td>[2.12, 3.52]</td><td>12</td><td>37</td><td>0.633</td></tr></tbody></table></div>
+  </figure>
+  <figure>
+    <figcaption><b>Table 7.</b> Paired contrasts of AUPRC lift against pan-essentiality, on the lists that both
+    rows score: the mean over lines of each line's mean difference, with a 95% interval from resampling lines (1,000
+    draws, seed 0). Lines / lists: what the contrast covers.</figcaption>
+    <div class="scroll"><table>
+      <thead><tr><th>Contrast</th><th>Validation</th><th>Lines / lists</th><th>Test</th><th>Lines / lists</th></tr></thead>
+      <tbody><tr><td>Prior − pan-essentiality</td><td>+0.05 [-0.16, +0.22]</td><td>12 / 16</td><td>+0.12 [+0.04, +0.24]</td><td>12 / 37</td></tr><tr><td>Measured GeneEffect − pan-essentiality</td><td>+2.47 [+0.32, +5.25]</td><td>12 / 16</td><td>-0.05 [-0.30, +0.20]</td><td>12 / 37</td></tr><tr><td>Pair identity − pan-essentiality</td><td>+12.35 [+6.16, +20.55]</td><td>12 / 15</td><td>+53.58 [+4.08, +145.72]</td><td>10 / 29</td></tr></tbody>
+    </table></div>
+  </figure>
+</section>
+
+<section>
+  <h2>Reading</h2>
+  <ul class="reading">
+    <li><b>Pair identity is the strongest row where it applies (Tables 5–6).</b> Its test mean is heavy-tailed: one
+    Zhang2026 list in A549 has 4 positives in
+    98,852 pairs and a lift of 4,943, and it sets most of the mean. A list with very few
+    positives makes the lift unstable; the minimum positives per list is still undecided (design §4).</li>
+    <li><b>The prior adds little to pan-essentiality (Table 7).</b> The paired gain is +0.05 [-0.16, +0.22]
+    on validation and +0.12 [+0.04, +0.24] on test, against lifts near 3 to 6.</li>
+    <li><b>Measured GeneEffect beats pan-essentiality on validation but not on test (Table 7).</b> Even the line's own
+    screen does not reliably beat each gene's mean, so a context model has little room above pan-essentiality on
+    these lists.</li>
+    <li><b>The held-out sides are small.</b> Each side has 12 lines, and validation has 16 lists, so the intervals
+    are wide. The 17 rule rows that need a decision and the lines with no scRNA would add lists.</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>
