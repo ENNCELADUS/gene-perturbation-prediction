@@ -5,6 +5,8 @@ it raises ValueError when a file does not have the expected shape. Gene symbols 
 as the file gives them.
 """
 
+import re
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -565,7 +567,9 @@ def read_Zhang2026_focad_isogenic(raw):
 KNOLL_ARMS = {"LU99": "LU99.MRTX9768", "SW1573": "SW1573.MRTX1719"}
 
 
-def read_Knoll2025_mrtx(raw):
+def _knoll(raw, value, anchor, genotype):
+    """The authors' rule on value(d, line), each construct's LFC: the pair below -0.5
+    and below the stronger single by more than 0.2."""
     d = pd.read_csv(_f(raw, "Knoll2025", "NIHMS2100756-supplement-3.csv"))
     _need(
         d,
@@ -575,14 +579,14 @@ def read_Knoll2025_mrtx(raw):
         "Knoll2025 supplement-3",
     )
     sym = d.GuideTargetSymbol.astype(str)
-    pairs = d[sym.str.count("_") == 1].copy()
-    ab = pairs.GuideTargetSymbol.str.split("_", expand=True)
+    is_pair = (sym.str.count("_") == 1).values
+    ab = sym[is_pair].str.split("_", expand=True)
     out = []
-    for L, arm in KNOLL_ARMS.items():
-        diff = pd.Series((d[arm] - d[f"{L}.DMSO"]).values, index=sym.values)
-        diff = diff[~diff.index.duplicated(keep=False)]
-        dp = (pairs[arm] - pairs[f"{L}.DMSO"]).values
-        da, db = diff.reindex(ab[0]).values, diff.reindex(ab[1]).values
+    for L in KNOLL_ARMS:
+        lfc = pd.Series(value(d, L).values, index=sym.values)
+        single = lfc[~lfc.index.duplicated(keep=False)]
+        dp = lfc.values[is_pair]
+        da, db = single.reindex(ab[0]).values, single.reindex(ab[1]).values
         miss = np.isnan(da) | np.isnan(db)
         pos = (dp < -0.5) & (dp - np.fmin(da, db) < -0.2)
         out.append(
@@ -595,11 +599,68 @@ def read_Knoll2025_mrtx(raw):
                 np.full(len(dp), np.nan),
                 pos,
                 np.where(miss, "single_gene_missing", ""),
-                anchor="PRMT5",
-                genotype=f"MTAP-deleted; {arm.split('.')[1]} arm minus DMSO",
+                anchor=anchor,
+                genotype=genotype(L),
             )
         )
     return pd.concat(out, ignore_index=True)
+
+
+def read_Knoll2025_mrtx(raw):
+    return _knoll(
+        raw,
+        lambda d, L: d[KNOLL_ARMS[L]] - d[f"{L}.DMSO"],
+        "PRMT5",
+        lambda L: f"MTAP-deleted; {KNOLL_ARMS[L].split('.')[1]} arm minus DMSO",
+    )
+
+
+def read_Knoll2025_dmso(raw):
+    """The paralog SL of each line: the authors' rule on the DMSO arm."""
+    return _knoll(raw, lambda d, L: d[f"{L}.DMSO"], "", lambda L: "DMSO vs pDNA")
+
+
+# Du2017
+DU_CONTROLS = re.compile(r"^(LC|DC\d+)$")  # library and dummy controls
+
+
+def read_Du2017(raw):
+    """Positives are the published pairs with S < -1 (the authors' call); negatives
+    are the other gene pairs of the library, assumed all scored: the paper publishes
+    only the significant pairs."""
+    hits = pd.read_csv(
+        _f(raw, "Du2017", "41592_2017_BFnmeth4286_MOESM2_ESM.txt"), sep="\t"
+    )
+    _need(hits, ["gene1", "gene2", "score"], "Du2017 Data Set 1")
+    member = "Supplementary_Dataset_3/double_lib_before_pack.txt"
+    zip_path = _f(raw, "Du2017", "41592_2017_BFnmeth4286_MOESM4_ESM.zip")
+    with zipfile.ZipFile(zip_path) as z:
+        library = pd.read_csv(z.open(member), sep="\t")
+    _need(library, ["pair"], f"Du2017 {member}")
+    # guides are GENE_<n>; the _PC positive controls have no number
+    genes = library.pair.str.split(":", expand=True).apply(
+        lambda g: g.str.extract(r"^(.+)_\d+$")[0]
+    )
+    genes = genes[genes.notna().all(axis=1)]
+    genes = genes[~genes.apply(lambda g: g.str.match(DU_CONTROLS)).any(axis=1)]
+    genes = genes[genes[0] != genes[1]]
+    tested = pd.DataFrame(np.sort(genes.to_numpy(), axis=1), columns=["a", "b"])
+    tested = tested.drop_duplicates().reset_index(drop=True)
+    hits[["a", "b"]] = np.sort(hits[["gene1", "gene2"]].to_numpy(), axis=1)
+    hits = hits[hits.a != hits.b]
+    score = tested.merge(hits[["a", "b", "score"]], on=["a", "b"], how="left").score
+    if score.notna().sum() != len(hits):
+        raise ValueError("Du2017: a published pair is not in the library")
+    return _out(
+        "Du2017",
+        "HEK293",
+        tested.a.values,
+        tested.b.values,
+        score.values,
+        np.full(len(tested), np.nan),
+        (score < -1).values,
+        "",
+    )
 
 
 READERS = {
@@ -618,4 +679,6 @@ READERS = {
     "Zhang2026_combinatorial": read_Zhang2026_combinatorial,
     "Zhang2026_focad_isogenic": read_Zhang2026_focad_isogenic,
     "Knoll2025_mrtx": read_Knoll2025_mrtx,
+    "Knoll2025_dmso": read_Knoll2025_dmso,
+    "Du2017": read_Du2017,
 }
