@@ -284,7 +284,8 @@ def read_Najm2018_apoptosis(raw: Path) -> pd.DataFrame:
                 (q < 0.05).astype(int),
             )
         )
-    return _concat(frames)
+    # its own lists (list_id Najm2018_apoptosis|line) within the study Najm2018
+    return _concat(frames).assign(study_id="Najm2018")
 
 
 def read_Parrish2021(raw: Path) -> pd.DataFrame:
