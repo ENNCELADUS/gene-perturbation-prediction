@@ -55,6 +55,8 @@ wheels/
 !configs/benchmarks/sl_studies.csv
 !configs/benchmarks/sl_study_lines.csv
 !configs/benchmarks/sl_study_tables.csv
+!configs/benchmarks/sl_label_rules.csv
+!configs/benchmarks/cell_line_sl_split.csv
 # Reviewed chemistry of each single-cell deposit (cell-state telemetry), small provenance.
 !configs/benchmarks/single_cell_source_chemistry.csv
 # Hand-authored provenance CSVs for paper tables (small, source-of-truth; not data dumps)
