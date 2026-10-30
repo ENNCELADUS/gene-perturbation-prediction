@@ -83,7 +83,9 @@ def pair_identity(training: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
 def pair_sum(rows: pd.DataFrame, value: Callable[[str], np.ndarray]) -> np.ndarray:
     """value("gene_a") + value("gene_b"). An anchor list's gene A is one gene or drug
     for the whole list, so its term is 0: the list's ranking is unchanged."""
-    a = value("gene_a")
+    a = np.array(
+        value("gene_a"), dtype=np.float64
+    )  # a copy: pandas may return read-only
     a[(rows["design"] == "anchor").to_numpy()] = 0.0
     return a + value("gene_b")
 
