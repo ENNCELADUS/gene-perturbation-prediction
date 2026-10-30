@@ -21,6 +21,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh stage-one-prior CONFIG --run-id ID   (the default prior refitted on the stage-one frame, CPU)
        hpc/run.sh sl-paris CONFIG --run-id ID [--genes N]   (PARIS, ported to Python, CPU, .venv-pie)
        hpc/run.sh sl-stage-two CONFIG --run-id ID   (SL stage two on stage one's GeneEffect, CPU, .venv-pie)
+       hpc/run.sh sl-baselines CONFIG --run-id ID   (baselines on the multi-study SL benchmark, CPU, .venv-pie)
        hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
        hpc/run.sh pie-precompute CONFIG --steps states|assemble_states --set NAME[,NAME]|ALL [--shard I/N]   (frozen PIE on state inputs, GPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment; pie-reproduce,
@@ -76,7 +77,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior|sl-paris|sl-stage-two|cell-states) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior|sl-paris|sl-stage-two|sl-baselines|cell-states) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -121,6 +122,7 @@ case "$command" in
   stage-one-prior) exec "$python_bin" -m src.experiments.stage_one.prior_reference "$@" ;;
   sl-paris) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.paris "$@" ;;
   sl-stage-two) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.stage_two "$@" ;;
+  sl-baselines) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.benchmark_baselines "$@" ;;
   gene-sources)
     step=$1; shift
     case "$step" in
