@@ -9,6 +9,7 @@ from src.context_prior.reference import load_reference
 from src.data.builders.build_context_reference import (
     closest_paralogs,
     driver_status,
+    filtered_line_tables,
     parse_corum,
     parse_gmt,
     parse_paralogs,
@@ -105,6 +106,22 @@ def test_driver_rule_reads_only_given_lines():
     assert list(status.columns) == ["KRAS", "BRAF"]  # TTN is not a hotspot gene
     assert list(status.index) == ["L1", "L2", "L3"]
     assert status.loc["L2", "BRAF"] == 1
+
+
+def test_filtered_line_tables_drop_blocked_lines_and_reselect_drivers(tmp_path):
+    lines = [f"L{i}" for i in range(20)]
+    drivers = pd.DataFrame(
+        {"model_id": lines, "KRAS": [1] * 2 + [0] * 18, "TP53": [1] * 10 + [0] * 10}
+    )
+    drivers.to_csv(tmp_path / "drivers.tsv", sep="\t", index=False)
+    pd.DataFrame({"model_id": lines, "msi_score": 1.0}).to_csv(
+        tmp_path / "msi.tsv", sep="\t", index=False
+    )
+    tables = filtered_line_tables(tmp_path, blocked={"L0", "L1", "L19"})
+    kept, _ = tables["drivers.tsv"]
+    assert "L0" not in set(kept["model_id"]) and len(kept) == 17
+    assert list(kept.columns) == ["model_id", "TP53"]  # KRAS falls under 5%
+    assert len(tables["msi.tsv"][0]) == 17
 
 
 def test_loader_refuses_blocked_lines(tmp_path):

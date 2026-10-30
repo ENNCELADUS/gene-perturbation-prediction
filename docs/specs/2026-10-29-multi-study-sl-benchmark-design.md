@@ -64,6 +64,11 @@ source.
 
 ## 4. Not yet decided
 
-- Eligibility rules for lines and lists (minimum positives and negatives per list).
-- The split rule's lineage strata and exact fractions, after the inventory.
-- Where tracked inventory tables live, and the builder.
+- Eligibility rules for lines and lists (minimum positives and negatives per list). The baselines score every list
+  that holds both classes.
+- The rules of the 12 `needs_decision` studies (candidates in each row's `note`).
+
+Settled on 2026-10-30 ([data card](../data/sl-study-inventory.md#labels-and-split-2026-10-30)): the tables live in
+`configs/benchmarks/` (`sl_label_rules.csv`, `cell_line_sl_split.json`); the builders are `build_sl_study_benchmark`
+and `build_sl_split`. The split keeps the final split's held-out lines and moves training lines, drawn across
+lineages, until validation and test each hold 20% of the single-cell lines with a two-class list.
