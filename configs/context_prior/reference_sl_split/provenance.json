@@ -1,0 +1,53 @@
+{
+  "retrieved": "2026-10-04",
+  "settings": {
+    "paralog_min_identity": 20.0,
+    "paralogs_per_gene": 10,
+    "progeny_top": 100,
+    "driver_min_fraction": 0.05
+  },
+  "files": {
+    "paralogs.tsv.gz": {
+      "source": "https://useast.ensembl.org/biomart/martservice",
+      "rows": 93520
+    },
+    "complexes.tsv": {
+      "source": "https://mips.helmholtz-muenchen.de/fastapi-corum/public/file/download_current_file?file_id=human&file_format=txt",
+      "rows": 18932
+    },
+    "hallmark.tsv": {
+      "source": "https://data.broadinstitute.org/gsea-msigdb/msigdb/release/2024.1.Hs/h.all.v2024.1.Hs.symbols.gmt",
+      "rows": 7322
+    },
+    "progeny.tsv": {
+      "source": "https://omnipathdb.org/annotations?resources=PROGENy&format=tsv",
+      "rows": 1400
+    },
+    "drivers.tsv": {
+      "source": "configs/context_prior/reference/drivers.tsv without the split's held-out and excluded lines",
+      "rows": 1880
+    },
+    "msi.tsv": {
+      "source": "configs/context_prior/reference/msi.tsv without the split's held-out and excluded lines",
+      "rows": 1841
+    },
+    "cell_cycle.tsv": {
+      "source": "https://raw.githubusercontent.com/satijalab/seurat/00e55c9b54c8b12b5ae85ffafc1c18d683c73a9f/data/cc.genes.rda",
+      "rows": 97
+    },
+    "meta_programs.tsv": {
+      "source": "https://raw.githubusercontent.com/tiroshlab/3ca/21a784103528cdf15008761f9669e2025159d6d2/ITH_hallmarks/MPs_distribution/MP_list.RDS.gz",
+      "rows": 2050
+    },
+    "meta_program_sources.tsv": {
+      "source": "https://raw.githubusercontent.com/tiroshlab/3ca/21a784103528cdf15008761f9669e2025159d6d2/ITH_hallmarks/TCGA_analysis/study_contribution_per_MP.RDS",
+      "rows": 41
+    }
+  },
+  "line_tables_rebuilt": "2026-10-30",
+  "state_programs_retrieved": "2026-10-12",
+  "checks": {
+    "meta_program_cell_lines": "meta_program_sources.tsv counts each program's cell-line studies (Kinker et al. 2020's CCLE pools and other cell-line sets). Kinker's pools hold the cells of validation and test lines, the exposure ruled out for Kinker's own programs on 2026-10-04, so a config reads only programs with no cell-line study (21 of 41; decided 2026-10-12).",
+    "tirosh_cell_cycle": "Tirosh et al. 2016 (Science 352:189, PMC4944528): 'we used gene signatures previously shown to denote G1/S or G2/M phases in both synchronization and single-cell experiments in cell lines', citing Whitfield et al. 2002 (synchronised HeLa; HeLa is a test line here) and Macosko et al. 2015. Canonical cell-cycle genes from an earlier experiment, no deposit this project reads; kept and noted."
+  }
+}

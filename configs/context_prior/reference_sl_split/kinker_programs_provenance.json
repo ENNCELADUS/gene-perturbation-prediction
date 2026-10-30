@@ -1,0 +1,9 @@
+{
+  "retrieved": "2026-10-17",
+  "source": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41588-020-00726-6/MediaObjects/41588_2020_726_MOESM3_ESM.xlsx",
+  "table": "Supplementary Table 4 (sheet 'Table S4'): Twelve RHPs derived from NMF programs; each signature is all genes in at least 25% of the constituent programs, ordered by frequency of occurrence",
+  "citation": "Kinker GS et al. 2020 Nat Genet 52:1208-1218, doi:10.1038/s41588-020-00726-6",
+  "programs": 12,
+  "rows": 533,
+  "note": "Derived from CCLE cell-line pools, some of them lines of this project (validation and test lines among them); used only to name states in Task 8's identity report, never as a model input."
+}

@@ -1,0 +1,2051 @@
+program	gene
+MP1 Cell Cycle - G2/M	TOP2A
+MP1 Cell Cycle - G2/M	UBE2C
+MP1 Cell Cycle - G2/M	HMGB2
+MP1 Cell Cycle - G2/M	NUSAP1
+MP1 Cell Cycle - G2/M	CENPF
+MP1 Cell Cycle - G2/M	CCNB1
+MP1 Cell Cycle - G2/M	TPX2
+MP1 Cell Cycle - G2/M	CKS2
+MP1 Cell Cycle - G2/M	BIRC5
+MP1 Cell Cycle - G2/M	PRC1
+MP1 Cell Cycle - G2/M	PTTG1
+MP1 Cell Cycle - G2/M	KPNA2
+MP1 Cell Cycle - G2/M	MKI67
+MP1 Cell Cycle - G2/M	CDC20
+MP1 Cell Cycle - G2/M	CDK1
+MP1 Cell Cycle - G2/M	CCNB2
+MP1 Cell Cycle - G2/M	CDKN3
+MP1 Cell Cycle - G2/M	SMC4
+MP1 Cell Cycle - G2/M	NUF2
+MP1 Cell Cycle - G2/M	ARL6IP1
+MP1 Cell Cycle - G2/M	CKAP2
+MP1 Cell Cycle - G2/M	ASPM
+MP1 Cell Cycle - G2/M	PLK1
+MP1 Cell Cycle - G2/M	CKS1B
+MP1 Cell Cycle - G2/M	CCNA2
+MP1 Cell Cycle - G2/M	AURKA
+MP1 Cell Cycle - G2/M	MAD2L1
+MP1 Cell Cycle - G2/M	GTSE1
+MP1 Cell Cycle - G2/M	HMMR
+MP1 Cell Cycle - G2/M	UBE2T
+MP1 Cell Cycle - G2/M	CENPE
+MP1 Cell Cycle - G2/M	CENPA
+MP1 Cell Cycle - G2/M	KIF20B
+MP1 Cell Cycle - G2/M	AURKB
+MP1 Cell Cycle - G2/M	CDCA3
+MP1 Cell Cycle - G2/M	CDCA8
+MP1 Cell Cycle - G2/M	UBE2S
+MP1 Cell Cycle - G2/M	KNSTRN
+MP1 Cell Cycle - G2/M	KIF2C
+MP1 Cell Cycle - G2/M	PBK
+MP1 Cell Cycle - G2/M	TUBA1B
+MP1 Cell Cycle - G2/M	DLGAP5
+MP1 Cell Cycle - G2/M	TACC3
+MP1 Cell Cycle - G2/M	STMN1
+MP1 Cell Cycle - G2/M	DEPDC1
+MP1 Cell Cycle - G2/M	ECT2
+MP1 Cell Cycle - G2/M	CENPW
+MP1 Cell Cycle - G2/M	ZWINT
+MP1 Cell Cycle - G2/M	HIST1H4C
+MP1 Cell Cycle - G2/M	KIF23
+MP2 Cell Cycle - G1/S	PCNA
+MP2 Cell Cycle - G1/S	RRM2
+MP2 Cell Cycle - G1/S	FEN1
+MP2 Cell Cycle - G1/S	GINS2
+MP2 Cell Cycle - G1/S	TYMS
+MP2 Cell Cycle - G1/S	MCM3
+MP2 Cell Cycle - G1/S	GMNN
+MP2 Cell Cycle - G1/S	HIST1H4C
+MP2 Cell Cycle - G1/S	CLSPN
+MP2 Cell Cycle - G1/S	ATAD2
+MP2 Cell Cycle - G1/S	TK1
+MP2 Cell Cycle - G1/S	KIAA0101
+MP2 Cell Cycle - G1/S	DUT
+MP2 Cell Cycle - G1/S	HELLS
+MP2 Cell Cycle - G1/S	MCM7
+MP2 Cell Cycle - G1/S	UBE2T
+MP2 Cell Cycle - G1/S	MCM4
+MP2 Cell Cycle - G1/S	CENPU
+MP2 Cell Cycle - G1/S	DHFR
+MP2 Cell Cycle - G1/S	ZWINT
+MP2 Cell Cycle - G1/S	ASF1B
+MP2 Cell Cycle - G1/S	MCM5
+MP2 Cell Cycle - G1/S	DNAJC9
+MP2 Cell Cycle - G1/S	RFC4
+MP2 Cell Cycle - G1/S	HMGB2
+MP2 Cell Cycle - G1/S	CDC6
+MP2 Cell Cycle - G1/S	RRM1
+MP2 Cell Cycle - G1/S	ORC6
+MP2 Cell Cycle - G1/S	CDK1
+MP2 Cell Cycle - G1/S	RAD51AP1
+MP2 Cell Cycle - G1/S	RNASEH2A
+MP2 Cell Cycle - G1/S	CHAF1A
+MP2 Cell Cycle - G1/S	CENPK
+MP2 Cell Cycle - G1/S	CDCA5
+MP2 Cell Cycle - G1/S	SLBP
+MP2 Cell Cycle - G1/S	MCM6
+MP2 Cell Cycle - G1/S	TMEM106C
+MP2 Cell Cycle - G1/S	CENPM
+MP2 Cell Cycle - G1/S	MYBL2
+MP2 Cell Cycle - G1/S	E2F1
+MP2 Cell Cycle - G1/S	USP1
+MP2 Cell Cycle - G1/S	DNMT1
+MP2 Cell Cycle - G1/S	PKMYT1
+MP2 Cell Cycle - G1/S	MAD2L1
+MP2 Cell Cycle - G1/S	PSMC3IP
+MP2 Cell Cycle - G1/S	CDCA4
+MP2 Cell Cycle - G1/S	RFC2
+MP2 Cell Cycle - G1/S	CDC45
+MP2 Cell Cycle - G1/S	UHRF1
+MP2 Cell Cycle - G1/S	MCM2
+MP3 Cell Cylce HMG-rich	STMN1
+MP3 Cell Cylce HMG-rich	TUBA1B
+MP3 Cell Cylce HMG-rich	H2AFZ
+MP3 Cell Cylce HMG-rich	DUT
+MP3 Cell Cylce HMG-rich	TUBB
+MP3 Cell Cylce HMG-rich	PCNA
+MP3 Cell Cylce HMG-rich	HMGB2
+MP3 Cell Cylce HMG-rich	KIAA0101
+MP3 Cell Cylce HMG-rich	HMGB1
+MP3 Cell Cylce HMG-rich	RANBP1
+MP3 Cell Cylce HMG-rich	RAN
+MP3 Cell Cylce HMG-rich	TYMS
+MP3 Cell Cylce HMG-rich	H2AFV
+MP3 Cell Cylce HMG-rich	SLC25A5
+MP3 Cell Cylce HMG-rich	CKS1B
+MP3 Cell Cylce HMG-rich	SNRPG
+MP3 Cell Cylce HMG-rich	COX8A
+MP3 Cell Cylce HMG-rich	HSPE1
+MP3 Cell Cylce HMG-rich	SNRPB
+MP3 Cell Cylce HMG-rich	ANAPC11
+MP3 Cell Cylce HMG-rich	SLIRP
+MP3 Cell Cylce HMG-rich	HMGN1
+MP3 Cell Cylce HMG-rich	NAA38
+MP3 Cell Cylce HMG-rich	SNRPD1
+MP3 Cell Cylce HMG-rich	SNRPE
+MP3 Cell Cylce HMG-rich	ATP5G3
+MP3 Cell Cylce HMG-rich	HIST1H4C
+MP3 Cell Cylce HMG-rich	HSPD1
+MP3 Cell Cylce HMG-rich	NME1
+MP3 Cell Cylce HMG-rich	TK1
+MP3 Cell Cylce HMG-rich	HMGN2
+MP3 Cell Cylce HMG-rich	MIF
+MP3 Cell Cylce HMG-rich	SNRPF
+MP3 Cell Cylce HMG-rich	ATP5G1
+MP3 Cell Cylce HMG-rich	TPI1
+MP3 Cell Cylce HMG-rich	COX5A
+MP3 Cell Cylce HMG-rich	ERH
+MP3 Cell Cylce HMG-rich	HMGA1
+MP3 Cell Cylce HMG-rich	HNRNPA2B1
+MP3 Cell Cylce HMG-rich	MCM7
+MP3 Cell Cylce HMG-rich	NUCB2
+MP3 Cell Cylce HMG-rich	SIVA1
+MP3 Cell Cylce HMG-rich	SRSF7
+MP3 Cell Cylce HMG-rich	YBX1
+MP3 Cell Cylce HMG-rich	LSM4
+MP3 Cell Cylce HMG-rich	ANP32B
+MP3 Cell Cylce HMG-rich	UQCRQ
+MP3 Cell Cylce HMG-rich	HSPB11
+MP3 Cell Cylce HMG-rich	SUMO2
+MP3 Cell Cylce HMG-rich	SNRPD3
+MP4 Chromatin	MT-ND6
+MP4 Chromatin	DST
+MP4 Chromatin	SMARCA5
+MP4 Chromatin	SPEN
+MP4 Chromatin	PCM1
+MP4 Chromatin	GOLGA4
+MP4 Chromatin	GOLGB1
+MP4 Chromatin	KCNQ1OT1
+MP4 Chromatin	PHF3
+MP4 Chromatin	PTPN11
+MP4 Chromatin	TRIM44
+MP4 Chromatin	ZNF638
+MP4 Chromatin	CEP350
+MP4 Chromatin	GOLIM4
+MP4 Chromatin	HIST1H1E
+MP4 Chromatin	MSH6
+MP4 Chromatin	ROCK2
+MP4 Chromatin	SMC1A
+MP4 Chromatin	SMCHD1
+MP4 Chromatin	ASH1L
+MP4 Chromatin	ATAD2
+MP4 Chromatin	ATAD5
+MP4 Chromatin	BAZ1B
+MP4 Chromatin	NOP14
+MP4 Chromatin	RIF1
+MP4 Chromatin	SYNE2
+MP4 Chromatin	TJP1
+MP4 Chromatin	TRIP11
+MP4 Chromatin	ENAH
+MP4 Chromatin	HIST1H1C
+MP4 Chromatin	HIST2H2AC
+MP4 Chromatin	NRD1
+MP4 Chromatin	RANBP2
+MP4 Chromatin	SMC5
+MP4 Chromatin	ARGLU1
+MP4 Chromatin	BDP1
+MP4 Chromatin	SETD2
+MP4 Chromatin	SLK
+MP4 Chromatin	SPAG9
+MP4 Chromatin	SUZ12
+MP4 Chromatin	AHCTF1
+MP4 Chromatin	CLINT1
+MP4 Chromatin	FAM208B
+MP4 Chromatin	KMT2A
+MP4 Chromatin	MACF1
+MP4 Chromatin	PAXBP1
+MP4 Chromatin	HIST1H1B
+MP4 Chromatin	UACA
+MP4 Chromatin	SENP6
+MP4 Chromatin	ZMYM4
+MP5 Stress	ATF3
+MP5 Stress	EGR1
+MP5 Stress	FOS
+MP5 Stress	PPP1R15A
+MP5 Stress	JUN
+MP5 Stress	DUSP1
+MP5 Stress	JUNB
+MP5 Stress	FOSB
+MP5 Stress	IER2
+MP5 Stress	GADD45B
+MP5 Stress	BTG2
+MP5 Stress	ZFP36
+MP5 Stress	DNAJB1
+MP5 Stress	NR4A1
+MP5 Stress	SERTAD1
+MP5 Stress	DDIT3
+MP5 Stress	KLF6
+MP5 Stress	NFKBIA
+MP5 Stress	HSPA1A
+MP5 Stress	HSPA1B
+MP5 Stress	CYR61
+MP5 Stress	MAFF
+MP5 Stress	NFKBIZ
+MP5 Stress	IER3
+MP5 Stress	CCNL1
+MP5 Stress	MCL1
+MP5 Stress	RHOB
+MP5 Stress	SOCS3
+MP5 Stress	IRF1
+MP5 Stress	CDKN1A
+MP5 Stress	HES1
+MP5 Stress	ID2
+MP5 Stress	KLF4
+MP5 Stress	KLF10
+MP5 Stress	CXCL2
+MP5 Stress	ID1
+MP5 Stress	TOB1
+MP5 Stress	TRIB1
+MP5 Stress	HSPH1
+MP5 Stress	RASD1
+MP5 Stress	SAT1
+MP5 Stress	DDIT4
+MP5 Stress	EGR2
+MP5 Stress	HERPUD1
+MP5 Stress	PLK2
+MP5 Stress	DNAJA1
+MP5 Stress	HSPA6
+MP5 Stress	PMAIP1
+MP5 Stress	CITED2
+MP5 Stress	ID3
+MP6 Hypoxia	NDRG1
+MP6 Hypoxia	BNIP3
+MP6 Hypoxia	SLC2A1
+MP6 Hypoxia	P4HA1
+MP6 Hypoxia	VEGFA
+MP6 Hypoxia	ENO2
+MP6 Hypoxia	ADM
+MP6 Hypoxia	HILPDA
+MP6 Hypoxia	PGK1
+MP6 Hypoxia	BNIP3L
+MP6 Hypoxia	FAM162A
+MP6 Hypoxia	PLOD2
+MP6 Hypoxia	EGLN3
+MP6 Hypoxia	LDHA
+MP6 Hypoxia	MT1X
+MP6 Hypoxia	NRN1
+MP6 Hypoxia	DDIT4
+MP6 Hypoxia	DDIT3
+MP6 Hypoxia	ERO1A
+MP6 Hypoxia	ANGPTL4
+MP6 Hypoxia	IGFBP3
+MP6 Hypoxia	PFKP
+MP6 Hypoxia	INSIG2
+MP6 Hypoxia	NDUFA4L2
+MP6 Hypoxia	PDK1
+MP6 Hypoxia	CA9
+MP6 Hypoxia	AKAP12
+MP6 Hypoxia	C4ORF3
+MP6 Hypoxia	IGFBP5
+MP6 Hypoxia	GBE1
+MP6 Hypoxia	LGALS3
+MP6 Hypoxia	TMEM45A
+MP6 Hypoxia	WSB1
+MP6 Hypoxia	GPI
+MP6 Hypoxia	S100A10
+MP6 Hypoxia	SLC16A3
+MP6 Hypoxia	EPB41L4A-AS1
+MP6 Hypoxia	ALDOA
+MP6 Hypoxia	ANKRD37
+MP6 Hypoxia	CAV1
+MP6 Hypoxia	AK4
+MP6 Hypoxia	DNAJB9
+MP6 Hypoxia	ERRFI1
+MP6 Hypoxia	MT2A
+MP6 Hypoxia	SLC3A2
+MP6 Hypoxia	VIM
+MP6 Hypoxia	ENO1
+MP6 Hypoxia	PFKFB3
+MP6 Hypoxia	HK2
+MP6 Hypoxia	CA12
+MP7 Stress (in vitro)	DDIT3
+MP7 Stress (in vitro)	SLC3A2
+MP7 Stress (in vitro)	TRIB3
+MP7 Stress (in vitro)	ASNS
+MP7 Stress (in vitro)	HERPUD1
+MP7 Stress (in vitro)	PPP1R15A
+MP7 Stress (in vitro)	EPB41L4A-AS1
+MP7 Stress (in vitro)	SNHG12
+MP7 Stress (in vitro)	GARS
+MP7 Stress (in vitro)	GADD45A
+MP7 Stress (in vitro)	MTHFD2
+MP7 Stress (in vitro)	XBP1
+MP7 Stress (in vitro)	CEBPG
+MP7 Stress (in vitro)	TAF1D
+MP7 Stress (in vitro)	NUPR1
+MP7 Stress (in vitro)	SARS
+MP7 Stress (in vitro)	SNHG8
+MP7 Stress (in vitro)	ZFAS1
+MP7 Stress (in vitro)	DDIT4
+MP7 Stress (in vitro)	PHGDH
+MP7 Stress (in vitro)	SHMT2
+MP7 Stress (in vitro)	TXNIP
+MP7 Stress (in vitro)	ATF4
+MP7 Stress (in vitro)	HSPA5
+MP7 Stress (in vitro)	GDF15
+MP7 Stress (in vitro)	CARS
+MP7 Stress (in vitro)	MAP1LC3B
+MP7 Stress (in vitro)	SQSTM1
+MP7 Stress (in vitro)	YARS
+MP7 Stress (in vitro)	DNAJB9
+MP7 Stress (in vitro)	PSAT1
+MP7 Stress (in vitro)	GADD45B
+MP7 Stress (in vitro)	ATF3
+MP7 Stress (in vitro)	SNHG15
+MP7 Stress (in vitro)	RSRC2
+MP7 Stress (in vitro)	CEBPB
+MP7 Stress (in vitro)	ARF4
+MP7 Stress (in vitro)	EIF1B
+MP7 Stress (in vitro)	OSER1
+MP7 Stress (in vitro)	BTG1
+MP7 Stress (in vitro)	SNHG7
+MP7 Stress (in vitro)	WARS
+MP7 Stress (in vitro)	ZFAND2A
+MP7 Stress (in vitro)	C6ORF48
+MP7 Stress (in vitro)	STC2
+MP7 Stress (in vitro)	ZNF622
+MP7 Stress (in vitro)	HSPA9
+MP7 Stress (in vitro)	PDRG1
+MP7 Stress (in vitro)	UPP1
+MP7 Stress (in vitro)	CCDC174
+MP8 Proteasomal degradation	PSMA3
+MP8 Proteasomal degradation	PSMC4
+MP8 Proteasomal degradation	MDH1
+MP8 Proteasomal degradation	PRDX1
+MP8 Proteasomal degradation	PSMA4
+MP8 Proteasomal degradation	PSMC2
+MP8 Proteasomal degradation	EIF4A3
+MP8 Proteasomal degradation	MRPL13
+MP8 Proteasomal degradation	PGK1
+MP8 Proteasomal degradation	PSMB3
+MP8 Proteasomal degradation	PSME2
+MP8 Proteasomal degradation	CCT8
+MP8 Proteasomal degradation	ANXA1
+MP8 Proteasomal degradation	DCAF13
+MP8 Proteasomal degradation	PRMT1
+MP8 Proteasomal degradation	SSBP1
+MP8 Proteasomal degradation	PSMB1
+MP8 Proteasomal degradation	LAPTM4A
+MP8 Proteasomal degradation	PSMB6
+MP8 Proteasomal degradation	CCT5
+MP8 Proteasomal degradation	NDUFS2
+MP8 Proteasomal degradation	PDHA1
+MP8 Proteasomal degradation	CCT7
+MP8 Proteasomal degradation	CDC123
+MP8 Proteasomal degradation	CCNB1
+MP8 Proteasomal degradation	PCMT1
+MP8 Proteasomal degradation	POLR2G
+MP8 Proteasomal degradation	HSPA5
+MP8 Proteasomal degradation	XRCC6
+MP8 Proteasomal degradation	NDUFA9
+MP8 Proteasomal degradation	DPM1
+MP8 Proteasomal degradation	SSB
+MP8 Proteasomal degradation	EIF3I
+MP8 Proteasomal degradation	MCTS1
+MP8 Proteasomal degradation	SLC3A2
+MP8 Proteasomal degradation	ECH1
+MP8 Proteasomal degradation	PSMD13
+MP8 Proteasomal degradation	TUBB4B
+MP8 Proteasomal degradation	SNRPB2
+MP8 Proteasomal degradation	DDX39A
+MP8 Proteasomal degradation	NQO1
+MP8 Proteasomal degradation	EIF4A1
+MP8 Proteasomal degradation	SPCS2
+MP8 Proteasomal degradation	IMPDH2
+MP8 Proteasomal degradation	RTCB
+MP8 Proteasomal degradation	GSTO1
+MP8 Proteasomal degradation	PDIA3
+MP8 Proteasomal degradation	PRDX2
+MP8 Proteasomal degradation	NUP37
+MP8 Proteasomal degradation	ILF2
+MP9 Unfolded protein response	PDIA3
+MP9 Unfolded protein response	MANF
+MP9 Unfolded protein response	PDIA4
+MP9 Unfolded protein response	CRELD2
+MP9 Unfolded protein response	HSPA5
+MP9 Unfolded protein response	SDF2L1
+MP9 Unfolded protein response	CALR
+MP9 Unfolded protein response	MYDGF
+MP9 Unfolded protein response	TMED9
+MP9 Unfolded protein response	ARF4
+MP9 Unfolded protein response	DNAJB9
+MP9 Unfolded protein response	SELENOK
+MP9 Unfolded protein response	SELENOS
+MP9 Unfolded protein response	CDK2AP2
+MP9 Unfolded protein response	DNAJC3
+MP9 Unfolded protein response	DNAJB11
+MP9 Unfolded protein response	ERLEC1
+MP9 Unfolded protein response	FKBP11
+MP9 Unfolded protein response	HYOU1
+MP9 Unfolded protein response	PDIA6
+MP9 Unfolded protein response	SEC61G
+MP9 Unfolded protein response	HERPUD1
+MP9 Unfolded protein response	HSP90B1
+MP9 Unfolded protein response	HSP90B2P
+MP9 Unfolded protein response	OSTC
+MP9 Unfolded protein response	CCPG1
+MP9 Unfolded protein response	ISG20
+MP9 Unfolded protein response	KDELR2
+MP9 Unfolded protein response	PLPP5
+MP9 Unfolded protein response	PPIB
+MP9 Unfolded protein response	RRBP1
+MP9 Unfolded protein response	SLC35B1
+MP9 Unfolded protein response	PRDX4
+MP9 Unfolded protein response	RPN2
+MP9 Unfolded protein response	SRPRB
+MP9 Unfolded protein response	AC068631.2
+MP9 Unfolded protein response	FKBP2
+MP9 Unfolded protein response	HM13
+MP9 Unfolded protein response	LMAN1
+MP9 Unfolded protein response	LMAN2
+MP9 Unfolded protein response	SEL1L
+MP9 Unfolded protein response	SRPRA
+MP9 Unfolded protein response	AC012181.2
+MP9 Unfolded protein response	CKAP4
+MP9 Unfolded protein response	MLEC
+MP9 Unfolded protein response	SEC63
+MP9 Unfolded protein response	SLC3A2
+MP9 Unfolded protein response	TXNDC15
+MP9 Unfolded protein response	ATF4
+MP9 Unfolded protein response	LAPTM4A
+MP10 Protein maturation	RPN2
+MP10 Protein maturation	PDIA3
+MP10 Protein maturation	ATP6AP2
+MP10 Protein maturation	HSPA5
+MP10 Protein maturation	PDIA6
+MP10 Protein maturation	LGALS3BP
+MP10 Protein maturation	GRN
+MP10 Protein maturation	LAPTM4A
+MP10 Protein maturation	HSP90B1
+MP10 Protein maturation	LAMP1
+MP10 Protein maturation	TMEM59
+MP10 Protein maturation	EPCAM
+MP10 Protein maturation	GDF15
+MP10 Protein maturation	HLA-C
+MP10 Protein maturation	OS9
+MP10 Protein maturation	PDIA4
+MP10 Protein maturation	APLP2
+MP10 Protein maturation	AZGP1
+MP10 Protein maturation	CLU
+MP10 Protein maturation	CTSA
+MP10 Protein maturation	DDOST
+MP10 Protein maturation	HLA-A
+MP10 Protein maturation	ITM2B
+MP10 Protein maturation	LRPAP1
+MP10 Protein maturation	NEAT1
+MP10 Protein maturation	PSAP
+MP10 Protein maturation	SIL1
+MP10 Protein maturation	SLC3A2
+MP10 Protein maturation	TIMP1
+MP10 Protein maturation	APMAP
+MP10 Protein maturation	APP
+MP10 Protein maturation	CTSL
+MP10 Protein maturation	LAMP2
+MP10 Protein maturation	LMAN2
+MP10 Protein maturation	MAGED2
+MP10 Protein maturation	PIGT
+MP10 Protein maturation	PRDX4
+MP10 Protein maturation	SERPINE2
+MP10 Protein maturation	TM9SF2
+MP10 Protein maturation	TSPAN1
+MP10 Protein maturation	ATP6AP1
+MP10 Protein maturation	CFI
+MP10 Protein maturation	EPHX1
+MP10 Protein maturation	EPRS
+MP10 Protein maturation	GGH
+MP10 Protein maturation	HEXB
+MP10 Protein maturation	MALAT1
+MP10 Protein maturation	PPIB
+MP10 Protein maturation	SPP1
+MP10 Protein maturation	SERPINA1
+MP11 Translation initiation	EPB41L4A-AS1
+MP11 Translation initiation	IMPDH2
+MP11 Translation initiation	AHCY
+MP11 Translation initiation	NOB1
+MP11 Translation initiation	OXA1L
+MP11 Translation initiation	EIF2A
+MP11 Translation initiation	IGBP1
+MP11 Translation initiation	LETMD1
+MP11 Translation initiation	RPL22L1
+MP11 Translation initiation	SNHG7
+MP11 Translation initiation	SNHG8
+MP11 Translation initiation	ZNF581
+MP11 Translation initiation	APEX1
+MP11 Translation initiation	C19ORF48
+MP11 Translation initiation	EIF3M
+MP11 Translation initiation	HIST3H2A
+MP11 Translation initiation	LTA4H
+MP11 Translation initiation	MYC
+MP11 Translation initiation	SNHG19
+MP11 Translation initiation	C11ORF1
+MP11 Translation initiation	C6ORF48
+MP11 Translation initiation	CCDC85B
+MP11 Translation initiation	CCNG1
+MP11 Translation initiation	EIF2S3
+MP11 Translation initiation	EIF3D
+MP11 Translation initiation	EIF3F
+MP11 Translation initiation	RGS10
+MP11 Translation initiation	TKT
+MP11 Translation initiation	ABHD14B
+MP11 Translation initiation	EIF4B
+MP11 Translation initiation	LYRM4
+MP11 Translation initiation	PPP1R14B
+MP11 Translation initiation	QARS
+MP11 Translation initiation	RSL1D1
+MP11 Translation initiation	SLC27A5
+MP11 Translation initiation	SRM
+MP11 Translation initiation	NME1
+MP11 Translation initiation	NBEAL1
+MP11 Translation initiation	EIF3E
+MP11 Translation initiation	CCNB1IP1
+MP11 Translation initiation	MRPL10
+MP11 Translation initiation	HSD17B11
+MP11 Translation initiation	TOP1MT
+MP11 Translation initiation	NOA1
+MP11 Translation initiation	FBL
+MP11 Translation initiation	MRPL45
+MP11 Translation initiation	ZNF277
+MP11 Translation initiation	PAICS
+MP11 Translation initiation	EXOSC5
+MP11 Translation initiation	ZFAS1
+MP12 EMT-I	COL1A2
+MP12 EMT-I	SPARC
+MP12 EMT-I	COL1A1
+MP12 EMT-I	COL3A1
+MP12 EMT-I	IGFBP7
+MP12 EMT-I	TAGLN
+MP12 EMT-I	C1S
+MP12 EMT-I	FN1
+MP12 EMT-I	MGP
+MP12 EMT-I	TIMP1
+MP12 EMT-I	TIMP3
+MP12 EMT-I	BGN
+MP12 EMT-I	C1R
+MP12 EMT-I	VIM
+MP12 EMT-I	COL6A2
+MP12 EMT-I	COL4A2
+MP12 EMT-I	COL6A1
+MP12 EMT-I	MMP2
+MP12 EMT-I	DCN
+MP12 EMT-I	COL4A1
+MP12 EMT-I	FSTL1
+MP12 EMT-I	NNMT
+MP12 EMT-I	TPM1
+MP12 EMT-I	TSC22D3
+MP12 EMT-I	CCDC80
+MP12 EMT-I	CTGF
+MP12 EMT-I	CXCL12
+MP12 EMT-I	ID3
+MP12 EMT-I	LUM
+MP12 EMT-I	MYL9
+MP12 EMT-I	PRSS23
+MP12 EMT-I	TGFBI
+MP12 EMT-I	TPM2
+MP12 EMT-I	CAV1
+MP12 EMT-I	CYR61
+MP12 EMT-I	IGFBP5
+MP12 EMT-I	LGALS1
+MP12 EMT-I	SPARCL1
+MP12 EMT-I	A2M
+MP12 EMT-I	ACTA2
+MP12 EMT-I	CALD1
+MP12 EMT-I	COL6A3
+MP12 EMT-I	CTSK
+MP12 EMT-I	FBLN1
+MP12 EMT-I	IGFBP4
+MP12 EMT-I	POSTN
+MP12 EMT-I	RARRES2
+MP12 EMT-I	SERPING1
+MP12 EMT-I	SNAI2
+MP12 EMT-I	TCF4
+MP13 EMT-II	LAMC2
+MP13 EMT-II	LAMB3
+MP13 EMT-II	LAMA3
+MP13 EMT-II	EMP3
+MP13 EMT-II	TGFBI
+MP13 EMT-II	TNFRSF12A
+MP13 EMT-II	FLNA
+MP13 EMT-II	PLAU
+MP13 EMT-II	PMEPA1
+MP13 EMT-II	CAV1
+MP13 EMT-II	KRT17
+MP13 EMT-II	PRSS23
+MP13 EMT-II	LGALS1
+MP13 EMT-II	VIM
+MP13 EMT-II	S100A2
+MP13 EMT-II	COL17A1
+MP13 EMT-II	FSTL3
+MP13 EMT-II	CST6
+MP13 EMT-II	IL32
+MP13 EMT-II	PDLIM7
+MP13 EMT-II	SERPINE1
+MP13 EMT-II	ANXA3
+MP13 EMT-II	IGFBP7
+MP13 EMT-II	DCBLD2
+MP13 EMT-II	F3
+MP13 EMT-II	MT2A
+MP13 EMT-II	TNC
+MP13 EMT-II	ITGB6
+MP13 EMT-II	KRT7
+MP13 EMT-II	PLAUR
+MP13 EMT-II	PRKCDBP
+MP13 EMT-II	SERPINE2
+MP13 EMT-II	ITGB1
+MP13 EMT-II	RBP1
+MP13 EMT-II	ITGA3
+MP13 EMT-II	CDKN1A
+MP13 EMT-II	THBS1
+MP13 EMT-II	FN1
+MP13 EMT-II	MMP7
+MP13 EMT-II	TGM2
+MP13 EMT-II	C15ORF48
+MP13 EMT-II	ITGA6
+MP13 EMT-II	PTHLH
+MP13 EMT-II	TPM1
+MP13 EMT-II	CDA
+MP13 EMT-II	IGFBP6
+MP13 EMT-II	PDPN
+MP13 EMT-II	RHOD
+MP13 EMT-II	INHBA
+MP13 EMT-II	ITGAV
+MP14 EMT-III	ANXA2
+MP14 EMT-III	KRT19
+MP14 EMT-III	S100A6
+MP14 EMT-III	TNFRSF12A
+MP14 EMT-III	KRT7
+MP14 EMT-III	LGALS1
+MP14 EMT-III	ANXA1
+MP14 EMT-III	TM4SF1
+MP14 EMT-III	S100A10
+MP14 EMT-III	LGALS3
+MP14 EMT-III	S100A16
+MP14 EMT-III	TAGLN2
+MP14 EMT-III	LMNA
+MP14 EMT-III	CRIP1
+MP14 EMT-III	EZR
+MP14 EMT-III	KRT18
+MP14 EMT-III	S100A11
+MP14 EMT-III	S100A4
+MP14 EMT-III	EMP3
+MP14 EMT-III	HSPB1
+MP14 EMT-III	KRT8
+MP14 EMT-III	TUBA1A
+MP14 EMT-III	VIM
+MP14 EMT-III	IL32
+MP14 EMT-III	KLF6
+MP14 EMT-III	ANXA3
+MP14 EMT-III	SH3BGRL3
+MP14 EMT-III	TMSB4X
+MP14 EMT-III	C19ORF33
+MP14 EMT-III	CKB
+MP14 EMT-III	CLIC1
+MP14 EMT-III	EMP1
+MP14 EMT-III	IFI27
+MP14 EMT-III	ISG15
+MP14 EMT-III	MDK
+MP14 EMT-III	MMP7
+MP14 EMT-III	PHLDA2
+MP14 EMT-III	PLP2
+MP14 EMT-III	CLDN4
+MP14 EMT-III	MYADM
+MP14 EMT-III	RHOC
+MP14 EMT-III	S100A14
+MP14 EMT-III	CD24
+MP14 EMT-III	CRIP2
+MP14 EMT-III	MYL12A
+MP14 EMT-III	RAB11FIP1
+MP14 EMT-III	S100P
+MP14 EMT-III	STMN1
+MP14 EMT-III	FXYD3
+MP14 EMT-III	FLNA
+MP15 EMT IV	KRT15
+MP15 EMT IV	CXCL14
+MP15 EMT IV	ALDH3A1
+MP15 EMT IV	DAPL1
+MP15 EMT IV	DST
+MP15 EMT IV	CCL2
+MP15 EMT IV	TXNIP
+MP15 EMT IV	C12ORF75
+MP15 EMT IV	COL17A1
+MP15 EMT IV	DCN
+MP15 EMT IV	HOPX
+MP15 EMT IV	MOXD1
+MP15 EMT IV	SDCBP
+MP15 EMT IV	SEPP1
+MP15 EMT IV	THBS2
+MP15 EMT IV	TIMP1
+MP15 EMT IV	ASS1
+MP15 EMT IV	GLUL
+MP15 EMT IV	NFIB
+MP15 EMT IV	NTRK2
+MP15 EMT IV	SERPINH1
+MP15 EMT IV	SOX4
+MP15 EMT IV	ANTXR1
+MP15 EMT IV	C1R
+MP15 EMT IV	C1S
+MP15 EMT IV	C6ORF48
+MP15 EMT IV	CAV1
+MP15 EMT IV	FTH1
+MP15 EMT IV	IGFBP5
+MP15 EMT IV	NCOA7
+MP15 EMT IV	NINJ1
+MP15 EMT IV	PNRC1
+MP15 EMT IV	SERPINE2
+MP15 EMT IV	SERPINF1
+MP15 EMT IV	SLC47A2
+MP15 EMT IV	SNAI2
+MP15 EMT IV	SOCS3
+MP15 EMT IV	SPARC
+MP15 EMT IV	TSC22D1
+MP15 EMT IV	ASPN
+MP15 EMT IV	LTF
+MP15 EMT IV	SFRP1
+MP15 EMT IV	TP53AIP1
+MP15 EMT IV	CD74
+MP15 EMT IV	EGR1
+MP15 EMT IV	BCAM
+MP15 EMT IV	SESN3
+MP15 EMT IV	IFITM1
+MP15 EMT IV	HTRA1
+MP15 EMT IV	IFIT3
+MP16 MES (glioma)	EMP1
+MP16 MES (glioma)	GAP43
+MP16 MES (glioma)	TNFRSF12A
+MP16 MES (glioma)	CD44
+MP16 MES (glioma)	TNC
+MP16 MES (glioma)	LYST
+MP16 MES (glioma)	PLAT
+MP16 MES (glioma)	WWTR1
+MP16 MES (glioma)	ANXA2
+MP16 MES (glioma)	GADD45A
+MP16 MES (glioma)	LMNA
+MP16 MES (glioma)	VMP1
+MP16 MES (glioma)	IGFBP3
+MP16 MES (glioma)	SCG2
+MP16 MES (glioma)	HIVEP3
+MP16 MES (glioma)	METTL7B
+MP16 MES (glioma)	RCAN1
+MP16 MES (glioma)	ZYX
+MP16 MES (glioma)	CAMK2D
+MP16 MES (glioma)	IL1RAP
+MP16 MES (glioma)	JAG1
+MP16 MES (glioma)	NAMPT
+MP16 MES (glioma)	PGM2L1
+MP16 MES (glioma)	VIM
+MP16 MES (glioma)	ACTN1
+MP16 MES (glioma)	AKAP12
+MP16 MES (glioma)	IGF2BP2
+MP16 MES (glioma)	MIR4435-2HG
+MP16 MES (glioma)	NRP2
+MP16 MES (glioma)	PDLIM4
+MP16 MES (glioma)	ANXA1
+MP16 MES (glioma)	BCAT1
+MP16 MES (glioma)	CLIC4
+MP16 MES (glioma)	CREB5
+MP16 MES (glioma)	DIRAS3
+MP16 MES (glioma)	EGR1
+MP16 MES (glioma)	ELL2
+MP16 MES (glioma)	F3
+MP16 MES (glioma)	FRMD5
+MP16 MES (glioma)	IGFBP7
+MP16 MES (glioma)	LINC00152
+MP16 MES (glioma)	S100A16
+MP16 MES (glioma)	VCL
+MP16 MES (glioma)	SAMD4A
+MP16 MES (glioma)	ADAMTS9-AS2
+MP16 MES (glioma)	SLC4A7
+MP16 MES (glioma)	GFAP
+MP16 MES (glioma)	CADPS
+MP16 MES (glioma)	GNG12
+MP16 MES (glioma)	KLHL4
+MP17 Interferon/MHC-II (I)	ISG15
+MP17 Interferon/MHC-II (I)	CD74
+MP17 Interferon/MHC-II (I)	IFI6
+MP17 Interferon/MHC-II (I)	HLA-DRA
+MP17 Interferon/MHC-II (I)	HLA-DRB1
+MP17 Interferon/MHC-II (I)	IFIT3
+MP17 Interferon/MHC-II (I)	PSMB9
+MP17 Interferon/MHC-II (I)	IFI44L
+MP17 Interferon/MHC-II (I)	RARRES3
+MP17 Interferon/MHC-II (I)	STAT1
+MP17 Interferon/MHC-II (I)	HLA-DPA1
+MP17 Interferon/MHC-II (I)	MX1
+MP17 Interferon/MHC-II (I)	UBE2L6
+MP17 Interferon/MHC-II (I)	IFITM3
+MP17 Interferon/MHC-II (I)	BST2
+MP17 Interferon/MHC-II (I)	OAS1
+MP17 Interferon/MHC-II (I)	GBP1
+MP17 Interferon/MHC-II (I)	IFI27
+MP17 Interferon/MHC-II (I)	IFIT1
+MP17 Interferon/MHC-II (I)	TAP1
+MP17 Interferon/MHC-II (I)	HLA-B
+MP17 Interferon/MHC-II (I)	IFITM1
+MP17 Interferon/MHC-II (I)	HLA-DMA
+MP17 Interferon/MHC-II (I)	ISG20
+MP17 Interferon/MHC-II (I)	TNFSF10
+MP17 Interferon/MHC-II (I)	IFI35
+MP17 Interferon/MHC-II (I)	IFI44
+MP17 Interferon/MHC-II (I)	HLA-DPB1
+MP17 Interferon/MHC-II (I)	HLA-E
+MP17 Interferon/MHC-II (I)	HLA-C
+MP17 Interferon/MHC-II (I)	PARP14
+MP17 Interferon/MHC-II (I)	WARS
+MP17 Interferon/MHC-II (I)	HLA-DQB1
+MP17 Interferon/MHC-II (I)	LAP3
+MP17 Interferon/MHC-II (I)	PSMB8
+MP17 Interferon/MHC-II (I)	C1S
+MP17 Interferon/MHC-II (I)	HLA-DRB5
+MP17 Interferon/MHC-II (I)	PLSCR1
+MP17 Interferon/MHC-II (I)	TYMP
+MP17 Interferon/MHC-II (I)	C1R
+MP17 Interferon/MHC-II (I)	SAA1
+MP17 Interferon/MHC-II (I)	HLA-F
+MP17 Interferon/MHC-II (I)	IFIT2
+MP17 Interferon/MHC-II (I)	SOD2
+MP17 Interferon/MHC-II (I)	GBP2
+MP17 Interferon/MHC-II (I)	HLA-A
+MP17 Interferon/MHC-II (I)	CXCL10
+MP17 Interferon/MHC-II (I)	HLA-DQA1
+MP17 Interferon/MHC-II (I)	PARP9
+MP17 Interferon/MHC-II (I)	B2M
+MP18 Interferon/MHC-II (II)	CD74
+MP18 Interferon/MHC-II (II)	HLA-DRA
+MP18 Interferon/MHC-II (II)	HLA-DRB1
+MP18 Interferon/MHC-II (II)	ALDH1A1
+MP18 Interferon/MHC-II (II)	HLA-DPA1
+MP18 Interferon/MHC-II (II)	IFITM2
+MP18 Interferon/MHC-II (II)	CD9
+MP18 Interferon/MHC-II (II)	CLU
+MP18 Interferon/MHC-II (II)	CRYAB
+MP18 Interferon/MHC-II (II)	NNMT
+MP18 Interferon/MHC-II (II)	S100A10
+MP18 Interferon/MHC-II (II)	TMEM176B
+MP18 Interferon/MHC-II (II)	C1R
+MP18 Interferon/MHC-II (II)	C1S
+MP18 Interferon/MHC-II (II)	DHRS3
+MP18 Interferon/MHC-II (II)	GPM6B
+MP18 Interferon/MHC-II (II)	HLA-DRB5
+MP18 Interferon/MHC-II (II)	IFI6
+MP18 Interferon/MHC-II (II)	IFITM3
+MP18 Interferon/MHC-II (II)	PLP1
+MP18 Interferon/MHC-II (II)	RARRES2
+MP18 Interferon/MHC-II (II)	S100B
+MP18 Interferon/MHC-II (II)	SERPING1
+MP18 Interferon/MHC-II (II)	TMEM176A
+MP18 Interferon/MHC-II (II)	ANXA1
+MP18 Interferon/MHC-II (II)	C3
+MP18 Interferon/MHC-II (II)	CTNNAL1
+MP18 Interferon/MHC-II (II)	GFRA3
+MP18 Interferon/MHC-II (II)	MT2A
+MP18 Interferon/MHC-II (II)	PDK4
+MP18 Interferon/MHC-II (II)	PLAT
+MP18 Interferon/MHC-II (II)	PMP22
+MP18 Interferon/MHC-II (II)	SEPP1
+MP18 Interferon/MHC-II (II)	C10ORF10
+MP18 Interferon/MHC-II (II)	EGFL8
+MP18 Interferon/MHC-II (II)	GPX3
+MP18 Interferon/MHC-II (II)	HLA-DMA
+MP18 Interferon/MHC-II (II)	MT1X
+MP18 Interferon/MHC-II (II)	SEMA3B
+MP18 Interferon/MHC-II (II)	UCHL1
+MP18 Interferon/MHC-II (II)	MMP7
+MP18 Interferon/MHC-II (II)	LGALS1
+MP18 Interferon/MHC-II (II)	CTSD
+MP18 Interferon/MHC-II (II)	ARPC1B
+MP18 Interferon/MHC-II (II)	ISG15
+MP18 Interferon/MHC-II (II)	WFDC2
+MP18 Interferon/MHC-II (II)	LGALS3BP
+MP18 Interferon/MHC-II (II)	CALM2
+MP18 Interferon/MHC-II (II)	TUBA1A
+MP18 Interferon/MHC-II (II)	A2M
+MP19 Epithelial Senescence	SLPI
+MP19 Epithelial Senescence	S100A9
+MP19 Epithelial Senescence	LCN2
+MP19 Epithelial Senescence	S100A8
+MP19 Epithelial Senescence	KRT16
+MP19 Epithelial Senescence	C15ORF48
+MP19 Epithelial Senescence	SPRR1B
+MP19 Epithelial Senescence	LY6D
+MP19 Epithelial Senescence	S100P
+MP19 Epithelial Senescence	KRT6B
+MP19 Epithelial Senescence	PI3
+MP19 Epithelial Senescence	WFDC2
+MP19 Epithelial Senescence	CEACAM6
+MP19 Epithelial Senescence	PDZK1IP1
+MP19 Epithelial Senescence	S100A7
+MP19 Epithelial Senescence	TSPAN1
+MP19 Epithelial Senescence	KRT13
+MP19 Epithelial Senescence	TACSTD2
+MP19 Epithelial Senescence	PSCA
+MP19 Epithelial Senescence	IL1RN
+MP19 Epithelial Senescence	LYPD3
+MP19 Epithelial Senescence	SAA1
+MP19 Epithelial Senescence	SERPINB3
+MP19 Epithelial Senescence	AQP3
+MP19 Epithelial Senescence	CLDN4
+MP19 Epithelial Senescence	CXCL17
+MP19 Epithelial Senescence	KRT17
+MP19 Epithelial Senescence	CRABP2
+MP19 Epithelial Senescence	ELF3
+MP19 Epithelial Senescence	KRT6A
+MP19 Epithelial Senescence	MAL2
+MP19 Epithelial Senescence	SPRR3
+MP19 Epithelial Senescence	IGFBP3
+MP19 Epithelial Senescence	PRSS22
+MP19 Epithelial Senescence	SPRR2D
+MP19 Epithelial Senescence	DSC2
+MP19 Epithelial Senescence	GPRC5A
+MP19 Epithelial Senescence	KRT7
+MP19 Epithelial Senescence	SPRR2A
+MP19 Epithelial Senescence	ANXA1
+MP19 Epithelial Senescence	MALL
+MP19 Epithelial Senescence	CEACAM5
+MP19 Epithelial Senescence	MUC4
+MP19 Epithelial Senescence	SERPINB1
+MP19 Epithelial Senescence	AGR2
+MP19 Epithelial Senescence	CLIC3
+MP19 Epithelial Senescence	SERPINB4
+MP19 Epithelial Senescence	FABP5
+MP19 Epithelial Senescence	SULT2B1
+MP19 Epithelial Senescence	CLDN7
+MP20 MYC	NME1
+MP20 MYC	C1QBP
+MP20 MYC	FABP5
+MP20 MYC	SRM
+MP20 MYC	EBNA1BP2
+MP20 MYC	HSPE1
+MP20 MYC	DCTPP1
+MP20 MYC	NOP16
+MP20 MYC	NHP2
+MP20 MYC	MRPL12
+MP20 MYC	DKC1
+MP20 MYC	HSPD1
+MP20 MYC	RANBP1
+MP20 MYC	CCT5
+MP20 MYC	DDX21
+MP20 MYC	ATP5G1
+MP20 MYC	PA2G4
+MP20 MYC	GPATCH4
+MP20 MYC	TOMM40
+MP20 MYC	GNL3
+MP20 MYC	PAICS
+MP20 MYC	RAN
+MP20 MYC	PPA1
+MP20 MYC	RUVBL1
+MP20 MYC	CCT2
+MP20 MYC	EIF4EBP1
+MP20 MYC	MYC
+MP20 MYC	LDHB
+MP20 MYC	TIMM13
+MP20 MYC	ODC1
+MP20 MYC	CYCS
+MP20 MYC	EIF5A
+MP20 MYC	NIFK
+MP20 MYC	NOLC1
+MP20 MYC	SNRPD1
+MP20 MYC	MRPL3
+MP20 MYC	MRTO4
+MP20 MYC	SLIRP
+MP20 MYC	LDHA
+MP20 MYC	NOP56
+MP20 MYC	PHB
+MP20 MYC	PNO1
+MP20 MYC	DCAF13
+MP20 MYC	ENO1
+MP20 MYC	NCL
+MP20 MYC	NOP58
+MP20 MYC	PRMT1
+MP20 MYC	BZW2
+MP20 MYC	CMSS1
+MP20 MYC	FKBP4
+MP21 Respiration	SLIRP
+MP21 Respiration	ROMO1
+MP21 Respiration	ATP5I
+MP21 Respiration	COX7B
+MP21 Respiration	PET100
+MP21 Respiration	ATP5G1
+MP21 Respiration	OST4
+MP21 Respiration	TMEM258
+MP21 Respiration	NDUFA3
+MP21 Respiration	NDUFB2
+MP21 Respiration	RPL21
+MP21 Respiration	USMG5
+MP21 Respiration	H3F3A
+MP21 Respiration	NDUFA1
+MP21 Respiration	SNRPD2
+MP21 Respiration	ATP5E
+MP21 Respiration	COX6B1
+MP21 Respiration	NDUFS5
+MP21 Respiration	NME1
+MP21 Respiration	ATP5J2
+MP21 Respiration	NDUFB1
+MP21 Respiration	NOP10
+MP21 Respiration	ATOX1
+MP21 Respiration	PSMB3
+MP21 Respiration	UQCR10
+MP21 Respiration	NDUFS6
+MP21 Respiration	NEDD8
+MP21 Respiration	TIMM8B
+MP21 Respiration	MYEOV2
+MP21 Respiration	NDUFA12
+MP21 Respiration	NDUFC1
+MP21 Respiration	SHFM1
+MP21 Respiration	COX17
+MP21 Respiration	MIR4461
+MP21 Respiration	NDUFAB1
+MP21 Respiration	NDUFB4
+MP21 Respiration	SEC61G
+MP21 Respiration	UBL5
+MP21 Respiration	APRT
+MP21 Respiration	RPS29
+MP21 Respiration	SNRPG
+MP21 Respiration	LGALS1
+MP21 Respiration	NHP2
+MP21 Respiration	SNRPF
+MP21 Respiration	PFDN2
+MP21 Respiration	LSM7
+MP21 Respiration	NDUFB8
+MP21 Respiration	NDUFA7
+MP21 Respiration	RPS21
+MP21 Respiration	COA3
+MP22 Secreted I	CXCL8
+MP22 Secreted I	PHLDA1
+MP22 Secreted I	MAFF
+MP22 Secreted I	KDM6B
+MP22 Secreted I	EPHA2
+MP22 Secreted I	ERRFI1
+MP22 Secreted I	IER3
+MP22 Secreted I	TNFRSF12A
+MP22 Secreted I	PHLDA2
+MP22 Secreted I	TM4SF1
+MP22 Secreted I	TRIB1
+MP22 Secreted I	DUSP5
+MP22 Secreted I	FOSL1
+MP22 Secreted I	HBEGF
+MP22 Secreted I	ICAM1
+MP22 Secreted I	AREG
+MP22 Secreted I	BIRC3
+MP22 Secreted I	CXCL1
+MP22 Secreted I	EMP1
+MP22 Secreted I	ITPKC
+MP22 Secreted I	MIDN
+MP22 Secreted I	PIM3
+MP22 Secreted I	ARID5B
+MP22 Secreted I	CCL2
+MP22 Secreted I	CDKN1A
+MP22 Secreted I	CSRNP1
+MP22 Secreted I	CXCL2
+MP22 Secreted I	MYC
+MP22 Secreted I	ARL14
+MP22 Secreted I	ARL5B
+MP22 Secreted I	GEM
+MP22 Secreted I	MYADM
+MP22 Secreted I	PIM1
+MP22 Secreted I	PLAUR
+MP22 Secreted I	TNFAIP3
+MP22 Secreted I	ANXA1
+MP22 Secreted I	CCL20
+MP22 Secreted I	CYR61
+MP22 Secreted I	DDX21
+MP22 Secreted I	EDN1
+MP22 Secreted I	FOSL2
+MP22 Secreted I	LIF
+MP22 Secreted I	LUCAT1
+MP22 Secreted I	MLF1
+MP22 Secreted I	NAMPT
+MP22 Secreted I	NCOA7
+MP22 Secreted I	PFKFB3
+MP22 Secreted I	ZBTB43
+MP22 Secreted I	ZC3H12A
+MP22 Secreted I	FHL2
+MP23 Secreted II	LCN2
+MP23 Secreted II	CP
+MP23 Secreted II	WFDC2
+MP23 Secreted II	AGR2
+MP23 Secreted II	C3
+MP23 Secreted II	CXCL1
+MP23 Secreted II	CXCL8
+MP23 Secreted II	SAA1
+MP23 Secreted II	CLU
+MP23 Secreted II	MDK
+MP23 Secreted II	TSPAN8
+MP23 Secreted II	BPIFB1
+MP23 Secreted II	CFB
+MP23 Secreted II	KLK11
+MP23 Secreted II	PDZK1IP1
+MP23 Secreted II	SAA2
+MP23 Secreted II	SLPI
+MP23 Secreted II	TSPAN1
+MP23 Secreted II	CXCL2
+MP23 Secreted II	ELF3
+MP23 Secreted II	LTF
+MP23 Secreted II	PIGR
+MP23 Secreted II	SCGB3A1
+MP23 Secreted II	TFF3
+MP23 Secreted II	TGM2
+MP23 Secreted II	AKR1C1
+MP23 Secreted II	CD24
+MP23 Secreted II	CLDN4
+MP23 Secreted II	CTSC
+MP23 Secreted II	GSTA1
+MP23 Secreted II	KRT19
+MP23 Secreted II	MMP7
+MP23 Secreted II	MSMB
+MP23 Secreted II	NCOA7
+MP23 Secreted II	S100A9
+MP23 Secreted II	SCGB1A1
+MP23 Secreted II	SPINK1
+MP23 Secreted II	IGFBP3
+MP23 Secreted II	VMO1
+MP23 Secreted II	MUC5B
+MP23 Secreted II	SERPINF1
+MP23 Secreted II	TNFSF10
+MP23 Secreted II	FMO2
+MP23 Secreted II	FAM3D
+MP23 Secreted II	PRSS23
+MP23 Secreted II	RDH10
+MP23 Secreted II	CD82
+MP23 Secreted II	RARRES1
+MP23 Secreted II	KYNU
+MP23 Secreted II	NDRG2
+MP24 Cilia	C9ORF116
+MP24 Cilia	CAPS
+MP24 Cilia	RSPH1
+MP24 Cilia	TPPP3
+MP24 Cilia	FAM183A
+MP24 Cilia	MORN2
+MP24 Cilia	WDR54
+MP24 Cilia	CETN2
+MP24 Cilia	ODF3B
+MP24 Cilia	C9ORF24
+MP24 Cilia	PIFO
+MP24 Cilia	C11ORF88
+MP24 Cilia	C5ORF49
+MP24 Cilia	DYNLRB2
+MP24 Cilia	C1ORF194
+MP24 Cilia	EFHC1
+MP24 Cilia	FAM229B
+MP24 Cilia	IQCG
+MP24 Cilia	PSENEN
+MP24 Cilia	SPA17
+MP24 Cilia	TSPAN1
+MP24 Cilia	C20ORF85
+MP24 Cilia	DNALI1
+MP24 Cilia	FOXJ1
+MP24 Cilia	LRRC23
+MP24 Cilia	LRRIQ1
+MP24 Cilia	IGFBP7
+MP24 Cilia	MS4A8
+MP24 Cilia	TCTEX1D2
+MP24 Cilia	DPCD
+MP24 Cilia	KIF9
+MP24 Cilia	TUBA1A
+MP24 Cilia	FABP6
+MP24 Cilia	MRPS31
+MP24 Cilia	ZMYND10
+MP24 Cilia	C12ORF75
+MP24 Cilia	CAPSL
+MP24 Cilia	CES1
+MP24 Cilia	DNAAF1
+MP24 Cilia	IFT57
+MP24 Cilia	IGFBP2
+MP24 Cilia	MLF1
+MP24 Cilia	OSCP1
+MP24 Cilia	PLAC8
+MP24 Cilia	DNAH5
+MP24 Cilia	CRIP1
+MP24 Cilia	RP11-295M3.4
+MP24 Cilia	GSTA1
+MP24 Cilia	SLC44A4
+MP24 Cilia	NUCB2
+MP25 Astrocytes	SPARCL1
+MP25 Astrocytes	GFAP
+MP25 Astrocytes	CLU
+MP25 Astrocytes	CRYAB
+MP25 Astrocytes	TTYH1
+MP25 Astrocytes	SLC1A3
+MP25 Astrocytes	CST3
+MP25 Astrocytes	ID3
+MP25 Astrocytes	AGT
+MP25 Astrocytes	APOE
+MP25 Astrocytes	EDNRB
+MP25 Astrocytes	ALDOC
+MP25 Astrocytes	AQP4
+MP25 Astrocytes	GATM
+MP25 Astrocytes	NDRG2
+MP25 Astrocytes	SPARC
+MP25 Astrocytes	MT2A
+MP25 Astrocytes	MT3
+MP25 Astrocytes	BCAN
+MP25 Astrocytes	HEPN1
+MP25 Astrocytes	NTRK2
+MP25 Astrocytes	PMP2
+MP25 Astrocytes	PON2
+MP25 Astrocytes	ATP1A2
+MP25 Astrocytes	HEY1
+MP25 Astrocytes	MLC1
+MP25 Astrocytes	PLTP
+MP25 Astrocytes	ATP1B2
+MP25 Astrocytes	ITM2C
+MP25 Astrocytes	MT1X
+MP25 Astrocytes	VIM
+MP25 Astrocytes	S100B
+MP25 Astrocytes	AHCYL1
+MP25 Astrocytes	RAMP1
+MP25 Astrocytes	SCRG1
+MP25 Astrocytes	C1ORF61
+MP25 Astrocytes	IGFBP7
+MP25 Astrocytes	RASSF4
+MP25 Astrocytes	ID1
+MP25 Astrocytes	IFITM3
+MP25 Astrocytes	CPE
+MP25 Astrocytes	CD9
+MP25 Astrocytes	FABP7
+MP25 Astrocytes	GRAMD3
+MP25 Astrocytes	ZFP36
+MP25 Astrocytes	F3
+MP25 Astrocytes	PLP1
+MP25 Astrocytes	ID4
+MP25 Astrocytes	PSAT1
+MP25 Astrocytes	GJA1
+MP26 NPC Glioma	STMN2
+MP26 NPC Glioma	DCX
+MP26 NPC Glioma	STMN4
+MP26 NPC Glioma	TAGLN3
+MP26 NPC Glioma	ELAVL4
+MP26 NPC Glioma	MLLT11
+MP26 NPC Glioma	NREP
+MP26 NPC Glioma	MIAT
+MP26 NPC Glioma	TUBB2A
+MP26 NPC Glioma	CD24
+MP26 NPC Glioma	HMP19
+MP26 NPC Glioma	RND3
+MP26 NPC Glioma	SOX11
+MP26 NPC Glioma	SOX4
+MP26 NPC Glioma	TUBB3
+MP26 NPC Glioma	MAP1B
+MP26 NPC Glioma	NSG1
+MP26 NPC Glioma	SNAP25
+MP26 NPC Glioma	FNBP1L
+MP26 NPC Glioma	HN1
+MP26 NPC Glioma	IGFBPL1
+MP26 NPC Glioma	PKIA
+MP26 NPC Glioma	NNAT
+MP26 NPC Glioma	RBP1
+MP26 NPC Glioma	SCG3
+MP26 NPC Glioma	DLX6-AS1
+MP26 NPC Glioma	KLHDC8A
+MP26 NPC Glioma	MEG3
+MP26 NPC Glioma	RBFOX2
+MP26 NPC Glioma	SCG2
+MP26 NPC Glioma	STMN1
+MP26 NPC Glioma	TMEM161B-AS1
+MP26 NPC Glioma	ARL4D
+MP26 NPC Glioma	BEX2
+MP26 NPC Glioma	DDAH2
+MP26 NPC Glioma	DLX5
+MP26 NPC Glioma	GAP43
+MP26 NPC Glioma	CRMP1
+MP26 NPC Glioma	ENO2
+MP26 NPC Glioma	TCEAL7
+MP26 NPC Glioma	UCHL1
+MP26 NPC Glioma	BASP1
+MP26 NPC Glioma	CXADR
+MP26 NPC Glioma	GNG3
+MP26 NPC Glioma	GPC2
+MP26 NPC Glioma	KIF5C
+MP26 NPC Glioma	PAK3
+MP26 NPC Glioma	RTN1
+MP26 NPC Glioma	TERF2IP
+MP26 NPC Glioma	SYT1
+MP27 Oligo Progenitor	SIRT2
+MP27 Oligo Progenitor	GPR17
+MP27 Oligo Progenitor	OLIG1
+MP27 Oligo Progenitor	APOD
+MP27 Oligo Progenitor	DLL3
+MP27 Oligo Progenitor	PLP1
+MP27 Oligo Progenitor	NEU4
+MP27 Oligo Progenitor	BCAN
+MP27 Oligo Progenitor	SOX8
+MP27 Oligo Progenitor	TNR
+MP27 Oligo Progenitor	OMG
+MP27 Oligo Progenitor	TMEM206
+MP27 Oligo Progenitor	LPPR1
+MP27 Oligo Progenitor	NKAIN4
+MP27 Oligo Progenitor	FIBIN
+MP27 Oligo Progenitor	SGK1
+MP27 Oligo Progenitor	SLC1A1
+MP27 Oligo Progenitor	CA10
+MP27 Oligo Progenitor	LMF1
+MP27 Oligo Progenitor	PTGDS
+MP27 Oligo Progenitor	SERINC5
+MP27 Oligo Progenitor	ASCL1
+MP27 Oligo Progenitor	DLL1
+MP27 Oligo Progenitor	OLIG2
+MP27 Oligo Progenitor	PSAT1
+MP27 Oligo Progenitor	RAB33A
+MP27 Oligo Progenitor	SCRG1
+MP27 Oligo Progenitor	CNP
+MP27 Oligo Progenitor	LIMA1
+MP27 Oligo Progenitor	THY1
+MP27 Oligo Progenitor	TUBB4A
+MP27 Oligo Progenitor	BCAS1
+MP27 Oligo Progenitor	CNTN1
+MP27 Oligo Progenitor	HES6
+MP27 Oligo Progenitor	LHFPL3
+MP27 Oligo Progenitor	PDGFRA
+MP27 Oligo Progenitor	RGR
+MP27 Oligo Progenitor	SCD5
+MP27 Oligo Progenitor	ANGPTL2
+MP27 Oligo Progenitor	DHCR7
+MP27 Oligo Progenitor	FGF12
+MP27 Oligo Progenitor	MPZL1
+MP27 Oligo Progenitor	MSMO1
+MP27 Oligo Progenitor	P2RX7
+MP27 Oligo Progenitor	RTKN
+MP27 Oligo Progenitor	TNFRSF21
+MP27 Oligo Progenitor	SMOC1
+MP27 Oligo Progenitor	ACAT2
+MP27 Oligo Progenitor	FDFT1
+MP27 Oligo Progenitor	PGRMC1
+MP28 Oligo normal	APOD
+MP28 Oligo normal	MBP
+MP28 Oligo normal	PLA2G16
+MP28 Oligo normal	PLP1
+MP28 Oligo normal	PPP1R14A
+MP28 Oligo normal	SEPP1
+MP28 Oligo normal	TF
+MP28 Oligo normal	GSN
+MP28 Oligo normal	PTGDS
+MP28 Oligo normal	APLP1
+MP28 Oligo normal	CLDN11
+MP28 Oligo normal	CLDND1
+MP28 Oligo normal	CNP
+MP28 Oligo normal	RNASE1
+MP28 Oligo normal	SCD
+MP28 Oligo normal	44443
+MP28 Oligo normal	ANLN
+MP28 Oligo normal	CRYAB
+MP28 Oligo normal	ELOVL1
+MP28 Oligo normal	HSPA2
+MP28 Oligo normal	PLLP
+MP28 Oligo normal	SIRT2
+MP28 Oligo normal	SLC44A1
+MP28 Oligo normal	BIN1
+MP28 Oligo normal	CMTM5
+MP28 Oligo normal	ERMN
+MP28 Oligo normal	FAM107B
+MP28 Oligo normal	LARP6
+MP28 Oligo normal	LHPP
+MP28 Oligo normal	MAG
+MP28 Oligo normal	MOBP
+MP28 Oligo normal	PLEKHB1
+MP28 Oligo normal	QDPR
+MP28 Oligo normal	S100A1
+MP28 Oligo normal	SLAIN1
+MP28 Oligo normal	SLC48A1
+MP28 Oligo normal	TUBB4A
+MP28 Oligo normal	TMEM144
+MP28 Oligo normal	ABCA2
+MP28 Oligo normal	CA2
+MP28 Oligo normal	KLK6
+MP28 Oligo normal	MAL
+MP28 Oligo normal	SPOCK3
+MP28 Oligo normal	HAPLN2
+MP28 Oligo normal	UGT8
+MP28 Oligo normal	STMN4
+MP28 Oligo normal	ATP1B1
+MP28 Oligo normal	44447
+MP28 Oligo normal	PACS2
+MP28 Oligo normal	ANKS1B
+MP29 NPC/OPC	BTG2
+MP29 NPC/OPC	SOX6
+MP29 NPC/OPC	BAZ2B
+MP29 NPC/OPC	SOX4
+MP29 NPC/OPC	DSEL
+MP29 NPC/OPC	MXD4
+MP29 NPC/OPC	PNRC1
+MP29 NPC/OPC	SOX5
+MP29 NPC/OPC	CHD7
+MP29 NPC/OPC	GRIA2
+MP29 NPC/OPC	MAP3K1
+MP29 NPC/OPC	OLIG1
+MP29 NPC/OPC	SESN3
+MP29 NPC/OPC	UBE2H
+MP29 NPC/OPC	ABAT
+MP29 NPC/OPC	DCX
+MP29 NPC/OPC	DOCK10
+MP29 NPC/OPC	GLCCI1
+MP29 NPC/OPC	KCNQ1OT1
+MP29 NPC/OPC	KDM5B
+MP29 NPC/OPC	KLHL24
+MP29 NPC/OPC	MAP2
+MP29 NPC/OPC	OLIG2
+MP29 NPC/OPC	PEAK1
+MP29 NPC/OPC	RAB3IP
+MP29 NPC/OPC	RFTN2
+MP29 NPC/OPC	RFX4
+MP29 NPC/OPC	TANC2
+MP29 NPC/OPC	TRIO
+MP29 NPC/OPC	VCAN
+MP29 NPC/OPC	ZNF91
+MP29 NPC/OPC	FAM181B
+MP29 NPC/OPC	STMN4
+MP29 NPC/OPC	DLL3
+MP29 NPC/OPC	BTG1
+MP29 NPC/OPC	TXNIP
+MP29 NPC/OPC	LDLRAD3
+MP29 NPC/OPC	SOX11
+MP29 NPC/OPC	HIP1
+MP29 NPC/OPC	FGFBP3
+MP29 NPC/OPC	MTSS1
+MP29 NPC/OPC	SPRY4
+MP29 NPC/OPC	REV3L
+MP29 NPC/OPC	MMP16
+MP29 NPC/OPC	KLF12
+MP29 NPC/OPC	TFDP2
+MP29 NPC/OPC	CADM2
+MP29 NPC/OPC	ARHGEF7
+MP29 NPC/OPC	GOLGB1
+MP29 NPC/OPC	ZMYM2
+MP30 PDAC-classical	TFF1
+MP30 PDAC-classical	TFF3
+MP30 PDAC-classical	CEACAM6
+MP30 PDAC-classical	AGR2
+MP30 PDAC-classical	LGALS4
+MP30 PDAC-classical	PHGR1
+MP30 PDAC-classical	PLAC8
+MP30 PDAC-classical	SLC40A1
+MP30 PDAC-classical	TM4SF4
+MP30 PDAC-classical	TSPAN8
+MP30 PDAC-classical	ANXA10
+MP30 PDAC-classical	LYZ
+MP30 PDAC-classical	TFF2
+MP30 PDAC-classical	CTSE
+MP30 PDAC-classical	GCNT3
+MP30 PDAC-classical	GPX2
+MP30 PDAC-classical	MUC13
+MP30 PDAC-classical	MUC5AC
+MP30 PDAC-classical	MUC5B
+MP30 PDAC-classical	PIGR
+MP30 PDAC-classical	CEACAM5
+MP30 PDAC-classical	CLDN18
+MP30 PDAC-classical	FAM3D
+MP30 PDAC-classical	SPINK1
+MP30 PDAC-classical	AGR3
+MP30 PDAC-classical	DUOX2
+MP30 PDAC-classical	PLA2G10
+MP30 PDAC-classical	REG4
+MP30 PDAC-classical	DUOXA2
+MP30 PDAC-classical	PDE4C
+MP30 PDAC-classical	PSCA
+MP30 PDAC-classical	TSPAN1
+MP30 PDAC-classical	VSIG2
+MP30 PDAC-classical	CA2
+MP30 PDAC-classical	HPGD
+MP30 PDAC-classical	DPCR1
+MP30 PDAC-classical	OLFM4
+MP30 PDAC-classical	AKR7A3
+MP30 PDAC-classical	CDH17
+MP30 PDAC-classical	FXYD3
+MP30 PDAC-classical	PDZK1IP1
+MP30 PDAC-classical	TCN1
+MP30 PDAC-classical	CEACAM1
+MP30 PDAC-classical	ISG20
+MP30 PDAC-classical	LINC01133
+MP30 PDAC-classical	SLC44A4
+MP30 PDAC-classical	VSIG1
+MP30 PDAC-classical	CEACAM7
+MP30 PDAC-classical	CXCL17
+MP30 PDAC-classical	CES2
+MP31 Alveolar	SFTPA1
+MP31 Alveolar	SFTPA2
+MP31 Alveolar	SFTPD
+MP31 Alveolar	LRRK2
+MP31 Alveolar	PGC
+MP31 Alveolar	SFTPC
+MP31 Alveolar	C4BPA
+MP31 Alveolar	SFTPB
+MP31 Alveolar	AQP1
+MP31 Alveolar	ABCA3
+MP31 Alveolar	PEBP4
+MP31 Alveolar	SCD
+MP31 Alveolar	HSD17B6
+MP31 Alveolar	MFSD2A
+MP31 Alveolar	NAPSA
+MP31 Alveolar	NNMT
+MP31 Alveolar	PIGR
+MP31 Alveolar	SCGB3A2
+MP31 Alveolar	SERPINA1
+MP31 Alveolar	SPINK5
+MP31 Alveolar	C16ORF89
+MP31 Alveolar	C3
+MP31 Alveolar	CACNA2D2
+MP31 Alveolar	EPHX1
+MP31 Alveolar	MID1IP1
+MP31 Alveolar	RNASE1
+MP31 Alveolar	ALPL
+MP31 Alveolar	DHCR24
+MP31 Alveolar	HOPX
+MP31 Alveolar	LPCAT1
+MP31 Alveolar	SCGB3A1
+MP31 Alveolar	SFTA2
+MP31 Alveolar	PTPN13
+MP31 Alveolar	S100A9
+MP31 Alveolar	SFTA3
+MP31 Alveolar	SUSD2
+MP31 Alveolar	DMBT1
+MP31 Alveolar	NPC2
+MP31 Alveolar	SLC22A31
+MP31 Alveolar	TFPI
+MP31 Alveolar	ALOX15B
+MP31 Alveolar	SLPI
+MP31 Alveolar	SFTA1P
+MP31 Alveolar	AK1
+MP31 Alveolar	DUOX1
+MP31 Alveolar	FASN
+MP31 Alveolar	FABP5
+MP31 Alveolar	CXCL17
+MP31 Alveolar	SDR16C5
+MP31 Alveolar	LAMP3
+MP32 Skin-pigmentation	PHACTR1
+MP32 Skin-pigmentation	TBC1D7
+MP32 Skin-pigmentation	MLANA
+MP32 Skin-pigmentation	ASAH1
+MP32 Skin-pigmentation	DCT
+MP32 Skin-pigmentation	LGALS3
+MP32 Skin-pigmentation	CAPN3
+MP32 Skin-pigmentation	GDF15
+MP32 Skin-pigmentation	GPNMB
+MP32 Skin-pigmentation	GPR137B
+MP32 Skin-pigmentation	MBP
+MP32 Skin-pigmentation	MITF
+MP32 Skin-pigmentation	PMEL
+MP32 Skin-pigmentation	TNFRSF14
+MP32 Skin-pigmentation	BIRC7
+MP32 Skin-pigmentation	CHCHD6
+MP32 Skin-pigmentation	LINC00518
+MP32 Skin-pigmentation	MXI1
+MP32 Skin-pigmentation	NOV
+MP32 Skin-pigmentation	TRPM1
+MP32 Skin-pigmentation	APOE
+MP32 Skin-pigmentation	FXYD3
+MP32 Skin-pigmentation	ISG20
+MP32 Skin-pigmentation	NBL1
+MP32 Skin-pigmentation	PLP1
+MP32 Skin-pigmentation	QDPR
+MP32 Skin-pigmentation	QPCT
+MP32 Skin-pigmentation	SH3BP5
+MP32 Skin-pigmentation	TIMP2
+MP32 Skin-pigmentation	TRIM2
+MP32 Skin-pigmentation	AVPI1
+MP32 Skin-pigmentation	DAB2
+MP32 Skin-pigmentation	GJB1
+MP32 Skin-pigmentation	GPR143
+MP32 Skin-pigmentation	GYPC
+MP32 Skin-pigmentation	LYST
+MP32 Skin-pigmentation	NSG1
+MP32 Skin-pigmentation	PIR
+MP32 Skin-pigmentation	RAB38
+MP32 Skin-pigmentation	RRAGD
+MP32 Skin-pigmentation	S100B
+MP32 Skin-pigmentation	SLC45A2
+MP32 Skin-pigmentation	SNCA
+MP32 Skin-pigmentation	TBC1D16
+MP32 Skin-pigmentation	TYRP1
+MP32 Skin-pigmentation	WIPI1
+MP32 Skin-pigmentation	SPON2
+MP32 Skin-pigmentation	ZNF106
+MP32 Skin-pigmentation	BCL2A1
+MP32 Skin-pigmentation	SNX10
+MP33 RBCs	BLVRB
+MP33 RBCs	HBB
+MP33 RBCs	APOC1
+MP33 RBCs	CA1
+MP33 RBCs	HBD
+MP33 RBCs	AHSP
+MP33 RBCs	PRDX2
+MP33 RBCs	REXO2
+MP33 RBCs	CNRIP1
+MP33 RBCs	HMBS
+MP33 RBCs	S100A6
+MP33 RBCs	HAGH
+MP33 RBCs	PLIN2
+MP33 RBCs	RHAG
+MP33 RBCs	CD36
+MP33 RBCs	FAM178B
+MP33 RBCs	FBXO7
+MP33 RBCs	FECH
+MP33 RBCs	HES6
+MP33 RBCs	KCNH2
+MP33 RBCs	KLF1
+MP33 RBCs	MYC
+MP33 RBCs	TFRC
+MP33 RBCs	ANK1
+MP33 RBCs	APOE
+MP33 RBCs	CASP3
+MP33 RBCs	CAST
+MP33 RBCs	HBA1
+MP33 RBCs	HBG2
+MP33 RBCs	MPC2
+MP33 RBCs	NFIA
+MP33 RBCs	STRADB
+MP33 RBCs	SYNGR1
+MP33 RBCs	TFR2
+MP33 RBCs	TMEM14C
+MP33 RBCs	UBAC1
+MP33 RBCs	CA2
+MP33 RBCs	GATA1
+MP33 RBCs	GYPB
+MP33 RBCs	HBA2
+MP33 RBCs	HBQ1
+MP33 RBCs	SMIM10
+MP33 RBCs	EPCAM
+MP33 RBCs	FAM45A
+MP33 RBCs	FCGRT
+MP33 RBCs	SLC25A37
+MP33 RBCs	LMNA
+MP33 RBCs	HBG1
+MP33 RBCs	UROD
+MP33 RBCs	CSF2RB
+MP34 Platelet-activation	RGS18
+MP34 Platelet-activation	PDLIM1
+MP34 Platelet-activation	ITGA2B
+MP34 Platelet-activation	PLEK
+MP34 Platelet-activation	C6ORF25
+MP34 Platelet-activation	FERMT3
+MP34 Platelet-activation	RAP1B
+MP34 Platelet-activation	CLU
+MP34 Platelet-activation	LIMS1
+MP34 Platelet-activation	CD9
+MP34 Platelet-activation	NRGN
+MP34 Platelet-activation	PBX1
+MP34 Platelet-activation	PF4
+MP34 Platelet-activation	PKM
+MP34 Platelet-activation	RP11-354E11.2
+MP34 Platelet-activation	SDPR
+MP34 Platelet-activation	SLC44A1
+MP34 Platelet-activation	STOM
+MP34 Platelet-activation	TMSB4X
+MP34 Platelet-activation	C2ORF88
+MP34 Platelet-activation	CMTM5
+MP34 Platelet-activation	GP9
+MP34 Platelet-activation	GSN
+MP34 Platelet-activation	HBD
+MP34 Platelet-activation	LAT
+MP34 Platelet-activation	MAX
+MP34 Platelet-activation	VCL
+MP34 Platelet-activation	ACTN1
+MP34 Platelet-activation	DAD1
+MP34 Platelet-activation	FYB
+MP34 Platelet-activation	MGLL
+MP34 Platelet-activation	MMRN1
+MP34 Platelet-activation	PPIF
+MP34 Platelet-activation	TPM1
+MP34 Platelet-activation	BIN2
+MP34 Platelet-activation	CCND3
+MP34 Platelet-activation	FCER1A
+MP34 Platelet-activation	FCER1G
+MP34 Platelet-activation	FLI1
+MP34 Platelet-activation	GATA2
+MP34 Platelet-activation	GUCY1B3
+MP34 Platelet-activation	PRKAR2B
+MP34 Platelet-activation	TGFB1
+MP34 Platelet-activation	TPM4
+MP34 Platelet-activation	VASP
+MP34 Platelet-activation	RAB27B
+MP34 Platelet-activation	PIM1
+MP34 Platelet-activation	CD36
+MP34 Platelet-activation	LGALS1
+MP34 Platelet-activation	CKB
+MP35 Hemato-related-I	CSF3R
+MP35 Hemato-related-I	SPINK2
+MP35 Hemato-related-I	VAMP5
+MP35 Hemato-related-I	AZU1
+MP35 Hemato-related-I	SELL
+MP35 Hemato-related-I	C1QTNF4
+MP35 Hemato-related-I	CFD
+MP35 Hemato-related-I	CTSG
+MP35 Hemato-related-I	ELANE
+MP35 Hemato-related-I	HOPX
+MP35 Hemato-related-I	ITM2C
+MP35 Hemato-related-I	NPDC1
+MP35 Hemato-related-I	AVP
+MP35 Hemato-related-I	C1ORF228
+MP35 Hemato-related-I	CD52
+MP35 Hemato-related-I	CLEC11A
+MP35 Hemato-related-I	CRHBP
+MP35 Hemato-related-I	CST7
+MP35 Hemato-related-I	MBOAT7
+MP35 Hemato-related-I	MDK
+MP35 Hemato-related-I	PLAC8
+MP35 Hemato-related-I	PRTN3
+MP35 Hemato-related-I	RNASE2
+MP35 Hemato-related-I	BAALC
+MP35 Hemato-related-I	BST2
+MP35 Hemato-related-I	C19ORF77
+MP35 Hemato-related-I	CD44
+MP35 Hemato-related-I	GLIPR1
+MP35 Hemato-related-I	ICAM3
+MP35 Hemato-related-I	KLF6
+MP35 Hemato-related-I	MPO
+MP35 Hemato-related-I	MS4A3
+MP35 Hemato-related-I	PRSS57
+MP35 Hemato-related-I	RAB32
+MP35 Hemato-related-I	SRGN
+MP35 Hemato-related-I	TSC22D3
+MP35 Hemato-related-I	ZFP36L2
+MP35 Hemato-related-I	FOS
+MP35 Hemato-related-I	SERPINB1
+MP35 Hemato-related-I	IGLL1
+MP35 Hemato-related-I	LYZ
+MP35 Hemato-related-I	MGST1
+MP35 Hemato-related-I	TNFSF13B
+MP35 Hemato-related-I	HLA-DQB1
+MP35 Hemato-related-I	CD74
+MP35 Hemato-related-I	PTPRCAP
+MP35 Hemato-related-I	ANKRD28
+MP35 Hemato-related-I	CD34
+MP35 Hemato-related-I	CPA3
+MP35 Hemato-related-I	KIAA0125
+MP36 IG	IGLC2
+MP36 IG	IGLC3
+MP36 IG	IGHA2
+MP36 IG	IGHA1
+MP36 IG	IGHG4
+MP36 IG	IGKC
+MP36 IG	CD79A
+MP36 IG	IGHG1
+MP36 IG	IGHG3
+MP36 IG	IGHG2
+MP36 IG	IGHGP
+MP36 IG	IGLJ2
+MP36 IG	IGLC1
+MP36 IG	DERL3
+MP36 IG	IGHM
+MP36 IG	IGLC7
+MP36 IG	SELENOM
+MP36 IG	CD63
+MP36 IG	IGLV3-1
+MP36 IG	IGLV3-7
+MP36 IG	IGLV6-57
+MP36 IG	JSRP1
+MP36 IG	CCPG1
+MP36 IG	DNAJB9
+MP36 IG	IGKV1-12
+MP36 IG	IGLJ1
+MP36 IG	KLF6
+MP36 IG	TSC22D3
+MP36 IG	AC134669.2
+MP36 IG	ADA2
+MP36 IG	CD27
+MP36 IG	CITED2
+MP36 IG	FCRL5
+MP36 IG	HERPUD1
+MP36 IG	HLA-F
+MP36 IG	IGKV4-1
+MP36 IG	IGLC5
+MP36 IG	IGLC6
+MP36 IG	IGLJ3
+MP36 IG	IGLL5
+MP36 IG	IGLV3-21
+MP36 IG	ITGB7
+MP36 IG	JCHAIN
+MP36 IG	TXNIP
+MP36 IG	MIR4539
+MP36 IG	SEL1L3
+MP36 IG	PRDX4
+MP36 IG	IRF4
+MP36 IG	MAN1A2
+MP36 IG	TNFRSF17
+MP37 Hemato-related-II	CTNNBL1
+MP37 Hemato-related-II	FCER1A
+MP37 Hemato-related-II	GATA2
+MP37 Hemato-related-II	CD84
+MP37 Hemato-related-II	PDZD8
+MP37 Hemato-related-II	SLC40A1
+MP37 Hemato-related-II	TESPA1
+MP37 Hemato-related-II	ZMYND8
+MP37 Hemato-related-II	CYTL1
+MP37 Hemato-related-II	MINPP1
+MP37 Hemato-related-II	PDCD4
+MP37 Hemato-related-II	PKIG
+MP37 Hemato-related-II	RP11-354E11.2
+MP37 Hemato-related-II	SOD2
+MP37 Hemato-related-II	STAM
+MP37 Hemato-related-II	ABCC4
+MP37 Hemato-related-II	ALDH1A1
+MP37 Hemato-related-II	ATP6V0A2
+MP37 Hemato-related-II	CD82
+MP37 Hemato-related-II	CNRIP1
+MP37 Hemato-related-II	CPA3
+MP37 Hemato-related-II	CPPED1
+MP37 Hemato-related-II	DEPTOR
+MP37 Hemato-related-II	GMPR
+MP37 Hemato-related-II	HBD
+MP37 Hemato-related-II	HPGDS
+MP37 Hemato-related-II	IL1B
+MP37 Hemato-related-II	KLF1
+MP37 Hemato-related-II	LXN
+MP37 Hemato-related-II	NFE2
+MP37 Hemato-related-II	PLEK
+MP37 Hemato-related-II	PLIN2
+MP37 Hemato-related-II	RAB37
+MP37 Hemato-related-II	RGS18
+MP37 Hemato-related-II	TPSB2
+MP37 Hemato-related-II	ZEB2
+MP37 Hemato-related-II	STXBP6
+MP37 Hemato-related-II	KCNQ1OT1
+MP37 Hemato-related-II	BMP2K
+MP37 Hemato-related-II	EREG
+MP37 Hemato-related-II	LINC00152
+MP37 Hemato-related-II	FREM1
+MP37 Hemato-related-II	PBX1
+MP37 Hemato-related-II	PDLIM1
+MP37 Hemato-related-II	MPP1
+MP37 Hemato-related-II	SOX4
+MP37 Hemato-related-II	FAM117A
+MP37 Hemato-related-II	FAM19A2
+MP37 Hemato-related-II	ICAM4
+MP37 Hemato-related-II	CASP3
+MP38 Glutathione	NAT8
+MP38 Glutathione	ACSM2B
+MP38 Glutathione	LGALS2
+MP38 Glutathione	AMN
+MP38 Glutathione	BBOX1
+MP38 Glutathione	KHK
+MP38 Glutathione	MIOX
+MP38 Glutathione	SMIM24
+MP38 Glutathione	AQP1
+MP38 Glutathione	C11ORF54
+MP38 Glutathione	CUBN
+MP38 Glutathione	GSTA1
+MP38 Glutathione	GLYAT
+MP38 Glutathione	ACSM2A
+MP38 Glutathione	AOC1
+MP38 Glutathione	APOM
+MP38 Glutathione	GAL3ST1
+MP38 Glutathione	GSTA2
+MP38 Glutathione	SLC6A13
+MP38 Glutathione	AZGP1
+MP38 Glutathione	GLYATL1
+MP38 Glutathione	LRP2
+MP38 Glutathione	PCSK1N
+MP38 Glutathione	PEPD
+MP38 Glutathione	SLC17A3
+MP38 Glutathione	SLC5A12
+MP38 Glutathione	CDHR5
+MP38 Glutathione	MSRA
+MP38 Glutathione	PDZK1
+MP38 Glutathione	PXMP2
+MP38 Glutathione	SLC16A9
+MP38 Glutathione	SLC22A18
+MP38 Glutathione	AGT
+MP38 Glutathione	CES2
+MP38 Glutathione	CLDN10
+MP38 Glutathione	DDC
+MP38 Glutathione	TMEM27
+MP38 Glutathione	TNFAIP6
+MP38 Glutathione	AGXT2
+MP38 Glutathione	CFI
+MP38 Glutathione	FOLR1
+MP38 Glutathione	GAMT
+MP38 Glutathione	HRSP12
+MP38 Glutathione	RBP5
+MP38 Glutathione	TSPAN1
+MP38 Glutathione	GPX3
+MP38 Glutathione	CXCL14
+MP38 Glutathione	PRAP1
+MP38 Glutathione	LACTB2
+MP38 Glutathione	GCHFR
+MP39 Metal-response	MT1X
+MP39 Metal-response	CAV1
+MP39 Metal-response	MT1E
+MP39 Metal-response	C5ORF46
+MP39 Metal-response	TGFBI
+MP39 Metal-response	CEBPB
+MP39 Metal-response	CKB
+MP39 Metal-response	EPB41L4A-AS1
+MP39 Metal-response	IGFBP5
+MP39 Metal-response	LGALS1
+MP39 Metal-response	LOX
+MP39 Metal-response	MT1M
+MP39 Metal-response	MT2A
+MP39 Metal-response	MT3
+MP39 Metal-response	NOL3
+MP39 Metal-response	STC1
+MP39 Metal-response	TUBA1A
+MP39 Metal-response	C10ORF10
+MP39 Metal-response	C1S
+MP39 Metal-response	CP
+MP39 Metal-response	DDIT4
+MP39 Metal-response	EMP3
+MP39 Metal-response	GLUL
+MP39 Metal-response	MT1F
+MP39 Metal-response	NPTX2
+MP39 Metal-response	PLP2
+MP39 Metal-response	SMIM3
+MP39 Metal-response	SNHG7
+MP39 Metal-response	SOX4
+MP39 Metal-response	BGN
+MP39 Metal-response	EDN1
+MP39 Metal-response	ID1
+MP39 Metal-response	ID4
+MP39 Metal-response	IER2
+MP39 Metal-response	MT1A
+MP39 Metal-response	PMP22
+MP39 Metal-response	RSL24D1
+MP39 Metal-response	TSC22D3
+MP39 Metal-response	VCAM1
+MP39 Metal-response	VCAN
+MP39 Metal-response	FSTL3
+MP39 Metal-response	TMEM45A
+MP39 Metal-response	ZBTB16
+MP39 Metal-response	TMEM91
+MP39 Metal-response	FKBP5
+MP39 Metal-response	S100A6
+MP39 Metal-response	C1R
+MP39 Metal-response	MMP7
+MP39 Metal-response	KLF4
+MP39 Metal-response	ANXA1
+MP40 PDAC-related	ISG20
+MP40 PDAC-related	KLK10
+MP40 PDAC-related	CEACAM1
+MP40 PDAC-related	F3
+MP40 PDAC-related	LMO7
+MP40 PDAC-related	PLAUR
+MP40 PDAC-related	SLPI
+MP40 PDAC-related	ANKRD36C
+MP40 PDAC-related	CD55
+MP40 PDAC-related	CEACAM6
+MP40 PDAC-related	EPS8L1
+MP40 PDAC-related	LCN2
+MP40 PDAC-related	PSCA
+MP40 PDAC-related	TIMP2
+MP40 PDAC-related	C15ORF48
+MP40 PDAC-related	KLF2
+MP40 PDAC-related	KLK6
+MP40 PDAC-related	KLK7
+MP40 PDAC-related	KRT23
+MP40 PDAC-related	LAMC2
+MP40 PDAC-related	S100A4
+MP40 PDAC-related	TNFRSF12A
+MP40 PDAC-related	ALDH1A3
+MP40 PDAC-related	ANXA1
+MP40 PDAC-related	APOL1
+MP40 PDAC-related	CLDN23
+MP40 PDAC-related	CLIC3
+MP40 PDAC-related	COL6A1
+MP40 PDAC-related	CST6
+MP40 PDAC-related	EMP1
+MP40 PDAC-related	FLNB
+MP40 PDAC-related	IL1RN
+MP40 PDAC-related	IL32
+MP40 PDAC-related	KLK11
+MP40 PDAC-related	KRT16
+MP40 PDAC-related	KRT17
+MP40 PDAC-related	LDLR
+MP40 PDAC-related	MALL
+MP40 PDAC-related	MMP7
+MP40 PDAC-related	RAB11FIP1
+MP40 PDAC-related	SLC16A3
+MP40 PDAC-related	TFF2
+MP40 PDAC-related	CEACAM5
+MP40 PDAC-related	MUC5AC
+MP40 PDAC-related	SDCBP2
+MP40 PDAC-related	SMIM5
+MP40 PDAC-related	ISG15
+MP40 PDAC-related	SLC2A1
+MP40 PDAC-related	LRRC8A
+MP40 PDAC-related	MT1X
+MP41 Unassigned	DST
+MP41 Unassigned	KMT2A
+MP41 Unassigned	MALAT1
+MP41 Unassigned	MIR6515
+MP41 Unassigned	AKAP9
+MP41 Unassigned	ATRX
+MP41 Unassigned	GOLGB1
+MP41 Unassigned	ZBTB20
+MP41 Unassigned	EIF3A
+MP41 Unassigned	MIR3648-1
+MP41 Unassigned	ANKRD12
+MP41 Unassigned	GOLGA4
+MP41 Unassigned	HNRNPU
+MP41 Unassigned	HSP90B2P
+MP41 Unassigned	PRRC2C
+MP41 Unassigned	RRBP1
+MP41 Unassigned	TTC3
+MP41 Unassigned	CFLAR
+MP41 Unassigned	DDX24
+MP41 Unassigned	EPRS
+MP41 Unassigned	FNDC3B
+MP41 Unassigned	HSP90B3P
+MP41 Unassigned	IRF4
+MP41 Unassigned	MLEC
+MP41 Unassigned	MT-ND6
+MP41 Unassigned	NCL
+MP41 Unassigned	NEAT1
+MP41 Unassigned	NEB
+MP41 Unassigned	PNISR
+MP41 Unassigned	PNRC1
+MP41 Unassigned	SNORD18B
+MP41 Unassigned	UBXN4
+MP41 Unassigned	AC010343.1
+MP41 Unassigned	BPTF
+MP41 Unassigned	CCDC69
+MP41 Unassigned	CEP350
+MP41 Unassigned	DDX5
+MP41 Unassigned	EIF5B
+MP41 Unassigned	GLCCI1
+MP41 Unassigned	HIPK2
+MP41 Unassigned	KMT2C
+MP41 Unassigned	LUC7L3
+MP41 Unassigned	MEF2C
+MP41 Unassigned	PDIA4
+MP41 Unassigned	SNORD55
+MP41 Unassigned	SNORD68
+MP41 Unassigned	SON
+MP41 Unassigned	UTRN
+MP41 Unassigned	ZBTB38
+MP41 Unassigned	XIST

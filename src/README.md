@@ -41,6 +41,9 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `build_extra_single_cell_sources`: Build the extra single-cell lines' raw-UMI h5ad from their public deposits, one wave of ``configs/data/extra_single_cell_sources_26Q1.json`` per run.
 - `build_pc9_hela_basal`: Build Tx1-ready PC9 and HeLa basal-count artifacts on the HPC.
 - `build_sl_screen_benchmark`: Build the SL screen benchmark (docs/data/sl-screen-benchmark.md, blueprint §5).
+- `build_sl_split`: Build the SL split from the final split and the multi-study SL benchmark's lists.
+- `build_sl_study_benchmark`: Build the multi-study SL benchmark's labels from configs/benchmarks/sl_label_rules.csv (docs/data/sl-study-inventory.md).
+- `sl_study_readers/`: One reader per ready label rule of the multi-study SL benchmark (core screens, combinatorial screens, anchor screens).
 - `build_state_programs`: Fetch and pin the noise diagnosis's reference cell-state programs under configs/context_prior/reference/.
 - `cellosaurus_context`: Cellosaurus text of the labelled lines as PIE's ``context_text``, keyed by ModelID.
 - `demultiplex`: Naming each called cell's line in a deposited library.
@@ -169,6 +172,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 
 ### `experiments/sl/`
 
+- `benchmark_baselines`: Baselines on the multi-study SL benchmark: pair identity, pan-essentiality, the prior's predicted and the measured GeneEffect, scored per (study, line) list.
 - `stage_two`: Stage two, first run (SL protocol §10): a PARIS head and a viability-embedding head, scored per held-out line and screen of the SL screen benchmark against their controls.
 
 ### `experiments/states/`

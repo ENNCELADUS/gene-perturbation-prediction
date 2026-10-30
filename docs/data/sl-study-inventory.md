@@ -1,17 +1,19 @@
 # SL Study Inventory
 
 **Status:** discovery inventory built 2026-10-29 for the
-[multi-study SL benchmark](../specs/2026-10-29-multi-study-sl-benchmark-design.md). Nothing is downloaded or labelled
-yet. The line rows and scRNA rows of the kept screens were reviewed on 2026-10-29 (see Review). The kind on each
-`candidate` row is still a proposal. Nothing here is SL evidence.
+[multi-study SL benchmark](../specs/2026-10-29-multi-study-sl-benchmark-design.md). The line rows and scRNA rows of the
+kept screens were reviewed on 2026-10-29 (see Review). The label rules, the labels and the SL split were built on
+2026-10-30 (see Labels and split). The kind on each `candidate` row is still a proposal. Nothing here is SL evidence.
 
 ## Files
 
 | File | Rows | Content |
 | --- | ---: | --- |
 | `configs/benchmarks/sl_studies.csv` | 2,261 | One row per study: `kind`, `platform`, per-line score, authors' call, data location, licence, `in_synlethdb3`, `in_slkb`, `found_via`, `curation_status`. For a curated row, `note` holds `decision=` |
-| `configs/benchmarks/sl_study_lines.csv` | 896 | One row per (study, line): the line as the source spells it, `engineered_genotype`, `proposed_model_id`, `match_evidence`; for kept screens also `model_review`, the reviewed `model_id`, `cellosaurus`, `screened` and `review_evidence` (see Review) |
+| `configs/benchmarks/sl_study_lines.csv` | 904 | One row per (study, line): the line as the source spells it, `engineered_genotype`, `proposed_model_id`, `match_evidence`; for kept screens also `model_review`, the reviewed `model_id`, `cellosaurus`, `screened` and `review_evidence` (see Review) |
 | `configs/benchmarks/sl_study_tables.csv` | 518 | One row per result file of a kept screen: URL, bytes, SHA-256, H20 path, route, status and a summary of its sheets and columns (see Per-line tables) |
+| `configs/benchmarks/sl_label_rules.csv` | 185 | One row per (study, comparison or screen): files, fields, the positive, negative and unlabelled rules, `rule_kind`, the quoted `rule_source`, the lines with their ModelIDs, `status` and, for a `ready` row, its `reader` (see Labels and split) |
+| `configs/benchmarks/cell_line_sl_split.json`, `.csv` | 434 | The SL split (see Labels and split) |
 | `configs/benchmarks/single_cell_atlas_candidates.csv` | +41 | The basal scRNA sources found for the screened lines, reviewed by `propose` and then by hand (see Review); the review evidence is at the end of each `note` |
 
 The search scripts, full-text pulls and per-line search logs are local only, in
@@ -122,10 +124,46 @@ Not opened: the SLKB SQL dump (241 MB, shared by its 11 studies), Alborzinia 202
 Neggers 2020's RAR. Shen 2017's `MOESM2_ESM.xlsx` is a PDF. Zhao 2018's DOI was corrected to
 10.1016/j.molcel.2018.01.017 (PMID 29452643).
 
+## Labels and split (2026-10-30)
+
+**Rules.** One rule per study comparison, in the order of design decision 5: the authors' call (75 rows), the authors'
+stated threshold (49), else the project default of FDR < 0.05 in the SL direction (11). 136 rows are `ready`, each
+with its own reader in `src/data/builders/sl_study_readers/`. 17 rows of 12 studies are `needs_decision`: they publish
+only a score with no FDR and no stated cut, and the row's `note` gives two or three candidate rules (Adhikari2018,
+Bowden2020_2, Chen2024, Dhoonmoon2020, Feng2024_2, Fielden2025, Ford2023, Guna2023, Knoll2025, Wang2017_2, Xu2021,
+Yang2021). 6 studies are `needs_parsing` (PDF-only or hit-only tables) and 26 rows are `unusable` (mouse lines,
+reporter or resistance screens, no published table).
+
+**Labels.** `build_sl_study_benchmark` writes `data/sl_studies/benchmark/{labels.parquet, lists.csv, manifest.json}`
+on the H20 (about 10 minutes on one CPU core): 2,718,058 (list, pair) rows from 54 studies in 294 lists (126 anchor, 168
+combinatorial), with 52,830 positives, 2,604,737 negatives and 60,491 unlabelled rows. 247 lists have a ModelID (115
+lines). The others are lines without a DepMap model (RPE1, HEK293A, HMEC, eHAP, OMM2.3, MP38). 209 lists over 110 lines
+hold both classes. A drug anchor keeps its name (`drug:olaparib`); the baselines rank anchor lists by gene B.
+
+**Line review.** On 2026-10-30, 43 `added_unreviewed` screened rows whose name equals the DepMap name of the proposed
+ModelID were set `correct`, and 8 lines the readers found (Knoll2025 LU99 and SW1573, six Ebright2026 lines) were
+added on the same evidence. The core screens take their ModelIDs from `sl_screen_lines.csv`.
+
+**Split.** `build_sl_split` keeps the final split's held-out lines on their side and moves screened single-cell
+training lines, drawn across lineages, until validation and test each hold 20% of the 61 single-cell lines with a
+two-class list: training 361, validation 37 and test 36 single-cell lines, with 6 more lines excluded for a shared
+patient. Two-class lists by side: training 94 (37 lines), validation 16 (12 lines), test 37 (12 lines).
+
+```bash
+.venv-tx1/bin/python -W ignore -m src.data.builders.build_sl_study_benchmark --rules configs/benchmarks/sl_label_rules.csv \
+  --raw data --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
+  --hgnc data/sl_screens/raw/hgnc/hgnc_complete_set.txt --out data/sl_studies/benchmark
+.venv-tx1/bin/python -m src.data.builders.build_sl_split --final configs/benchmarks/cell_line_geneeffect_split.json \
+  --lists data/sl_studies/benchmark/lists.csv --model data/sl_dependency_v0/raw/depmap/Model.csv \
+  --out configs/benchmarks/cell_line_sl_split.json
+```
+
+The builders refuse an existing output. `pyxlsb` reads van2023_2's `.xlsb`.
+
 ## Pitfalls
 
 - **Use `screened` and `model_id`, not `proposed_model_id`.** The proposals include lines used only for validation and
-  near-names. The 50 added rows and the 17 rows still `unsure` are not reviewed.
+  near-names. 5 added rows and the 17 rows still `unsure` are not reviewed.
 - **Lines without scRNA.** After two searches, these screened lines have no public basal scRNA: every uveal melanoma line
   except MP41, every head-and-neck line, most of Flister's extra lines, and lines such as SiHa, MV4-11, RT112, OV90 and
   KYSE150. They cannot be scored until a source exists.

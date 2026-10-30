@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import shutil
 import subprocess
 import urllib.parse
 from collections.abc import Collection, Sequence
@@ -17,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from src.data.depmap import read_depmap_matrix
-from src.data.extra_lines import load_extra_lines
+from src.data.extra_lines import load_bulk_lines
 from src.data.splits import load_geneeffect_split
 
 BIOMART_URL = "https://useast.ensembl.org/biomart/martservice"
@@ -225,23 +226,57 @@ def line_tables(
     }
 
 
+def filtered_line_tables(
+    source: Path, blocked: Collection[str]
+) -> dict[str, tuple[pd.DataFrame, str]]:
+    """The line tables of the reference in ``source`` without ``blocked`` lines; a
+    driver stays while it is called in DRIVER_MIN_FRACTION of the kept lines.
+
+    shortcut: a gene under the fraction in ``source`` cannot become a driver; rebuild
+    from the hotspot matrix (``line_tables``) when it is at hand.
+    """
+    drivers = pd.read_csv(source / "drivers.tsv", sep="\t", dtype={"model_id": str})
+    drivers = drivers[~drivers["model_id"].isin(set(blocked))].set_index("model_id")
+    drivers = drivers.loc[:, drivers.mean() >= DRIVER_MIN_FRACTION]
+    msi = pd.read_csv(source / "msi.tsv", sep="\t", dtype={"model_id": str})
+    msi = msi[~msi["model_id"].isin(set(blocked))]
+    note = f"{source}/{{}} without the split's held-out and excluded lines"
+    return {
+        "drivers.tsv": (drivers.reset_index(), note.format("drivers.tsv")),
+        "msi.tsv": (msi, note.format("msi.tsv")),
+    }
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("split", "extra-lines", "hotspot", "damaging", "out"):
+    for name in ("split", "out"):
         parser.add_argument(f"--{name}", type=Path, required=True)
+    for name in ("hotspot", "damaging"):
+        parser.add_argument(f"--{name}", type=Path)
     parser.add_argument(
         "--line-tables-only",
         action="store_true",
         help="rebuild drivers.tsv and msi.tsv only, keeping the gene tables",
     )
+    parser.add_argument(
+        "--filter-from",
+        type=Path,
+        help="copy this reference to --out with its line tables filtered to the split",
+    )
     args = parser.parse_args(argv)
+    if not args.filter_from and not (args.hotspot and args.damaging):
+        parser.error("--hotspot and --damaging are required without --filter-from")
     split = load_geneeffect_split(args.split)
-    extra = load_extra_lines(args.extra_lines, split)
+    extra = load_bulk_lines(args.split, split)
     blocked = {*split.val, *split.test, *extra.excluded}
     out = args.out
-    out.mkdir(parents=True, exist_ok=True)
-    tables = line_tables(args.hotspot, args.damaging, blocked)
-    if args.line_tables_only:
+    if args.filter_from:
+        shutil.copytree(args.filter_from, out)  # refuses an existing --out
+        tables = filtered_line_tables(args.filter_from, blocked)
+    else:
+        out.mkdir(parents=True, exist_ok=True)
+        tables = line_tables(args.hotspot, args.damaging, blocked)
+    if args.line_tables_only or args.filter_from:
         provenance = json.loads((out / "provenance.json").read_text())
         provenance["line_tables_rebuilt"] = date.today().isoformat()
     else:

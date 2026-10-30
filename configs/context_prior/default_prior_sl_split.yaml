@@ -1,11 +1,12 @@
 # The default linear context prior (default_prior.yaml) refitted on the SL split
 # (configs/benchmarks/cell_line_sl_split.json): the multi-study SL benchmark's baselines read its
 # export as the predicted GeneEffect of the SL validation and test lines.
+# Its reference tables drop the SL split's held-out lines (build_context_reference --filter-from).
 seed: 0
 joint_config: configs/revision/frozen_huber_sl_split.yaml
 output_root: outputs/context_prior
 paths:
-  reference: configs/context_prior/reference
+  reference: configs/context_prior/reference_sl_split
   model: data/sl_dependency_v0/raw/depmap/Model.csv
   bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
 training_side:

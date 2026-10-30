@@ -18,6 +18,7 @@ prints every command's arguments.
 | `stage-one`, `stage-one-queue`, `stage-one-report`, `stage-one-prior` | stage-one runs, their queue and report, the prior reference | one GPU per run (`.venv-pie`); the prior on CPU | [Stage-one model](#the-stage-one-model) |
 | `cell-states`, `pie-precompute --steps states` | the cell-state telemetry and the frozen PIE on its states | CPU; scVI and PIE on GPUs | [Cell states](#the-cell-states) |
 | `sl-paris`, `sl-stage-two` | PARIS (`sl.paris`) and SL stage two on stage one's GeneEffect (`sl.stage_two`) | CPU, `.venv-pie` | [SL stage two](#sl-stage-two) |
+| `sl-baselines` | baselines on the multi-study SL benchmark (`sl.benchmark_baselines`) | CPU, `.venv-pie` | [SL benchmark baselines](#sl-benchmark-baselines) |
 
 GPU use, measured on 30838 in October 2026 (one H20 per job unless noted; SM is `nvidia-smi dmon`'s busy share):
 
@@ -46,7 +47,7 @@ Direct entry points, `python -m src.<module>` from the repository root (`.venv-t
 | `experiments.states.programs` | the cNMF, starCAT and scVI fits (`.venv-states`), launched by `cell-states --steps fit` | [Cell states](#the-cell-states) |
 | `data.builders.build_extra_single_cell_sources`, `recount_extra_single_cell_sources`, `build_extra_single_cell_lines`, `plan_second_sources`, `build_cell_line_geneeffect_split` | the single-cell extras and the final split | [Extra single-cell lines](#extra-single-cell-lines) |
 | `data.builders.cellosaurus_context`, `embed_protein_sources`; `data.gene_sources` | the stage-one context text and gene sources | [Stage-one inputs](#the-stage-one-inputs) |
-| `data.builders.build_extra_bulk_lines`, `build_cell_line_geneeffect_226_split`, `build_sl_screen_benchmark`, `build_pc9_hela_basal` | tracked membership files and benchmarks | their cards: [bulk lines](../docs/data/extra-bulk-lines-26q1.md), [226](../docs/data/cell-line-geneeffect-226.md), [SL screens](../docs/data/sl-screen-benchmark.md), [context screen](../docs/data/sl-context-screen.md) |
+| `data.builders.build_extra_bulk_lines`, `build_cell_line_geneeffect_226_split`, `build_sl_screen_benchmark`, `build_sl_study_benchmark`, `build_sl_split`, `build_pc9_hela_basal` | tracked membership files and benchmarks | their cards: [bulk lines](../docs/data/extra-bulk-lines-26q1.md), [226](../docs/data/cell-line-geneeffect-226.md), [SL screens](../docs/data/sl-screen-benchmark.md), [SL studies](../docs/data/sl-study-inventory.md#labels-and-split-2026-10-30), [context screen](../docs/data/sl-context-screen.md) |
 | `data.builders.build_context_reference`, `build_state_programs` | the prior's reference tables and pinned cell-state programs (on the Mac) | [context-generalization design](../docs/specs/2026-10-04-context-generalization-design.md), [noise-diagnosis design](../docs/specs/2026-10-12-noise-diagnosis-design.md) |
 | `data.builders.prepare_kinker_umi_h5ad`, `prepare_cell_line_atlas_raw_umi`, `materialize_exp13_original47_raw_umi`, `bootstrap_exp13_uniprot_cache`, `build_exp13_esm2_universe`, `precompute_esm2_embeddings` | the 226 benchmark's raw-UMI basal h5ad and ESM2 table | [226 card](../docs/data/cell-line-geneeffect-226.md), [Tx1 input record](../results/exp13_stage0/README.md) |
 | `experiments.historical.*` | retired probes and builders, kept runnable | [historical README](../src/experiments/historical/README.md) |
@@ -335,6 +336,28 @@ run directory refuses another config.
 ```bash
 OMP_NUM_THREADS=1 hpc/run.sh sl-paris configs/sl/paris.yaml --run-id paris_seed0   # ~4,250 genes, n_jobs 60
 hpc/run.sh sl-stage-two configs/sl/stage_two.yaml --run-id stage_two_seed0
+```
+
+## SL benchmark baselines
+
+`sl-baselines` (`src.experiments.sl.benchmark_baselines`) reads the multi-study SL benchmark's labels, the SL split
+and the export of the default prior refitted on that split
+([data card](../docs/data/sl-study-inventory.md#labels-and-split-2026-10-30)). It scores each validation and test
+list with pair identity, pan-essentiality, the prior's predicted GeneEffect and the measured GeneEffect (a reference),
+and writes `scores.parquet`, `lists.csv`, `metrics.json` and `results.md` to
+`outputs/sl/benchmark_baselines/<run id>/`. The headline is AUPRC over the list's positive rate, averaged within each
+line and then over lines. An anchor list is ranked by gene B, so drug anchors keep their lists. The prior reads
+`configs/context_prior/reference_sl_split/`, the reference tables without the SL split's held-out lines, written on
+the Mac by `build_context_reference --split configs/benchmarks/cell_line_sl_split.json --filter-from
+configs/context_prior/reference --out configs/context_prior/reference_sl_split` (the hotspot matrix the driver table
+needs is not on the H20, so drivers are reselected from the existing table).
+
+```bash
+R=default_prior_sl_split_seed0
+OMP_NUM_THREADS=32 MKL_NUM_THREADS=32 nohup bash -c "hpc/run.sh prior configs/context_prior/default_prior_sl_split.yaml --run-id $R \
+  && hpc/run.sh prior-export configs/context_prior/default_prior_sl_split.yaml --run-id $R \
+  && hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id benchmark_baselines_seed0" \
+  > outputs/launches/sl_benchmark_chain.log 2>&1 &
 ```
 
 ## The `prior` command
