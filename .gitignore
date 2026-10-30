@@ -67,6 +67,8 @@ wheels/
 !results/p1_response_pathway_diagnostics/evidence/**
 # PIE reproduction comparison tables (small, the record of results/pie_reproduction/)
 !results/pie_reproduction/*.csv
+# Copied host tables of the multi-study SL benchmark run page (small)
+!results/sl_study_benchmark/host/*.csv
 /outputs/
 data/**/features
 data/**/interim
