@@ -637,11 +637,12 @@ def read_Du2017(raw):
     with zipfile.ZipFile(zip_path) as z:
         library = pd.read_csv(z.open(member), sep="\t")
     _need(library, ["pair"], f"Du2017 {member}")
-    # guides are GENE_<n>; the _PC positive controls have no number
+    # guides are GENE_<n>, or GENE_PC for the essential-gene controls the paper scores
     genes = library.pair.str.split(":", expand=True).apply(
-        lambda g: g.str.extract(r"^(.+)_\d+$")[0]
+        lambda g: g.str.extract(r"^(.+)_(?:\d+|PC)$")[0]
     )
-    genes = genes[genes.notna().all(axis=1)]
+    if genes.isna().any().any():
+        raise ValueError(f"Du2017 {member}: a guide name is not GENE_<n> or GENE_PC")
     genes = genes[~genes.apply(lambda g: g.str.match(DU_CONTROLS)).any(axis=1)]
     genes = genes[genes[0] != genes[1]]
     tested = pd.DataFrame(np.sort(genes.to_numpy(), axis=1), columns=["a", "b"])
