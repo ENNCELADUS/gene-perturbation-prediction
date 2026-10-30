@@ -594,6 +594,49 @@ def read_Zimmermann2018_RPE1(raw: Path) -> pd.DataFrame:
     return _zimmermann(raw, "RPE1")
 
 
+# Wang2017_2 (Table 3, AML CRISPR scores)
+# The Results name five genes "required only in the context of oncogenic Ras". The
+# Ras-dependent lines are the six whose own KRAS or NRAS score is below -1.9 (every
+# other line is above -1.7); Figure 6B, the authors' annotation, was not read.
+_WANG_RAS = {"NB4": "KRAS", "OCI-AML3": "NRAS", "P31/FUJ": "NRAS",
+             "PL-21": "KRAS", "SKM-1": "KRAS", "THP-1": "NRAS"}  # fmt: skip
+_WANG_SL = {"RCE1", "ICMT", "RAF1", "SHOC2", "PREX1"}
+
+
+def read_Wang2017_2(raw: Path) -> pd.DataFrame:
+    d = _sheet(
+        _f(raw, "Wang2017_2", "1-s2.0-S0092867417300612-mmc3.xlsx"),
+        "3. Human AML screen CS",
+        header=1,
+    )
+    _need(d, ["Gene"], "Wang2017_2 Table 3")
+    pos = d.Gene.isin(_WANG_SL).to_numpy()
+    if pos.sum() != len(_WANG_SL):
+        raise ValueError("Wang2017_2 Table 3: a Ras-SL gene is missing")
+    frames = []
+    for line, ras in _WANG_RAS.items():
+        # NB4 has two replicate columns: their mean
+        cols = [c for c in d.columns if str(c).split(" (replicate")[0] == line]
+        if not cols:
+            raise ValueError(f"Wang2017_2 Table 3: no column for {line}")
+        score = d[cols].apply(pd.to_numeric, errors="coerce").mean(axis=1)
+        frames.append(
+            _out(
+                "Wang2017_2",
+                f"Wang2017_2|{line}|{ras}",
+                line,
+                ras,
+                f"oncogenic {ras}, Ras-dependent",
+                d.Gene,
+                score,
+                np.nan,
+                _bin(pos),
+                "",
+            )
+        )
+    return pd.concat(frames, ignore_index=True)
+
+
 # van2021 (source data, DrugZ)
 def _drugz(d, where):
     _need(d, ["GENE", "normZ", "fdr_synth"], where)

@@ -155,6 +155,47 @@ def _orcs(raw, study, screen):
     return _unique(_drop_controls(d, "OFFICIAL_SYMBOL"), "OFFICIAL_SYMBOL")
 
 
+# Adhikari2018 (HEK-HT with mutant RAS vs vector, ORCS)
+_ADHIKARI = {"HRAS": 1035, "KRAS": 1037, "NRAS": 1039}  # anchor: ORCS screen
+for _gene in _ADHIKARI:  # the paper's "top 1% of negatively enriched genes"
+    _rule(
+        f"read_Adhikari2018_{_gene}",
+        "`depletion_percentile` <= 0.01",
+        "`depletion_percentile` > 0.01",
+    )
+
+
+def _adhikari(raw, gene):
+    d = _orcs(raw, "Adhikari2018", _ADHIKARI[gene])
+    d = d[d["SCORE.1"].notna()].copy()
+    d["depletion_percentile"] = d["SCORE.1"].rank(method="first") / len(d)
+    return _label(
+        d,
+        f"read_Adhikari2018_{gene}",
+        "Adhikari2018",
+        f"Adhikari2018|HEK-HT|{gene}",
+        "HEK-HT",
+        gene,
+        f"{gene} G12V vs vector",
+        gene,
+        "OFFICIAL_SYMBOL",
+        "SCORE.1",
+        None,
+    )
+
+
+def read_Adhikari2018_HRAS(raw: Path) -> pd.DataFrame:
+    return _adhikari(raw, "HRAS")
+
+
+def read_Adhikari2018_KRAS(raw: Path) -> pd.DataFrame:
+    return _adhikari(raw, "KRAS")
+
+
+def read_Adhikari2018_NRAS(raw: Path) -> pd.DataFrame:
+    return _adhikari(raw, "NRAS")
+
+
 # Alborzinia2023 (SLC-focused KO screens)
 _rule(
     "read_Alborzinia2023_A375",
@@ -480,6 +521,33 @@ def read_Clements2020_BRCA2KO(raw: Path) -> pd.DataFrame:
     )
 
 
+# Dhoonmoon2020 (PaTu 8988t PARP14-KO vs WT, RSA)
+_rule(  # the paper's "top 500 hits" (Fig. 1D)
+    "read_Dhoonmoon2020", "`Overall Gene Rank` <= 500", "`Overall Gene Rank` > 500"
+)
+
+
+def read_Dhoonmoon2020(raw: Path) -> pd.DataFrame:
+    zip_path = raw / "sl_studies/raw/Dhoonmoon2020/gkaa508_supplemental_files.zip"
+    d = _sheet(_zip_member(zip_path, "Supplementary Table S1.xlsx"), "Gene Rank RSA")
+    cols = ["Gene Name", "Log P", "Overall Gene Rank"]
+    _need(d, cols, "Dhoonmoon2020 Table S1")
+    d = _num(_drop_controls(d, "Gene Name"), cols[1:])
+    return _label(
+        d,
+        "read_Dhoonmoon2020",
+        "Dhoonmoon2020",
+        "Dhoonmoon2020|PaTu 8988t|PARP14",
+        "PaTu 8988t",
+        "PARP14",
+        "PARP14-KO vs WT",
+        "PARP14",
+        "Gene Name",
+        "Log P",
+        None,
+    )
+
+
 # Drainas2020 (hTERT-RPE1 TP53-KO vs WT, 2D)
 _rule(
     "read_Drainas2020",
@@ -652,38 +720,47 @@ def read_Feng2022_TP53BP1(raw: Path) -> pd.DataFrame:
 
 
 # Feng2024_2 (RPE1-hTERT TP53-/- FANCM-KO clone 3)
-_rule(
-    "read_Feng2024_2_FANCM_clone3",
-    "`CCA (clone3)` > 1 and `RPE1_dFANCM_clone3_BAGEL_T18` > 10",
-    "not (`CCA (clone3)` > 1 and `RPE1_dFANCM_clone3_BAGEL_T18` > 10)",
-)
+for _clone in ("clone3", "clone12"):
+    _rule(
+        f"read_Feng2024_2_FANCM_{_clone}",
+        f"`CCA ({_clone})` > 1 and `RPE1_dFANCM_{_clone}_BAGEL_T18` > 10",
+        f"not (`CCA ({_clone})` > 1 and `RPE1_dFANCM_{_clone}_BAGEL_T18` > 10)",
+    )
 
 
-def read_Feng2024_2_FANCM_clone3(raw: Path) -> pd.DataFrame:
+def _feng2024_fancm(raw, clone):
     d = _sheet(
         raw / "sl_studies/raw/Feng2024_2/biorxiv_DC2_TableS2.xlsx",
         "FANCM KO SL screen",
         header=1,
     )
-    cols = ["Gene", "CCA (clone3)", "RPE1_dFANCM_clone3_BAGEL_T18"]
+    cca = f"CCA ({clone})"
+    cols = ["Gene", cca, f"RPE1_dFANCM_{clone}_BAGEL_T18"]
     _need(d, cols, "Feng2024_2 Table S2")
     d = _num(_drop_controls(d, "Gene"), cols[1:])
-    d["CCA (clone3)"] = d["CCA (clone3)"].where(
-        d["CCA (clone3)"] > -9999
-    )  # -9999.88 is a missing-value sentinel
+    d[cca] = d[cca].where(d[cca] > -9999)  # -9999.88 is a missing-value sentinel
     return _label(
         d,
-        "read_Feng2024_2_FANCM_clone3",
+        f"read_Feng2024_2_FANCM_{clone}",
         "Feng2024_2",
-        "Feng2024_2|RPE1|FANCM_clone3",
+        f"Feng2024_2|RPE1|FANCM_{clone}",
         "RPE1",
         "FANCM",
-        "FANCM-/- clone 3 vs parental RPE1-hTERT TP53-/- PACKO Cas9",
+        f"FANCM-/- {clone.replace('clone', 'clone ')} vs parental RPE1-hTERT TP53-/- "
+        "PACKO Cas9",
         "FANCM",
         "Gene",
-        "CCA (clone3)",
+        cca,
         None,
     )
+
+
+def read_Feng2024_2_FANCM_clone3(raw: Path) -> pd.DataFrame:
+    return _feng2024_fancm(raw, "clone3")
+
+
+def read_Feng2024_2_FANCM_clone12(raw: Path) -> pd.DataFrame:
+    return _feng2024_fancm(raw, "clone12")
 
 
 # Fielden2025 (dual-guide CRISPRi, combinatorial)
@@ -716,6 +793,41 @@ def read_Fielden2025_RPE1(raw: Path) -> pd.DataFrame:
         None,
         gene_a_col="gene_a",
     )
+
+
+# The focused screens: the RPE-1 cut, the authors' SL call, on each line's score
+_FIELDEN_FOCUSED = {
+    "K562": "K562_GEMINI_score_sens",
+    "HeLa S3": "Hela_GEMINI_score_sens",
+}
+_rule("read_Fielden2025_focused", "`score` <= -1", "`score` > -1")
+
+
+def read_Fielden2025_focused(raw: Path) -> pd.DataFrame:
+    d = _sheet(
+        raw / "sl_studies/raw/Fielden2025/41586_2025_8815_MOESM6_ESM.xlsx",
+        "240522_Gemini_scores_all_cell_l",
+    )
+    _need(d, ["gene_combination", *_FIELDEN_FOCUSED.values()], "Fielden2025 MOESM6")
+    d = _pairs(d, "gene_combination")
+    frames = [
+        _label(
+            _num(d.assign(score=d[column]), ["score"]),
+            "read_Fielden2025_focused",
+            "Fielden2025",
+            f"Fielden2025|{line}",
+            line,
+            "",
+            "",
+            "",
+            "gene_b",
+            "score",
+            None,
+            gene_a_col="gene_a",
+        )
+        for line, column in _FIELDEN_FOCUSED.items()
+    ]
+    return pd.concat(frames, ignore_index=True)
 
 
 # Hill2019 (NALM-6 UBE2R1/UBE2R2 KO, EKO library)
