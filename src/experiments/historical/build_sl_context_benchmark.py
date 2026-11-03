@@ -1,6 +1,6 @@
-"""Historical builder of the context_screen_v2 SL pair-context benchmark
-(``docs/data/sl-context-screen.md``) from the integrated raw table, its only
-pair-label input; the tracked split contract supplies context identities and
+"""Historical builder of the context_screen_v2 SL pair-context benchmark (retired
+card ``docs/data/sl-context-screen.md`` at 9318ede) from the integrated raw table,
+its only pair-label input; the tracked split contract supplies context identities and
 registration evidence, never labels."""
 
 from __future__ import annotations

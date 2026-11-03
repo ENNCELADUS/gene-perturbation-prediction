@@ -47,7 +47,7 @@ Direct entry points, `python -m src.<module>` from the repository root (`.venv-t
 | `experiments.states.programs` | the cNMF, starCAT and scVI fits (`.venv-states`), launched by `cell-states --steps fit` | [Cell states](#the-cell-states) |
 | `data.builders.build_extra_single_cell_sources`, `recount_extra_single_cell_sources`, `build_extra_single_cell_lines`, `plan_second_sources`, `build_cell_line_geneeffect_split` | the single-cell extras and the final split | [Extra single-cell lines](#extra-single-cell-lines) |
 | `data.builders.cellosaurus_context`, `embed_protein_sources`; `data.gene_sources` | the stage-one context text and gene sources | [Stage-one inputs](#the-stage-one-inputs) |
-| `data.builders.build_extra_bulk_lines`, `build_cell_line_geneeffect_226_split`, `build_sl_screen_benchmark`, `build_sl_study_benchmark`, `build_sl_split`, `build_pc9_hela_basal` | tracked membership files and benchmarks | their cards: [bulk lines](../docs/data/extra-bulk-lines-26q1.md), [226](../docs/data/cell-line-geneeffect-226.md), [SL screens](../docs/data/sl-screen-benchmark.md), [SL studies](../docs/data/sl-study-inventory.md#labels-and-split-2026-10-30), [context screen](../docs/data/sl-context-screen.md) |
+| `data.builders.build_extra_bulk_lines`, `build_cell_line_geneeffect_226_split`, `build_sl_screen_benchmark`, `build_sl_study_benchmark`, `build_sl_split`, `build_pc9_hela_basal` | tracked membership files and benchmarks | their cards: [bulk lines](../docs/data/extra-bulk-lines-26q1.md), [226](../docs/data/cell-line-geneeffect-226.md), [SL benchmark](../docs/data/sl-benchmark.html) |
 | `data.builders.build_context_reference`, `build_state_programs` | the prior's reference tables and pinned cell-state programs (on the Mac) | [context-generalization design](../docs/specs/2026-10-04-context-generalization-design.md), [noise-diagnosis design](../docs/specs/2026-10-12-noise-diagnosis-design.md) |
 | `data.builders.prepare_kinker_umi_h5ad`, `prepare_cell_line_atlas_raw_umi`, `materialize_exp13_original47_raw_umi`, `bootstrap_exp13_uniprot_cache`, `build_exp13_esm2_universe`, `precompute_esm2_embeddings` | the 226 benchmark's raw-UMI basal h5ad and ESM2 table | [226 card](../docs/data/cell-line-geneeffect-226.md), [Tx1 input record](../results/exp13_stage0/README.md) |
 | `experiments.historical.*` | retired probes and builders, kept runnable | [historical README](../src/experiments/historical/README.md) |
@@ -342,7 +342,7 @@ hpc/run.sh sl-stage-two configs/sl/stage_two.yaml --run-id stage_two_seed0
 
 `sl-baselines` (`src.experiments.sl.benchmark_baselines`) reads the multi-study SL benchmark's labels, the SL split
 and the export of the default prior refitted on that split
-([data card](../docs/data/sl-study-inventory.md#labels-and-split-2026-10-30)). It scores each validation and test
+([data card](../docs/data/sl-benchmark.html)). It scores each validation and test
 list with pair identity, pan-essentiality, the prior's predicted GeneEffect and the measured GeneEffect (a reference),
 and writes `scores.parquet`, `lists.csv`, `metrics.json` and `results.md` to
 `outputs/sl/benchmark_baselines/<run id>/`. The headline is AUPRC over the list's positive rate, averaged within each

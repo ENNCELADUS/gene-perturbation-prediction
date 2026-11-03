@@ -1,4 +1,4 @@
-"""Build the SL screen benchmark (docs/data/sl-screen-benchmark.md, blueprint §5): the
+"""Build the SL screen benchmark (docs/data/sl-benchmark.html, blueprint §5): the
 screens of Kebabci et al. 2026 (Ito 2021, Klingbeil 2024, Harle 2025), one row per
 (screen, line, unordered gene pair) with the published scores, an SL label and the
 line's split side, plus MiT4SL's A549 labels as a secondary external test."""
@@ -22,7 +22,7 @@ from src.data.extra_lines import (
 from src.data.labels import parse_gene_symbol
 from src.data.splits import FixedSplit, load_geneeffect_split
 
-#: Published tables under ``--raw``, as fetched (docs/data/sl-screen-benchmark.md).
+#: Published tables under ``--raw``, as fetched (docs/data/sl-benchmark.html).
 RAW_FILES = {
     "ito": "ito_2021/41588_2021_967_MOESM2_ESM.xlsx",
     "klingbeil_lfc": "klingbeil_2024/cd-23-1529_supplementary_table_s2_suppst2.xlsx",

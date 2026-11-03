@@ -273,6 +273,6 @@ same screen's training lines (the pair-identity control) and pan-essentiality (Â
 score in every line, as Cilantro-SL's classifier is trained to, cannot rank them. MiT4SL's own A549 labels are scored
 as a secondary external test beside its published A549 result (AUROC 0.673), which reads only the line's bulk RNA;
 Kebabci's published scores read the held-out line's measured GeneEffect and are no comparator. The built
-benchmark, its counts and its departures from Kebabci's own labels are in its data card
-(`docs/data/sl-screen-benchmark.md`). Composed
+benchmark and its counts are in its data card
+(`docs/data/sl-benchmark.html`). Composed
 single-gene predictions yield definition-1 candidates; they do not estimate a double-knockout phenotype.

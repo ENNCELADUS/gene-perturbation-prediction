@@ -37,7 +37,7 @@ the SL task differently, and this protocol is rewritten to match before stage tw
   (`configs/benchmarks/extra_bulk_lines_26Q1.json`), reported beside it, never pooled. Flister 2025 and Fong 2024 are not adopted.
 - **Built (2026-10-11):** the screen tables fetched on the H20, the line map
   `configs/benchmarks/sl_screen_lines.csv`, the builder `src/data/builders/build_sl_screen_benchmark.py` and its
-  output `data/sl_screens/benchmark/` on the H20, described in the [data card](data/sl-screen-benchmark.md). The
+  output `data/sl_screens/benchmark/` on the H20, described in the [SL benchmark card](data/sl-benchmark.html). The
   labels follow Kebabci's rule but are not Kebabci's labels: on Ito's ten lines the rule gives 1,511 SL calls in
   47,315 points against their 958 in 41,244, because their GEMINI was recomputed from counts and their pairs were
   filtered, neither released. Before a first run: the default prior and its out-of-fold export rerun on the
@@ -71,7 +71,7 @@ predictor. Neither outcome estimates a double-knockout interaction phenotype.
 
 The [tracked split](../configs/benchmarks/context_screen_v2_split.json) and
 [basal registry](../configs/benchmarks/context_screen_v2_basal_registry.json)
-are the authorities. The [data card](data/sl-context-screen.md) documents source
+are the authorities. The retired data card (`docs/data/sl-context-screen.md` at 9318ede) documents source
 filters, label inference and artifact provenance. The benchmark is this project's own
 proposal, built from screen-level pair labels in named cell lines; the Feng 2024 SL
 benchmark is not used.

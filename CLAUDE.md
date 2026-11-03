@@ -33,10 +33,10 @@ Replace this section on every update; history lives in `results/` and the protoc
   merged; H20 artifacts written before it were migrated once, so pre-trim code cannot read them.
 - **Stage two** (SL protocol §10): pair identity wins; predicted or measured GeneEffect adds nothing over each gene's
   mean ([record](results/sl_stage_two_seed0/README.md)). Not SL context evidence. Both: [status](results/status.html).
-- **Multi-study SL benchmark** ([card](docs/data/sl-study-inventory.md#labels-and-split-2026-10-30)): 294 lists, 54
-  studies, SL split `cell_line_sl_split.json` (12 val, 12 test lines with lists). Pair identity leads; the prior adds
-  little to pan-essentiality ([record](results/sl_study_benchmark/summary.html)). Open: 17 rule rows that need a
-  decision, a minimum of positives per list, stage one on the SL split.
+- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): rebuilt 2026-10-30 with the authors' cuts:
+  58 studies, 310 lists, 140 lines; 62 lines scored (basal scRNA, SL split side, two-class list: 36 train, 13 val,
+  13 test). The SL split was rebuilt; the baselines on it ([record](results/sl_study_benchmark/summary.html)) are
+  still those of the 294-list build. Open: rerun prior and baselines, a minimum of positives per list, stage one.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands

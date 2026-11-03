@@ -1,4 +1,4 @@
-"""Build the multi-study SL benchmark's labels (docs/data/sl-study-inventory.md): run
+"""Build the multi-study SL benchmark's labels (docs/data/sl-benchmark.html): run
 the reader (the ``reader`` column) of every ready row of
 configs/benchmarks/sl_label_rules.csv, map each list's line to its reviewed ModelID and
 each gene to its 26Q1 GeneEffect symbol, and write one row per (list, gene pair).
