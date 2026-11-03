@@ -40,9 +40,9 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `build_extra_single_cell_lines`: The frozen single-cell identity map and the extra single-cell membership built from it (docs/data/single-cell-atlas-search.md).
 - `build_extra_single_cell_sources`: Build the extra single-cell lines' raw-UMI h5ad from their public deposits, one wave of ``configs/data/extra_single_cell_sources_26Q1.json`` per run.
 - `build_pc9_hela_basal`: Build Tx1-ready PC9 and HeLa basal-count artifacts on the HPC.
-- `build_sl_screen_benchmark`: Build the SL screen benchmark (docs/data/sl-screen-benchmark.md, blueprint §5).
+- `build_sl_screen_benchmark`: Build the SL screen benchmark (docs/data/sl-benchmark.html, blueprint §5).
 - `build_sl_split`: Build the SL split from the final split and the multi-study SL benchmark's lists.
-- `build_sl_study_benchmark`: Build the multi-study SL benchmark's labels from configs/benchmarks/sl_label_rules.csv (docs/data/sl-study-inventory.md).
+- `build_sl_study_benchmark`: Build the multi-study SL benchmark's labels from configs/benchmarks/sl_label_rules.csv (docs/data/sl-benchmark.html).
 - `sl_study_readers/`: One reader per ready label rule of the multi-study SL benchmark (core screens, combinatorial screens, anchor screens).
 - `build_state_programs`: Fetch and pin the noise diagnosis's reference cell-state programs under configs/context_prior/reference/.
 - `cellosaurus_context`: Cellosaurus text of the labelled lines as PIE's ``context_text``, keyed by ModelID.
@@ -188,7 +188,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 ### `experiments/historical/`
 
 - `audit_tx1_basal_batch`: Historical audit of basal-source confounding.
-- `build_sl_context_benchmark`: Historical builder of the context_screen_v2 SL pair-context benchmark (``docs/data/sl-context-screen.md``) from the integrated raw table, its only pair-label input; the tracked split contract supplies context identities and registration evidence, never labels.
+- `build_sl_context_benchmark`: Historical builder of the context_screen_v2 SL pair-context benchmark (retired card ``docs/data/sl-context-screen.md`` at 9318ede) from the integrated raw table, its only pair-label input; the tracked split contract supplies context identities and registration evidence, never labels.
 - `cilantro_coverage`: Historical pre-GPU audit of the context screen's coverage by Cilantro-SL.
 - `prepare_kinker_cpm_h5ad`: Historical builder of per-line Kinker/scCCLE processed-CPM h5ads for a CPM sensitivity analysis, superseded by raw-UMI preparation; every artifact marks the matrix as non-raw and the standard Tx1 raw-count contract as blocked.
 - `stage0_tx1_input_probe`: Historical probe of whether Tx1-3B encodes a CPM-rescaled cell as it encodes the raw counts underneath it, with the collator's unseeded gene subsampling (``_sample``, ``torch.randperm``) isolated by seeding each arm just before its forward pass.

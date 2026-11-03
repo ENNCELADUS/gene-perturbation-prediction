@@ -8,7 +8,7 @@ plan. The port (phase 2) follows the [SL protocol rules](../04-sl-ranking-protoc
 Haber and Ma, *Uncertainty-aware synthetic lethality prediction with pretrained foundation models*,
 bioRxiv 2026 (local PDF under `docs/literature/03_models/synthetic_lethality/`). Phase 1 reproduces
 the paper on its own data with its own code; phase 2 carries the method to the
-[context screen](../data/sl-context-screen.md) and the basal single cells of the
+context screen (retired card `docs/data/sl-context-screen.md` at 9318ede) and the basal single cells of the
 [226-line membership](../data/cell-line-geneeffect-226.md). Neither phase is SL evidence for the
 held-out-line question until phase 2's test contexts are scored.
 

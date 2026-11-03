@@ -1,7 +1,7 @@
 # Multi-study cell-line SL benchmark: design
 
 **Status:** design agreed 2026-10-29 (interview with the user); discovery inventory built 2026-10-29
-([data card](../data/sl-study-inventory.md)). Not built. It will replace the three-screen benchmark of blueprint §5 and SL protocol §10 when built.
+; labels and SL split built 2026-10-30 ([data card](../data/sl-benchmark.html)). It replaces the three-screen benchmark of blueprint §5 and SL protocol §10.
 
 ## 1. Why a new benchmark
 
@@ -56,7 +56,7 @@ used as label sources.
 
 ## 3. Discovery result
 
-The [data card](../data/sl-study-inventory.md) has the files and counts. Of 2,261 studies, 90 combinatorial or
+The [data card](../data/sl-benchmark.html) has the files and counts. Of 2,261 studies, 90 combinatorial or
 anchor screens are kept after a full-text pass. After the review of 2026-10-29, 156 lines were screened in them, and 93
 of these have basal scRNA (10 of them current validation or test lines). They form 172 (study, line) lists. The
 three-screen benchmark has 34 lines. scRNA, not SL labels, limits the line count: 63 screened lines have no basal
@@ -66,9 +66,10 @@ source.
 
 - Eligibility rules for lines and lists (minimum positives and negatives per list). The baselines score every list
   that holds both classes.
-- The rules of the 12 `needs_decision` studies (candidates in each row's `note`).
 
-Settled on 2026-10-30 ([data card](../data/sl-study-inventory.md#labels-and-split-2026-10-30)): the tables live in
+Settled on 2026-10-30 ([data card](../data/sl-benchmark.html)): the tables live in
 `configs/benchmarks/` (`sl_label_rules.csv`, `cell_line_sl_split.json`); the builders are `build_sl_study_benchmark`
 and `build_sl_split`. The split keeps the final split's held-out lines and moves training lines, drawn across
-lineages, until validation and test each hold 20% of the single-cell lines with a two-class list.
+lineages, until validation and test each hold 20% of the single-cell lines with a two-class list. A row with no
+published SL call or cut takes the authors' own cut where the paper states one; a study that publishes no SL pairs, or
+no cut that can be applied to its table, is `unusable`.
