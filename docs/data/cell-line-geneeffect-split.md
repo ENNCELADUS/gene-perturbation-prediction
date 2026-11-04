@@ -13,12 +13,12 @@ Each line has one role.
 
 | Role | Lines | Definition |
 | --- | ---: | --- |
-| `train` | 379 | Single-cell training lines: the 226's 171 training lines, then the 208 built single-cell extras. PC9 and HeLa (`unlabeled_train`) have no 26Q1 GeneEffect, so 377 are labelled. From the 2026-11-04 build, the built extras without GeneEffect (SL benchmark lines, lines without a ModelID included) are also `train` and `unlabeled_train` |
-| `val` | 27 | The 226's validation lines, unchanged |
-| `test` | 28 | The 226's test lines (A549 since 2026-10-11) |
-| `bulk_labelled` | 713 | Training-side lines read through bulk RNA only: the bulk file's labelled lines without built single cells |
-| `bulk_unlabelled` | 576 | Bulk RNA without 26Q1 GeneEffect, encoder rows only (52 have single cells but no label) |
-| `excluded` | 12 | Lines sharing a `PatientID` with a validation or test line, with the reason; never read (the two such single-cell candidates are among them) |
+| `train` | 400 | Single-cell training lines: the 226's 171 training lines, then the built single-cell extras. 16 (`unlabeled_train`: PC9, HeLa and the SL lines without GeneEffect) have no 26Q1 GeneEffect, so 384 are labelled |
+| `val` | 27 | The 226's validation lines (PK-45H in place of PA-TU-8988S since 2026-11-04) |
+| `test` | 28 | The 226's test lines (ABC-1 and HT-55 in place of A549 and SW 620 since 2026-11-04) |
+| `bulk_labelled` | 708 | Training-side lines read through bulk RNA only: the bulk file's labelled lines without built single cells |
+| `bulk_unlabelled` | 570 | Bulk RNA without 26Q1 GeneEffect, encoder rows only |
+| `excluded` | 7 | Lines sharing a `PatientID` with a validation or test line, with the reason; never read. None has GeneEffect or bulk RNA |
 
 The builder refuses an unbuilt single-cell extra, an extra the bulk file excludes, and a single-cell training line
 sharing a patient with a held-out line (patients from the 226 table and the extras' records). A built extra leaves

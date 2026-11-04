@@ -5,7 +5,7 @@
 linear context prior ([protocol §10](../03-geneeffect-protocol.md#10-linear-context-prior),
 [design](../specs/2026-10-04-context-generalization-design.md)). Since 2026-10-12 it is an input of
 the [final split](cell-line-geneeffect-split.md): its lines without built single cells are the final
-split's bulk-only lines (713 labelled, 576 unlabelled), which is what fits read; the 205 labelled
+split's bulk-only lines (708 labelled, 570 unlabelled), which is what fits read; the 205 labelled
 lines with built single cells are single-cell training lines there. Nothing here is SL evidence.
 
 ## Purpose
