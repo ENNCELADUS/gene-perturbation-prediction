@@ -13,7 +13,7 @@ SPLIT = REPO_ROOT / "configs/benchmarks/cell_line_geneeffect_226_split.json"
 AUDIT = REPO_ROOT / "configs/benchmarks/cell_line_geneeffect_226_split_audit.json"
 
 
-def test_single_split_keeps_original_contexts_in_train_except_a549() -> None:
+def test_single_split_keeps_original_contexts_in_train() -> None:
     frame = pd.read_csv(CSV)
     assert frame["split"].value_counts().to_dict() == {
         "train": 171,
@@ -22,8 +22,7 @@ def test_single_split_keeps_original_contexts_in_train_except_a549() -> None:
     }
     original = frame.loc[frame["cohort"] == "original_context_47"]
     assert len(original) == 47
-    assert set(original.loc[original["split"] != "train", "model_id"]) == {"ACH-000681"}
-    assert original.set_index("model_id").loc["ACH-000681", "split"] == "test"
+    assert set(original["split"]) == {"train"}  # A549 moved to train on 2026-11-04
     assert set(original.loc[~original["geneeffect_available"], "model_id"]) == {
         "ACH-000779",
         "ACH-001086",
@@ -41,7 +40,7 @@ def test_json_is_the_only_three_way_membership_authority() -> None:
 def test_audit_label_boundary() -> None:
     audit = json.loads(AUDIT.read_text())
     assert audit["status"] == "verified_unified_split"
-    assert audit["original_contexts_test"] == ["ACH-000681"]
+    assert audit["original_contexts_test"] == []
     assert audit["patient_group_cross_split"] == 0
     assert audit["geneeffect"]["missing_model_ids"] == [
         "ACH-000779",
