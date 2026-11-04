@@ -72,4 +72,5 @@ Settled on 2026-10-30 ([data card](../data/sl-benchmark.html)): the tables live 
 and `build_sl_split`. The split keeps the final split's held-out lines and moves training lines, drawn across
 lineages, until validation and test each hold 20% of the single-cell lines with a two-class list. A row with no
 published SL call or cut takes the authors' own cut where the paper states one; a study that publishes no SL pairs, or
-no cut that can be applied to its table, is `unusable`.
+no cut that can be applied to its table, is left out: on 2026-11-04 its rule rows were removed from the rules file and its
+files from the H20 (git history keeps the rows).
