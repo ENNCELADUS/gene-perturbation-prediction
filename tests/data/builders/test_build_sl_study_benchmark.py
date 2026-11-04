@@ -40,7 +40,7 @@ def test_build(tmp_path, monkeypatch):
     monkeypatch.setitem(builder.READERS, "S", reader)
     rules = pd.DataFrame(
         {"study_id": ["S", "Q"], "reader": ["S", ""], "design": ["combinatorial", ""],
-         "status": ["ready", "unusable"],
+         "condition": ["genetic", ""], "status": ["ready", "unusable"],
          "lines": ["A549 [ACH-000681]; H1299 [ACH-000510]; Odd", ""]}
     )  # fmt: skip
     rules.to_csv(tmp_path / "rules.csv", index=False)
@@ -76,8 +76,8 @@ def test_build(tmp_path, monkeypatch):
     assert manifest["rules_not_ready"] == {"Q": "unusable"}
     lists = pd.read_csv(out / "lists.csv")
     assert lists.set_index("line").loc[
-        "A549", ["n_positive", "n_negative"]
-    ].tolist() == [1, 1]
+        "A549", ["condition", "n_positive", "n_negative"]
+    ].tolist() == ["genetic", 1, 1]
     with pytest.raises(FileExistsError):
         builder.build(tmp_path / "rules.csv", tmp_path, tmp_path / "ge.csv",
                       tmp_path / "hgnc.txt", out, tmp_path / "ids.csv")  # fmt: skip
@@ -103,3 +103,4 @@ def test_every_ready_rule_has_its_own_reader():
     )
     ready = rules[rules["status"] == "ready"]
     assert ready["reader"].is_unique and set(ready["reader"]) == set(READERS)
+    assert set(ready["condition"]) <= {"genetic", "treatment", "gain", "group"}
