@@ -14,10 +14,11 @@ share 224 CPU cores: set `OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes 
 | Available port | GPUs |
 |---|---|
 | 30838 | **4 × H20** |
-| 30986 | **4 × H20** |
+| 30757 | **4 × H20** |
 
 `ssh -A -p 30838 root@10.15.171.204`, then `cd /2023533015/VCC_Project`. Both ports accept password-free login with the
-laptop's existing SSH key; use `ssh -p 30986 root@10.15.171.204` for the second container. GitHub access on 30838 uses
+laptop's existing SSH key; use `ssh -p 30757 root@10.15.171.204` for the second container. Other ports (30030, 30734,
+30986) are out of date; do not use them. GitHub access on 30838 uses
 the laptop's GitHub key through SSH agent forwarding (`-A`); keep the session open while fetching or pulling. No GitHub
 private key is stored on the container. Ports change when a container is recreated; if one
 refuses, ask the user rather than scanning. Ports in `results/` are historical. Never store the SSH password in the repo.
