@@ -4,8 +4,8 @@ already held out keep their side, and further screened training lines, with or w
 GeneEffect, move to validation and test, drawn across lineages, until each side holds a
 fixed fraction of the screened lines. A reviewed placement
 (configs/benchmarks/sl_split_placements.csv) keeps a line, and the lines of its
-patient, on the training side. Lines sharing a patient with a moved line are
-excluded."""
+patient, on the training side. A screened line sharing a patient with a moved line
+moves with it; other lines sharing it are excluded."""
 
 from __future__ import annotations
 
@@ -24,8 +24,9 @@ POLICY = (
     "training lines, with or without GeneEffect, moved to validation and test until "
     "each side holds {fraction:.0%} of the {scored} screened lines with a scored list "
     "(seed {seed}, drawn across lineages); the final split's held-out lines keep their "
-    "side, and a placed line and its patient's lines stay on the training side. Lines "
-    "sharing a PatientID with a moved line are excluded. Each line's group is "
+    "side, and a placed line and its patient's lines stay on the training side. A "
+    "screened line sharing a PatientID with a moved line moves with it; other lines "
+    "sharing it are excluded. Each line's group is "
     "with_geneeffect or without_geneeffect. Stage one keeps the final split."
 )
 GROUPS = ("with_geneeffect", "without_geneeffect")
@@ -95,20 +96,26 @@ def build_sl_split(
     ]
     excluded = dict(final["excluded"])
     moved = {"val": [], "test": []}
+    drawable = set(candidates["model_id"])
     for model_id in draw_order(candidates[["model_id", "lineage"]], seed):
         if min(count.values()) >= target:
             break
-        if model_id in excluded:
+        if model_id in excluded or model_id in moved["val"] + moved["test"]:
             continue
         side = "val" if count["val"] <= count["test"] else "test"
-        moved[side].append(model_id)
-        count[side] += 1
+        group = [model_id]
         for other in patients.index[patients == patients[model_id]]:
-            if other != model_id and other not in excluded:
+            if other == model_id or other in excluded:
+                continue
+            if other in drawable:  # a screened sibling goes to the same side
+                group.append(other)
+            else:
                 excluded[other] = (
                     f"shares PatientID {patients[model_id]} with held-out SL line "
                     f"{model_id}"
                 )
+        moved[side] += group
+        count[side] += len(group)
     gone = set(moved["val"]) | set(moved["test"]) | set(excluded)
     payload = {
         "schema_version": SPLIT_SCHEMA_VERSION,

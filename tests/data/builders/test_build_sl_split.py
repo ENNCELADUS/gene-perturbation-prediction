@@ -128,3 +128,16 @@ def test_tracked_placements_are_reviewed_train_placements():
     assert set(read_placements("configs/benchmarks/sl_split_placements.csv")) == {
         "CVCL_4388"
     }
+
+
+def test_a_screened_patient_sibling_moves_with_the_drawn_line():
+    patients = PATIENTS.copy()
+    patients["U0"] = patients["T4"]  # U0 (no GeneEffect) and T4 share a patient
+    payload, table = build_sl_split(
+        FINAL, SPLIT, TABLE.assign(patient_id=TABLE["model_id"].map(patients)),
+        lists(["T4", "U0", "V0"]), patients, fraction=1.0, seed=0, placed={},
+    )  # fmt: skip
+    held = {*payload["val"], *payload["test"]}
+    assert {"T4", "U0"} <= held and "U0" not in payload["excluded"]
+    side = {m: s for s in ("val", "test") for m in payload[s]}
+    assert side["T4"] == side["U0"]
