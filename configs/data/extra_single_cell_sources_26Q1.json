@@ -4,6 +4,7 @@
   "gene_effect_path": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
   "bulk_expression_path": "data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv",
   "split_path": "configs/benchmarks/cell_line_geneeffect_226_split.json",
+  "sl_rules_path": "configs/benchmarks/sl_label_rules.csv",
   "gene_metadata_path": "data/sl_dependency_v0/raw/tahoe_100m_metadata/gene_metadata.parquet",
   "gene_metadata_ensembl_column": "ensembl_id",
   "gene_metadata_symbol_column": "gene_symbol",
@@ -4854,6 +4855,469 @@
             "cell_suffix": ""
           },
           "arm": "medium"
+        }
+      ]
+    },
+    "kinker_scp542": {
+      "wave": 3,
+      "files": {},
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "kinker_umi",
+          "path": "data/sl_dependency_v0/raw/cell_line_atlas_179/sources/kinker_sccle/UMIcount_data.txt",
+          "cell_lines": [
+            "HEP3B217_LIVER",
+            "SKMEL5_SKIN"
+          ],
+          "chunk_rows": 256,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": null,
+            "sep": null,
+            "skiprows": 0,
+            "cell_column": null,
+            "label_column": "Cell_line",
+            "arm_column": null,
+            "keep": {},
+            "cell_prefix": "",
+            "cell_suffix": ""
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse162045": {
+      "wave": 3,
+      "files": {
+        "GSM4932163_sample5_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4932nnn/GSM4932163/suppl/GSM4932163_sample5_matrix.mtx.gz",
+        "GSM4932163_sample5_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4932nnn/GSM4932163/suppl/GSM4932163_sample5_genes.tsv.gz",
+        "GSM4932163_sample5_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4932nnn/GSM4932163/suppl/GSM4932163_sample5_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM4932163_sample5_matrix.mtx.gz",
+          "features": "GSM4932163_sample5_genes.tsv.gz",
+          "barcodes": "GSM4932163_sample5_barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "SK-MEL-28"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse114687": {
+      "wave": 3,
+      "files": {
+        "GSE114687_pseudospace_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE114nnn/GSE114687/suppl/GSE114687_pseudospace_matrix.mtx.gz",
+        "GSE114687_pseudospace_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE114nnn/GSE114687/suppl/GSE114687_pseudospace_genes.tsv.gz",
+        "GSE114687_pseudospace_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE114nnn/GSE114687/suppl/GSE114687_pseudospace_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "1",
+        "2"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSE114687_pseudospace_matrix.mtx.gz",
+          "features": "GSE114687_pseudospace_genes.tsv.gz",
+          "barcodes": "GSE114687_pseudospace_barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "barcode",
+            "pattern": "-(?P<arm>[12])$",
+            "identifier": "MCF10A",
+            "rename": {}
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse217779": {
+      "wave": 3,
+      "files": {
+        "GSE217779_JB_BothRepsWgRNAs_processed_cell_by_gene_wgRNA_REAL_genes.txt.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE217nnn/GSE217779/suppl/GSE217779_JB_BothRepsWgRNAs_processed_cell_by_gene_wgRNA_REAL_genes.txt.gz",
+        "GSE217779_JB_BothRepsWgRNAs_gRNA_cell_file_wTargetGene.txt.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE217nnn/GSE217779/suppl/GSE217779_JB_BothRepsWgRNAs_gRNA_cell_file_wTargetGene.txt.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "control_guide"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSE217779_JB_BothRepsWgRNAs_processed_cell_by_gene_wgRNA_REAL_genes.txt.gz",
+          "sep": "\t",
+          "skiprows": 0,
+          "genes_by_cells": false,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "guides",
+            "path": "GSE217779_JB_BothRepsWgRNAs_gRNA_cell_file_wTargetGene.txt.gz",
+            "sep": "\t",
+            "cell_column": "cell_bc",
+            "guide_column": "Target_Gene",
+            "controls": [
+              "NTC"
+            ],
+            "identifier": "U-937"
+          },
+          "arm": "control_guide"
+        }
+      ]
+    },
+    "replogle2022_rpe1": {
+      "wave": 3,
+      "files": {
+        "rpe1_raw_singlecell_01.h5ad": "https://ndownloader.figshare.com/files/35775606"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "control_guide"
+      ],
+      "libraries": [
+        {
+          "reader": "anndata",
+          "path": "rpe1_raw_singlecell_01.h5ad",
+          "counts": "X",
+          "gene_column": "index",
+          "symbol_column": "gene_name",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "guides",
+            "path": null,
+            "sep": null,
+            "cell_column": null,
+            "guide_column": "gene",
+            "controls": [
+              "non-targeting"
+            ],
+            "identifier": "RPE1"
+          },
+          "arm": "control_guide"
+        }
+      ]
+    },
+    "gse293316": {
+      "wave": 3,
+      "files": {
+        "GSM8880232_reh_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8880nnn/GSM8880232/suppl/GSM8880232_reh_matrix.mtx.gz",
+        "GSM8880232_reh_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8880nnn/GSM8880232/suppl/GSM8880232_reh_features.tsv.gz",
+        "GSM8880232_reh_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8880nnn/GSM8880232/suppl/GSM8880232_reh_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8880232_reh_matrix.mtx.gz",
+          "features": "GSM8880232_reh_features.tsv.gz",
+          "barcodes": "GSM8880232_reh_barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "REH"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse270292": {
+      "wave": 3,
+      "files": {
+        "GSM8339158_10Xv3.1_eHAP_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8339nnn/GSM8339158/suppl/GSM8339158_10Xv3.1_eHAP_matrix.mtx.gz",
+        "GSM8339158_10Xv3.1_eHAP_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8339nnn/GSM8339158/suppl/GSM8339158_10Xv3.1_eHAP_features.tsv.gz",
+        "GSM8339158_10Xv3.1_eHAP_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8339nnn/GSM8339158/suppl/GSM8339158_10Xv3.1_eHAP_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8339158_10Xv3.1_eHAP_matrix.mtx.gz",
+          "features": "GSM8339158_10Xv3.1_eHAP_features.tsv.gz",
+          "barcodes": "GSM8339158_10Xv3.1_eHAP_barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "eHAP"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse291908": {
+      "wave": 3,
+      "files": {
+        "GSM8844231_H9_ESC_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8844nnn/GSM8844231/suppl/GSM8844231_H9_ESC_matrix.mtx.gz",
+        "GSM8844231_H9_ESC_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8844nnn/GSM8844231/suppl/GSM8844231_H9_ESC_features.tsv.gz",
+        "GSM8844231_H9_ESC_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM8844nnn/GSM8844231/suppl/GSM8844231_H9_ESC_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "0h"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM8844231_H9_ESC_matrix.mtx.gz",
+          "features": "GSM8844231_H9_ESC_features.tsv.gz",
+          "barcodes": "GSM8844231_H9_ESC_barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "WA09"
+          },
+          "arm": "0h"
+        }
+      ]
+    },
+    "gse237726": {
+      "wave": 3,
+      "files": {
+        "GSM7646204_HMLE_BULK_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7646nnn/GSM7646204/suppl/GSM7646204_HMLE_BULK_matrix.mtx.gz",
+        "GSM7646204_HMLE_BULK_genes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7646nnn/GSM7646204/suppl/GSM7646204_HMLE_BULK_genes.tsv.gz",
+        "GSM7646204_HMLE_BULK_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM7646nnn/GSM7646204/suppl/GSM7646204_HMLE_BULK_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM7646204_HMLE_BULK_matrix.mtx.gz",
+          "features": "GSM7646204_HMLE_BULK_genes.tsv.gz",
+          "barcodes": "GSM7646204_HMLE_BULK_barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "HMLE"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "tenx_293t": {
+      "wave": 3,
+      "files": {
+        "293t_filtered_gene_bc_matrices.tar.gz": "https://cf.10xgenomics.com/samples/cell-exp/1.1.0/293t/293t_filtered_gene_bc_matrices.tar.gz",
+        "hgmm_10k_v3_filtered_feature_bc_matrix.tar.gz": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_10k_v3/hgmm_10k_v3_filtered_feature_bc_matrix.tar.gz",
+        "hgmm_10k_v3_analysis.tar.gz": "https://cf.10xgenomics.com/samples/cell-exp/3.0.0/hgmm_10k_v3/hgmm_10k_v3_analysis.tar.gz"
+      },
+      "unpack": [
+        "293t_filtered_gene_bc_matrices.tar.gz",
+        "hgmm_10k_v3_filtered_feature_bc_matrix.tar.gz",
+        "hgmm_10k_v3_analysis.tar.gz"
+      ],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "filtered_matrices_mex/hg19/matrix.mtx",
+          "features": "filtered_matrices_mex/hg19/genes.tsv",
+          "barcodes": "filtered_matrices_mex/hg19/barcodes.tsv",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "293T"
+          },
+          "arm": "untreated"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "filtered_feature_bc_matrix/matrix.mtx.gz",
+          "features": "filtered_feature_bc_matrix/features.tsv.gz",
+          "barcodes": "filtered_feature_bc_matrix/barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "hg19_",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "labels",
+            "path": "analysis/gem_classification.csv",
+            "sep": ",",
+            "skiprows": 0,
+            "cell_column": "barcode",
+            "label_column": "call",
+            "arm_column": null,
+            "keep": {
+              "call": [
+                "hg19"
+              ]
+            },
+            "cell_prefix": "",
+            "cell_suffix": ""
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse319999": {
+      "wave": 3,
+      "files": {
+        "GSM9531538_3CL_Gapfill_Betaine_WTA_BC001_filtered_feature_bc_matrix.h5": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM9531nnn/GSM9531538/suppl/GSM9531538_3CL_Gapfill_Betaine_WTA_BC001_filtered_feature_bc_matrix.h5"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_h5",
+          "h5": "GSM9531538_3CL_Gapfill_Betaine_WTA_BC001_filtered_feature_bc_matrix.h5",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "pool",
+            "members": [
+              "K562",
+              "SET2",
+              "HEL"
+            ],
+            "clusters": 6,
+            "min_margin": 0.2
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse138814": {
+      "wave": 3,
+      "files": {
+        "GSM4119858_Umi.counts.allgenes.csv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM4119nnn/GSM4119858/suppl/GSM4119858_Umi.counts.allgenes.csv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSM4119858_Umi.counts.allgenes.csv.gz",
+          "sep": ",",
+          "skiprows": 0,
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "HeLa S3"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse144236": {
+      "wave": 3,
+      "files": {
+        "GSE144236_CAL27_vitro_counts.txt.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE144nnn/GSE144236/suppl/GSE144236_CAL27_vitro_counts.txt.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "symbol",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "table",
+          "path": "GSE144236_CAL27_vitro_counts.txt.gz",
+          "sep": "\t",
+          "skiprows": 0,
+          "genes_by_cells": true,
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "line",
+            "identifier": "CAL27"
+          },
+          "arm": "untreated"
+        }
+      ]
+    },
+    "gse132044": {
+      "wave": 3,
+      "files": {
+        "GSE132044_mixture_hg19_mm10_count_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE132nnn/GSE132044/suppl/GSE132044_mixture_hg19_mm10_count_matrix.mtx.gz",
+        "GSE132044_mixture_hg19_mm10_gene.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE132nnn/GSE132044/suppl/GSE132044_mixture_hg19_mm10_gene.tsv.gz",
+        "GSE132044_mixture_hg19_mm10_cell.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE132nnn/GSE132044/suppl/GSE132044_mixture_hg19_mm10_cell.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "untreated"
+      ],
+      "libraries": [
+        {
+          "reader": "mixture_mtx",
+          "matrix": "GSE132044_mixture_hg19_mm10_count_matrix.mtx.gz",
+          "gene_table": "GSE132044_mixture_hg19_mm10_gene.tsv.gz",
+          "cell_table": "GSE132044_mixture_hg19_mm10_cell.tsv.gz",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "species",
+            "gene_prefix": "ENSG",
+            "min_fraction": 0.9,
+            "pattern": "\\.10x-Chromium-v2\\.",
+            "identifier": "HEK293"
+          },
+          "arm": "untreated"
         }
       ]
     }

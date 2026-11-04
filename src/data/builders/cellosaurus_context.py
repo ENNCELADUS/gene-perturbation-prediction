@@ -86,8 +86,15 @@ def line_accessions(
 ) -> tuple[dict[str, str], list[str]]:
     """({ModelID: accession} of lines with a valid CVCL RRID, sorted lines without).
 
-    A line absent from Model.csv raises: the split and Model.csv are one DepMap release.
+    A line without a ModelID has its Cellosaurus accession, or an ``SL-`` ID, as its
+    ID (configs/benchmarks/sl_line_identities.csv). Any other line absent from
+    Model.csv raises: the split and Model.csv are one DepMap release.
     """
+    rrids = {
+        **rrids,
+        **{line: line for line in lines if ACCESSION.fullmatch(line) is not None},
+        **{line: "" for line in lines if line.startswith("SL-")},
+    }
     absent = [line for line in lines if line not in rrids]
     if absent:
         raise KeyError(f"{len(absent)} split lines are not in Model.csv: {absent[:10]}")

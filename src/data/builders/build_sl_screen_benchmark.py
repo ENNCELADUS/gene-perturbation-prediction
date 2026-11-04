@@ -334,7 +334,7 @@ def line_sides(
     ``unused`` with a reason.
     """
     sc_labelled = set(extra_single_cell.labelled)
-    sc_unlabelled = set(extra_single_cell.unlabelled)
+    sc_unlabelled = {*extra_single_cell.unlabelled, *extra_single_cell.not_built}
     held = {**{m: "val" for m in split.val}, **{m: "test" for m in split.test}}
     rows = []
     for model_id in lines["model_id"].fillna(""):

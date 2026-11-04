@@ -15,7 +15,7 @@ from typing import Any
 from src.data.splits import SPLIT_SCHEMA_VERSION, FixedSplit
 
 SCHEMA_VERSION = "extra-bulk-lines-26q1-v1"
-SINGLE_CELL_SCHEMA_VERSION = "extra-single-cell-lines-26q1-v2"
+SINGLE_CELL_SCHEMA_VERSION = "extra-single-cell-lines-26q1-v3"
 
 
 @dataclass(frozen=True)
@@ -41,15 +41,17 @@ class ExtraSingleCellLines:
     Attributes:
         labelled: Lines with 26Q1 GeneEffect whose raw-UMI file is built, each
             with its record (source, accession, condition, cells, arms, ...).
-        unlabelled: Chosen lines without 26Q1 GeneEffect; never built.
-        pending: Chosen labelled lines whose source is not built yet, with the
-            reason.
+        unlabelled: SL benchmark lines without 26Q1 GeneEffect whose raw-UMI file
+            is built, each with its record.
+        not_built: Other chosen lines without 26Q1 GeneEffect.
+        pending: Chosen lines whose source is not built yet, with the reason.
         excluded: Chosen lines sharing a patient with a validation or test line,
             with the reason; never built.
     """
 
     labelled: Mapping[str, Mapping[str, Any]]
-    unlabelled: tuple[str, ...]
+    unlabelled: Mapping[str, Mapping[str, Any]]
+    not_built: tuple[str, ...]
     pending: Mapping[str, str]
     excluded: Mapping[str, str]
 
@@ -119,7 +121,8 @@ def load_extra_single_cell_lines(path: Path, split: FixedSplit) -> ExtraSingleCe
     payload = _payload(path, SINGLE_CELL_SCHEMA_VERSION)
     lines = ExtraSingleCellLines(
         dict(payload["labelled"]),
-        tuple(payload["unlabelled"]),
+        dict(payload["unlabelled"]),
+        tuple(payload["not_built"]),
         dict(payload["pending"]),
         dict(payload["excluded"]),
     )
@@ -127,7 +130,8 @@ def load_extra_single_cell_lines(path: Path, split: FixedSplit) -> ExtraSingleCe
         path,
         {
             "labelled": tuple(lines.labelled),
-            "unlabelled": lines.unlabelled,
+            "unlabelled": tuple(lines.unlabelled),
+            "not_built": lines.not_built,
             "pending": tuple(lines.pending),
             "excluded": tuple(lines.excluded),
             "split": split.all_model_ids,

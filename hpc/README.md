@@ -426,7 +426,9 @@ Cellosaurus: files from those hosts are downloaded on the Mac and copied to the 
 
 ## Extra single-cell lines
 
-Labelled DepMap lines outside the 226 with public basal single cells join the prepared root as raw-UMI h5ad
+Labelled DepMap lines outside the 226 with public basal single cells, and SL benchmark lines without GeneEffect (as
+`unlabeled_train`; a line without a ModelID has its ID from `configs/benchmarks/sl_line_identities.csv`), join the
+prepared root as raw-UMI h5ad
 ([card](../docs/data/single-cell-atlas-search.md)), then the final split as training lines
 ([card](../docs/data/cell-line-geneeffect-split.md)). One wave of the source spec at a time, on CPU; after the
 membership file changes, rebuild the final split (on the Mac; it reads tracked files only) and commit it before
@@ -441,7 +443,7 @@ OMP_NUM_THREADS=16 nohup .venv-tx1/bin/python -m src.data.builders.build_extra_s
 .venv-tx1/bin/python -m src.data.builders.build_extra_single_cell_lines build \
   --candidates configs/benchmarks/single_cell_atlas_candidates.csv --model data/sl_dependency_v0/raw/depmap/Model.csv \
   --gene-effect data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv \
-  --split configs/benchmarks/cell_line_geneeffect_226_split.json \
+  --split configs/benchmarks/cell_line_geneeffect_226_split.json --sl-rules configs/benchmarks/sl_label_rules.csv \
   --qc-dir data/sl_dependency_v0/processed/basal_raw_umi/qc --out configs/benchmarks/extra_single_cell_lines_26Q1.json
 uv run python -m src.data.builders.build_cell_line_geneeffect_split \
   --split-226 configs/benchmarks/cell_line_geneeffect_226_split.json \
@@ -458,6 +460,13 @@ h5ad; an h5ad without its source's report (an interrupted run) stops it. The mem
 build. The last command grows `data/geneeffect_joint/v2` and its pseudo-bulk by the new lines (Tx1 encodes them on
 the visible GPU); the 226's files are left as written. To re-prepare one line, delete its h5ad, `lines/<ModelID>.npz`,
 Tx1 cache directory and pseudo-bulk row.
+
+Wave 3 (2026-11-04) adds SL benchmark lines (the sources are in the
+[atlas card](../docs/data/single-cell-atlas-search.md#wave-3-2026-11-04)). Its files come from the Mac (GEO, figshare+
+and 10x), copied to the same paths with their SHA-256; `kinker_scp542` reads the 226's `UMIcount_data.txt` in place, so
+`--print-downloads` lists nothing for wave 3 once the copies are there. It also needs `gse311521` and `emtab13204`
+built again, for MeWo, MP41 and PL-21: delete their `qc/<source>.json` and the h5ad of each line they wrote before the
+build.
 
 Wave 2 adds sources whose libraries are re-counted from SRA runs. Before building, the GENCODE reference is indexed
 once and each re-counted library is counted (sratoolkit's `fasterq-dump` and kb-python, installed outside the

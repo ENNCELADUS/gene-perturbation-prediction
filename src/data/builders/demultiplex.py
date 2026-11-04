@@ -1,5 +1,6 @@
 """Naming each called cell's line in a deposited library: the knee cell call, hashtag
-and RT-barcode demultiplexing, pools matched to DepMap bulk RNA, and the identity
+and RT-barcode demultiplexing, pools matched to DepMap bulk RNA, control-guide cells
+of a pooled screen, and the identity
 kinds a source spec may name."""
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ IDENTITIES = {
     "hashtag": ("counts", "cell_suffix", "hashtags", "min_count", "min_ratio"),
     "pool": ("members", "clusters", "min_margin"),
     "rt_hash": ("rt_barcodes", "rt_map", "hash_table", "min_count", "min_ratio"),
+    "guides": ("path", "sep", "cell_column", "guide_column", "controls", "identifier"),
+    "species": ("gene_prefix", "min_fraction", "pattern", "identifier"),
 }
 
 
@@ -240,6 +243,52 @@ def identify(
         )
         calls = [c if ok else None for c, ok in zip(calls, present, strict=True)]
         return calls, [None] * n, {"hashtags": tally}
+    if kind == "guides":
+        # A cell is the line's control cell (arm ``control_guide``) when every guide
+        # called in it is a control guide. ``path`` None: the library's obs.
+        if identity["path"] is None:
+            table = library.obs.assign(_cell=library.obs.index.astype(str))
+            cell_column = "_cell"
+        else:
+            table = pd.read_csv(root / identity["path"], sep=identity["sep"], dtype=str)
+            cell_column = identity["cell_column"]
+        guides = table.groupby(cell_column)[identity["guide_column"]].agg(set)
+        controls = set(identity["controls"])
+        arm = {
+            cell: "control_guide"
+            for cell, called in guides.items()
+            if called <= controls
+        }
+        lines = [identity["identifier"] if c in arm else None for c in library.cells]
+        return (
+            lines,
+            [arm.get(c) for c in library.cells],
+            {"control_cells": int(sum(v is not None for v in lines))},
+        )
+    if kind == "species":
+        # A cell of a mixed-species library is the line's when at least
+        # ``min_fraction`` of its UMI fall on genes whose id starts with
+        # ``gene_prefix`` and its id matches ``pattern``.
+        ours = np.asarray(
+            [g.startswith(identity["gene_prefix"]) for g in library.genes]
+        )
+        totals = np.asarray(library.counts.sum(axis=1)).ravel()
+        mine = np.asarray(library.counts[:, np.flatnonzero(ours)].sum(axis=1)).ravel()
+        fraction = np.divide(
+            mine, totals, out=np.zeros_like(mine, float), where=totals > 0
+        )
+        pattern = re.compile(identity["pattern"])
+        lines = [
+            identity["identifier"]
+            if fraction[i] >= identity["min_fraction"] and pattern.search(cell)
+            else None
+            for i, cell in enumerate(library.cells)
+        ]
+        return (
+            lines,
+            [None] * n,
+            {"species_cells": int(sum(v is not None for v in lines))},
+        )
     if kind == "pool":
         if library.symbols is None:
             raise ValueError("pool identity needs gene symbols")

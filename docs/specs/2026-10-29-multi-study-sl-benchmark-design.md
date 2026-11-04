@@ -74,3 +74,22 @@ lineages, until validation and test each hold 20% of the single-cell lines with 
 published SL call or cut takes the authors' own cut where the paper states one; a study that publishes no SL pairs, or
 no cut that can be applied to its table, is left out: on 2026-11-04 its rule rows were removed from the rules file and its
 files from the H20 (git history keeps the rows).
+
+Settled on 2026-11-04 (user decisions; [data card](../data/sl-benchmark.html)):
+
+- A line needs basal scRNA and study labels to be in the benchmark. Measured GeneEffect only supervises stage one.
+- A line without a ModelID gets its Cellosaurus accession as its ID, or `SL-<study>-<line>` when Cellosaurus has no
+  record of it. The reviewed table `configs/benchmarks/sl_line_identities.csv` records each line's spellings, ID,
+  parent, patient group and lineage. Every DepMap join continues to use the ModelID.
+- SL lines that have basal scRNA move into the final split, so that preparation reads them: lines with GeneEffect
+  into `train`, lines without GeneEffect (lines without a ModelID included) into `train` and `unlabeled_train`.
+  All earlier checkpoints and the prepared root's derived parts become unusable. The check that refused a checkpoint
+  under another split membership is removed.
+- hTERT-RPE1 (`CVCL_4388`) is on the SL train side by hand, with its patient group (`PT-JWRsco`, the six RPE1-ss DepMap
+  subclones). The reviewed placement is one row of `configs/benchmarks/sl_split_placements.csv`; the split records it
+  under `placed` and in its inputs. The draw of every other line does not change.
+- Decision 7 says that a line without GeneEffect can be on each side. The SL split draws only labelled training lines,
+  because stage one follows the SL split and scores each validation and test line against its measured GeneEffect.
+  Thus a line without GeneEffect stays on the training side in this build. This is open for a later decision.
+- The stage-two control with measured GeneEffect is scored only on lines with a ModelID. Results show the non-cancer
+  lines as a separate group.

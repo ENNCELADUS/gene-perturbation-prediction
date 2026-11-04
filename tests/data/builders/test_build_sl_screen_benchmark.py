@@ -157,7 +157,11 @@ def test_line_sides_follow_the_nested_split_and_the_extra_lines() -> None:
         split,
         extra_bulk_labelled={"B1", "SC1"},
         extra_single_cell=ExtraSingleCellLines(
-            labelled={"SC1": {}}, unlabelled=("SCU",), pending={}, excluded={}
+            labelled={"SC1": {}},
+            unlabelled={},
+            not_built=("SCU",),
+            pending={},
+            excluded={},
         ),
     )
     assert sides["split"].tolist() == [

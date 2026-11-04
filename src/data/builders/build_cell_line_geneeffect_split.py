@@ -21,9 +21,10 @@ from src.data.splits import SPLIT_SCHEMA_VERSION, FixedSplit, load_geneeffect_sp
 POLICY = (
     "The final split. Validation and test are the 226's 27 and 28 lines. The "
     "single-cell training lines are the 226's 171 training lines (PC9 and HeLa "
-    "without 26Q1 GeneEffect) and the built single-cell extras; the bulk-only lines "
-    "join the training side through bulk RNA. No line sharing a PatientID with a "
-    "validation or test line is read."
+    "without 26Q1 GeneEffect) and the built single-cell extras; the extras without "
+    "26Q1 GeneEffect (SL benchmark lines, Cellosaurus lines included) are unlabelled "
+    "training lines. The bulk-only lines join the training side through bulk RNA. No "
+    "line sharing a PatientID with a validation or test line is read."
 )
 TABLE_COLUMNS = ["split", "model_id", "patient_id", "lineage", "expression_source"]
 
@@ -39,18 +40,16 @@ def build_split(
         raise ValueError(
             f"single-cell extras not built yet: {sorted(single_cell.pending)}"
         )
-    cells = sorted(single_cell.labelled)
-    for name, group in (("unlabelled", bulk.unlabelled), ("excluded", bulk.excluded)):
-        shared = sorted(set(cells) & set(group))
-        if shared:
-            raise ValueError(
-                f"built single-cell extras the bulk file calls {name}: {shared}"
-            )
+    built = {**single_cell.labelled, **single_cell.unlabelled}
+    cells = sorted(built)
+    shared = sorted(set(cells) & set(bulk.excluded))
+    if shared:
+        raise ValueError(f"built single-cell extras the bulk file excludes: {shared}")
     if set(table["model_id"]) != set(split.all_model_ids):
         raise ValueError("the 226 table and the 226 split list different lines")
     patients = {
         **table.set_index("model_id")["patient_id"].to_dict(),
-        **{m: single_cell.labelled[m]["patient_id"] for m in cells},
+        **{m: built[m]["patient_id"] for m in cells},
     }
     held = {patients[m] for m in (*split.val, *split.test)}
     leaking = sorted(m for m in (*split.train, *cells) if patients[m] in held)
@@ -64,18 +63,18 @@ def build_split(
         "train": [*split.train, *cells],
         "val": list(split.val),
         "test": list(split.test),
-        "unlabeled_train": list(split.unlabeled_train),
+        "unlabeled_train": [*split.unlabeled_train, *sorted(single_cell.unlabelled)],
         "bulk_labelled": sorted(set(bulk.labelled) - set(cells)),
-        "bulk_unlabelled": sorted(bulk.unlabelled),
+        "bulk_unlabelled": sorted(set(bulk.unlabelled) - set(cells)),
         "excluded": dict(sorted({**bulk.excluded, **single_cell.excluded}.items())),
     }
     extras = pd.DataFrame(
         {
             "split": "train",
             "model_id": cells,
-            "patient_id": [single_cell.labelled[m]["patient_id"] for m in cells],
-            "lineage": [single_cell.labelled[m]["lineage"] for m in cells],
-            "expression_source": [single_cell.labelled[m]["source"] for m in cells],
+            "patient_id": [built[m]["patient_id"] for m in cells],
+            "lineage": [built[m]["lineage"] for m in cells],
+            "expression_source": [built[m]["source"] for m in cells],
         }
     )
     rows = pd.concat([table[TABLE_COLUMNS], extras], ignore_index=True)

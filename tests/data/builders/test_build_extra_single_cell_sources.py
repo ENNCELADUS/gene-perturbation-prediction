@@ -116,12 +116,14 @@ def build_world(root: Path) -> dict:
         ),
         columns=list(MAP_COLUMNS),
     ).to_csv(root / "map.csv", index=False)
+    pd.DataFrame({"study_id": [], "lines": []}).to_csv(root / "rules.csv", index=False)
     spec = {
         "candidates_path": str(root / "map.csv"),
         "model_path": str(root / "Model.csv"),
         "gene_effect_path": str(root / "gene_effect.csv"),
         "bulk_expression_path": str(root / "bulk.csv"),
         "split_path": str(root / "split.json"),
+        "sl_rules_path": str(root / "rules.csv"),
         "gene_metadata_path": str(root / "gene_metadata.parquet"),
         "gene_metadata_ensembl_column": "ensembl_id",
         "gene_metadata_symbol_column": "gene_symbol",
@@ -809,3 +811,71 @@ def test_downloads_list_the_recount_reference_once(tmp_path):
         "https://example/genome",
         "https://example/two",
     ]
+
+
+def test_guides_identity_keeps_cells_with_only_control_guides(tmp_path):
+    cells = ["a", "b", "c", "d"]
+    library = Library(sparse.csr_matrix((4, 1)), cells, ["g"], None, None, [], None)
+    pd.DataFrame(
+        {"cell_bc": ["a", "b", "b", "c", "c"],
+         "Target_Gene": ["NTC", "NTC", "BRD4", "NTC", "NTC"]}
+    ).to_csv(tmp_path / "guides.tsv", sep="\t", index=False)  # fmt: skip
+    spec = {"kind": "guides", "path": "guides.tsv", "sep": "\t",
+            "cell_column": "cell_bc", "guide_column": "Target_Gene",
+            "controls": ["NTC"], "identifier": "U-937"}  # fmt: skip
+    lines, arms, report = identify(library, spec, tmp_path, {}, Path("."))
+    assert lines == ["U-937", None, "U-937", None]  # b has a targeting guide too
+    assert arms == ["control_guide", None, "control_guide", None]
+    assert report == {"control_cells": 2}
+
+
+def test_kinker_reader_keeps_the_listed_lines_cells(tmp_path):
+    rows = [
+        "\tc1\tc2\tc3",
+        "Cell_line\tSKMEL5_SKIN\tA549_LUNG\tSKMEL5_SKIN",
+        "Pool_ID\t1\t1\t2",
+        "G1\t1\t2\t3",
+        "G2\t0\t5\t4",
+        "G3\t7\t0\t0",
+    ]
+    (tmp_path / "UMIcount_data.txt").write_text("\n".join(rows) + "\n")
+    library = read_library(
+        tmp_path,
+        {"reader": "kinker_umi", "path": str(tmp_path / "UMIcount_data.txt"),
+         "cell_lines": ["SKMEL5_SKIN"], "chunk_rows": 2},
+    )  # fmt: skip
+    assert library.cells == ["c1", "c3"] and library.genes == ["G1", "G2", "G3"]
+    assert library.counts.toarray().tolist() == [[1, 0, 7], [3, 4, 0]]
+    assert library.obs["Cell_line"].tolist() == ["SKMEL5_SKIN", "SKMEL5_SKIN"]
+
+
+def test_guides_identity_reads_the_librarys_obs():
+    obs = pd.DataFrame({"gene": ["non-targeting", "BRD4"]}, index=["a", "b"])
+    library = Library(sparse.csr_matrix((2, 1)), ["a", "b"], ["g"], None, None, [], obs)
+    spec = {"kind": "guides", "path": None, "sep": None, "cell_column": None,
+            "guide_column": "gene", "controls": ["non-targeting"],
+            "identifier": "RPE1"}  # fmt: skip
+    lines, arms, _ = identify(library, spec, Path("."), {}, Path("."))
+    assert lines == ["RPE1", None] and arms == ["control_guide", None]
+
+
+def test_mixture_reader_and_species_identity(tmp_path):
+    # genes x cells
+    counts = sparse.coo_matrix(np.array([[9, 0, 1], [1, 0, 8], [0, 5, 1]]))
+    mmwrite(tmp_path / "m.mtx", counts)
+    (tmp_path / "genes.tsv").write_text(
+        "hg19_ENSG1_hg19_A\nhg19_ENSG2_hg19_B\nmm10_ENSMUSG1_mm10_C\n"
+    )
+    (tmp_path / "cells.tsv").write_text("M1.10x.a\nM1.10x.b\nM1.Drop.c\n")
+    library = read_library(
+        tmp_path,
+        {"reader": "mixture_mtx", "matrix": "m.mtx", "gene_table": "genes.tsv",
+         "cell_table": "cells.tsv"},
+    )  # fmt: skip
+    assert library.genes == ["ENSG1", "ENSG2", "ENSMUSG1"]
+    assert library.symbols == ["A", "B", "C"]
+    spec = {"kind": "species", "gene_prefix": "ENSG", "min_fraction": 0.9,
+            "pattern": r"\.10x\.", "identifier": "HEK293"}  # fmt: skip
+    lines, _, report = identify(library, spec, tmp_path, {}, Path("."))
+    assert lines == ["HEK293", None, None]  # b is mouse; c is another method
+    assert report == {"species_cells": 1}

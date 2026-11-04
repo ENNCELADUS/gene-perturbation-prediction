@@ -1,5 +1,5 @@
 {
-  "schema_version": "extra-single-cell-lines-26q1-v2",
+  "schema_version": "extra-single-cell-lines-26q1-v3",
   "policy": "Labelled lines outside the 226 whose basal single cells are built, one source per line (untreated or vehicle 2D first, then raw counts, then most cells). A line sharing a PatientID with a validation or test line is excluded; a chosen line without 26Q1 GeneEffect is unlabelled and not built; a labelled line whose source is not built yet is pending.",
   "labelled": {
     "ACH-000001": {
@@ -3484,7 +3484,8 @@
       "other_sources": []
     }
   },
-  "unlabelled": [
+  "unlabelled": {},
+  "not_built": [
     "ACH-000002",
     "ACH-000073",
     "ACH-000081",

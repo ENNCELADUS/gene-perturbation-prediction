@@ -275,6 +275,13 @@ validation, report both, experiment code reports and people decide). The SL-spec
 - Validation contexts select only; they are never promoted into training.
 - Join contexts by DepMap ModelID through the checked-in map and fail loudly on an
   unmapped context. Never join on informal name: DepMap's `CellLineName` for K562 is `K-562`.
+- (2026-11-04) A line needs basal scRNA and study labels to be in the multi-study SL benchmark; measured GeneEffect
+  only supervises stage one. A line without a ModelID has the ID of its reviewed row in
+  `configs/benchmarks/sl_line_identities.csv` (Cellosaurus accession, else `SL-<study>-<line>`), with its patient
+  group and lineage. Such a line, and a DepMap line without GeneEffect, is an unlabelled training line of the final
+  split: it gives stage one no target. The stage-two control with measured GeneEffect is scored only on lines with a
+  ModelID. Results show the non-cancer lines (DepMap "Non-Cancerous", or `non_cancer` in the identity table) as a
+  separate group, because they are outside the cancer lines that train stage one.
 - Fit the standardiser, any calibrator and any threshold on the training side only.
   **Per-context z-scoring of $\hat y$ is forbidden**: it consumes the test context's own
   distribution and erases the quantity under test.

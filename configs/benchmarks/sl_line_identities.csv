@@ -1,0 +1,16 @@
+line_id,name,spellings,cellosaurus,parent,patient_id,lineage,non_cancer,note
+CVCL_4388,hTERT-RPE1,Fielden2025:RPE-1; Feng2024_2:RPE1; GonatopoulosPournatzis2020:RPE1; Zimmermann2018:RPE1; van2023_2:RPE1; van2021:RPE1-iCas9; Thompson2021:RPE; Drainas2020:hTERT-RPE1,CVCL_4388,CVCL_B365 (RPE-340),PT-JWRsco,Eye,true,"Cellosaurus 2026-11-04: the DepMap subclones RPE1-ss6/ss48/ss51/ss77/ss111/ss119 (ACH-002462..ACH-002467, PT-JWRsco) derive from it. RPE1-iCas9 (engineered) and RPE (not a Cellosaurus synonym) merge by the studies' text."
+SL-Nebenfuehr2026-eHAP,eHAP,Nebenfuehr2026:eHAP; SeguraBayona2026:eHAP iCas9,,CVCL_Y019 (HAP1; ACH-002475),PT-gjpFPM,Myeloid,true,"No Cellosaurus record of the eHAP pool; its clones are eHAP A11 (CVCL_5J32) and eHAP E9 (CVCL_5J33), children of HAP1. Cellosaurus calls HAP1 and eHAP a cancer cell line (from KBM-7, CVCL_A426, no ModelID); the user puts eHAP in the non-cancer group. eHAP iCas9 (SeguraBayona2026, an inducible-Cas9 derivative) merges into eHAP and uses its basal cells (decision 2026-11-04)."
+CVCL_6910,HEK293-A,Feng2022:HEK293-A; Park2023:HEK293-A,CVCL_6910,CVCL_0045 (HEK293; ACH-001085),PT-iL41un,Kidney,true,DepMap gives HEK-293 no lineage; Kidney is from the Cellosaurus site (fetal kidney).
+CVCL_0063,HEK293T,Shen2017:293T,CVCL_0063,CVCL_0045 (HEK293; ACH-001085),PT-iL41un,Kidney,true,DepMap gives HEK-293 no lineage; Kidney is from the Cellosaurus site (fetal kidney).
+CVCL_C9AL,HEK-HT,Adhikari2018:HEK-HT,CVCL_C9AL,CVCL_C9AK (HA1),CVCL_C9AK,Kidney,true,HA1 is SV40 large T embryonic kidney (Stewart and Bacchetti 1991); Cellosaurus gives no link to HEK293 and no information on DepMap HEK TE (ACH-000049).
+SL-Tuano2023-HMLE,HMLE,Tuano2023:HMEC (HMLE),,Elenbaas 2001,SL-Tuano2023-HMLE,Breast,true,No Cellosaurus record.
+SL-Tuano2023-mesHMLE,mesHMLE,Tuano2023:HMEC (mesHMLE),,HMLE after EMT (Tuano 2023 Methods),SL-Tuano2023-HMLE,Breast,true,No Cellosaurus record.
+SL-Tuano2023-B80-T5,B80-T5,Tuano2023:HMEC (B80-T5),,CVCL_A283 (Bre-80; proposed),CVCL_A283,Breast,true,No Cellosaurus record; Toouli 2002. The Bre-80 parent is from the name; Cellosaurus does not list B80-T5 as a child.
+SL-Tuano2023-B80-T17,B80-T17,Tuano2023:HMEC (B80-T17),,CVCL_A283 (Bre-80; proposed),CVCL_A283,Breast,true,No Cellosaurus record; Toouli 2002. The Bre-80 parent is from the name; Cellosaurus does not list B80-T17 as a child.
+SL-Tuano2023-K5-K19neg,K5+/K19-,Tuano2023:HMEC (K5+/K19-),,Zhao 2010,SL-Tuano2023-K5-K19neg,Breast,true,No Cellosaurus record; telomerase-immortalized mammary progenitor cells.
+CVCL_9773,WA09,Liu2019:WA09,CVCL_9773,,CVCL_9773,Embryonal,true,Embryonic stem cell; Embryonal is the DepMap lineage of its non-cancer embryonal model (proposed).
+CVCL_C306,OMM2.3,Chan2025:OMM23,CVCL_C306,"same donor as CVCL_C302 (Mel270; ACH-002014), CVCL_C305 (OMM2.2), CVCL_C307 (OMM2.5; ACH-002018), CVCL_C308 (OMM2.6)",PT-5vJu3k,Eye,false,The Chan2025 file spells OMM2.3 as OMM23.
+CVCL_4D11,MP38,Chan2025:MP38,CVCL_4D11,,CVCL_4D11,Eye,false,Uveal melanoma.
+CVCL_0058,HeLa S3,Fielden2025:HeLa S3,CVCL_0058,CVCL_0030 (HeLa; ACH-001086),PT-c34xau,Cervix,false,
+CVCL_EI63,C092,Harle2025:C092,CVCL_EI63,,CVCL_EI63,Skin,false,Metastatic melanoma; Cellosaurus gives no primary site (Skin is proposed).

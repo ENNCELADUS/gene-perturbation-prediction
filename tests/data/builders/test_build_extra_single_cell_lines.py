@@ -52,8 +52,8 @@ def test_one_source_sums_a_lines_identifiers():
 
 
 MODELS = pd.DataFrame(
-    {"patient_id": ["P1", "P2", "P3", "P4", "P2", "P5"], "lineage": "Lung"},
-    index=["T", "V", "A", "B", "D", "E"],
+    {"patient_id": ["P1", "P2", "P3", "P4", "P2", "P5", "P6"], "lineage": "Lung"},
+    index=["T", "V", "A", "B", "D", "E", "C"],
 )
 SPLIT = FixedSplit(train=("T",), val=("V",), test=())
 
@@ -62,11 +62,16 @@ def test_admission_skips_the_226_and_excludes_held_out_patients():
     candidates = _rows(
         *({"source": "s", "model_id": m, "identifier": m} for m in "TABDE")
     )
-    admission = admit(
-        candidates, MODELS, labelled_ids={"T", "A", "D", "E"}, split=SPLIT
+    candidates = pd.concat(
+        [candidates, _rows({"source": "s", "model_id": "C", "identifier": "C"})]
     )
+    admission = admit(
+        candidates, MODELS, labelled_ids={"T", "A", "D", "E"}, split=SPLIT,
+        sl_lines={"C"},
+    )  # fmt: skip
     assert admission.labelled == {"A": "s", "E": "s"}
-    assert admission.unlabelled == ("B",)
+    assert admission.unlabelled == {"C": "s"}  # an SL line without GeneEffect
+    assert admission.not_built == ("B",)
     assert admission.excluded == {"D": "shares PatientID P2 with held-out line V"}
 
 
@@ -77,6 +82,7 @@ def test_admission_refuses_unknown_model_ids():
             MODELS,
             labelled_ids=(),
             split=SPLIT,
+            sl_lines=(),
         )
 
 
@@ -90,8 +96,9 @@ def test_membership_builds_lines_with_cells_and_leaves_the_rest_pending(tmp_path
     )
     qc = {"s": {"source": "s", "lines": {"A": {"cells": 12, "arms": {"dmso": 12}}}}}
     payload = build_membership(
-        candidates, MODELS, labelled_ids={"A", "D", "E"}, split=SPLIT, qc=qc
-    )
+        candidates, MODELS, labelled_ids={"A", "D", "E"}, split=SPLIT, sl_lines=(),
+        qc=qc,
+    )  # fmt: skip
     assert payload["labelled"]["A"] == {
         "source": "s",
         "accession": "GSE1",
@@ -108,8 +115,15 @@ def test_membership_builds_lines_with_cells_and_leaves_the_rest_pending(tmp_path
     path = tmp_path / "membership.json"
     path.write_text(json.dumps(payload))
     lines = load_extra_single_cell_lines(path, SPLIT)
-    assert set(lines.labelled) == {"A"} and lines.unlabelled == ("B",)
+    assert set(lines.labelled) == {"A"} and lines.not_built == ("B",)
     assert set(lines.excluded) == {"D"}
+
+    u = {"source": "u", "lines": {"B": {"cells": 3, "arms": {}}}}
+    built = build_membership(
+        candidates, MODELS, labelled_ids={"A", "D", "E"}, split=SPLIT,
+        sl_lines={"B"}, qc={**qc, "u": u},
+    )  # fmt: skip
+    assert built["unlabelled"]["B"]["source"] == "u" and built["not_built"] == []
 
     payload["pending"]["T"] = "a 226 line"
     path.write_text(json.dumps(payload))

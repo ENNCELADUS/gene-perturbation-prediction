@@ -1,6 +1,6 @@
 """Readers for the extra single-cell deposits' counts: each reader kind's required keys
-and its parser (10x matrix, h5 and BAM, tables, triplets, loom, AnnData, Tahoe),
-returning one ``Library`` of raw counts and any hashtag counts."""
+and its parser (10x matrix, h5 and BAM, tables, triplets, loom, AnnData, Tahoe,
+Kinker UMI), returning one ``Library`` of raw counts and any hashtag counts."""
 
 from __future__ import annotations
 
@@ -31,6 +31,8 @@ READERS = {
     "mtx_names": ("matrix", "gene_table", "cell_table"),
     "anndata": ("path", "counts", "gene_column", "symbol_column"),
     "tahoe": ("shards", "gene_metadata", "cell_lines", "drug"),
+    "kinker_umi": ("path", "cell_lines", "chunk_rows"),
+    "mixture_mtx": ("matrix", "gene_table", "cell_table"),
 }
 
 
@@ -354,6 +356,62 @@ def _read_tahoe(root: Path, spec: Mapping[str, Any]) -> Library:
     )
 
 
+def _read_mixture_mtx(root: Path, spec: Mapping[str, Any]) -> Library:
+    """A headerless genes x cells mtx on a two-species reference, with headerless
+    one-column gene (``<genome>_<id>_<genome>_<symbol>``) and cell tables, as
+    GSE132044 deposits it; genes keep both species."""
+
+    def column(name: str) -> list[str]:
+        return pd.read_csv(root / spec[name], header=None, dtype=str)[0].tolist()
+
+    names = [name.split("_", 3) for name in column("gene_table")]
+    return Library(
+        counts=sparse.csr_matrix(mmread(root / spec["matrix"]).T),
+        cells=column("cell_table"),
+        genes=[name[1] for name in names],
+        symbols=[name[3] for name in names],
+        tags=None,
+        tag_names=[],
+        obs=None,
+    )
+
+
+def _read_kinker_umi(root: Path, spec: Mapping[str, Any]) -> Library:
+    """Broad SCP542's ``UMIcount_data.txt`` (path relative to the working directory:
+    the 226's copy; genes x cells, symbols, a ``Cell_line`` and a ``Pool_ID`` row
+    before the genes), streamed in ``chunk_rows`` gene rows, keeping only the cells
+    of ``cell_lines`` (CCLE names); obs holds ``Cell_line``."""
+    from src.data.builders.prepare_kinker_umi_h5ad import (
+        METADATA_ROWS,
+        read_matrix_head,
+    )
+
+    path = Path(spec["path"])
+    cells, metadata = read_matrix_head(path)
+    lines = metadata["Cell_line"]
+    wanted = set(spec["cell_lines"])
+    keep = [cell for cell, line in zip(cells, lines, strict=True) if line in wanted]
+    if not keep:
+        raise ValueError(f"{path}: no cells of {sorted(wanted)}")
+    genes, parts = [], []
+    for chunk in pd.read_csv(
+        path, sep="\t", names=["GENE", *cells], skiprows=1 + len(METADATA_ROWS),
+        usecols=["GENE", *keep], chunksize=int(spec["chunk_rows"]),
+    ):  # fmt: skip
+        genes += chunk.pop("GENE").astype(str).tolist()
+        parts.append(sparse.csr_matrix(chunk.loc[:, keep].to_numpy().T))
+    line_of = dict(zip(cells, lines, strict=True))
+    return Library(
+        counts=sparse.hstack(parts).tocsr(),
+        cells=keep,
+        genes=genes,
+        symbols=genes,
+        tags=None,
+        tag_names=[],
+        obs=pd.DataFrame({"Cell_line": [line_of[c] for c in keep]}, index=keep),
+    )
+
+
 _READ = {
     "tenx_mtx": _read_tenx_mtx,
     "tenx_h5": _read_tenx_h5,
@@ -363,6 +421,8 @@ _READ = {
     "mtx_names": _read_mtx_names,
     "anndata": _read_anndata,
     "tahoe": _read_tahoe,
+    "kinker_umi": _read_kinker_umi,
+    "mixture_mtx": _read_mixture_mtx,
 }
 
 
