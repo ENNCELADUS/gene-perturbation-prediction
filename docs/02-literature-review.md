@@ -93,9 +93,9 @@ The quantities differ. GeneEffect measures a single-gene dependency. A screen hi
 particular assay and calling rule. A genetic-interaction estimate additionally needs a joint phenotype and an
 explicit expectation under a non-interaction model. Comparing single-gene dependencies between deficient and
 proficient lines yields candidates, not measured epistasis, and composing two single-gene predictions does not
-estimate a double-knockout phenotype. The data cards keep the distinction for the resources held here:
-[Horlbeck](data/horlbeck-2018-k562-gi.md) contains fitness genetic-interaction measurements, whereas the
-[Jost/Replogle dual-sgRNA resource](data/jost-replogle-dual-sgrna-k562-crispri.md) measures single-gene
+estimate a double-knockout phenotype. The resources held here keep the distinction:
+Horlbeck's K562 map contains fitness genetic-interaction measurements, whereas the
+Jost/Replogle dual-sgRNA resource measures single-gene
 knockdown efficacy.
 
 Experimental SL labels are scarce and concentrated. Curated databases aggregate screen calls, literature
