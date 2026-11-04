@@ -42,14 +42,14 @@ used as label sources.
    recorded before any model is scored. Every row keeps its continuous score. A pair whose gene is depleted alone
    in a line is unlabelled in that line. A study with positives only cannot form a list, and its pairs are reported
    by name outside the headline.
-6. **Metric** (changed 2026-11-04). A *list* is the set of pairs that one study tested in one line. Its negatives
-   are "tested, not called", not true negatives, so the metrics are positive-unlabelled ones. The headline is
-   recall in the top 10%: rank each known positive inside its own list, credit it when it falls in the top 10% of
-   that list (a tie block shares its credit; a random ranking gives 0.10), pool the positives of all lists of a
-   line, and take the mean over lines. Report the model minus the pair-identity control per line, with a bootstrap
-   interval over lines, and each line's positive count. Second: AUROC (the mean percentile of the known positives
-   among the negatives of their list). Third: AUPRC divided by the positive rate, for comparison with the
-   literature. No minimum positive count removes a line. Controls: pair identity (the pair's hit rate in the same
+6. **Metric** (changed 2026-11-04). A *screen* is the set of pairs that one study tested in one line with one
+   setup. Its negatives are "tested, not called", not true negatives, so the metrics are positive-unlabelled ones.
+   The headline is recall in the top 10%: rank the pairs of each screen, credit each known positive in the top 10%
+   (a tie block shares its credit; a random ranking gives 0.10), take the mean over a study's screens, then over a
+   line's studies, then over the lines. Only genetic screens with both classes enter it (the rules' `condition`
+   column; treatment, gain and group screens are scored and kept in the run files). Report the model minus the
+   pair-identity control per line, with a bootstrap interval over lines. AUROC and AUPRC over the positive rate
+   are averaged the same way and stay in the run files. Controls: pair identity (the pair's hit rate in the same
    study's training lines), pan-essentiality and a context-ablated model.
 7. **Split** (changed 2026-11-04). A fixed random split of lines, about 60% training, 20% validation and 20% test,
    drawn within each lineage, for stage two only. Lines from one patient stay on one side. The draw takes every
@@ -82,6 +82,10 @@ files from the H20 (git history keeps the rows).
 
 Settled on 2026-11-04 (user decisions; [data card](../data/sl-benchmark.html)):
 
+- Training (stage two): one model scores (basal profile, pair); the screen and the study are not inputs. Binary
+  cross-entropy on every genetic two-class screen row, with weight 1 / (lines · studies of the line · screens of the
+  study in the line · 2 · rows of the row's class in its screen), scaled to mean 1. Conflicting labels stay as
+  separate rows. Validation recall in the top 10% selects the checkpoint.
 - A line needs basal scRNA and study labels to be in the benchmark. Measured GeneEffect only supervises stage one.
 - A line without a ModelID gets its Cellosaurus accession as its ID, or `SL-<study>-<line>` when Cellosaurus has no
   record of it. The reviewed table `configs/benchmarks/sl_line_identities.csv` records each line's spellings, ID,

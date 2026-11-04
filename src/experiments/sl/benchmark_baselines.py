@@ -1,15 +1,17 @@
 """Baselines on the multi-study SL benchmark (docs/specs/2026-10-29-multi-study-sl-
 benchmark-design.md). A list's negatives are tested and not called, not true negatives,
 so the metrics are positive-unlabelled ones. Headline: recall in the top 10% of each
-list (a random ranking gives 0.10), with each known positive ranked inside its own list
-and the positives of a line's lists pooled, then the mean over a split's lines, and
-the per-line difference from pair identity. Then AUROC (the mean percentile of the
-known positives) and AUPRC over the positive rate. Scorers: the pair's hit rate in the
-same study's training lines (pair identity), each gene's mean GeneEffect over the
-training lines (pan-essentiality), stage one's production prediction of GeneEffect in
-the line, and the measured GeneEffect as a reference, never a bar (only lines with
-GeneEffect have it). Every split is reported for all lines, the lines with and without
-GeneEffect, and the cancer and non-cancer lines."""
+genetic screen with both classes (a random ranking gives 0.10), then the mean over a
+study's screens, over a line's studies and over a split's lines, and the per-line
+difference from pair identity. AUROC (the mean percentile of the known positives) and
+AUPRC over the positive rate are averaged the same way. Screens under a treatment, an
+activating anchor or a group-level call are scored but kept out of the headline.
+Scorers: the pair's hit rate in the same study's training lines (pair identity), each
+gene's mean GeneEffect over the training lines (pan-essentiality), stage one's
+production prediction of GeneEffect in the line, and the measured GeneEffect as a
+reference, never a bar (only lines with GeneEffect have it). Every split is reported
+for all lines, the lines with and without GeneEffect, and the cancer and non-cancer
+lines."""
 
 from __future__ import annotations
 
@@ -30,7 +32,16 @@ from src.experiments.run_dir import bind
 from src.experiments.sl.stage_two import ranking_metrics
 
 SIDES = ("train", "val", "test")
-LIST_KEYS = ["split", "design", "study_id", "list_id", "model_id"]
+LIST_KEYS = ["split", "design", "condition", "study_id", "list_id", "model_id"]
+#: The only condition the headline reads (the rules' ``condition`` column).
+HEADLINE = "genetic"
+METRICS = ["recall_top10", "auroc", "auprc_lift"]
+NAMES = {
+    "stage_one_production": "Stage one's predicted GeneEffect",
+    "pair_identity": "Pair identity (hit rate in the study's training lines)",
+    "pan_essentiality": "Pan-essentiality (gene mean GeneEffect)",
+    "measured_geneeffect": "Measured GeneEffect (reference, lines with GeneEffect)",
+}
 #: The headline's top fraction of each list.
 TOP = 0.10
 
@@ -160,26 +171,43 @@ def list_records(scores: pd.DataFrame, k: int) -> pd.DataFrame:
 
 
 def line_records(lists: pd.DataFrame) -> pd.DataFrame:
-    """Per split, scorer and line, the line's positives pooled over its lists:
-    recall in the top 10%, AUROC (mean percentile of the positives) and the mean
-    AUPRC over the positive rate of its lists with both classes."""
+    """Per split, scorer and line: each headline screen's (genetic, both classes
+    ranked) recall in the top 10%, AUROC (mean percentile of its positives) and AUPRC
+    over the positive rate, averaged over a study's screens, then over the line's
+    studies, so neither a large screen nor a study with many screens dominates."""
+    two_class = (lists["ranked_positives"] > 0) & (lists["percentiles"] > 0)
+    screens = lists[two_class & (lists["condition"] == HEADLINE)].assign(
+        recall_top10=lambda x: x["top_credit"] / x["ranked_positives"],
+        auroc=lambda x: x["percentile_sum"] / x["percentiles"],
+    )
     keys = ["split", "scorer", "model_id"]
-    pooled = lists.groupby(keys).agg(
+    studies = screens.groupby([*keys, "study_id"]).agg(
+        **{m: (m, "mean") for m in METRICS},
         positives=("ranked_positives", "sum"),
-        top_credit=("top_credit", "sum"),
-        percentile_sum=("percentile_sum", "sum"),
-        percentiles=("percentiles", "sum"),
-        auprc_lift=("auprc_lift", "mean"),
-        lists=("list_id", "size"),
+        screens=("list_id", "size"),
     )
-    pooled = pooled[pooled["positives"] > 0]
-    pooled = pooled.assign(
-        recall_top10=pooled["top_credit"] / pooled["positives"],
-        auroc=pooled["percentile_sum"]
-        / pooled["percentiles"].where(pooled["percentiles"] > 0),
+    lines = studies.groupby(keys).agg(
+        **{m: (m, "mean") for m in METRICS},
+        positives=("positives", "sum"),
+        screens=("screens", "sum"),
+        studies=("screens", "size"),
     )
-    columns = [*keys, "positives", "lists", "recall_top10", "auroc", "auprc_lift"]
-    return pooled.reset_index()[columns]
+    return lines.reset_index()[[*keys, "positives", "studies", "screens", *METRICS]]
+
+
+def screen_counts(lists: pd.DataFrame) -> list[dict[str, Any]]:
+    """Per split and condition: screens, those with both classes, and positives."""
+    one = lists[lists["scorer"] == "pair_identity"]
+    one = one.assign(two_class=(one["ranked_positives"] > 0) & (one["percentiles"] > 0))
+    counts = one.groupby(["split", "condition"]).agg(
+        screens=("list_id", "size"),
+        two_class=("two_class", "sum"),
+        positives=("ranked_positives", "sum"),
+    )
+    return [
+        {k: (v if isinstance(v, str) else int(v)) for k, v in row.items()}
+        for row in counts.reset_index().to_dict("records")
+    ]
 
 
 def summary(
@@ -277,9 +305,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "run_id": run_id,
         "rows": {"training": len(training), "held": len(held), **dropped,
                  "measured_rows_without_geneeffect": int(without.sum())},
-        "lists_without_both_classes": int(
-            lists.loc[lists["scorer"] == "pair_identity", "auprc_lift"].isna().sum()
-        ),
+        "screens": screen_counts(lists),
         "summary": summary(
             lines, groups, int(config["bootstrap"]), int(config["seed"])),
     }  # fmt: skip
@@ -292,32 +318,61 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
 
 
 def results_markdown(metrics: Mapping[str, Any]) -> str:
+    """Table 1, recall in the top 10% per scorer on validation and test (all lines);
+    Table 2, the difference from pair identity. The other line groups, AUROC, AUPRC
+    and each screen are in metrics.json, lines.csv and lists.csv."""
+    rows = {
+        (r["split"], r["scorer"]): r for r in metrics["summary"] if r["group"] == "all"
+    }
+    scorers = [s for s in NAMES if (("test", s) in rows)]
+    best = {
+        split: max(
+            rows[(split, s)]["recall_top10"]
+            for s in scorers
+            if (split, s) in rows and s != "measured_geneeffect"  # a reference
+        )
+        for split in ("val", "test")
+    }
+
+    def cell(split: str, scorer: str) -> str:
+        row = rows.get((split, scorer))
+        if row is None:
+            return "—"
+        text = f"{row['recall_top10']:.3f}"
+        return f"**{text}**" if row["recall_top10"] == best[split] else text
+
+    def gap(split: str, scorer: str) -> str:
+        row = rows.get((split, scorer))
+        if row is None or row["minus_pair_identity"] is None:
+            return "—"
+        low, high = row["interval"]
+        return f"{row['minus_pair_identity']:+.3f} [{low:+.3f}, {high:+.3f}]"
+
+    n = {split: rows[(split, "pair_identity")]["lines"] for split in ("val", "test")}
     lines = [
         f"# SL benchmark baselines: {metrics['run_id']}",
         "",
-        "Recall in the top 10% of each list (a random ranking gives 0.10): the known "
-        "positives of a line's lists, pooled, then the mean over lines; the difference "
-        "from pair identity per line, with a 95% interval from resampling lines. AUROC "
-        "is the mean percentile of the known positives; AUPRC lift is AUPRC over the "
-        "positive rate. A list's negatives are tested and not called, not true "
-        "negatives. The measured GeneEffect is scored only on lines with GeneEffect. "
-        "Stage two trains mostly on in-sample stage-one inputs, so the number for "
-        "lines without GeneEffect is a low estimate; that group is small and mostly "
-        "non-cancer.",
+        "**Table 1.** Recall in the top 10% on the multi-study SL benchmark, mean over "
+        "held-out lines (each line: the mean over its studies of the mean over their "
+        "genetic screens with both classes). Higher is better; a random ranking gives "
+        "0.10. Best in bold.",
         "",
-        "| Split | Group | Scorer | Lines | Positives | Recall top 10% "
-        "| − pair identity | 95% interval | AUROC | AUPRC lift |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |",
-    ]
-    for row in metrics["summary"]:
-        low, high = row["interval"]
-        gap = row["minus_pair_identity"]
-        lines.append(
-            f"| {row['split']} | {row['group']} | {row['scorer']} | {row['lines']} | "
-            f"{row['positives']} | {row['recall_top10']:.3f} | "
-            f"{'—' if gap is None else f'{gap:+.3f}'} | [{low:.3f}, {high:.3f}] | "
-            f"{row['auroc']:.3f} | {row['auprc_lift']:.3f} |"
-        )
+        f"| Model | Validation ({n['val']} lines) | Test ({n['test']} lines) |",
+        "| --- | ---: | ---: |",
+        *(f"| {NAMES[s]} | {cell('val', s)} | {cell('test', s)} |" for s in scorers),
+        "| Random ranking | 0.100 | 0.100 |",
+        "",
+        "**Table 2.** Difference from pair identity in recall in the top 10%, mean "
+        "over lines, with a 95% bootstrap interval over lines. Higher is better.",
+        "",
+        "| Model − pair identity | Validation | Test |",
+        "| --- | ---: | ---: |",
+        *(f"| {NAMES[s]} | {gap('val', s)} | {gap('test', s)} |"
+          for s in scorers if s != "pair_identity"),
+        "",
+        "Other line groups, AUROC and AUPRC are in `metrics.json`; each line in "
+        "`lines.csv`; each screen, the non-genetic ones included, in `lists.csv`.",
+    ]  # fmt: skip
     return "\n".join(lines) + "\n"
 
 

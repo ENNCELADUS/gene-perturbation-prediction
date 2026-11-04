@@ -1,5 +1,5 @@
 """SL benchmark baselines on a synthetic benchmark: scorer values, and the headline
-averaged within each line before averaging over lines."""
+averaged over a study's genetic screens, a line's studies, then the lines."""
 
 from __future__ import annotations
 
@@ -33,11 +33,13 @@ def labels() -> pd.DataFrame:
             [("G0", "G1"), ("G0", "G2"), ("G1", "G3")], side_label
         ):
             rows.append(
-                {"study_id": "S", "design": "combinatorial", "list_id": f"S|{line}",
+                {"study_id": "S", "design": "combinatorial", "condition": "genetic",
+                 "list_id": f"S|{line}",
                  "model_id": line, "gene_a": a, "gene_b": b, "label": label}
             )  # fmt: skip
     rows.append(
-        {"study_id": "S", "design": "combinatorial", "list_id": "S|E0",
+        {"study_id": "S", "design": "combinatorial", "condition": "genetic",
+         "list_id": "S|E0",
          "model_id": "E0", "gene_a": "G2", "gene_b": "G3", "label": 0}
     )  # fmt: skip
     frame = pd.DataFrame(rows)
@@ -78,25 +80,34 @@ def test_recall_in_the_top_tenth_and_percentiles_of_a_known_list():
     assert credit == pytest.approx([0.1, 0.1]) and percentile.tolist() == [0.5, 0.5]
 
 
-def test_a_lines_positives_pool_over_its_lists_and_the_gap_is_per_line():
-    scores = pd.DataFrame(
-        {"split": "test", "design": "anchor", "study_id": "S",
-         "list_id": ["a"] * 10 + ["b"] * 10, "model_id": "L0",
-         "label": [1] + [0] * 9 + [0] * 9 + [1],
-         "score": [*range(10, 0, -1), *range(10, 0, -1)]}
+def test_a_line_averages_its_studies_of_screens_and_the_gap_is_per_line():
+    def screen(study, name, condition, label):
+        return pd.DataFrame(
+            {"split": "test", "design": "anchor", "condition": condition,
+             "study_id": study, "list_id": name, "model_id": "L0", "label": label,
+             "score": range(10, 0, -1)}
+        )  # fmt: skip
+
+    first, last = [1] + [0] * 9, [0] * 9 + [1]
+    scores = pd.concat(
+        [screen("S", "a", "genetic", first), screen("S", "b", "genetic", last),
+         screen("T", "c", "genetic", first),
+         screen("T", "d", "treatment", last),  # not in the headline
+         screen("T", "e", "genetic", [0] * 10)]  # one class: not in the headline
     )  # fmt: skip
     model = scores.assign(scorer="model")
     control = scores.assign(scorer="pair_identity", score=0.0)
     lists = list_records(pd.concat([model, control]), k=2)
     lines = line_records(lists).set_index("scorer")
-    # list a: its positive is first (credit 1); list b: last (credit 0) -> 1/2
-    assert lines.loc["model", "recall_top10"] == pytest.approx(0.5)
-    assert lines.loc["model", "positives"] == 2
+    # study S: screens credit 1 and 0 -> 0.5; study T: 1 -> line (0.5 + 1) / 2
+    # (pooling the positives would give 2/3)
+    assert lines.loc["model", "recall_top10"] == pytest.approx(0.75)
+    assert lines.loc["model", ["positives", "studies", "screens"]].tolist() == [3, 2, 3]
     assert lines.loc["pair_identity", "recall_top10"] == pytest.approx(0.1)
     rows = summary(lines.reset_index(), {"all": {"L0"}}, reps=10, seed=0)
     model_row = next(r for r in rows if r["scorer"] == "model")
-    assert model_row["minus_pair_identity"] == pytest.approx(0.4)
-    assert (model_row["lines"], model_row["positives"]) == (1, 2)
+    assert model_row["minus_pair_identity"] == pytest.approx(0.65)
+    assert (model_row["lines"], model_row["positives"]) == (1, 3)
 
 
 def test_run_scores_every_list(tmp_path):
@@ -137,6 +148,10 @@ def test_run_scores_every_list(tmp_path):
     ]
     assert measured["score"].tolist() == pytest.approx([1.6, 2.1, 1.5, 2.0])
     metrics = json.loads((out / "metrics.json").read_text())
+    assert {"split": "test", "condition": "genetic", "screens": 1, "two_class": 1,
+            "positives": 1} in metrics["screens"]  # fmt: skip
+    report = (out / "results.md").read_text()
+    assert "Table 1" in report and "Measured GeneEffect" in report
     by = {(r["split"], r["scorer"], r["group"]): r for r in metrics["summary"]}
     scorers = ("pair_identity", "pan_essentiality", "measured_geneeffect")
     assert {(s, c) for s, c, g in by if g == "all"} == {

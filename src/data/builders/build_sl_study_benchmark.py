@@ -2,7 +2,8 @@
 the reader (the ``reader`` column) of every ready row of
 configs/benchmarks/sl_label_rules.csv, map each list's line to its reviewed ModelID (a
 line without one to its ``line_id`` in configs/benchmarks/sl_line_identities.csv) and
-each gene to its 26Q1 GeneEffect symbol, and write one row per (list, gene pair).
+each gene to its 26Q1 GeneEffect symbol, and write one row per (list, gene pair) with
+its rule's ``condition`` (``genetic``, ``treatment``, ``gain`` or ``group``).
 Constructs of one pair in one list are merged: SL when any is, negative only when every
 one is called negative. An anchor that is not a gene (``drug:<name>``) keeps its name.
 Sides come later, from the SL split."""
@@ -91,11 +92,13 @@ def build(
         raise ValueError(f"spellings with a ModelID and a line_id: {both}")
     lines |= spellings
     frames, studies = [], {}
-    for reader, design in zip(ready["reader"], ready["design"]):
+    for reader, design, condition in zip(
+        ready["reader"], ready["design"], ready["condition"]
+    ):
         frame = READERS[reader](raw)
         if tuple(frame.columns) != COLUMNS:
             raise ValueError(f"{reader} returned columns {list(frame.columns)}")
-        frames.append(frame.assign(design=design))
+        frames.append(frame.assign(design=design, condition=condition))
     rows = pd.concat(frames, ignore_index=True)
     keys = list(zip(rows["study_id"], rows["line"]))
     unused = sorted(set(spellings) - set(keys))
@@ -116,7 +119,9 @@ def build(
     rows = rows[rows["gene_a"] != rows["gene_b"]]
     rows = merge_constructs(rows)
     lists = (
-        rows.groupby(["study_id", "design", "list_id", "line", "model_id"])["label"]
+        rows.groupby(
+            ["study_id", "design", "condition", "list_id", "line", "model_id"]
+        )["label"]
         .agg(
             n_positive=lambda x: int((x == 1).sum()),
             n_negative=lambda x: int((x == 0).sum()),
