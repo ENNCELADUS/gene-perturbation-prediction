@@ -5320,6 +5320,61 @@
           "arm": "untreated"
         }
       ]
+    },
+    "gse350646": {
+      "wave": 3,
+      "files": {
+        "GSE350646_multi_count_raw_probe_bc_matrix.h5": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE350nnn/GSE350646/suppl/GSE350646_multi_count_raw_probe_bc_matrix.h5",
+        "GSM10117712_sample1_filtered_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM10117nnn/GSM10117712/suppl/GSM10117712_sample1_filtered_matrix.mtx.gz",
+        "GSM10117712_sample1_filtered_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM10117nnn/GSM10117712/suppl/GSM10117712_sample1_filtered_features.tsv.gz",
+        "GSM10117712_sample1_filtered_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM10117nnn/GSM10117712/suppl/GSM10117712_sample1_filtered_barcodes.tsv.gz",
+        "GSM10117712_sample2_filtered_matrix.mtx.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM10117nnn/GSM10117712/suppl/GSM10117712_sample2_filtered_matrix.mtx.gz",
+        "GSM10117712_sample2_filtered_features.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM10117nnn/GSM10117712/suppl/GSM10117712_sample2_filtered_features.tsv.gz",
+        "GSM10117712_sample2_filtered_barcodes.tsv.gz": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM10117nnn/GSM10117712/suppl/GSM10117712_sample2_filtered_barcodes.tsv.gz"
+      },
+      "unpack": [],
+      "gene_id_kind": "ensembl",
+      "arms": [
+        "control_guide"
+      ],
+      "libraries": [
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM10117712_sample1_filtered_matrix.mtx.gz",
+          "features": "GSM10117712_sample1_filtered_features.tsv.gz",
+          "barcodes": "GSM10117712_sample1_filtered_barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "probe_negative",
+            "probe_h5": "GSE350646_multi_count_raw_probe_bc_matrix.h5",
+            "feature": "|EGFP|",
+            "max_count": 0,
+            "identifier": "PLC/PRF/5"
+          },
+          "arm": "control_guide"
+        },
+        {
+          "reader": "tenx_mtx",
+          "matrix": "GSM10117712_sample2_filtered_matrix.mtx.gz",
+          "features": "GSM10117712_sample2_filtered_features.tsv.gz",
+          "barcodes": "GSM10117712_sample2_filtered_barcodes.tsv.gz",
+          "header": false,
+          "gene_id_prefix": "",
+          "cells": "deposited",
+          "knee_min_umi": 100,
+          "identity": {
+            "kind": "probe_negative",
+            "probe_h5": "GSE350646_multi_count_raw_probe_bc_matrix.h5",
+            "feature": "|EGFP|",
+            "max_count": 0,
+            "identifier": "PLC/PRF/5"
+          },
+          "arm": "control_guide"
+        }
+      ]
     }
   }
 }
