@@ -1,11 +1,9 @@
 """Build the SL split (multi-study SL benchmark design, decision 7) from the final
-split and the SL benchmark's lists, for stage two only: the screened single-cell lines
-already held out keep their side, and further screened training lines, with or without
-GeneEffect, move to validation and test, drawn across lineages, until each side holds a
-fixed fraction of the screened lines. A reviewed placement
-(configs/benchmarks/sl_split_placements.csv) keeps a line, and the lines of its
-patient, on the training side. A screened line sharing a patient with a moved line
-moves with it; other lines sharing it are excluded."""
+split's lines, for stage two only. The reviewed placements
+(configs/benchmarks/sl_split_placements.csv) name every validation and test line; every
+other line of the final split is a training line, whatever its stage-one side. A placed
+line's screened patient siblings must be placed on its side; its other patient siblings
+are excluded."""
 
 from __future__ import annotations
 
@@ -13,23 +11,22 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from src.data.depmap import read_models
 from src.data.splits import SPLIT_SCHEMA_VERSION, FixedSplit, load_geneeffect_split
 
 POLICY = (
-    "The SL split, for stage two only: the final split with screened single-cell "
-    "training lines, with or without GeneEffect, moved to validation and test until "
-    "each side holds {fraction:.0%} of the {scored} screened lines with a scored list "
-    "(seed {seed}, drawn across lineages); the final split's held-out lines keep their "
-    "side, and a placed line and its patient's lines stay on the training side. A "
-    "screened line sharing a PatientID with a moved line moves with it; other lines "
-    "sharing it are excluded. Each line's group is "
-    "with_geneeffect or without_geneeffect. Stage one keeps the final split."
+    "The SL split, for stage two only: {val} validation and {test} test lines "
+    "placed by hand so that training, validation and test hold about 80%, 10% and "
+    "10% of the kept SL pairs, across lineages; every other line of the final split "
+    "is a training line. Lines of one patient are on one side; a held-out line's "
+    "unscreened patient siblings are excluded. Each line's group (with_geneeffect: "
+    "stage one's production fit reads its GeneEffect; without_geneeffect: it does "
+    "not) stratifies the results."
 )
 GROUPS = ("with_geneeffect", "without_geneeffect")
+SIDES = ("val", "test")
 
 
 def scored_lines(lists: pd.DataFrame, lines: set[str]) -> list[str]:
@@ -38,28 +35,18 @@ def scored_lines(lists: pd.DataFrame, lines: set[str]) -> list[str]:
     return sorted(set(lists.loc[both, "model_id"]) & lines)
 
 
-def read_placements(path: Path) -> dict[str, str]:
-    """The reviewed placements: line_id -> reason; every placement is ``train``."""
+def read_placements(path: Path) -> dict[str, tuple[str, str]]:
+    """The reviewed placements: line_id -> (side, reason), side val or test."""
     frame = pd.read_csv(path, dtype=str, keep_default_na=False)
     if list(frame.columns) != ["line_id", "side", "reason"]:
         raise ValueError(f"{path}: columns must be line_id, side, reason")
-    if set(frame["side"]) - {"train"} or (frame["reason"] == "").any():
-        raise ValueError(f"{path}: every placement is train with a reason")
+    if set(frame["side"]) - set(SIDES) or (frame["reason"] == "").any():
+        raise ValueError(f"{path}: every placement is val or test with a reason")
     if frame["line_id"].duplicated().any():
         raise ValueError(f"{path}: a line is placed twice")
-    return dict(zip(frame["line_id"], frame["reason"]))
-
-
-def draw_order(candidates: pd.DataFrame, seed: int) -> list[str]:
-    """Candidates interleaved across lineages: a random order within each lineage,
-    then sorted by rank over lineage size, so every prefix spreads over lineages."""
-    rng = np.random.default_rng(seed)
-    frame = candidates.sort_values("model_id").assign(key=rng.random(len(candidates)))
-    frame = frame.sort_values(["lineage", "key"])
-    rank = frame.groupby("lineage").cumcount()
-    size = frame.groupby("lineage")["model_id"].transform("size")
-    frame = frame.assign(position=(rank + 0.5) / size)
-    return frame.sort_values(["position", "key"])["model_id"].tolist()
+    return {
+        m: (s, r) for m, s, r in zip(frame["line_id"], frame["side"], frame["reason"])
+    }
 
 
 def build_sl_split(
@@ -69,65 +56,46 @@ def build_sl_split(
     lists: pd.DataFrame,
     patients: pd.Series,
     *,
-    fraction: float,
-    seed: int,
-    placed: dict[str, str],
+    placed: dict[str, tuple[str, str]],
 ) -> tuple[dict, pd.DataFrame]:
     """The SL split's payload (without ``inputs``) and table. ``final`` is the final
     split's payload, ``table`` its table, ``patients`` maps every line it lists
-    (single-cell and bulk) to its PatientID, and ``placed`` the lines that stay on
-    the training side to their reasons."""
-    off = sorted(set(placed) - set(split.train))
-    if off:
-        raise ValueError(f"placed lines not on the final split's training side: {off}")
-    placed_patients = {patients[m] for m in placed}
-    scored = scored_lines(lists, set(table["model_id"]))
-    target = round(fraction * len(scored))
-    count = {"val": len(set(scored) & set(split.val)),
-             "test": len(set(scored) & set(split.test))}  # fmt: skip
-    if max(count.values()) > target:
-        raise ValueError(f"more held-out SL lines than the target {target}: {count}")
-    held_patients = {patients[m] for m in (*split.val, *split.test)}
-    candidates = table[
-        table["model_id"].isin(scored)
-        & table["model_id"].isin(split.train)
-        & ~table["patient_id"].isin(held_patients)
-        & ~table["patient_id"].isin(placed_patients)
-    ]
+    (single-cell and bulk) to its PatientID, and ``placed`` the held-out lines to
+    their side and reason."""
+    lines = [*split.train, *split.val, *split.test]
+    unknown = sorted(set(placed) - set(lines))
+    if unknown:
+        raise ValueError(f"placed lines not in the final split: {unknown}")
+    scored = set(scored_lines(lists, set(table["model_id"])))
     excluded = dict(final["excluded"])
-    moved = {"val": [], "test": []}
-    drawable = set(candidates["model_id"])
-    for model_id in draw_order(candidates[["model_id", "lineage"]], seed):
-        if min(count.values()) >= target:
-            break
-        if model_id in excluded or model_id in moved["val"] + moved["test"]:
-            continue
-        side = "val" if count["val"] <= count["test"] else "test"
-        group = [model_id]
+    for model_id, (side, _) in placed.items():
         for other in patients.index[patients == patients[model_id]]:
             if other == model_id or other in excluded:
                 continue
-            if other in drawable:  # a screened sibling goes to the same side
-                group.append(other)
-            else:
+            if other in scored:
+                if placed.get(other, ("train",))[0] != side:
+                    raise ValueError(
+                        f"{other} shares PatientID {patients[model_id]} with "
+                        f"{model_id} ({side}) and is not placed on {side}"
+                    )
+            elif other not in placed:
                 excluded[other] = (
                     f"shares PatientID {patients[model_id]} with held-out SL line "
                     f"{model_id}"
                 )
-        moved[side] += group
-        count[side] += len(group)
-    gone = set(moved["val"]) | set(moved["test"]) | set(excluded)
+    held = {s: [m for m in lines if placed.get(m, ("train",))[0] == s] for s in SIDES}
+    gone = set(placed) | set(excluded)
     payload = {
         "schema_version": SPLIT_SCHEMA_VERSION,
-        "policy": POLICY.format(fraction=fraction, scored=len(scored), seed=seed),
-        "train": [m for m in split.train if m not in gone],
-        "val": [*split.val, *moved["val"]],
-        "test": [*split.test, *moved["test"]],
+        "policy": POLICY.format(val=len(held["val"]), test=len(held["test"])),
+        "train": [m for m in lines if m not in gone],
+        "val": held["val"],
+        "test": held["test"],
         "unlabeled_train": [m for m in split.unlabeled_train if m not in gone],
         "bulk_labelled": [m for m in final["bulk_labelled"] if m not in gone],
         "bulk_unlabelled": [m for m in final["bulk_unlabelled"] if m not in gone],
         "excluded": dict(sorted(excluded.items())),
-        "placed": dict(sorted(placed.items())),
+        "placed": {m: r for m, (_, r) in sorted(placed.items())},
     }
     order = [*payload["train"], *payload["val"], *payload["test"]]
     rows = table.set_index("model_id").loc[order].reset_index()[table.columns]
@@ -148,8 +116,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--placements", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--fraction", type=float, default=0.2)
-    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
     payload, table = build_sl_split(
         json.loads(args.final.read_text()),
@@ -157,15 +123,12 @@ def main(argv: list[str] | None = None) -> int:
         pd.read_csv(args.final.with_suffix(".csv"), dtype=str),
         pd.read_csv(args.lists),
         read_models(args.model)["patient_id"],
-        fraction=args.fraction,
-        seed=args.seed,
         placed=read_placements(args.placements),
     )
     payload["inputs"] = {
         "final_split": {"path": str(args.final)},
         "lists": {"path": str(args.lists)},
         "placements": {"path": str(args.placements)},
-        "draw": {"fraction": args.fraction, "seed": args.seed},
     }
     args.out.write_text(json.dumps(payload, indent=2) + "\n")
     table.to_csv(args.out.with_suffix(".csv"), index=False)
