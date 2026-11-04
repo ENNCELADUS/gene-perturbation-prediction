@@ -29,10 +29,10 @@ Replace this section on every update; history lives in `results/` and the protoc
   ([record](results/stage_one_prior_input/README.md)). The next build makes all current checkpoints unusable.
 - **Stage two** (SL protocol §10): pair identity wins; predicted or measured GeneEffect adds nothing over each gene's
   mean ([record](results/sl_stage_two_seed0/README.md)). Not SL context evidence. Both: [status](results/status.html).
-- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): 135 lines; the headline reads genetic two-class
-  screens (76 lines: 45/15/16), recall in the top 10% averaged over screens, studies, then lines. Last record (pooled
-  metric): pair identity wins ([record](results/sl_study_benchmark/summary.html)). **Next**: rebuild labels into
-  `data/sl_studies/benchmark_v2`, rerun `sl-baselines`; build the screen-weighted BCE stage-two model (design spec).
+- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels rebuilt 2026-11-04 into
+  `data/sl_studies/benchmark_v2` (H20); the headline reads genetic two-class screens (76 lines: 45/15/16), recall in
+  the top 10% averaged over screens, studies, then lines. H20 `outputs/` is empty. **Next**: `prior-production`, then
+  `sl-baselines`; the screen-weighted BCE stage-two model is decided (design spec) but not built.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands
