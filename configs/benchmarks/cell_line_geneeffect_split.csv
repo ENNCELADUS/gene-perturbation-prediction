@@ -177,6 +177,7 @@ train,ACH-000014,PT-fp8PeY,Skin,mixseq
 train,ACH-000015,PT-ffwajI,Lung,mixseq
 train,ACH-000018,PT-Mi0cKz,Bladder/Urinary Tract,gse311521
 train,ACH-000021,PT-9p1WQv,Lung,mixseq
+train,ACH-000023,PT-lVglGI,Pancreas,mixseq
 train,ACH-000024,PT-codP7n,Lymphoid,gse242465
 train,ACH-000026,PT-AR7W9o,Bladder/Urinary Tract,mixseq
 train,ACH-000035,PT-5LVIPg,Lung,mixseq
