@@ -63,9 +63,8 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
   <h2>1. Stage-one benchmark: GeneEffect in held-out lines</h2>
   <p><b>Task.</b> For a held-out cell line <i>c</i> and a gene <i>g</i>, predict the DepMap CRISPR GeneEffect
   (release 26Q1) from the basal single-cell transcriptome of <i>c</i>. The model predicts the residual over the
-  training mean of each gene. Thus the cell line, not the gene, is the axis of generalization.</p>
-  <p><b>Split.</b> One fixed split of cell lines. No patient has lines on two sides, and GeneEffect values did not
-  set membership. Validation selects the model, and test is scored once.</p>
+  training mean of each gene. Thus the axis of generalization is the cell line.</p>
+  <p><b>Split.</b> One fixed split of cell lines. All lines of one patient are on one side, and membership was set before any GeneEffect value was read. Validation selects the model, and test is scored once.</p>
   <div class="wrap"><table>
     <caption>Table 1. Stage-one split (number of cell lines).</caption>
     <thead><tr><th>Role</th><th class="num">Lines</th><th>Use</th></tr></thead>
@@ -96,8 +95,7 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
 <section>
   <h2>2. Stage-two benchmark: SL pairs in held-out lines</h2>
   <p><b>Task.</b> For a held-out line, rank the gene pairs that a screen tested in that line, so that the pairs the
-  screen called synthetic lethal (SL) come first. The model reads the line's basal profile and the gene pair. It does
-  not read the screen or the study.</p>
+  screen called synthetic lethal (SL) come first. The model reads only the line's basal profile and the gene pair.</p>
   <div class="stats">
     <div><b>58</b>studies</div>
     <div><b>310</b>screens</div>
@@ -106,22 +104,20 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
     <div><b>77</b>lines in the main result</div>
   </div>
   <p><b>Sources.</b> Published combinatorial double-knockout screens (173 screens) and anchor screens, in which one
-  gene is lost and the rest of the genome is screened (137 screens). Computational predictions are not used. A line
-  enters the benchmark if it has basal single-cell profiles and screen labels. It does not need measured
-  GeneEffect.</p>
+  gene is lost and the rest of the genome is screened (137 screens). All labels come from experiments. A line
+  enters the benchmark if it has basal single-cell profiles and screen labels; measured GeneEffect is optional.</p>
   <h3>Preprocessing</h3>
   <ol>
-    <li><b>Screen.</b> A screen is the set of pairs that one study tested in one line with one setup. Labels stay
-      inside their screen and are not merged across screens or studies.</li>
+    <li><b>Screen.</b> A screen is the set of pairs that one study tested in one line with one setup. Each label belongs to one screen.</li>
     <li><b>Label.</b> The authors' SL call. If the study has no call, the authors' cut on its score. If it has no cut,
-      FDR &lt; 0.05. A negative is a pair that the screen tested and did not call. It is not a proven non-SL pair.</li>
+      FDR &lt; 0.05. A negative is a pair that the screen tested without an SL call.</li>
     <li><b>Pair.</b> Two genes in alphabetical order, one row for each screen and pair. Same-gene pairs and control
       guides are removed. Where a study flags a gene as lethal alone, its negatives are left unlabelled.</li>
-    <li><b>Conflicts.</b> A pair can be SL in one screen and not SL in another screen. Both rows are kept.</li>
+    <li><b>Conflicts.</b> A pair can have different labels in two screens; both rows are kept.</li>
     <li><b>Condition.</b> The main result uses <i>genetic</i> screens: loss of function in the unperturbed parental
       line, which the basal profile describes. Screens under a drug or irradiation, with an activating anchor, or with
       a call copied from a group of lines are kept out of the main result.</li>
-    <li><b>Classes.</b> A screen with no SL pair or no negative pair is not scored.</li>
+    <li><b>Classes.</b> Only screens with both SL and negative pairs are scored.</li>
   </ol>
   <div class="wrap"><table>
     <caption>Table 3. Screens for each condition (all lines).</caption>
@@ -138,7 +134,7 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
       validation and 20% test, drawn within each lineage. The held-out lines of stage one keep their side. Lines of
       one patient stay on one side.</li>
     <li><b>Stage-one input.</b> Stage two reads stage one's predicted GeneEffect from one fit on all lines with
-      GeneEffect. A held-out SL line without GeneEffect is therefore never in that fit.</li>
+      GeneEffect. </li>
     <li><b>Training.</b> One model for all screens, with binary cross-entropy on the training lines. Each line has the
       same total weight, each study the same weight in its line, and each screen the same weight in its study. Inside
       a screen, the SL and the negative pairs each have half of the weight.</li>
@@ -167,14 +163,12 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
   <h3>Stage one: per-line residual Spearman ↑</h3>
   <p>For each held-out line, the Spearman correlation over the selective genes between the predicted and the measured
   GeneEffect residual (GeneEffect minus the training gene mean, divided by the gene's residual SD). Selective genes
-  have a dependency that changes across the training lines. Take the mean over lines. The gene mean predicts no residual,
-  so it has no score. The metric asks which genes the line needs more or less than usual.</p>
+  have a dependency that changes across the training lines. Take the mean over lines. The gene mean predicts a zero residual, so its correlation is undefined. The metric asks which genes the line needs more or less than usual.</p>
   <p class="eq">ρ = mean<sub>c</sub> Spearman<sub>g ∈ selective</sub>( r<sub>cg</sub>, r̂<sub>cg</sub> )</p>
   <h3>Stage two: recall in the top 10% ↑</h3>
-  <p>The negatives are tested and not called, so the metric uses only the known SL pairs. In each screen, rank the
+  <p>The metric uses the known SL pairs, because a negative is only a screen non-hit. In each screen, rank the
   pairs and take the fraction of SL pairs in the top 10% (tied pairs share the credit; a random ranking gives 0.10).
-  Take the mean over the screens of a study, then over the studies of a line, then over the lines. Thus a large
-  screen, or a study with many screens, does not control a line.</p>
+  Take the mean over the screens of a study, then over the studies of a line, then over the lines. Thus each study has equal weight in its line, and each screen equal weight in its study.</p>
   <p class="eq">R = mean<sub>c</sub> mean<sub>t ∈ studies(c)</sub> mean<sub>s ∈ screens(t,c)</sub> recall@10%(s)</p>
   <p><b>Controls.</b> Pair identity (the pair's SL rate in the same study's training lines), pan-essentiality (the
   training mean GeneEffect of the two genes) and a context-ablated model (the same model with each gene's mean
