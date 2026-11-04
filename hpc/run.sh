@@ -9,6 +9,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   (linear context prior, CPU)
        hpc/run.sh prior-selected CONFIG --run-id ID   (the reference prior's data-selected genes, CPU)
        hpc/run.sh prior-export CONFIG --run-id ID   (the reference prior's predictions for the correction, CPU)
+       hpc/run.sh prior-production CONFIG --sl-split SPLIT --run-id ID   (stage one's production fit for stage two, CPU)
        hpc/run.sh prior-stack CONFIG --run-id ID   (single-cell statistics stacked on a prior export, CPU)
        hpc/run.sh prior-noise CONFIG --run-id ID [--sections A,B]   (what limits the prior, CPU)
        hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps fetch,download,evaluate,compare]   (PIE's released checkpoints, GPU)
@@ -38,6 +39,9 @@ test, into outputs/context_prior/<id>/ (rows/, results.md).
 data-selected stage into outputs/context_prior/<id>/data_selected/.
 `prior-export` writes the config's reference row, out of fold for the
 single-cell training lines, into outputs/context_prior/<id>/export/.
+`prior-production` fits the config's reference row once on every labelled line
+(stage one's production fit) and writes the GeneEffect of every single-cell
+line into outputs/context_prior/<id>/production/; stage two reads it.
 `prior-stack` stacks each arm's single-cell statistics on the export of the
 config's prior_run, into outputs/context_prior/<id>/single_cell_stack/.
 `prior-noise` runs the noise diagnosis's sections (default: all) against the
@@ -77,7 +81,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior|sl-paris|sl-stage-two|sl-baselines|cell-states) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-production|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior|sl-paris|sl-stage-two|sl-baselines|cell-states) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -98,6 +102,7 @@ case "$command" in
   prior) exec "$python_bin" -m src.experiments.prior.context_prior "$@" ;;
   prior-selected) exec "$python_bin" -m src.experiments.prior.data_selected_analysis "$@" ;;
   prior-export) exec "$python_bin" -m src.experiments.prior.prior_export "$@" ;;
+  prior-production) exec "$python_bin" -m src.experiments.prior.production "$@" ;;
   prior-stack) exec "$python_bin" -m src.experiments.prior.single_cell_stack "$@" ;;
   prior-noise) exec "$python_bin" -m src.experiments.prior.noise_diagnosis "$@" ;;
   pie-reproduce)

@@ -340,22 +340,26 @@ hpc/run.sh sl-stage-two configs/sl/stage_two.yaml --run-id stage_two_seed0
 
 ## SL benchmark baselines
 
+Stage one and stage two are separate (decision 2026-11-04). The stage-one benchmark keeps the final split. Stage two
+reads one production table: `prior-production` fits the configuration that the stage-one benchmark chose (the default
+prior's reference row, `configs/context_prior/default_prior.yaml`) once on every labelled line, with no validation set
+and no cross-fitting, and writes the GeneEffect of every single-cell line to
+`outputs/context_prior/<run id>/production/predictions.parquet`. A labelled line that shares a patient with an SL
+validation or test line without GeneEffect leaves the fit; `production.json` names it.
+
 `sl-baselines` (`src.experiments.sl.benchmark_baselines`) reads the multi-study SL benchmark's labels, the SL split
-and the export of the default prior refitted on that split
-([data card](../docs/data/sl-benchmark.html)). It scores each validation and test
-list with pair identity, pan-essentiality, the prior's predicted GeneEffect and the measured GeneEffect (a reference),
-and writes `scores.parquet`, `lists.csv`, `metrics.json` and `results.md` to
-`outputs/sl/benchmark_baselines/<run id>/`. The headline is AUPRC over the list's positive rate, averaged within each
-line and then over lines. An anchor list is ranked by gene B, so drug anchors keep their lists. The prior reads
-`configs/context_prior/reference_sl_split/`, the reference tables without the SL split's held-out lines, written on
-the Mac by `build_context_reference --split configs/benchmarks/cell_line_sl_split.json --filter-from
-configs/context_prior/reference --out configs/context_prior/reference_sl_split` (the hotspot matrix the driver table
-needs is not on the H20, so drivers are reselected from the existing table).
+and the production table ([data card](../docs/data/sl-benchmark.html)). It scores each validation and test list with
+pair identity, pan-essentiality, the production prediction and the measured GeneEffect (a reference, on lines with
+GeneEffect only), and writes `scores.parquet`, `lists.csv`, `lines.csv`, `metrics.json` and `results.md` to
+`outputs/sl/benchmark_baselines/<run id>/`. The headline is recall in the top 10% of each list (the known positives of
+a line's lists pooled, then the mean over lines), with the per-line difference from pair identity; AUROC and AUPRC over
+the positive rate follow. Each row is given for all lines, the lines with and without GeneEffect, and the cancer and
+non-cancer lines. An anchor list is ranked by gene B, so drug anchors keep their lists.
 
 ```bash
-R=default_prior_sl_split_seed0
-OMP_NUM_THREADS=32 MKL_NUM_THREADS=32 nohup bash -c "hpc/run.sh prior configs/context_prior/default_prior_sl_split.yaml --run-id $R \
-  && hpc/run.sh prior-export configs/context_prior/default_prior_sl_split.yaml --run-id $R \
+R=stage_one_production_seed0
+OMP_NUM_THREADS=32 MKL_NUM_THREADS=32 nohup bash -c "hpc/run.sh prior-production configs/context_prior/default_prior.yaml \
+  --sl-split configs/benchmarks/cell_line_sl_split.json --run-id $R \
   && hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id benchmark_baselines_seed0" \
   > outputs/launches/sl_benchmark_chain.log 2>&1 &
 ```

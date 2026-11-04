@@ -26,7 +26,7 @@ from src.context_prior.space import (
 from src.context_prior.targets import Definitions, fit_definitions, residual_frame
 from src.context_prior.views import fit_expression_components
 from src.data.depmap import read_depmap_matrix, read_models
-from src.data.extra_lines import load_bulk_lines
+from src.data.extra_lines import ExtraLines, load_bulk_lines
 from src.data.splits import FixedSplit, load_geneeffect_split
 from src.eval.accuracy import score
 from src.experiments.joint.config import load_config
@@ -107,14 +107,27 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     the prior neither fits nor encodes it and the bridge does not pair it, though
     a single-cell training line still takes a fold and an export row.
     """
+    joint = load_config(Path(config["joint_config"]))
+    split = load_geneeffect_split(Path(joint["paths"]["split"]))
+    extra = load_bulk_lines(Path(joint["paths"]["split"]), split)
+    return base_on(config, split, extra, [*split.val, *split.test])
+
+
+def base_on(
+    config: Mapping[str, Any],
+    split: FixedSplit,
+    extra: ExtraLines,
+    space_lines: Sequence[str],
+) -> RunBase:
+    """``load_base`` on a given split and bulk-only lines; the space is the bulk
+    genes every line of ``space_lines`` measures in pseudo-bulk (the production fit
+    passes its scored lines and a split without validation or test)."""
     from src.data.prepared import read_manifest
     from src.data.pseudobulk import read_pseudobulk
     from src.experiments.prepare import prepare_pseudobulk
 
     joint = load_config(Path(config["joint_config"]))
     paths = config["paths"]
-    split = load_geneeffect_split(Path(joint["paths"]["split"]))
-    extra = load_bulk_lines(Path(joint["paths"]["split"]), split)
     models = read_models(Path(paths["model"]))
     dropped = set(config["training_side"]["exclude_lineages"])
 
@@ -143,7 +156,7 @@ def load_base(config: Mapping[str, Any]) -> RunBase:
     panel = list(read_manifest(prepared)["common_gene_panel"])
     prepare_pseudobulk(joint, list(bulk.columns))
     pseudo = read_pseudobulk(prepared).loc[list(split.all_model_ids)]
-    space = measured_genes(pseudo, list(bulk.columns), [*split.val, *split.test])
+    space = measured_genes(pseudo, list(bulk.columns), space_lines)
     pseudo = pseudo.loc[:, space]
     fill = pseudo.loc[list(split.train)].mean(axis=0, skipna=True)
     pseudo, filled = fill_unmeasured(pseudo, split.train)

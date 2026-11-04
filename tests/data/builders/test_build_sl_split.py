@@ -56,7 +56,7 @@ def test_held_lines_stay_and_quotas_fill_across_lineages():
     scored_held = lambda side: [m for m in payload[side] if m in scored]  # noqa: E731
     assert len(scored_held("val")) == len(scored_held("test")) == 2
     moved = set(payload["val"] + payload["test"]) - {"V0", "E0"}
-    assert len(moved) == 3 and moved <= set(TRAIN)  # never unlabelled U0
+    assert len(moved) == 3 and moved <= {*TRAIN, "U0"}  # U0 has no GeneEffect
     assert len({TABLE.set_index("model_id").loc[m, "lineage"] for m in moved}) > 1
     assert not moved & set(payload["train"])
     assert list(table["model_id"]) == [
@@ -64,6 +64,16 @@ def test_held_lines_stay_and_quotas_fill_across_lineages():
         *payload["val"],
         *payload["test"],
     ]
+
+
+def test_a_line_without_geneeffect_can_move_and_records_its_group():
+    payload, table = build_sl_split(
+        FINAL, SPLIT, TABLE, lists(["U0", "V0"]), PATIENTS, fraction=1.0, seed=0,
+        placed={},
+    )  # fmt: skip
+    assert payload["test"] == ["E0", "U0"] and "U0" not in payload["unlabeled_train"]
+    groups = table.set_index("model_id")["group"]
+    assert groups["U0"] == "without_geneeffect" and groups["T0"] == "with_geneeffect"
 
 
 def test_a_moved_lines_patient_siblings_are_excluded():

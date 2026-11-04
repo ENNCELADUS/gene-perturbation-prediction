@@ -12,9 +12,12 @@ import pytest
 from src.data.splits import FixedSplit
 from src.experiments.sl.benchmark_baselines import (
     benchmark_rows,
+    line_records,
     line_values,
+    list_records,
     load_config,
     pair_identity,
+    positive_ranks,
     run,
     summary,
 )
@@ -62,15 +65,38 @@ def test_a_drug_anchor_list_is_ranked_by_gene_b():
     assert line_values(effects, kept).tolist() == pytest.approx([-1.0, 0.2])
 
 
-def test_summary_averages_lists_within_a_line_first():
-    lists = pd.DataFrame(
-        {"split": "test", "scorer": "x", "model_id": ["L0", "L0", "L1"],
-         "auprc_lift": [1.0, 3.0, 4.0], "auroc": [0.5, 0.5, 0.5],
-         "group": ["cancer", "cancer", "non-cancer"]}
+def test_recall_in_the_top_tenth_and_percentiles_of_a_known_list():
+    # 20 pairs, 2 known positives ranked 1st and 5th: the top 10% holds 2 pairs.
+    score = -np.arange(20, dtype=float)
+    label = np.zeros(20, dtype=int)
+    label[[0, 4]] = 1
+    credit, percentile = positive_ranks(label, score)
+    assert credit.tolist() == [1.0, 0.0]
+    assert percentile.tolist() == pytest.approx([18 / 18, 15 / 18])
+    # A constant score is a random ranking: each positive's credit is 0.10.
+    credit, percentile = positive_ranks(label, np.zeros(20))
+    assert credit == pytest.approx([0.1, 0.1]) and percentile.tolist() == [0.5, 0.5]
+
+
+def test_a_lines_positives_pool_over_its_lists_and_the_gap_is_per_line():
+    scores = pd.DataFrame(
+        {"split": "test", "design": "anchor", "study_id": "S",
+         "list_id": ["a"] * 10 + ["b"] * 10, "model_id": "L0",
+         "label": [1] + [0] * 9 + [0] * 9 + [1],
+         "score": [*range(10, 0, -1), *range(10, 0, -1)]}
     )  # fmt: skip
-    rows = {row["group"]: row for row in summary(lists, reps=20, seed=0)}
-    assert rows["all"]["auprc_lift"] == pytest.approx(3.0) and rows["all"]["lines"] == 2
-    assert rows["non-cancer"]["auprc_lift"] == pytest.approx(4.0)
+    model = scores.assign(scorer="model")
+    control = scores.assign(scorer="pair_identity", score=0.0)
+    lists = list_records(pd.concat([model, control]), k=2)
+    lines = line_records(lists).set_index("scorer")
+    # list a: its positive is first (credit 1); list b: last (credit 0) -> 1/2
+    assert lines.loc["model", "recall_top10"] == pytest.approx(0.5)
+    assert lines.loc["model", "positives"] == 2
+    assert lines.loc["pair_identity", "recall_top10"] == pytest.approx(0.1)
+    rows = summary(lines.reset_index(), {"all": {"L0"}}, reps=10, seed=0)
+    model_row = next(r for r in rows if r["scorer"] == "model")
+    assert model_row["minus_pair_identity"] == pytest.approx(0.4)
+    assert (model_row["lines"], model_row["positives"]) == (1, 2)
 
 
 def test_run_scores_every_list(tmp_path):
@@ -85,6 +111,10 @@ def test_run_scores_every_list(tmp_path):
     )  # fmt: skip
     effect.to_csv(tmp_path / "ge.csv")
     pd.DataFrame(
+        {"split": ["train", "train", "val", "test"],
+         "model_id": ["T0", "T1", "V0", "E0"], "group": "with_geneeffect"}
+    ).to_csv(tmp_path / "split.csv", index=False)  # fmt: skip
+    pd.DataFrame(
         {"ModelID": ["T0", "T1", "V0", "E0"],
          "OncotreePrimaryDisease": ["Lung", "Lung", "Lung", "Non-Cancerous"]}
     ).to_csv(tmp_path / "Model.csv", index=False)  # fmt: skip
@@ -92,8 +122,8 @@ def test_run_scores_every_list(tmp_path):
     (tmp_path / "config.yaml").write_text(
         f"kind: sl_benchmark_baselines\nseed: 0\noutput_root: {tmp_path}\ntask: base\n"
         f"labels: {tmp_path}/labels.parquet\nsplit: {tmp_path}/split.json\n"
-        f"gene_effect: {tmp_path}/ge.csv\nmodel: {tmp_path}/Model.csv\nprior: null\n"
-        "top_k: 2\nbootstrap: 10\n"
+        f"gene_effect: {tmp_path}/ge.csv\nmodel: {tmp_path}/Model.csv\n"
+        "stage_one: null\ntop_k: 2\nbootstrap: 10\n"
     )
     out = run(load_config(tmp_path / "config.yaml"), "r0")
     scores = pd.read_parquet(out / "scores.parquet")
@@ -112,7 +142,9 @@ def test_run_scores_every_list(tmp_path):
     assert {(s, c) for s, c, g in by if g == "all"} == {
         (s, c) for s in ("val", "test") for c in scorers
     }
-    assert ("test", "pair_identity", "non-cancer") in by  # E0 is non-cancer
+    assert ("test", "pair_identity", "non_cancer") in by  # E0 is non-cancer
     by = {(s, c): row for (s, c, g), row in by.items() if g == "all"}
     # On E0 the measured GeneEffect ranks the one SL pair (G0, G2) first.
     assert by[("test", "measured_geneeffect")]["auprc_lift"] == pytest.approx(4.0)
+    # A list of 4 pairs: its top 10% is 0.4 of a pair, all of it the first pair.
+    assert by[("test", "measured_geneeffect")]["recall_top10"] == pytest.approx(0.4)
