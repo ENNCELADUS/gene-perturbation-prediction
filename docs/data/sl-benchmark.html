@@ -64,7 +64,7 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
   <p><b>Task.</b> For a held-out cell line <i>c</i> and a gene <i>g</i>, predict the DepMap CRISPR GeneEffect
   (release 26Q1) from the basal single-cell transcriptome of <i>c</i>. The model predicts the residual over the
   training mean of each gene. Thus the axis of generalization is the cell line.</p>
-  <p><b>Split.</b> One fixed split of cell lines. All lines of one patient are on one side, and membership depends only on patient, lineage and expression source. Validation selects the model, and test is scored once.</p>
+  <p><b>Split.</b> One fixed split of cell lines. All lines of one patient are on one side, and membership follows patient, lineage and expression source. Validation selects the model, and test is scored once.</p>
   <div class="wrap"><table>
     <caption>Table 1. Stage-one split (number of cell lines).</caption>
     <thead><tr><th>Role</th><th class="num">Lines</th><th>Use</th></tr></thead>
