@@ -30,7 +30,8 @@ def test_patient_siblings_of_held_out_lines_without_geneeffect_leave_the_fit():
     assert (split.val, split.test) == ((), ())
     assert set(split.train) == {"T0", "T1", "U0", "U1", "V0", "E0"}  # all predicted
     assert set(split.supervised_train) == {"T1", "V0", "E0"}  # T0 gives no target
-    assert extra.labelled == ("B1",) and {"B0", "T0", "Z0"} <= set(extra.excluded)
+    assert extra.labelled == ("B1",) and extra.unlabelled == ("Y0", "B0")
+    assert extra.excluded == {"Z0": "old"}  # a left-out line keeps its expression
 
 
 def test_production_table_predicts_every_line_from_one_full_fit(tmp_path, monkeypatch):
