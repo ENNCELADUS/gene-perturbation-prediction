@@ -1,11 +1,12 @@
-"""The SL split: held-out lines keep their side, quotas fill across lineages, and a
-moved line's patient siblings leave every fit."""
+"""The SL split: the placed lines are the held-out sides, every other line trains,
+and a held-out line's patient siblings follow it or leave every fit."""
 
 from __future__ import annotations
 
 import json
 
 import pandas as pd
+import pytest
 
 from src.data.builders.build_sl_split import build_sl_split, main
 from src.data.extra_lines import load_bulk_lines
@@ -47,58 +48,39 @@ def lists(lines: list[str]) -> pd.DataFrame:
     )  # fmt: skip
 
 
-def test_held_lines_stay_and_quotas_fill_across_lineages():
-    scored = [*TRAIN, "U0", "V0"]  # 10 scored lines, E0 has no list
+def test_placed_lines_are_held_out_and_stage_one_sides_do_not_bind():
+    placed = {"T1": ("val", "r"), "U0": ("test", "r")}
     payload, table = build_sl_split(
-        FINAL, SPLIT, TABLE, lists(scored), PATIENTS, fraction=0.2, seed=0, placed={}
+        FINAL, SPLIT, TABLE, lists(["T1", "U0", "V0"]), PATIENTS, placed=placed
     )
-    assert payload["val"][0] == "V0" and payload["test"][0] == "E0"
-    scored_held = lambda side: [m for m in payload[side] if m in scored]  # noqa: E731
-    assert len(scored_held("val")) == len(scored_held("test")) == 2
-    moved = set(payload["val"] + payload["test"]) - {"V0", "E0"}
-    assert len(moved) == 3 and moved <= {*TRAIN, "U0"}  # U0 has no GeneEffect
-    assert len({TABLE.set_index("model_id").loc[m, "lineage"] for m in moved}) > 1
-    assert not moved & set(payload["train"])
-    assert list(table["model_id"]) == [
-        *payload["train"],
-        *payload["val"],
-        *payload["test"],
-    ]
-
-
-def test_a_line_without_geneeffect_can_move_and_records_its_group():
-    payload, table = build_sl_split(
-        FINAL, SPLIT, TABLE, lists(["U0", "V0"]), PATIENTS, fraction=1.0, seed=0,
-        placed={},
-    )  # fmt: skip
-    assert payload["test"] == ["E0", "U0"] and "U0" not in payload["unlabeled_train"]
+    assert (payload["val"], payload["test"]) == (["T1"], ["U0"])
+    assert {"V0", "E0"} <= set(payload["train"])  # stage one's held-out lines train
+    assert "U0" not in payload["unlabeled_train"]
+    assert list(table["model_id"]) == [*payload["train"], "T1", "U0"]
     groups = table.set_index("model_id")["group"]
     assert groups["U0"] == "without_geneeffect" and groups["T0"] == "with_geneeffect"
 
 
-def test_a_moved_lines_patient_siblings_are_excluded():
+def test_a_held_lines_unscreened_patient_siblings_are_excluded():
     payload, _ = build_sl_split(
-        FINAL,
-        SPLIT,
-        TABLE,
-        lists(["T4", "V0"]),
-        PATIENTS,
-        fraction=1.0,
-        seed=0,
-        placed={},
+        FINAL, SPLIT, TABLE, lists(["T4"]), PATIENTS, placed={"T4": ("test", "r")}
     )
-    assert payload["test"] == ["E0", "T4"]
     assert "B0" in payload["excluded"] and "B0" not in payload["bulk_labelled"]
     assert "X0" in payload["excluded"] and "B1" in payload["bulk_labelled"]
 
 
-def test_a_placed_line_and_its_patient_stay_on_the_training_side():
+def test_a_screened_patient_sibling_must_be_placed_on_the_same_side():
+    patients = PATIENTS.copy()
+    patients["U0"] = patients["T4"]
+    table = TABLE.assign(patient_id=TABLE["model_id"].map(patients))
+    with pytest.raises(ValueError, match="not placed on test"):
+        build_sl_split(FINAL, SPLIT, table, lists(["T4", "U0"]), patients,
+                       placed={"T4": ("test", "r")})  # fmt: skip
     payload, _ = build_sl_split(
-        FINAL, SPLIT, TABLE, lists(["T4", "V0"]), PATIENTS, fraction=1.0, seed=0,
-        placed={"T4": "reviewed"},
+        FINAL, SPLIT, table, lists(["T4", "U0"]), patients,
+        placed={"T4": ("test", "r"), "U0": ("test", "r")},
     )  # fmt: skip
-    assert "T4" in payload["train"] and payload["placed"] == {"T4": "reviewed"}
-    assert "B0" in payload["bulk_labelled"]  # T4's patient sibling is not excluded
+    assert payload["test"] == ["T4", "U0"]
 
 
 def test_main_writes_a_split_the_loaders_accept(tmp_path):
@@ -112,32 +94,21 @@ def test_main_writes_a_split_the_loaders_accept(tmp_path):
         {"ModelID": PATIENTS.index, "PatientID": PATIENTS.values,
          "OncotreeLineage": "Lung"}
     ).to_csv(tmp_path / "Model.csv", index=False)  # fmt: skip
-    (tmp_path / "placed.csv").write_text("line_id,side,reason\nT1,train,reviewed\n")
+    (tmp_path / "placed.csv").write_text(
+        "line_id,side,reason\nT1,val,reviewed\nT2,test,reviewed\n"
+    )
     out = tmp_path / "sl.json"
     main(["--final", str(final), "--lists", str(tmp_path / "lists.csv"),
           "--model", str(tmp_path / "Model.csv"), "--placements",
           str(tmp_path / "placed.csv"), "--out", str(out)])  # fmt: skip
     split = load_geneeffect_split(out)
     load_bulk_lines(out, split)
-    assert len(split.val) + len(split.test) > 2 and "T1" in split.train
+    assert (split.val, split.test) == (("T1",), ("T2",))
 
 
-def test_tracked_placements_are_reviewed_train_placements():
+def test_tracked_placements_hold_only_held_out_lines():
     from src.data.builders.build_sl_split import read_placements
 
-    assert set(read_placements("configs/benchmarks/sl_split_placements.csv")) == {
-        "CVCL_4388"
-    }
-
-
-def test_a_screened_patient_sibling_moves_with_the_drawn_line():
-    patients = PATIENTS.copy()
-    patients["U0"] = patients["T4"]  # U0 (no GeneEffect) and T4 share a patient
-    payload, table = build_sl_split(
-        FINAL, SPLIT, TABLE.assign(patient_id=TABLE["model_id"].map(patients)),
-        lists(["T4", "U0", "V0"]), patients, fraction=1.0, seed=0, placed={},
-    )  # fmt: skip
-    held = {*payload["val"], *payload["test"]}
-    assert {"T4", "U0"} <= held and "U0" not in payload["excluded"]
-    side = {m: s for s in ("val", "test") for m in payload[s]}
-    assert side["T4"] == side["U0"]
+    placed = read_placements("configs/benchmarks/sl_split_placements.csv")
+    sides = [side for side, _ in placed.values()]
+    assert sides.count("val") >= 15 and sides.count("test") >= 15

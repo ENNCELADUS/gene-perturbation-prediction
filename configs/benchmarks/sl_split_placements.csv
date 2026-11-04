@@ -1,2 +1,34 @@
 line_id,side,reason
-CVCL_4388,train,"hTERT-RPE1, user decision 2026-11-04: stays on the training side by hand; its patient group PT-JWRsco (the six RPE1-ss DepMap subclones, bulk labelled) stays with it."
+ACH-000997,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000023,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000517,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-001061,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-001357,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000510,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000601,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000757,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-001086,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000290,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000866,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000169,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000779,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000022,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000615,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+CVCL_0058,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000900,val,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000042,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000943,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000971,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000995,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000768,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000219,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000207,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000362,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000019,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-001318,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000665,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000354,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000662,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000730,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000195,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
+ACH-000406,test,manual SL split 2026-11-04: about 80/10/10% of the kept SL pairs across lineages
