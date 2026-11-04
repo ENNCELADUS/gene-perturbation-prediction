@@ -281,7 +281,7 @@ validation, report both, experiment code reports and people decide). The SL-spec
   group and lineage. Such a line, and a DepMap line without GeneEffect, is an unlabelled training line of the final
   split: it gives stage one no target. Stage one and stage two are separate: the stage-one benchmark keeps the final
   split, and stage two reads stage one's production table (one fit on every labelled line; see the design spec). The
-  SL split draws lines with and without GeneEffect. The stage-two control with measured GeneEffect is scored only on
+  SL split, placed by hand, holds lines with and without GeneEffect on every side. The stage-two control with measured GeneEffect is scored only on
   lines with GeneEffect. Results give all lines, each GeneEffect group and the non-cancer lines (DepMap
   "Non-Cancerous", or `non_cancer` in the identity table) separately.
 - (2026-11-04) The multi-study benchmark's negatives are tested and not called, so its headline is recall in the

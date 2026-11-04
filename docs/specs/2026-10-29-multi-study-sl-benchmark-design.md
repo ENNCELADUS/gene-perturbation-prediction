@@ -51,11 +51,7 @@ used as label sources.
    pair-identity control per line, with a bootstrap interval over lines. AUROC and AUPRC over the positive rate
    are averaged the same way and stay in the run files. Controls: pair identity (the pair's hit rate in the same
    study's training lines), pan-essentiality and a context-ablated model.
-7. **Split** (changed 2026-11-04). A fixed random split of lines, about 60% training, 20% validation and 20% test,
-   drawn within each lineage, for stage two only. Lines from one patient stay on one side. The draw takes every
-   line with basal scRNA and labels, with or without GeneEffect, and each line records its group
-   (`with_geneeffect` or `without_geneeffect`). Stage one keeps the final split. Validation selects the model; test
-   is scored once.
+7. **Split** (changed 2026-11-04). A split of lines placed by hand (2026-11-04), for stage two only: 17 validation and 16 test lines chosen so that training, validation and test hold about 80%, 10% and 10% of the kept SL pairs, across lineages; every other line trains. Stage one's sides do not bind it. Lines from one patient stay on one side. Each line records its group (`with_geneeffect`: stage one's production fit reads its GeneEffect; `without_geneeffect`: it does not), and results are stratified by it; validation and test each hold 5 lines without GeneEffect. Validation selects the model; test is scored once.
 8. **Pairs scored.** The headline scores all pairs of a list. The split of pairs into seen and unseen pairs (seen
    means the pair was tested in a training line) is a later ablation.
 
@@ -74,8 +70,7 @@ source.
 
 Settled on 2026-10-30 ([data card](../data/sl-benchmark.html)): the tables live in
 `configs/benchmarks/` (`sl_label_rules.csv`, `cell_line_sl_split.json`); the builders are `build_sl_study_benchmark`
-and `build_sl_split`. The split keeps the final split's held-out lines and moves training lines, drawn across
-lineages, until validation and test each hold 20% of the single-cell lines with a two-class list. A row with no
+and `build_sl_split`. The split's validation and test lines are the placements in `configs/benchmarks/sl_split_placements.csv` (since 2026-11-04). A row with no
 published SL call or cut takes the authors' own cut where the paper states one; a study that publishes no SL pairs, or
 no cut that can be applied to its table, is left out: on 2026-11-04 its rule rows were removed from the rules file and its
 files from the H20 (git history keeps the rows).
