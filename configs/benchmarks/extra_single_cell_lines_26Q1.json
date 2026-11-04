@@ -1,6 +1,6 @@
 {
   "schema_version": "extra-single-cell-lines-26q1-v3",
-  "policy": "Labelled lines outside the 226 whose basal single cells are built, one source per line (untreated or vehicle 2D first, then raw counts, then most cells). A line sharing a PatientID with a validation or test line is excluded; a chosen line without 26Q1 GeneEffect is unlabelled and not built; a labelled line whose source is not built yet is pending.",
+  "policy": "Lines outside the 226 whose basal single cells are built, one source per line (untreated or vehicle 2D first, then raw counts, then most cells): lines with 26Q1 GeneEffect (labelled), and SL benchmark lines without it (unlabelled, Cellosaurus lines included; they get no stage-one target). A line sharing a PatientID with a validation or test line is excluded; another chosen line without GeneEffect is not built; a line whose source is not built yet is pending.",
   "labelled": {
     "ACH-000001": {
       "source": "gse207993",
@@ -19,6 +19,22 @@
       "other_sources": [
         "mixseq"
       ]
+    },
+    "ACH-000005": {
+      "source": "gse319999",
+      "accession": "GEO GSE319999 (SuperSeries GSE333562)",
+      "identifiers": [
+        "HEL"
+      ],
+      "condition": "untreated K562+SET2+HEL mix, 10x Flex fixed-RNA, several libraries",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-q4K2cp",
+      "lineage": "Myeloid",
+      "cells": 4004,
+      "arms": {
+        "untreated": 4004
+      },
+      "other_sources": []
     },
     "ACH-000012": {
       "source": "gse118767",
@@ -503,6 +519,22 @@
       "cells": 1483,
       "arms": {
         "targets_only": 1483
+      },
+      "other_sources": []
+    },
+    "ACH-000195": {
+      "source": "gse319999",
+      "accession": "GEO GSE319999 (SuperSeries GSE333562)",
+      "identifiers": [
+        "SET2"
+      ],
+      "condition": "untreated K562+SET2+HEL mix, 10x Flex fixed-RNA, several libraries",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ZJgxZb",
+      "lineage": "Myeloid",
+      "cells": 2515,
+      "arms": {
+        "untreated": 2515
       },
       "other_sources": []
     },
@@ -1156,6 +1188,24 @@
         "targets_only": 2120
       },
       "other_sources": []
+    },
+    "ACH-000406": {
+      "source": "gse217779",
+      "accession": "GEO GSE217779",
+      "identifiers": [
+        "U-937"
+      ],
+      "condition": "non-targeting-guide cells of a Cas9 CROP-seq (2 replicates)",
+      "condition_class": "control_guide",
+      "patient_id": "PT-ZwaNYv",
+      "lineage": "Myeloid",
+      "cells": 606,
+      "arms": {
+        "control_guide": 606
+      },
+      "other_sources": [
+        "gse278043"
+      ]
     },
     "ACH-000407": {
       "source": "mixseq",
@@ -2338,6 +2388,22 @@
       },
       "other_sources": []
     },
+    "ACH-000832": {
+      "source": "gse144236",
+      "accession": "GEO GSE144236",
+      "identifiers": [
+        "CAL27"
+      ],
+      "condition": "untreated CAL27 in vitro (GSM4565521), 10x 3prime v3",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-JCJHPr",
+      "lineage": "Head and Neck",
+      "cells": 4759,
+      "arms": {
+        "untreated": 4759
+      },
+      "other_sources": []
+    },
     "ACH-000833": {
       "source": "mixseq",
       "accession": "figshare 10.6084/m9.figshare.10298696",
@@ -2777,6 +2843,22 @@
       },
       "other_sources": []
     },
+    "ACH-000960": {
+      "source": "gse293316",
+      "accession": "GEO GSE293316",
+      "identifiers": [
+        "REH"
+      ],
+      "condition": "parental REH (ATCC CRL-8286), untreated (GSM8880232), 10x Multiome GEX",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-N5YXV2",
+      "lineage": "Lymphoid",
+      "cells": 7388,
+      "arms": {
+        "untreated": 7388
+      },
+      "other_sources": []
+    },
     "ACH-000961": {
       "source": "mixseq",
       "accession": "figshare 10.6084/m9.figshare.10298696",
@@ -3008,6 +3090,22 @@
         "DMSO_6hr_expt3": 104,
         "DMSO_24hr_expt3": 91,
         "DMSO_24hr_expt10": 67
+      },
+      "other_sources": []
+    },
+    "ACH-001318": {
+      "source": "gse350646",
+      "accession": "GEO GSE350646 (SuperSeries GSE350647)",
+      "identifiers": [
+        "PLC/PRF/5"
+      ],
+      "condition": "SAM CRISPRa vector without a spacer, 72 h co-culture with EGFP-labelled PLC/PRF/5 reference cells (GSM10117712 probe barcodes BC001, BC002), 10x Flex",
+      "condition_class": "control_guide",
+      "patient_id": "PT-E7izN5",
+      "lineage": "Liver",
+      "cells": 7111,
+      "arms": {
+        "control_guide": 7111
       },
       "other_sources": []
     },
@@ -3484,7 +3582,238 @@
       "other_sources": []
     }
   },
-  "unlabelled": {},
+  "unlabelled": {
+    "ACH-000218": {
+      "source": "emtab13204",
+      "accession": "E-MTAB-13204",
+      "identifiers": [
+        "PL21"
+      ],
+      "condition": "Targets only: monoculture 24 h in own medium, TotalSeq-A hashed, 10x 3' v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-ADoL4a",
+      "lineage": "Myeloid",
+      "cells": 2654,
+      "arms": {
+        "targets_only": 2654
+      },
+      "other_sources": []
+    },
+    "ACH-000615": {
+      "source": "gse162045",
+      "accession": "GEO GSE162045",
+      "identifiers": [
+        "SK-MEL-28"
+      ],
+      "condition": "untreated 0 h (GSM4932163, 10x 3prime)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-xtiBPE",
+      "lineage": "Skin",
+      "cells": 1937,
+      "arms": {
+        "untreated": 1937
+      },
+      "other_sources": []
+    },
+    "ACH-000625": {
+      "source": "kinker_scp542",
+      "accession": "SCP542; GEO GSE157220",
+      "identifiers": [
+        "HEP3B217_LIVER"
+      ],
+      "condition": "untreated, pooled culture",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-oPfLLk",
+      "lineage": "Liver",
+      "cells": 118,
+      "arms": {
+        "untreated": 118
+      },
+      "other_sources": [
+        "mixseq"
+      ]
+    },
+    "ACH-000730": {
+      "source": "kinker_scp542",
+      "accession": "SCP542; GEO GSE157220",
+      "identifiers": [
+        "SKMEL5_SKIN"
+      ],
+      "condition": "untreated, pooled culture",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-2vBUWf",
+      "lineage": "Skin",
+      "cells": 297,
+      "arms": {
+        "untreated": 297
+      },
+      "other_sources": []
+    },
+    "ACH-000987": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "MeWo"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-1PBPXD",
+      "lineage": "Skin",
+      "cells": 3575,
+      "arms": {
+        "untreated": 3575
+      },
+      "other_sources": []
+    },
+    "ACH-001085": {
+      "source": "gse132044",
+      "accession": "GEO GSE132044",
+      "identifiers": [
+        "HEK293"
+      ],
+      "condition": "untreated HEK293 mixed with mouse NIH3T3, human cells by species",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-iL41un",
+      "lineage": NaN,
+      "cells": 3199,
+      "arms": {
+        "untreated": 3199
+      },
+      "other_sources": []
+    },
+    "ACH-001357": {
+      "source": "gse114687",
+      "accession": "GEO GSE114687",
+      "identifiers": [
+        "MCF10A"
+      ],
+      "condition": "untreated \"spontaneous EMT\" inner and outer colony (GSM3147293, GSM3147294), 10x v1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-mrGSYl",
+      "lineage": "Breast",
+      "cells": 5002,
+      "arms": {
+        "1": 2440,
+        "2": 2562
+      },
+      "other_sources": [
+        "gse200981"
+      ]
+    },
+    "ACH-002010": {
+      "source": "gse311521",
+      "accession": "GEO GSE311521",
+      "identifiers": [
+        "MP41"
+      ],
+      "condition": "untreated pooled culture, Easy-Sci RNA (raw counts recovered from the deposited log-normalised matrix)",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-GhwOWG",
+      "lineage": "Eye",
+      "cells": 5279,
+      "arms": {
+        "untreated": 5279
+      },
+      "other_sources": []
+    },
+    "CVCL_0058": {
+      "source": "gse138814",
+      "accession": "GEO GSE138814",
+      "identifiers": [
+        "HeLa S3"
+      ],
+      "condition": "untreated (GSM4119858), 10x v2",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-c34xau",
+      "lineage": "Cervix",
+      "cells": 880,
+      "arms": {
+        "untreated": 880
+      },
+      "other_sources": []
+    },
+    "CVCL_0063": {
+      "source": "tenx_293t",
+      "accession": "10x Genomics dataset 293t (Cell Ranger 1.1.0)",
+      "identifiers": [
+        "293T",
+        "hg19"
+      ],
+      "condition": "untreated 1:1 HEK293T:NIH3T3 mix, human cells by 10x gem_classification; untreated pure 293T, 10x 3prime v1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-iL41un",
+      "lineage": "Kidney",
+      "cells": 6953,
+      "arms": {
+        "untreated": 6953
+      },
+      "other_sources": []
+    },
+    "CVCL_4388": {
+      "source": "replogle2022_rpe1",
+      "accession": "figshare+ 10.25452/figshare.plus.20029387",
+      "identifiers": [
+        "RPE1"
+      ],
+      "condition": "non-targeting sgRNA cells, day 7, ZIM3-KRAB-dCas9 CRISPRi",
+      "condition_class": "control_guide",
+      "patient_id": "PT-JWRsco",
+      "lineage": "Eye",
+      "cells": 11485,
+      "arms": {
+        "control_guide": 11485
+      },
+      "other_sources": []
+    },
+    "CVCL_9773": {
+      "source": "gse291908",
+      "accession": "GEO GSE291908",
+      "identifiers": [
+        "WA09"
+      ],
+      "condition": "H9/WA09 ESC at 0 h (GSM8844231), 10x Multiome GEX",
+      "condition_class": "basal_2d",
+      "patient_id": "CVCL_9773",
+      "lineage": "Embryonal",
+      "cells": 9851,
+      "arms": {
+        "0h": 9851
+      },
+      "other_sources": []
+    },
+    "SL-Nebenfuehr2026-eHAP": {
+      "source": "gse270292",
+      "accession": "GEO GSE270292",
+      "identifiers": [
+        "eHAP"
+      ],
+      "condition": "no 4sU labelling (GSM8339158), 10x 3prime v3.1",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-gjpFPM",
+      "lineage": "Myeloid",
+      "cells": 2633,
+      "arms": {
+        "untreated": 2633
+      },
+      "other_sources": []
+    },
+    "SL-Tuano2023-HMLE": {
+      "source": "gse237726",
+      "accession": "GEO GSE237726",
+      "identifiers": [
+        "HMLE"
+      ],
+      "condition": "untreated, unsorted bulk population (GSM7646204), 10x 3prime v2",
+      "condition_class": "basal_2d",
+      "patient_id": "SL-Tuano2023-HMLE",
+      "lineage": "Breast",
+      "cells": 4612,
+      "arms": {
+        "untreated": 4612
+      },
+      "other_sources": []
+    }
+  },
   "not_built": [
     "ACH-000002",
     "ACH-000073",
@@ -3494,7 +3823,6 @@
     "ACH-000117",
     "ACH-000122",
     "ACH-000186",
-    "ACH-000218",
     "ACH-000236",
     "ACH-000270",
     "ACH-000347",
@@ -3512,7 +3840,6 @@
     "ACH-000555",
     "ACH-000572",
     "ACH-000603",
-    "ACH-000625",
     "ACH-000628",
     "ACH-000644",
     "ACH-000650",
@@ -3533,11 +3860,9 @@
     "ACH-000954",
     "ACH-000967",
     "ACH-000982",
-    "ACH-000987",
     "ACH-000998",
     "ACH-001034",
     "ACH-001127",
-    "ACH-002010",
     "ACH-002217",
     "ACH-002248",
     "ACH-002509"
@@ -3560,6 +3885,12 @@
     "split": {
       "path": "configs/benchmarks/cell_line_geneeffect_226_split.json"
     },
+    "sl_rules": {
+      "path": "configs/benchmarks/sl_label_rules.csv"
+    },
+    "identities": {
+      "path": "configs/benchmarks/sl_line_identities.csv"
+    },
     "qc/emtab13204": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/emtab13204.json"
     },
@@ -3575,14 +3906,23 @@
     "qc/gse113660": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse113660.json"
     },
+    "qc/gse114687": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse114687.json"
+    },
     "qc/gse116256": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse116256.json"
     },
     "qc/gse118767": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse118767.json"
     },
+    "qc/gse132044": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse132044.json"
+    },
     "qc/gse137912": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse137912.json"
+    },
+    "qc/gse138814": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse138814.json"
     },
     "qc/gse139386": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse139386.json"
@@ -3593,11 +3933,17 @@
     "qc/gse142750_recount": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse142750_recount.json"
     },
+    "qc/gse144236": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse144236.json"
+    },
     "qc/gse146221": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse146221.json"
     },
     "qc/gse147405": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse147405.json"
+    },
+    "qc/gse162045": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse162045.json"
     },
     "qc/gse173339": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse173339.json"
@@ -3635,6 +3981,9 @@
     "qc/gse216182": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse216182.json"
     },
+    "qc/gse217779": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse217779.json"
+    },
     "qc/gse217922": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse217922.json"
     },
@@ -3667,6 +4016,9 @@
     },
     "qc/gse237228": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse237228.json"
+    },
+    "qc/gse237726": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse237726.json"
     },
     "qc/gse242465": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse242465.json"
@@ -3707,11 +4059,20 @@
     "qc/gse270117": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse270117.json"
     },
+    "qc/gse270292": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse270292.json"
+    },
     "qc/gse272618": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse272618.json"
     },
+    "qc/gse291908": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse291908.json"
+    },
     "qc/gse292402": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse292402.json"
+    },
+    "qc/gse293316": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse293316.json"
     },
     "qc/gse297836": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse297836.json"
@@ -3725,6 +4086,9 @@
     "qc/gse314230": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse314230.json"
     },
+    "qc/gse319999": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse319999.json"
+    },
     "qc/gse328823": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse328823.json"
     },
@@ -3734,14 +4098,26 @@
     "qc/gse331320": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse331320.json"
     },
+    "qc/gse350646": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/gse350646.json"
+    },
+    "qc/kinker_scp542": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/kinker_scp542.json"
+    },
     "qc/mixseq": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/mixseq.json"
+    },
+    "qc/replogle2022_rpe1": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/replogle2022_rpe1.json"
     },
     "qc/srp199641": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/srp199641.json"
     },
     "qc/tahoe100m": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/tahoe100m.json"
+    },
+    "qc/tenx_293t": {
+      "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/tenx_293t.json"
     },
     "qc/tenxcellplexjurkatraji10k": {
       "path": "data/sl_dependency_v0/processed/basal_raw_umi/qc/tenxcellplexjurkatraji10k.json"

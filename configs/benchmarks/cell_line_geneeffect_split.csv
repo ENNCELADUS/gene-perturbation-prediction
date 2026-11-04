@@ -171,6 +171,7 @@ train,ACH-001333,PT-9q6tDV,Cervix,Tahoe-100M DMSO
 train,ACH-002249,PT-eHeXj9,Head and Neck,kinker_sccle
 train,ACH-002475,PT-gjpFPM,Myeloid,GSE153108 HAP1 basal raw counts
 train,ACH-000001,PT-gj46wT,Ovary/Fallopian Tube,gse207993
+train,ACH-000005,PT-q4K2cp,Myeloid,gse319999
 train,ACH-000012,PT-NdspH5,Lung,gse118767
 train,ACH-000014,PT-fp8PeY,Skin,mixseq
 train,ACH-000015,PT-ffwajI,Lung,mixseq
@@ -200,9 +201,11 @@ train,ACH-000146,PT-Sv45MF,Myeloid,emtab13204
 train,ACH-000149,PT-ombRgU,Peripheral Nervous System,gse229224
 train,ACH-000174,PT-dTkV2T,Thyroid,mixseq
 train,ACH-000183,PT-T1yBnE,Lymphoid,emtab13204
+train,ACH-000195,PT-ZJgxZb,Myeloid,gse319999
 train,ACH-000200,PT-bkGAPG,CNS/Brain,mixseq
 train,ACH-000204,PT-gN5ZVQ,Lymphoid,emtab13204
 train,ACH-000212,PT-y6HadC,Breast,mixseq
+train,ACH-000218,PT-ADoL4a,Myeloid,emtab13204
 train,ACH-000232,PT-88IC1n,CNS/Brain,gse178116
 train,ACH-000235,PT-zLTXv3,Pancreas,gse218310
 train,ACH-000237,PT-wwKJYr,Ovary/Fallopian Tube,mixseq
@@ -239,6 +242,7 @@ train,ACH-000373,PT-8qF7hQ,Myeloid,emtab13204
 train,ACH-000390,PT-gDZo34,Lung,mixseq
 train,ACH-000393,PT-saZI6H,Liver,mixseq
 train,ACH-000398,PT-OW2fam,Lymphoid,emtab13204
+train,ACH-000406,PT-ZwaNYv,Myeloid,gse217779
 train,ACH-000407,PT-iaJKdg,Uterus,mixseq
 train,ACH-000411,PT-Kwk2bU,Kidney,mixseq
 train,ACH-000416,PT-YdBNCw,Lung,gse118767
@@ -273,8 +277,10 @@ train,ACH-000581,PT-NDi54R,Esophagus/Stomach,gse142750
 train,ACH-000587,PT-HkdFKw,Lung,gse118767
 train,ACH-000589,PT-KKsvGZ,Lung,mixseq
 train,ACH-000595,PT-jhnjmL,CNS/Brain,mixseq
+train,ACH-000615,PT-xtiBPE,Skin,gse162045
 train,ACH-000618,PT-BJe5Qe,Head and Neck,mixseq
 train,ACH-000624,PT-j1ziCB,Breast,gse202435
+train,ACH-000625,PT-oPfLLk,Liver,kinker_scp542
 train,ACH-000639,PT-PkJ80f,Lung,gse303762
 train,ACH-000652,PT-ETHfq8,Pancreas,mixseq
 train,ACH-000653,PT-vA8rQh,Lymphoid,emtab13204
@@ -289,6 +295,7 @@ train,ACH-000698,PT-ERlBcq,Lung,gse193959
 train,ACH-000699,PT-8MisfZ,Breast,srp199641
 train,ACH-000701,PT-ColGZ0,Ovary/Fallopian Tube,mixseq
 train,ACH-000704,PT-9pirK7,Ovary/Fallopian Tube,mixseq
+train,ACH-000730,PT-2vBUWf,Skin,kinker_scp542
 train,ACH-000734,PT-s6JoAb,Liver,mixseq
 train,ACH-000736,PT-2GXHBV,Esophagus/Stomach,gse142750_recount
 train,ACH-000738,PT-8oCN4x,CNS/Brain,mixseq
@@ -309,6 +316,7 @@ train,ACH-000823,PT-O7zBRO,Esophagus/Stomach,figshare33273600
 train,ACH-000824,PT-ItKoPJ,Esophagus/Stomach,mixseq
 train,ACH-000826,PT-nAjtb0,Lung,mixseq
 train,ACH-000827,PT-L3eOYW,Skin,gse230574
+train,ACH-000832,PT-JCJHPr,Head and Neck,gse144236
 train,ACH-000833,PT-lbYOig,Soft Tissue,mixseq
 train,ACH-000836,PT-ZS5SNw,Head and Neck,mixseq
 train,ACH-000837,PT-9eMhTl,Lung,mixseq
@@ -335,24 +343,29 @@ train,ACH-000938,PT-rgsUoa,Lymphoid,emtab13204
 train,ACH-000939,PT-b2KmUs,Uterus,gse311521
 train,ACH-000941,PT-YZF57N,Uterus,mixseq
 train,ACH-000944,PT-grWxm0,Lymphoid,gse314230
+train,ACH-000960,PT-N5YXV2,Lymphoid,gse293316
 train,ACH-000961,PT-P06fLR,Uterus,mixseq
 train,ACH-000966,PT-bGFaJu,Ovary/Fallopian Tube,mixseq
 train,ACH-000973,PT-P31KFG,Bladder/Urinary Tract,mixseq
 train,ACH-000979,PT-05dldv,Prostate,gse147405
 train,ACH-000981,PT-zhUnhJ,Lymphoid,emtab13204
+train,ACH-000987,PT-1PBPXD,Skin,gse311521
 train,ACH-001001,PT-epgMPc,Bone,gse179681
 train,ACH-001021,PT-qL6HtY,Liver,tahoe100m
 train,ACH-001029,PT-NX1XUV,Bone,gse146221
+train,ACH-001085,PT-iL41un,,gse132044
 train,ACH-001129,PT-ej13Dz,Myeloid,emtab13204
 train,ACH-001188,PT-ombRgU,Peripheral Nervous System,gse311521
 train,ACH-001192,PT-MPUfgI,Bone,gse311521
 train,ACH-001205,PT-eQaQl0,Bone,gse236284
 train,ACH-001239,PT-JAyPtz,Skin,mixseq
 train,ACH-001307,PT-1llqWx,Thyroid,mixseq
+train,ACH-001318,PT-E7izN5,Liver,gse350646
 train,ACH-001328,PT-BB1vF7,Skin,gse206953
 train,ACH-001334,PT-ERAmPK,Cervix,figshare33273600
 train,ACH-001338,PT-cvCz0R,Peripheral Nervous System,gse229224
 train,ACH-001344,PT-smWXLD,Peripheral Nervous System,gse229224
+train,ACH-001357,PT-mrGSYl,Breast,gse114687
 train,ACH-001366,PT-jZHQTi,Peripheral Nervous System,gse229224
 train,ACH-001389,PT-huyXeM,Breast,gse228275
 train,ACH-001390,PT-SMhk4C,Breast,gse182694
@@ -371,6 +384,7 @@ train,ACH-001814,PT-2XpRTn,Bone,gse311521
 train,ACH-001819,PT-FVLPZS,Breast,gse202771
 train,ACH-001852,PT-eIYOff,Biliary Tract,figshare33273600
 train,ACH-001992,PT-nrQ0Fm,Pleura,figshare33273600
+train,ACH-002010,PT-GhwOWG,Eye,gse311521
 train,ACH-002042,PT-vhf9cn,Head and Neck,figshare33273600
 train,ACH-002181,PT-B4cHwN,Ovary/Fallopian Tube,gse247098
 train,ACH-002499,PT-j6UudO,Breast,gse328823
@@ -378,6 +392,12 @@ train,ACH-002508,PT-SogXKU,Skin,gse311521
 train,ACH-002510,PT-6g2PcW,Skin,gse311521
 train,ACH-002512,PT-YwNqCa,Skin,gse311521
 train,ACH-002659,PT-btmPL5,Bowel,figshare33273600
+train,CVCL_0058,PT-c34xau,Cervix,gse138814
+train,CVCL_0063,PT-iL41un,Kidney,tenx_293t
+train,CVCL_4388,PT-JWRsco,Eye,replogle2022_rpe1
+train,CVCL_9773,CVCL_9773,Embryonal,gse291908
+train,SL-Nebenfuehr2026-eHAP,PT-gjpFPM,Myeloid,gse270292
+train,SL-Tuano2023-HMLE,SL-Tuano2023-HMLE,Breast,gse237726
 val,ACH-000022,PT-lVglGI,Pancreas,kinker_sccle
 val,ACH-000048,PT-EehOTC,Ovary/Fallopian Tube,kinker_sccle
 val,ACH-000132,PT-F6NvL5,Ovary/Fallopian Tube,kinker_sccle
