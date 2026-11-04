@@ -2,9 +2,10 @@
 split and the SL benchmark's lists, for stage two only: the screened single-cell lines
 already held out keep their side, and further screened training lines, with or without
 GeneEffect, move to validation and test, drawn across lineages, until each side holds a
-fixed fraction of the screened lines. A reviewed placement (configs/benchmarks/sl_split_placements.csv)
-keeps a line, and the lines of its patient, on the training side. Lines sharing a
-patient with a moved line are excluded."""
+fixed fraction of the screened lines. A reviewed placement
+(configs/benchmarks/sl_split_placements.csv) keeps a line, and the lines of its
+patient, on the training side. Lines sharing a patient with a moved line are
+excluded."""
 
 from __future__ import annotations
 
