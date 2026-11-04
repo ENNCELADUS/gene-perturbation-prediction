@@ -50,6 +50,9 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
 .stats b { display: block; font-size: 1.4rem; font-variant-numeric: tabular-nums; }
 .long { max-height: 70vh; overflow: auto; }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body)"></script>
 </head>
 <body>
 <main>
@@ -159,12 +162,26 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
   <p>For each held-out line, the Spearman correlation over the selective genes between the predicted and the measured
   GeneEffect residual (GeneEffect minus the training gene mean, divided by the gene's residual SD). Selective genes
   have a dependency that changes across the training lines. Take the mean over lines. The gene mean predicts a zero residual, so its correlation is undefined. The metric asks which genes the line needs more or less than usual.</p>
-  <p class="eq">ρ = mean<sub>c</sub> Spearman<sub>g ∈ selective</sub>( r<sub>cg</sub>, r̂<sub>cg</sub> )</p>
+  <div class="eq">\[
+    \rho \;=\; \frac{1}{|\mathcal{C}|}\sum_{c\in\mathcal{C}}
+      \operatorname{Spearman}_{g\in\mathcal{G}_{\mathrm{sel}}}\!\bigl(r_{cg},\,\hat r_{cg}\bigr),
+    \qquad r_{cg} \;=\; \frac{y_{cg}-\mu_g}{\sigma_g}
+  \]</div>
+  <p class="small">\(\mathcal{C}\): held-out lines; \(\mathcal{G}_{\mathrm{sel}}\): selective genes; \(y_{cg}\): measured
+  GeneEffect; \(\mu_g,\sigma_g\): training mean and residual SD of gene \(g\); \(\hat r_{cg}\): predicted residual.</p>
   <h3>Stage two: recall in the top 10% ↑</h3>
   <p>The metric uses the known SL pairs, because a negative is only a screen non-hit. In each screen, rank the
   pairs and take the fraction of SL pairs in the top 10% (tied pairs share the credit; a random ranking gives 0.10).
   Take the mean over the screens of a study, then over the studies of a line, then over the lines. Thus each study has equal weight in its line, and each screen equal weight in its study.</p>
-  <p class="eq">R = mean<sub>c</sub> mean<sub>t ∈ studies(c)</sub> mean<sub>s ∈ screens(t,c)</sub> recall@10%(s)</p>
+  <div class="eq">\[
+    \mathrm{R}_{10}(s) \;=\; \frac{1}{|P_s|}\sum_{p\in P_s}\mathbf{1}\!\left[\operatorname{rank}_s(p)\le 0.1\,n_s\right],
+    \qquad
+    \mathrm{R}_{10} \;=\; \frac{1}{|\mathcal{C}|}\sum_{c\in\mathcal{C}}\frac{1}{|T_c|}\sum_{t\in T_c}
+      \frac{1}{|S_{tc}|}\sum_{s\in S_{tc}}\mathrm{R}_{10}(s)
+  \]</div>
+  <p class="small">\(P_s\): SL pairs of screen \(s\); \(n_s\): pairs in \(s\); \(\operatorname{rank}_s(p)\): rank of
+  \(p\) by model score in \(s\) (a tie block shares its credit); \(T_c\): studies of line \(c\); \(S_{tc}\): kept screens
+  of study \(t\) in line \(c\).</p>
   <p><b>Controls.</b> Pair identity (the pair's SL rate in the same study's training lines), pan-essentiality (the
   training mean GeneEffect of the two genes) and a context-ablated model (the same model with each gene's mean
   profile in place of the line's). The main result is the model minus pair identity for each line, with a 95%
