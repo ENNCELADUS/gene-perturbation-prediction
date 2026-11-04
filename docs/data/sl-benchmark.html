@@ -75,17 +75,21 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
       <tr><td>Validation</td><td class="num">27</td><td>Model selection</td></tr>
       <tr><td>Test</td><td class="num">28</td><td>Scored once</td></tr>
     </tbody></table></div>
+  <p><b>Perturb-seq data.</b> 19 of the benchmark lines have a published genetic Perturb-seq screen: a pool of guides
+  in the cells, with each cell read by scRNA. Table 2 lists the available data.</p>
   <div class="wrap"><table>
-    <caption>Table 2. Genetic Perturb-seq screens of the benchmark lines.</caption>
-    <thead><tr><th>Dataset</th><th>Screen</th><th class="num">Lines</th></tr></thead>
+    <caption>Table 2. Available genetic Perturb-seq screens of the benchmark lines.</caption>
+    <thead><tr><th>Dataset</th><th>Perturbation</th><th>Genes targeted</th><th>Lines</th></tr></thead>
     <tbody>
-      <tr><td>Replogle 2022</td><td>CRISPRi, genome-wide and essential genes</td><td class="num">2</td></tr>
-      <tr><td>Nadig 2025</td><td>CRISPRi, essential genes</td><td class="num">1</td></tr>
-      <tr><td>Jost 2020 / Replogle 2020</td><td>CRISPRi, dual sgRNA</td><td class="num">1</td></tr>
-      <tr><td>X-Atlas/Orion (Xaira 2025)</td><td>Genome-wide</td><td class="num">2</td></tr>
-      <tr><td>Jiang 2025</td><td>CRISPRi, signalling regulators, 5 stimuli</td><td class="num">6</td></tr>
-      <tr><td>McFarland 2020 (MIX-seq)</td><td>Cas9 pool</td><td class="num">6</td></tr>
-      <tr><td>Other CROP-seq and pooled Cas9 deposits</td><td>Cas9</td><td class="num">3</td></tr>
+      <tr><td>Replogle 2022</td><td>CRISPRi</td><td>Genome-wide; essential genes</td><td>K-562 (both), hTERT-RPE1 (essential genes)</td></tr>
+      <tr><td>Nadig 2025</td><td>CRISPRi</td><td>Essential genes</td><td>Jurkat</td></tr>
+      <tr><td>Jost 2020 / Replogle 2020</td><td>CRISPRi, dual sgRNA</td><td>Gene pairs</td><td>K-562</td></tr>
+      <tr><td>X-Atlas/Orion (Xaira 2025)</td><td>CRISPR</td><td>Genome-wide</td><td>HCT 116, 293T</td></tr>
+      <tr><td>Jiang 2025 (Pathway Perturb-seq)</td><td>CRISPRi, 5 stimuli</td><td>About 1,500 signalling regulators</td><td>K-562, HAP1, HT-29, A549, BxPC-3, MCF-7</td></tr>
+      <tr><td>McFarland 2020 (MIX-seq, experiment 2)</td><td>Cas9, pooled lines</td><td>Control guides only (sgLACZ, sgOR2J2)</td><td>PANC-1, RKO, KP-4, A2058, T24, HT-1080</td></tr>
+      <tr><td>GSE217779</td><td>Cas9 CROP-seq</td><td>Not recorded</td><td>U-937</td></tr>
+      <tr><td>GSE229062</td><td>Cas9 CROP-seq</td><td>Not recorded</td><td>T3M-4</td></tr>
+      <tr><td>figshare 33273600</td><td>Cas9, pooled lines</td><td>Not recorded</td><td>HCT-15</td></tr>
     </tbody></table></div>
 </section>
 
