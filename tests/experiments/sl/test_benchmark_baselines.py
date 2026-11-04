@@ -65,10 +65,12 @@ def test_a_drug_anchor_list_is_ranked_by_gene_b():
 def test_summary_averages_lists_within_a_line_first():
     lists = pd.DataFrame(
         {"split": "test", "scorer": "x", "model_id": ["L0", "L0", "L1"],
-         "auprc_lift": [1.0, 3.0, 4.0], "auroc": [0.5, 0.5, 0.5]}
+         "auprc_lift": [1.0, 3.0, 4.0], "auroc": [0.5, 0.5, 0.5],
+         "group": ["cancer", "cancer", "non-cancer"]}
     )  # fmt: skip
-    (row,) = summary(lists, reps=20, seed=0)
-    assert row["auprc_lift"] == pytest.approx(3.0) and row["lines"] == 2
+    rows = {row["group"]: row for row in summary(lists, reps=20, seed=0)}
+    assert rows["all"]["auprc_lift"] == pytest.approx(3.0) and rows["all"]["lines"] == 2
+    assert rows["non-cancer"]["auprc_lift"] == pytest.approx(4.0)
 
 
 def test_run_scores_every_list(tmp_path):
@@ -82,11 +84,16 @@ def test_run_scores_every_list(tmp_path):
         columns=[f"{g} ({i})" for i, g in enumerate(GENES)],
     )  # fmt: skip
     effect.to_csv(tmp_path / "ge.csv")
+    pd.DataFrame(
+        {"ModelID": ["T0", "T1", "V0", "E0"],
+         "OncotreePrimaryDisease": ["Lung", "Lung", "Lung", "Non-Cancerous"]}
+    ).to_csv(tmp_path / "Model.csv", index=False)  # fmt: skip
     labels().to_parquet(tmp_path / "labels.parquet")
     (tmp_path / "config.yaml").write_text(
         f"kind: sl_benchmark_baselines\nseed: 0\noutput_root: {tmp_path}\ntask: base\n"
         f"labels: {tmp_path}/labels.parquet\nsplit: {tmp_path}/split.json\n"
-        f"gene_effect: {tmp_path}/ge.csv\nprior: null\ntop_k: 2\nbootstrap: 10\n"
+        f"gene_effect: {tmp_path}/ge.csv\nmodel: {tmp_path}/Model.csv\nprior: null\n"
+        "top_k: 2\nbootstrap: 10\n"
     )
     out = run(load_config(tmp_path / "config.yaml"), "r0")
     scores = pd.read_parquet(out / "scores.parquet")
@@ -100,8 +107,12 @@ def test_run_scores_every_list(tmp_path):
     ]
     assert measured["score"].tolist() == pytest.approx([1.6, 2.1, 1.5, 2.0])
     metrics = json.loads((out / "metrics.json").read_text())
-    by = {(r["split"], r["scorer"]): r for r in metrics["summary"]}
+    by = {(r["split"], r["scorer"], r["group"]): r for r in metrics["summary"]}
     scorers = ("pair_identity", "pan_essentiality", "measured_geneeffect")
-    assert set(by) == {(s, c) for s in ("val", "test") for c in scorers}
+    assert {(s, c) for s, c, g in by if g == "all"} == {
+        (s, c) for s in ("val", "test") for c in scorers
+    }
+    assert ("test", "pair_identity", "non-cancer") in by  # E0 is non-cancer
+    by = {(s, c): row for (s, c, g), row in by.items() if g == "all"}
     # On E0 the measured GeneEffect ranks the one SL pair (G0, G2) first.
     assert by[("test", "measured_geneeffect")]["auprc_lift"] == pytest.approx(4.0)

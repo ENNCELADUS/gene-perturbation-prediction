@@ -18,7 +18,13 @@ from typing import Any
 
 import pandas as pd
 
-from src.data.depmap import read_model_ids, read_models
+from src.data.builders.build_sl_study_benchmark import line_map
+from src.data.depmap import (
+    LINE_IDENTITIES,
+    read_line_identities,
+    read_model_ids,
+    read_models,
+)
 from src.data.extra_lines import SINGLE_CELL_SCHEMA_VERSION
 from src.data.splits import FixedSplit, load_geneeffect_split
 
@@ -41,11 +47,12 @@ MAP_COLUMNS = (
 CONDITION_CLASSES = ("basal_2d", "control_guide", "cutting_control", "other")
 FLAGS = ("ambiguous", "no_match", "problematic", "derived")
 POLICY = (
-    "Labelled lines outside the 226 whose basal single cells are built, one source "
-    "per line (untreated or vehicle 2D first, then raw counts, then most cells). A "
-    "line sharing a PatientID with a validation or test line is excluded; a chosen "
-    "line without 26Q1 GeneEffect is unlabelled and not built; a labelled line whose "
-    "source is not built yet is pending."
+    "Lines outside the 226 whose basal single cells are built, one source per line "
+    "(untreated or vehicle 2D first, then raw counts, then most cells): lines with "
+    "26Q1 GeneEffect (labelled), and SL benchmark lines without it (unlabelled, "
+    "Cellosaurus lines included; they get no stage-one target). A line sharing a "
+    "PatientID with a validation or test line is excluded; another chosen line "
+    "without GeneEffect is not built; a line whose source is not built yet is pending."
 )
 
 #: Cellosaurus entries: ``search(name)`` and ``entry(accession)`` return dicts
@@ -100,12 +107,15 @@ class Admission:
 
     Attributes:
         labelled: Lines with 26Q1 GeneEffect, each with its chosen source.
-        unlabelled: Lines without 26Q1 GeneEffect.
+        unlabelled: SL benchmark lines without 26Q1 GeneEffect, each with its
+            chosen source.
+        not_built: Other chosen lines without 26Q1 GeneEffect.
         excluded: Lines sharing a patient with a validation or test line.
     """
 
     labelled: Mapping[str, str]
-    unlabelled: tuple[str, ...]
+    unlabelled: Mapping[str, str]
+    not_built: tuple[str, ...]
     excluded: Mapping[str, str]
 
 
@@ -115,15 +125,17 @@ def admit(
     *,
     labelled_ids: Collection[str],
     split: FixedSplit,
+    sl_lines: Collection[str],
 ) -> Admission:
-    """Sort the chosen lines outside the 226 into labelled, unlabelled, excluded."""
+    """Sort the chosen lines outside the 226 into labelled, unlabelled (SL
+    benchmark lines without GeneEffect), not built and excluded."""
     chosen = choose_sources(candidates)
     unknown = sorted(set(chosen) - set(models.index))
     if unknown:
         raise ValueError(f"ModelIDs absent from Model.csv: {unknown[:10]}")
     ours = set(split.all_model_ids)
     held = {models.at[m, "patient_id"]: m for m in (*split.val, *split.test)}
-    labelled, unlabelled, excluded = {}, [], {}
+    labelled, unlabelled, not_built, excluded = {}, {}, [], {}
     for model_id, source in chosen.items():
         patient = models.at[model_id, "patient_id"]
         if model_id in ours:
@@ -134,9 +146,18 @@ def admit(
             )
         elif model_id in labelled_ids:
             labelled[model_id] = source
+        elif model_id in sl_lines:
+            unlabelled[model_id] = source
         else:
-            unlabelled.append(model_id)
-    return Admission(labelled, tuple(unlabelled), excluded)
+            not_built.append(model_id)
+    return Admission(labelled, unlabelled, tuple(not_built), excluded)
+
+
+def sl_benchmark_lines(rules: Path, identities: Path = LINE_IDENTITIES) -> set[str]:
+    """The ModelIDs of the SL rules' reviewed ``lines`` and the identity table's
+    line_ids."""
+    frame = pd.read_csv(rules, dtype=str, keep_default_na=False)
+    return set(line_map(frame).values()) | set(read_line_identities(identities).index)
 
 
 def build_membership(
@@ -145,14 +166,23 @@ def build_membership(
     *,
     labelled_ids: Collection[str],
     split: FixedSplit,
+    sl_lines: Collection[str],
     qc: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """Membership payload; a labelled line is built when its chosen source's QC
-    report holds it with at least one cell, and pending otherwise."""
-    admission = admit(candidates, models, labelled_ids=labelled_ids, split=split)
+    """Membership payload; a labelled or unlabelled line is built when its chosen
+    source's QC report holds it with at least one cell, and pending otherwise."""
+    admission = admit(
+        candidates, models, labelled_ids=labelled_ids, split=split, sl_lines=sl_lines
+    )
     accepted = candidates.loc[candidates["review"] == "ok"]
-    labelled, pending = {}, {}
-    for model_id, source in admission.labelled.items():
+    built = {"labelled": {}, "unlabelled": {}}
+    pending = {}
+    chosen = [
+        (side, model_id, source)
+        for side in built
+        for model_id, source in getattr(admission, side).items()
+    ]
+    for side, model_id, source in chosen:
         report = qc.get(source)
         line = None if report is None else report["lines"].get(model_id)
         if report is None:
@@ -163,7 +193,7 @@ def build_membership(
             continue
         rows = accepted.loc[accepted["model_id"] == model_id]
         own = rows.loc[rows["source"] == source]
-        labelled[model_id] = {
+        built[side][model_id] = {
             "source": source,
             "accession": own["accession"].iloc[0],
             "identifiers": sorted(own["identifier"]),
@@ -178,8 +208,9 @@ def build_membership(
     return {
         "schema_version": SINGLE_CELL_SCHEMA_VERSION,
         "policy": POLICY,
-        "labelled": labelled,
-        "unlabelled": list(admission.unlabelled),
+        "labelled": built["labelled"],
+        "unlabelled": built["unlabelled"],
+        "not_built": list(admission.not_built),
         "pending": pending,
         "excluded": dict(admission.excluded),
     }
@@ -313,7 +344,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     for step in (proposing, building):
         step.add_argument("--candidates", type=Path, required=True)
         step.add_argument("--model", type=Path, required=True)
-    for name in ("gene-effect", "split", "qc-dir", "out"):
+    for name in ("gene-effect", "split", "sl-rules", "qc-dir", "out"):
         building.add_argument(f"--{name}", type=Path, required=True)
     args = parser.parse_args(argv)
     candidates = read_map(args.candidates)
@@ -340,6 +371,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         read_models(args.model),
         labelled_ids=read_model_ids(args.gene_effect),
         split=load_geneeffect_split(args.split),
+        sl_lines=sl_benchmark_lines(args.sl_rules),
         qc=qc,
     )
     inputs = {
@@ -347,13 +379,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         "model": args.model,
         "gene_effect": args.gene_effect,
         "split": args.split,
+        "sl_rules": args.sl_rules,
+        "identities": LINE_IDENTITIES,
         **{f"qc/{source}": args.qc_dir / f"{source}.json" for source in sorted(qc)},
     }
     payload["inputs"] = {k: {"path": str(p)} for k, p in inputs.items()}
     args.out.write_text(json.dumps(payload, indent=2) + "\n")
     print(
-        f"{len(payload['labelled'])} labelled, {len(payload['pending'])} pending, "
-        f"{len(payload['unlabelled'])} unlabelled, {len(payload['excluded'])} excluded"
+        f"{len(payload['labelled'])} labelled, {len(payload['unlabelled'])} "
+        f"unlabelled, {len(payload['pending'])} pending, {len(payload['not_built'])} "
+        f"not built, {len(payload['excluded'])} excluded"
     )
     return 0
 

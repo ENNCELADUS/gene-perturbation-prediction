@@ -18,7 +18,7 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-10-30)
+## Current state (2026-11-04)
 
 Replace this section on every update; history lives in `results/` and the protocol.
 
@@ -26,17 +26,14 @@ Replace this section on every update; history lives in `results/` and the protoc
   reaches the default prior refitted on the frame (per-line residual Spearman 0.215 validation / 0.228 test;
   [record](results/stage_one_architecture/README.md)). FiLM reading the prior's prediction recovers most of it
   (0.199–0.203) but not all, and ΔE beside the prior adds nothing that line-permuted ΔE does not
-  ([record](results/stage_one_prior_input/README.md)). Cell-state telemetry (Task 8) ran
-  ([record](results/state_telemetry_seed0/README.md)).
-- **Next**: the rest of Wave 2, then Task 9 (five vocabularies). The GPU-efficiency pass is merged (`hpc/README.md`);
-  the stage-one rows were rerun after it, and their records still show the earlier runs. The whole-repo trim is
-  merged; H20 artifacts written before it were migrated once, so pre-trim code cannot read them.
+  ([record](results/stage_one_prior_input/README.md)). The next build makes all current checkpoints unusable.
 - **Stage two** (SL protocol §10): pair identity wins; predicted or measured GeneEffect adds nothing over each gene's
   mean ([record](results/sl_stage_two_seed0/README.md)). Not SL context evidence. Both: [status](results/status.html).
-- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): rebuilt 2026-10-30 with the authors' cuts:
-  58 studies, 310 lists, 140 lines; 62 lines scored (basal scRNA, SL split side, two-class list: 36 train, 13 val,
-  13 test). The SL split was rebuilt; the baselines on it ([record](results/sl_study_benchmark/summary.html)) are
-  still those of the 294-list build. Open: rerun prior and baselines, a minimum of positives per list, stage one.
+- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): 58 studies, 310 lists, 135 lines. Code for the
+  2026-11-04 decisions is in: lines without a ModelID join by Cellosaurus ID
+  (`configs/benchmarks/sl_line_identities.csv`); SL lines with basal scRNA and no GeneEffect enter the final split as
+  unlabelled training lines; hTERT-RPE1 is placed on SL train by hand; extra-source wave 3 adds 19 SL lines. **Next**:
+  the H20 cleanup and one build (sources to SL split), then prior and baselines.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands
@@ -94,8 +91,9 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
   existing root grows by the lines it lacks, in the recorded space.
 - `configs/benchmarks/cell_line_geneeffect_split.json` (the **final split**, [card](docs/data/cell-line-geneeffect-split.md)) is
   the sole membership authority: 379 single-cell training lines, 27 validation, 28 test (A549 since 2026-10-11), 713
-  labelled and 576 unlabelled bulk-only lines that join the prior's training side through bulk RNA, and 12 excluded. Gene
-  means, selective genes, residual SD and context PCA fit on its 377 labelled training lines;
+  labelled and 576 unlabelled bulk-only lines that join the prior's training side through bulk RNA, and 12 excluded
+  (counts before the 2026-11-04 build, which adds SL lines without GeneEffect to `train` + `unlabeled_train`). Gene
+  means, selective genes, residual SD and context PCA fit on its labelled training lines;
   `src/data/splits.py:assert_fit_eligible` guards every fit.
 - Checkpoint selection reads validation only: `val_selective_spearman` for the joint model, the per-line residual Spearman
   for stage one (protocol §6). `all` never runs test; `revision` and `test` score a chosen `best.pt` once.
@@ -108,13 +106,14 @@ Mistakes here produce a complete-looking **wrong artifact**, not an exception.
 - `src/experiments/config.py` raises on unknown or missing keys; never add `.get(key, default)` config reads.
 - `load_inputs` refuses manifests without `expression_space`, and checkpoint loads raise on zero or mismatched keys
   (`load_released_state`). Never bypass either or add a bare `load_state_dict(..., strict=False)`.
-- Resume rejects a conflicting config; a batch-size change needs a new run id. A checkpoint records the split
-  membership it was fitted under, and `load_inputs` refuses to restore it under another: every checkpoint from
-  before the 2026-10-11 in-place re-split (A549 to test) is refused for resume, evaluation and readout.
+- Resume rejects a conflicting config; a batch-size change needs a new run id. A checkpoint does not record the split
+  membership: use a checkpoint only with the split it was trained on.
 - Residuals: targets center on the fold-fit `mu_hat_g^(-c)`, predictions on fold-independent `mu_bar` — centering a prediction
   on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-prior residual correlations are undefined, not zero.
 - Join cell lines by DepMap ModelID, never by informal names at run time (`K-562` ≠ `K562`): a source's spelling becomes a
-  ModelID only through a reviewed row of `configs/benchmarks/single_cell_atlas_candidates.csv`. Fit means, gene
-  membership and normalization on labeled training lines only.
+  ModelID only through a reviewed row of `configs/benchmarks/single_cell_atlas_candidates.csv`. A line without a ModelID
+  has the ID of its reviewed row in `configs/benchmarks/sl_line_identities.csv` (Cellosaurus accession, else
+  `SL-<study>-<line>`); `read_models` adds those rows. Fit means, gene membership and normalization on labeled training
+  lines only.
 - Context claims need residual evaluation against context-blind priors; the rules are in the GeneEffect protocol (§11) and the
   SL protocol (§8). Single-gene predictions are not SL or genetic-interaction evidence.

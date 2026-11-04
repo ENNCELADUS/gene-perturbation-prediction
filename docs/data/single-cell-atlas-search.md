@@ -42,12 +42,15 @@ stops it.
 
 Each line takes its cells from one source: among `ok` rows of an ingested wave, the best
 `condition_class`, then integer counts, then most cells, then the source key. The membership file
-`configs/benchmarks/extra_single_cell_lines_26Q1.json` (schema `extra-single-cell-lines-26q1-v2`,
+`configs/benchmarks/extra_single_cell_lines_26Q1.json` (schema `extra-single-cell-lines-26q1-v3`,
 `src/data/extra_lines.py:load_extra_single_cell_lines`) sorts the chosen lines outside the 226:
 `labelled` (26Q1 GeneEffect row and built cells, with source, identifiers, condition, patient,
-lineage, cells and arms), `pending` (labelled, source not built or no cell after QC), `unlabelled`
-(no GeneEffect row; never built) and `excluded` (shares a PatientID with a validation or test line).
-Preparation and the SL benchmark read only `labelled`.
+lineage, cells and arms), `unlabelled` (since 2026-11-04: a line of the SL benchmark without a GeneEffect row, with
+built cells and the same record; a line without a ModelID has its ID from `configs/benchmarks/sl_line_identities.csv`),
+`pending` (source not built or no cell after QC), `not_built` (another chosen line without a GeneEffect row) and
+`excluded` (shares a PatientID with a validation or test line). The SL benchmark lines are the ModelIDs of the
+reviewed `lines` of `configs/benchmarks/sl_label_rules.csv` and the identity table's lines. The final split takes
+`labelled` and `unlabelled` as training lines; `unlabelled` lines are also `unlabeled_train`.
 
 **Second deposits** (2026-10-12, for the [noise diagnosis](../specs/2026-10-12-noise-diagnosis-design.md)'s deposit
 swap): `configs/data/second_source_lines_26Q1.json` (`src/data/builders/plan_second_sources.py`) names, for each labelled
@@ -165,6 +168,45 @@ Checks on the routes:
   UMI (knees at 3,391 and 2,555 UMI).
 - **sci-Plex depth.** Its nuclei are shallow (median 576 and 390 UMI for T98G and U-87 MG), so the
   200-gene floor keeps 4,845 and 971 of the DMSO cells the RT map and hash calls assign.
+
+## Wave 3 (2026-11-04)
+
+Wave 3 adds basal cells for SL benchmark lines, so that the SL benchmark can score them (decisions 2026-11-04). The
+lines without GeneEffect become unlabelled training lines of the final split. The searches of 2026-11-04 verified each
+deposit (raw integer counts).
+
+| Source | Lines | Cells read | Reader |
+| --- | --- | --- | --- |
+| `replogle2022_rpe1` | hTERT-RPE1 (`CVCL_4388`) | non-targeting guide cells of `rpe1_raw_singlecell_01.h5ad` (figshare+, copied from the Mac) | `anndata`, identity `guides` on obs `gene` |
+| `kinker_scp542` | Hep 3B2.1-7, SK-MEL-5 | the 226's copy of SCP542 `UMIcount_data.txt` | `kinker_umi` (streams the listed lines' columns) |
+| `gse162045` | SK-MEL-28 | GSM4932163, untreated 0 h | `tenx_mtx` |
+| `gse114687` | MCF 10A | pseudospace samples 1 and 2 (mock inner and outer colony; GSM3147293, GSM3147294), 5,004 cells | `tenx_mtx`, arm from the barcode suffix |
+| `gse217779` | U-937 | cells whose every guide is `NTC` (606) | `table`, identity `guides` |
+| `gse319999` | Set-2 | one untreated K562 + SET2 + HEL 92.1.7 Flex pool (GSM9531538 BC001), lines by bulk RNA | `tenx_h5`, identity `pool` |
+| `gse293316` | Reh | parental, untreated (GSM8880232), 7,433 Multiome nuclei | `tenx_mtx` (the peaks are not read) |
+| `gse144236` | CAL 27 | untreated in vitro (GSM4565521), 4,759 cells; the paper does not say whether they carry Cas9 | `table` |
+| `gse270292` | eHAP (`SL-Nebenfuehr2026-eHAP`; eHAP iCas9 merges into it) | no 4sU arm (GSM8339158), 2,807 cells | `tenx_mtx` |
+| `gse237726` | HMLE (`SL-Tuano2023-HMLE`) | unsorted population (GSM7646204), 4,614 cells | `tenx_mtx` |
+| `gse132044` | HEK-293 | human cells of the HEK293 + NIH3T3 mixtures | `tenx_mtx`, human cells by species |
+| `tenx_293t` | 293T (`CVCL_0063`) | 10x 293T (2,885 cells) and the human cells of hgmm_10k_v3 (10x species call) | `tenx_mtx` |
+| `gse138814` | HeLa S3 (`CVCL_0058`) | GSM4119858, 884 cells | `table` |
+| `gse291908` | WA09 (`CVCL_9773`) | 0 h arm (GSM8844231), 9,853 Multiome nuclei | `tenx_mtx` (the peaks are not read) |
+| `gse350646` | PLC/PRF/5 | spacer-free SAM CRISPRa control arm (probe barcodes BC001, BC002), EGFP-labelled reference cells removed | `tenx_mtx`; Flex counts 18,083 probe-targeted genes, so `normalize_total` divides by a different total than on poly-A lines |
+
+MeWo and MP41 come from `gse311521` (wave 2), and PL-21 from `emtab13204` (wave 1): those two sources are built
+again. The HEL row of `gse319999` joins HEL 92.1.7 (`ACH-000005`): the GIFT-seq lines came from ATCC. HEK293-A does not
+use the HEK-293 cells.
+
+Not built: `gse200981` (MCF 10A, 383 untreated cells; `gse114687` ranks first), `gse160915` (PA-TU-8902: the
+monoculture library holds tumour cells and HUVEC, and PECAM1, CDH5, VWF and EPCAM do not separate them). Deferred, with
+a map row: T84 (`gse248412`, reads only, MULTI-seq hashtags; the authors removed T84 from the deposited matrix, and the
+earlier note "GSE248412 is bulk" is wrong), SW837 (`prjna1294394`, a 21-line pool that needs SNP demultiplexing), NB-4
+(`node_oep001921`, the deposit did not open). LS513 (`gse311813`) has only a xenograft arm.
+
+No usable source (searched 2026-11-04): the 13 eye and skin lines, 11 lung, head and neck and other lines (COR-L311,
+NCI-H1436, NCI-H1836, LCLC-97TM1, NCI-H520, NCI-H1993, CAL-33, HSC-2, MKN74, PEO1, C092), OCI-AML2, NOMO-1, P31/FUJ,
+MV4-11, HEL (`ACH-000004`), HEK293-A, HEK-HT, mesHMLE, B80-T5, B80-T17, K5+/K19-, SNU-478, KP-363T, COLO-678, SW1463,
+PaCaDD-165, YAPC, PK-1, KP-1N and SNU-213.
 
 ## 2026-10-07 search
 

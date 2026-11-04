@@ -1,6 +1,7 @@
 """Build the multi-study SL benchmark's labels (docs/data/sl-benchmark.html): run
 the reader (the ``reader`` column) of every ready row of
-configs/benchmarks/sl_label_rules.csv, map each list's line to its reviewed ModelID and
+configs/benchmarks/sl_label_rules.csv, map each list's line to its reviewed ModelID (a
+line without one to its ``line_id`` in configs/benchmarks/sl_line_identities.csv) and
 each gene to its 26Q1 GeneEffect symbol, and write one row per (list, gene pair).
 Constructs of one pair in one list are merged: SL when any is, negative only when every
 one is called negative. An anchor that is not a gene (``drug:<name>``) keeps its name.
@@ -16,6 +17,7 @@ import pandas as pd
 
 from src.data.builders.build_sl_screen_benchmark import geneeffect_namer, symbol_mapper
 from src.data.builders.sl_study_readers import COLUMNS, READERS
+from src.data.depmap import LINE_IDENTITIES, identity_spellings, read_line_identities
 from src.data.io import write_json, write_parquet
 from src.data.labels import parse_gene_symbol
 
@@ -57,7 +59,12 @@ def merge_constructs(rows: pd.DataFrame) -> pd.DataFrame:
 
 
 def build(
-    rules_path: Path, raw: Path, gene_effect: Path, hgnc_path: Path, out: Path
+    rules_path: Path,
+    raw: Path,
+    gene_effect: Path,
+    hgnc_path: Path,
+    out: Path,
+    identities: Path = LINE_IDENTITIES,
 ) -> dict:
     if out.exists():
         raise FileExistsError(f"refusing to overwrite {out}")
@@ -78,6 +85,11 @@ def build(
     )
     name = geneeffect_namer(symbol_mapper(hgnc), geneeffect)
     lines = line_map(ready)
+    spellings = identity_spellings(read_line_identities(identities))
+    both = sorted(set(lines) & set(spellings))
+    if both:
+        raise ValueError(f"spellings with a ModelID and a line_id: {both}")
+    lines |= spellings
     frames, studies = [], {}
     for reader, design in zip(ready["reader"], ready["design"]):
         frame = READERS[reader](raw)
@@ -85,9 +97,11 @@ def build(
             raise ValueError(f"{reader} returned columns {list(frame.columns)}")
         frames.append(frame.assign(design=design))
     rows = pd.concat(frames, ignore_index=True)
-    rows["model_id"] = [
-        lines.get(key, "") for key in zip(rows["study_id"], rows["line"])
-    ]
+    keys = list(zip(rows["study_id"], rows["line"]))
+    unused = sorted(set(spellings) - set(keys))
+    if unused:
+        raise ValueError(f"identity spellings no reader returns: {unused}")
+    rows["model_id"] = [lines.get(key, "") for key in keys]
     rows["screen_gene_a"], rows["screen_gene_b"] = rows["gene_a"], rows["gene_b"]
     rows["gene_a"] = rows["gene_a"].map(name)
     rows["gene_b"] = rows["gene_b"].map(name)

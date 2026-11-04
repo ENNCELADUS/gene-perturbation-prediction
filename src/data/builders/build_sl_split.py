@@ -2,7 +2,9 @@
 split and the SL benchmark's lists: the screened single-cell lines
 already held out keep their side, and further screened labelled training lines move to
 validation and test, drawn across lineages, until each side holds a fixed fraction
-of the screened lines. Lines sharing a patient with a moved line are excluded."""
+of the screened lines. A reviewed placement (configs/benchmarks/sl_split_placements.csv)
+keeps a line, and the lines of its patient, on the training side. Lines sharing a
+patient with a moved line are excluded."""
 
 from __future__ import annotations
 
@@ -13,13 +15,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.data.depmap import read_models
 from src.data.splits import SPLIT_SCHEMA_VERSION, FixedSplit, load_geneeffect_split
 
 POLICY = (
     "The SL split: the final split with screened single-cell training lines moved to "
     "validation and test until each side holds {fraction:.0%} of the {scored} screened "
     "lines with a scored list (seed {seed}, drawn across lineages); the final split's "
-    "held-out lines keep their side. Lines sharing a PatientID with a moved line are "
+    "held-out lines keep their side, and a placed line and its patient's lines stay "
+    "on the training side. Lines sharing a PatientID with a moved line are "
     "excluded. Stage one follows it."
 )
 
@@ -28,6 +32,18 @@ def scored_lines(lists: pd.DataFrame, lines: set[str]) -> list[str]:
     """Single-cell lines with at least one list holding both classes."""
     both = (lists["n_positive"] > 0) & (lists["n_negative"] > 0)
     return sorted(set(lists.loc[both, "model_id"]) & lines)
+
+
+def read_placements(path: Path) -> dict[str, str]:
+    """The reviewed placements: line_id -> reason; every placement is ``train``."""
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False)
+    if list(frame.columns) != ["line_id", "side", "reason"]:
+        raise ValueError(f"{path}: columns must be line_id, side, reason")
+    if set(frame["side"]) - {"train"} or (frame["reason"] == "").any():
+        raise ValueError(f"{path}: every placement is train with a reason")
+    if frame["line_id"].duplicated().any():
+        raise ValueError(f"{path}: a line is placed twice")
+    return dict(zip(frame["line_id"], frame["reason"]))
 
 
 def draw_order(candidates: pd.DataFrame, seed: int) -> list[str]:
@@ -51,10 +67,16 @@ def build_sl_split(
     *,
     fraction: float,
     seed: int,
+    placed: dict[str, str],
 ) -> tuple[dict, pd.DataFrame]:
     """The SL split's payload (without ``inputs``) and table. ``final`` is the final
-    split's payload, ``table`` its table, and ``patients`` maps every ModelID it lists
-    (single-cell and bulk) to its PatientID."""
+    split's payload, ``table`` its table, ``patients`` maps every line it lists
+    (single-cell and bulk) to its PatientID, and ``placed`` the lines that stay on
+    the training side to their reasons."""
+    off = sorted(set(placed) - set(split.train))
+    if off:
+        raise ValueError(f"placed lines not on the final split's training side: {off}")
+    placed_patients = {patients[m] for m in placed}
     scored = scored_lines(lists, set(table["model_id"]))
     target = round(fraction * len(scored))
     count = {"val": len(set(scored) & set(split.val)),
@@ -66,6 +88,7 @@ def build_sl_split(
         table["model_id"].isin(scored)
         & table["model_id"].isin(split.supervised_train)
         & ~table["patient_id"].isin(held_patients)
+        & ~table["patient_id"].isin(placed_patients)
     ]
     excluded = dict(final["excluded"])
     moved = {"val": [], "test": []}
@@ -94,6 +117,7 @@ def build_sl_split(
         "bulk_labelled": [m for m in final["bulk_labelled"] if m not in gone],
         "bulk_unlabelled": [m for m in final["bulk_unlabelled"] if m not in gone],
         "excluded": dict(sorted(excluded.items())),
+        "placed": dict(sorted(placed.items())),
     }
     order = [*payload["train"], *payload["val"], *payload["test"]]
     rows = table.set_index("model_id").loc[order].reset_index()[table.columns]
@@ -110,23 +134,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--final", type=Path, required=True)
     parser.add_argument("--lists", type=Path, required=True)
     parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--placements", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--fraction", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
-    model = pd.read_csv(args.model, dtype=str)
     payload, table = build_sl_split(
         json.loads(args.final.read_text()),
         load_geneeffect_split(args.final),
         pd.read_csv(args.final.with_suffix(".csv"), dtype=str),
         pd.read_csv(args.lists),
-        model.set_index("ModelID")["PatientID"],
+        read_models(args.model)["patient_id"],
         fraction=args.fraction,
         seed=args.seed,
+        placed=read_placements(args.placements),
     )
     payload["inputs"] = {
         "final_split": {"path": str(args.final)},
         "lists": {"path": str(args.lists)},
+        "placements": {"path": str(args.placements)},
         "draw": {"fraction": args.fraction, "seed": args.seed},
     }
     args.out.write_text(json.dumps(payload, indent=2) + "\n")

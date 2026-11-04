@@ -1,4 +1,5 @@
-"""Pinned DepMap matrices as ModelID x gene-symbol frames, and Model.csv."""
+"""Pinned DepMap matrices as ModelID x gene-symbol frames, Model.csv, and the
+reviewed identity table of the lines without a ModelID."""
 
 from __future__ import annotations
 
@@ -9,6 +10,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+#: The reviewed identity table of the SL lines without a DepMap ModelID.
+LINE_IDENTITIES = Path("configs/benchmarks/sl_line_identities.csv")
+IDENTITY_COLUMNS = (
+    "line_id", "name", "spellings", "cellosaurus", "parent", "patient_id", "lineage",
+    "non_cancer", "note",
+)  # fmt: skip
 #: DepMap header ``SYMBOL (Entrez)``; some Omics columns carry ``(Unknown)``.
 _COLUMN = re.compile(r"^(?P<symbol>\S+) \((?:\d+|Unknown)\)$")
 #: Profile metadata of DepMap Omics matrices (one row per sequencing profile).
@@ -75,11 +82,42 @@ def read_model_ids(path: Path) -> frozenset[str]:
     return frozenset(pd.read_csv(path, usecols=[0], dtype=str).iloc[:, 0])
 
 
-def read_models(path: Path) -> pd.DataFrame:
-    """Model.csv: ``patient_id`` (a missing one becomes the ModelID) and ``lineage``."""
+def read_line_identities(path: Path = LINE_IDENTITIES) -> pd.DataFrame:
+    """The reviewed identity table of the SL lines without a DepMap ModelID, by
+    ``line_id`` (Cellosaurus accession, else ``SL-<study>-<line>``)."""
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False)
+    if tuple(frame.columns) != IDENTITY_COLUMNS:
+        raise ValueError(f"{path}: columns must be {IDENTITY_COLUMNS}")
+    if (frame[["line_id", "patient_id", "lineage"]] == "").any().any():
+        raise ValueError(f"{path}: a row has no line_id, patient_id or lineage")
+    if set(frame["non_cancer"]) - {"true", "false"}:
+        raise ValueError(f"{path}: non_cancer must be true or false")
+    return frame.set_index("line_id", verify_integrity=True)
+
+
+def identity_spellings(identities: pd.DataFrame) -> dict[tuple[str, str], str]:
+    """(study_id, line as the study's reader spells it) -> line_id."""
+    out = {}
+    for line_id, field in identities["spellings"].items():
+        for entry in filter(None, (part.strip() for part in field.split(";"))):
+            study, spelling = entry.split(":", 1)
+            if (study, spelling) in out:
+                raise ValueError(f"spelling {study}:{spelling} has two line_ids")
+            out[(study, spelling)] = line_id
+    return out
+
+
+def read_models(path: Path, identities: Path | None = LINE_IDENTITIES) -> pd.DataFrame:
+    """Model.csv: ``patient_id`` (a missing one becomes the ModelID) and ``lineage``,
+    followed by the rows of the line identity table (lines without a ModelID)."""
     frame = pd.read_csv(
         path, usecols=["ModelID", "PatientID", "OncotreeLineage"], dtype=str
     ).set_index("ModelID", verify_integrity=True)
     frame.index.name = "model_id"
     patient = frame["PatientID"].fillna(pd.Series(frame.index, index=frame.index))
-    return pd.DataFrame({"patient_id": patient, "lineage": frame["OncotreeLineage"]})
+    models = pd.DataFrame({"patient_id": patient, "lineage": frame["OncotreeLineage"]})
+    if identities is None:
+        return models
+    extra = read_line_identities(identities)[["patient_id", "lineage"]]
+    extra.index.name = "model_id"
+    return pd.concat([models, extra], verify_integrity=True)

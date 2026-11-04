@@ -165,6 +165,11 @@ def test_lines_and_accessions_follow_the_split_and_model_csv(tmp_path: Path) -> 
     assert without == ["ACH-000003", "ACH-000005"]
     with pytest.raises(KeyError, match="not in Model.csv"):
         cc.line_accessions([*lines, "ACH-999999"], cc.read_rrids(models_path))
+    # lines without a ModelID: a Cellosaurus ID is its own accession, SL- has none
+    accessions, without = cc.line_accessions(
+        ["CVCL_4388", "SL-S-X"], cc.read_rrids(models_path)
+    )
+    assert accessions == {"CVCL_4388": "CVCL_4388"} and without == ["SL-S-X"]
 
 
 def test_released_keys_skip_stimulations_and_prefer_the_accession(setup) -> None:

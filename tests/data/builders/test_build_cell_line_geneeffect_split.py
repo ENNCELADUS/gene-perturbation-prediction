@@ -38,7 +38,11 @@ def record(patient: str) -> dict:
 
 
 CELLS = ExtraSingleCellLines(
-    {"X1": record("PX1"), "X0": record("PX0")}, ("Y0",), {}, {"Z1": "shares PV"}
+    {"X1": record("PX1"), "X0": record("PX0")},
+    {"Y0": record("PY0")},
+    ("W0",),
+    {},
+    {"Z1": "shares PV"},
 )
 BULK = ExtraLines(
     ("B0", "X0", "X1"), ("Y0", "Y1"), {"Z0": "shares PE", "Z1": "shares PV"}
@@ -47,11 +51,11 @@ BULK = ExtraLines(
 
 def test_extras_train_and_bulk_only_lines_keep_one_role():
     payload, table = build_split(SPLIT, TABLE, CELLS, BULK)
-    assert payload["train"] == ["T0", "T1", "U0", "X0", "X1"]
+    assert payload["train"] == ["T0", "T1", "U0", "X0", "X1", "Y0"]
     assert payload["val"] == ["V0"] and payload["test"] == ["E0"]
-    assert payload["unlabeled_train"] == ["U0"]
+    assert payload["unlabeled_train"] == ["U0", "Y0"]  # Y0: built, no GeneEffect
     assert payload["bulk_labelled"] == ["B0"]  # X0, X1 train through their cells
-    assert payload["bulk_unlabelled"] == ["Y0", "Y1"]
+    assert payload["bulk_unlabelled"] == ["Y1"]
     assert payload["excluded"] == {"Z0": "shares PE", "Z1": "shares PV"}
     assert list(table.columns) == [
         "split",
@@ -60,7 +64,7 @@ def test_extras_train_and_bulk_only_lines_keep_one_role():
         "lineage",
         "expression_source",
     ]
-    assert list(table["model_id"]) == ["T0", "T1", "U0", "X0", "X1", "V0", "E0"]
+    assert list(table["model_id"]) == ["T0", "T1", "U0", "X0", "X1", "Y0", "V0", "E0"]
     extra = table.set_index("model_id").loc["X0"]
     assert (extra["split"], extra["patient_id"], extra["expression_source"]) == (
         "train",
@@ -70,14 +74,14 @@ def test_extras_train_and_bulk_only_lines_keep_one_role():
 
 
 def test_build_refuses_unbuilt_leaking_or_contradicted_extras():
-    pending = ExtraSingleCellLines(CELLS.labelled, (), {"X2": "not built"}, {})
+    pending = ExtraSingleCellLines(CELLS.labelled, {}, (), {"X2": "not built"}, {})
     with pytest.raises(ValueError, match="not built yet"):
         build_split(SPLIT, TABLE, pending, BULK)
-    leaking = ExtraSingleCellLines({"X0": record("PV")}, (), {}, {})
+    leaking = ExtraSingleCellLines({}, {"X0": record("PV")}, (), {}, {})
     with pytest.raises(ValueError, match="sharing a patient"):
         build_split(SPLIT, TABLE, leaking, BULK)
     excluded = ExtraLines(("B0",), (), {"X0": "shares PE"})
-    with pytest.raises(ValueError, match="calls excluded"):
+    with pytest.raises(ValueError, match="bulk file excludes"):
         build_split(SPLIT, TABLE, CELLS, excluded)
 
 
@@ -120,7 +124,7 @@ def test_tracked_final_split_is_what_the_builder_writes(tmp_path):
         benchmarks / "extra_single_cell_lines_26Q1.json", old
     )
     assert (split.val, split.test) == (old.val, old.test)
-    assert split.train == (*old.train, *sorted(cells.labelled))
+    assert split.train == (*old.train, *sorted({**cells.labelled, **cells.unlabelled}))
     bulk = load_bulk_lines(tracked, split)
     every = load_extra_lines(benchmarks / "extra_bulk_lines_26Q1.json", old)
     assert set(bulk.labelled) == set(every.labelled) - set(cells.labelled)

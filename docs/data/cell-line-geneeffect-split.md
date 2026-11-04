@@ -13,16 +13,17 @@ Each line has one role.
 
 | Role | Lines | Definition |
 | --- | ---: | --- |
-| `train` | 379 | Single-cell training lines: the 226's 171 training lines, then the 208 built single-cell extras. PC9 and HeLa (`unlabeled_train`) have no 26Q1 GeneEffect, so 377 are labelled |
+| `train` | 379 | Single-cell training lines: the 226's 171 training lines, then the 208 built single-cell extras. PC9 and HeLa (`unlabeled_train`) have no 26Q1 GeneEffect, so 377 are labelled. From the 2026-11-04 build, the built extras without GeneEffect (SL benchmark lines, lines without a ModelID included) are also `train` and `unlabeled_train` |
 | `val` | 27 | The 226's validation lines, unchanged |
 | `test` | 28 | The 226's test lines (A549 since 2026-10-11) |
 | `bulk_labelled` | 713 | Training-side lines read through bulk RNA only: the bulk file's labelled lines without built single cells |
 | `bulk_unlabelled` | 576 | Bulk RNA without 26Q1 GeneEffect, encoder rows only (52 have single cells but no label) |
 | `excluded` | 12 | Lines sharing a `PatientID` with a validation or test line, with the reason; never read (the two such single-cell candidates are among them) |
 
-The builder refuses an unbuilt single-cell extra, an extra the bulk file excludes or lists as unlabelled, and a
-single-cell training line sharing a patient with a held-out line (patients from the 226 table and the extras'
-records); the bulk-only exclusions come from the bulk file, built against the same held-out lines.
+The builder refuses an unbuilt single-cell extra, an extra the bulk file excludes, and a single-cell training line
+sharing a patient with a held-out line (patients from the 226 table and the extras' records). A built extra leaves
+`bulk_labelled` and `bulk_unlabelled`. The bulk-only exclusions come from the bulk file, built against the same
+held-out lines.
 
 ## What fits on what
 
@@ -56,5 +57,5 @@ changes.
 
 Before 2026-10-12 the 226 split was the membership authority and the extras had their own membership files; results
 recorded before then fit their definitions on the 226's 169 labelled training lines (172/27/27 before 2026-10-11,
-171/27/28 after). A checkpoint records the split membership it was fitted under, so every earlier checkpoint is refused
-under this split.
+171/27/28 after). Until 2026-11-04 a checkpoint recorded the split membership and was refused under another; that check
+is removed, and the checkpoints written before the 2026-11-04 build do not belong to the split it writes.

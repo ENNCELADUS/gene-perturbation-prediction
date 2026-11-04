@@ -50,7 +50,7 @@ def lists(lines: list[str]) -> pd.DataFrame:
 def test_held_lines_stay_and_quotas_fill_across_lineages():
     scored = [*TRAIN, "U0", "V0"]  # 10 scored lines, E0 has no list
     payload, table = build_sl_split(
-        FINAL, SPLIT, TABLE, lists(scored), PATIENTS, fraction=0.2, seed=0
+        FINAL, SPLIT, TABLE, lists(scored), PATIENTS, fraction=0.2, seed=0, placed={}
     )
     assert payload["val"][0] == "V0" and payload["test"][0] == "E0"
     scored_held = lambda side: [m for m in payload[side] if m in scored]  # noqa: E731
@@ -68,11 +68,27 @@ def test_held_lines_stay_and_quotas_fill_across_lineages():
 
 def test_a_moved_lines_patient_siblings_are_excluded():
     payload, _ = build_sl_split(
-        FINAL, SPLIT, TABLE, lists(["T4", "V0"]), PATIENTS, fraction=1.0, seed=0
+        FINAL,
+        SPLIT,
+        TABLE,
+        lists(["T4", "V0"]),
+        PATIENTS,
+        fraction=1.0,
+        seed=0,
+        placed={},
     )
     assert payload["test"] == ["E0", "T4"]
     assert "B0" in payload["excluded"] and "B0" not in payload["bulk_labelled"]
     assert "X0" in payload["excluded"] and "B1" in payload["bulk_labelled"]
+
+
+def test_a_placed_line_and_its_patient_stay_on_the_training_side():
+    payload, _ = build_sl_split(
+        FINAL, SPLIT, TABLE, lists(["T4", "V0"]), PATIENTS, fraction=1.0, seed=0,
+        placed={"T4": "reviewed"},
+    )  # fmt: skip
+    assert "T4" in payload["train"] and payload["placed"] == {"T4": "reviewed"}
+    assert "B0" in payload["bulk_labelled"]  # T4's patient sibling is not excluded
 
 
 def test_main_writes_a_split_the_loaders_accept(tmp_path):
@@ -82,12 +98,23 @@ def test_main_writes_a_split_the_loaders_accept(tmp_path):
     )
     TABLE.to_csv(final.with_suffix(".csv"), index=False)
     lists([*TRAIN, "V0"]).to_csv(tmp_path / "lists.csv", index=False)
-    pd.DataFrame({"ModelID": PATIENTS.index, "PatientID": PATIENTS.values}).to_csv(
-        tmp_path / "Model.csv", index=False
-    )
+    pd.DataFrame(
+        {"ModelID": PATIENTS.index, "PatientID": PATIENTS.values,
+         "OncotreeLineage": "Lung"}
+    ).to_csv(tmp_path / "Model.csv", index=False)  # fmt: skip
+    (tmp_path / "placed.csv").write_text("line_id,side,reason\nT1,train,reviewed\n")
     out = tmp_path / "sl.json"
     main(["--final", str(final), "--lists", str(tmp_path / "lists.csv"),
-          "--model", str(tmp_path / "Model.csv"), "--out", str(out)])  # fmt: skip
+          "--model", str(tmp_path / "Model.csv"), "--placements",
+          str(tmp_path / "placed.csv"), "--out", str(out)])  # fmt: skip
     split = load_geneeffect_split(out)
     load_bulk_lines(out, split)
-    assert len(split.val) + len(split.test) > 2
+    assert len(split.val) + len(split.test) > 2 and "T1" in split.train
+
+
+def test_tracked_placements_are_reviewed_train_placements():
+    from src.data.builders.build_sl_split import read_placements
+
+    assert set(read_placements("configs/benchmarks/sl_split_placements.csv")) == {
+        "CVCL_4388"
+    }

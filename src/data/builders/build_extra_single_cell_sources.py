@@ -1,6 +1,7 @@
 """Build the extra single-cell lines' raw-UMI h5ad from their public deposits, one wave
-of ``configs/data/extra_single_cell_sources_26Q1.json`` per run: each line the map's
-choice takes from a source (never a 226 line), named only through accepted map rows,
+of ``configs/data/extra_single_cell_sources_26Q1.json`` per run: each admitted line
+(labelled, or an SL benchmark line without GeneEffect) the map's choice takes from a
+source (never a 226 line), named only through accepted map rows,
 with its basal arms above the QC floor. A source's ``qc/<source>.json`` is written
 last, a source that has one is skipped, and no h5ad is overwritten."""
 
@@ -25,7 +26,12 @@ import pandas as pd
 from scipy import sparse
 
 from src.data.basal import assert_tx1_input_contract
-from src.data.builders.build_extra_single_cell_lines import Admission, admit, read_map
+from src.data.builders.build_extra_single_cell_lines import (
+    Admission,
+    admit,
+    read_map,
+    sl_benchmark_lines,
+)
 from src.data.builders.demultiplex import identify, knee
 from src.data.builders.prepare_cell_line_atlas_raw_umi import (
     load_gene_mapping,
@@ -274,6 +280,7 @@ def run(
         models,
         labelled_ids=read_model_ids(Path(spec["gene_effect_path"])),
         split=split,
+        sl_lines=sl_benchmark_lines(Path(spec["sl_rules_path"])),
     )
     gene_metadata, symbol_to_ensembl = load_gene_mapping(spec)
     context = Context(
@@ -294,7 +301,7 @@ def run(
             print(f"{name}: built", flush=True)
             continue
         taken = (
-            admission.labelled
+            {**admission.labelled, **admission.unlabelled}
             if second_source is None
             else {m: line["second"] for m, line in planned.items()}
         )

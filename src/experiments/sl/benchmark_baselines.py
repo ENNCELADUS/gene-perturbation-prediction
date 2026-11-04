@@ -4,7 +4,9 @@ as AUPRC over the list's positive rate; the headline is the mean over a split's 
 of the mean over each line's lists. Scorers: the pair's hit rate in the same study's
 training lines (pair identity), each gene's mean GeneEffect over the training lines
 (pan-essentiality), the linear context prior's predicted GeneEffect in the line, and
-the measured GeneEffect in the line as a reference, never a bar."""
+the measured GeneEffect in the line as a reference, never a bar (only lines with a
+DepMap ModelID have it). Every split is also reported for its cancer and non-cancer
+lines (DepMap "Non-Cancerous", or ``non_cancer`` in the line identity table)."""
 
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.data.depmap import read_line_identities
 from src.data.io import write_json, write_parquet, write_text
 from src.data.labels import parse_gene_symbol
 from src.data.prior_offsets import read_prior_offsets
@@ -33,7 +36,7 @@ def load_config(path: Path) -> dict[str, Any]:
     require_keys(
         config,
         {"kind", "seed", "output_root", "task", "labels", "split", "gene_effect",
-         "prior", "top_k", "bootstrap"},
+         "model", "prior", "top_k", "bootstrap"},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_benchmark_baselines":
@@ -47,6 +50,14 @@ def read_gene_effect(path: Path) -> pd.DataFrame:
     wide.index = wide.index.astype(str)
     wide.columns = [parse_gene_symbol(column) for column in wide.columns]
     return wide
+
+
+def non_cancer_lines(model: Path) -> set[str]:
+    """Lines outside the cancer lines that train stage one."""
+    frame = pd.read_csv(model, usecols=["ModelID", "OncotreePrimaryDisease"], dtype=str)
+    depmap = frame.loc[frame["OncotreePrimaryDisease"] == "Non-Cancerous", "ModelID"]
+    identities = read_line_identities()
+    return set(depmap) | set(identities.index[identities["non_cancer"] == "true"])
 
 
 def benchmark_rows(
@@ -126,17 +137,20 @@ def list_records(scores: pd.DataFrame, k: int) -> pd.DataFrame:
 
 
 def summary(lists: pd.DataFrame, reps: int, seed: int) -> list[dict[str, Any]]:
-    """Per split and scorer: the mean over lines of each line's mean AUPRC lift, with
-    a 95% interval from resampling lines."""
+    """Per split, scorer and group (``all``, and each value of ``group``): the mean
+    over lines of each line's mean AUPRC lift, with a 95% interval from resampling
+    lines."""
     rng = np.random.default_rng(seed)
     scored = lists[lists["auprc_lift"].notna()]
+    scored = pd.concat([scored.assign(group="all"), scored], ignore_index=True)
     out = []
-    for (split, scorer), group in scored.groupby(["split", "scorer"], sort=True):
+    keys = ["split", "scorer", "group"]
+    for (split, scorer, part), group in scored.groupby(keys, sort=True):
         per_line = group.groupby("model_id")["auprc_lift"].mean().to_numpy()
         draws = [rng.choice(per_line, len(per_line)).mean() for _ in range(reps)]
         low, high = np.quantile(draws, [0.025, 0.975])
         out.append(
-            {"split": split, "scorer": scorer, "lines": len(per_line),
+            {"split": split, "scorer": scorer, "group": part, "lines": len(per_line),
              "lists": len(group), "auprc_lift": float(per_line.mean()),
              "interval": [float(low), float(high)],
              "auroc": float(group.groupby("model_id")["auroc"].mean().mean())}
@@ -175,10 +189,23 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         [base.assign(scorer=name, score=values) for name, values in scorers.items()],
         ignore_index=True,
     )
+    without = (scores["scorer"] == "measured_geneeffect") & ~scores["model_id"].isin(
+        effects.index
+    )
+    scores = scores[~without].reset_index(drop=True)
     lists = list_records(scores, int(config["top_k"]))
+    non_cancer = non_cancer_lines(Path(config["model"]))
+    lists["group"] = np.where(
+        lists["model_id"].isin(non_cancer), "non-cancer", "cancer"
+    )
     metrics = {
         "run_id": run_id,
-        "rows": {"training": len(training), "held": len(held), **dropped},
+        "rows": {
+            "training": len(training),
+            "held": len(held),
+            **dropped,
+            "measured_rows_without_model_id": int(without.sum()),
+        },
         "lists_without_both_classes": int(
             lists.loc[lists["scorer"] == "pair_identity", "auprc_lift"].isna().sum()
         ),
@@ -198,13 +225,15 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         "AUPRC over the list's positive rate (1 is a random ranking), averaged within "
         "each line, then over lines; 95% interval from resampling lines.",
         "",
-        "| Scorer | Split | Lines | Lists | AUPRC lift | 95% interval | AUROC |",
-        "| --- | --- | ---: | ---: | ---: | --- | ---: |",
+        "| Scorer | Split | Lines | Group | Lists | AUPRC lift | 95% interval "
+        "| AUROC |",
+        "| --- | --- | ---: | --- | ---: | ---: | --- | ---: |",
     ]
     for row in metrics["summary"]:
         low, high = row["interval"]
         lines.append(
-            f"| {row['scorer']} | {row['split']} | {row['lines']} | {row['lists']} | "
+            f"| {row['scorer']} | {row['split']} | {row['lines']} | {row['group']} | "
+            f"{row['lists']} | "
             f"{row['auprc_lift']:.3f} | [{low:.3f}, {high:.3f}] | {row['auroc']:.3f} |"
         )
     return "\n".join(lines) + "\n"

@@ -1,6 +1,6 @@
 {
   "schema_version": "cell-line-geneeffect-split-v1",
-  "policy": "The final split. Validation and test are the 226's 27 and 28 lines. The single-cell training lines are the 226's 171 training lines (PC9 and HeLa without 26Q1 GeneEffect) and the built single-cell extras; the bulk-only lines join the training side through bulk RNA. No line sharing a PatientID with a validation or test line is read.",
+  "policy": "The final split. Validation and test are the 226's 27 and 28 lines. The single-cell training lines are the 226's 171 training lines (PC9 and HeLa without 26Q1 GeneEffect) and the built single-cell extras; the extras without 26Q1 GeneEffect (SL benchmark lines, Cellosaurus lines included) are unlabelled training lines. The bulk-only lines join the training side through bulk RNA. No line sharing a PatientID with a validation or test line is read.",
   "train": [
     "ACH-000013",
     "ACH-000017",
