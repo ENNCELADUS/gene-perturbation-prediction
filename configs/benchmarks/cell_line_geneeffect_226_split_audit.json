@@ -101,22 +101,12 @@
   "moved_2026_11_04": {
     "to_train": [
       "ACH-000022",
-      "ACH-000097",
-      "ACH-000111",
-      "ACH-000223",
       "ACH-000651",
-      "ACH-000681",
-      "ACH-000785",
-      "ACH-000859"
+      "ACH-000681"
     ],
     "from_train": {
-      "ACH-000330": "test",
       "ACH-000468": "val",
       "ACH-000528": "test",
-      "ACH-000563": "val",
-      "ACH-000668": "test",
-      "ACH-000711": "val",
-      "ACH-000721": "test",
       "ACH-000926": "test"
     },
     "note": "counts and cohort_counts follow the move; the geneeffect slice gene counts are from before it"
