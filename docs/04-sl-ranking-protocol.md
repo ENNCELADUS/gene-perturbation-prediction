@@ -279,9 +279,14 @@ validation, report both, experiment code reports and people decide). The SL-spec
   only supervises stage one. A line without a ModelID has the ID of its reviewed row in
   `configs/benchmarks/sl_line_identities.csv` (Cellosaurus accession, else `SL-<study>-<line>`), with its patient
   group and lineage. Such a line, and a DepMap line without GeneEffect, is an unlabelled training line of the final
-  split: it gives stage one no target. The stage-two control with measured GeneEffect is scored only on lines with a
-  ModelID. Results show the non-cancer lines (DepMap "Non-Cancerous", or `non_cancer` in the identity table) as a
-  separate group, because they are outside the cancer lines that train stage one.
+  split: it gives stage one no target. Stage one and stage two are separate: the stage-one benchmark keeps the final
+  split, and stage two reads stage one's production table (one fit on every labelled line; see the design spec). The
+  SL split draws lines with and without GeneEffect. The stage-two control with measured GeneEffect is scored only on
+  lines with GeneEffect. Results give all lines, each GeneEffect group and the non-cancer lines (DepMap
+  "Non-Cancerous", or `non_cancer` in the identity table) separately.
+- (2026-11-04) The multi-study benchmark's negatives are tested and not called, so its headline is recall in the
+  top 10% of each list (positives pooled per line, mean over lines, minus pair identity per line); AUROC and AUPRC
+  over the positive rate follow.
 - Fit the standardiser, any calibrator and any threshold on the training side only.
   **Per-context z-scoring of $\hat y$ is forbidden**: it consumes the test context's own
   distribution and erases the quantity under test.

@@ -1,8 +1,8 @@
 """Build the SL split (multi-study SL benchmark design, decision 7) from the final
-split and the SL benchmark's lists: the screened single-cell lines
-already held out keep their side, and further screened labelled training lines move to
-validation and test, drawn across lineages, until each side holds a fixed fraction
-of the screened lines. A reviewed placement (configs/benchmarks/sl_split_placements.csv)
+split and the SL benchmark's lists, for stage two only: the screened single-cell lines
+already held out keep their side, and further screened training lines, with or without
+GeneEffect, move to validation and test, drawn across lineages, until each side holds a
+fixed fraction of the screened lines. A reviewed placement (configs/benchmarks/sl_split_placements.csv)
 keeps a line, and the lines of its patient, on the training side. Lines sharing a
 patient with a moved line are excluded."""
 
@@ -19,13 +19,15 @@ from src.data.depmap import read_models
 from src.data.splits import SPLIT_SCHEMA_VERSION, FixedSplit, load_geneeffect_split
 
 POLICY = (
-    "The SL split: the final split with screened single-cell training lines moved to "
-    "validation and test until each side holds {fraction:.0%} of the {scored} screened "
-    "lines with a scored list (seed {seed}, drawn across lineages); the final split's "
-    "held-out lines keep their side, and a placed line and its patient's lines stay "
-    "on the training side. Lines sharing a PatientID with a moved line are "
-    "excluded. Stage one follows it."
+    "The SL split, for stage two only: the final split with screened single-cell "
+    "training lines, with or without GeneEffect, moved to validation and test until "
+    "each side holds {fraction:.0%} of the {scored} screened lines with a scored list "
+    "(seed {seed}, drawn across lineages); the final split's held-out lines keep their "
+    "side, and a placed line and its patient's lines stay on the training side. Lines "
+    "sharing a PatientID with a moved line are excluded. Each line's group is "
+    "with_geneeffect or without_geneeffect. Stage one keeps the final split."
 )
+GROUPS = ("with_geneeffect", "without_geneeffect")
 
 
 def scored_lines(lists: pd.DataFrame, lines: set[str]) -> list[str]:
@@ -86,7 +88,7 @@ def build_sl_split(
     held_patients = {patients[m] for m in (*split.val, *split.test)}
     candidates = table[
         table["model_id"].isin(scored)
-        & table["model_id"].isin(split.supervised_train)
+        & table["model_id"].isin(split.train)
         & ~table["patient_id"].isin(held_patients)
         & ~table["patient_id"].isin(placed_patients)
     ]
@@ -126,6 +128,8 @@ def build_sl_split(
         + ["val"] * len(payload["val"])
         + ["test"] * len(payload["test"])
     )
+    without = set(split.unlabeled_train)
+    rows["group"] = [GROUPS[m in without] for m in rows["model_id"]]
     return payload, rows
 
 

@@ -76,8 +76,15 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
     <li>The rules file has 145 rows from 58 studies. Each row has a reader that applies its rule.</li>
     <li>A line gets a score only if it has prepared basal scRNA, a side in the SL split and a list with both classes.
       These lines hold 21,189 of the 55,147 positives.</li>
-    <li>The metric of a list is its AUPRC divided by its positive rate. The score of a line is the mean over its lists.
-      The main result is the mean over the lines.</li>
+    <li>A list's negatives are tested and not called; they are not true negatives. Thus the main metric is recall in
+      the top 10%: each known positive is ranked inside its own list, and it counts when it is in the top 10% of that
+      list (a random ranking gives 0.10). The positives of all lists of a line are pooled, and the main result is the
+      mean over the lines, given as the model minus pair identity for each line, with a bootstrap interval over
+      lines. AUROC (the mean percentile of the known positives) and AUPRC divided by the positive rate come next. No
+      minimum positive count removes a line; each line's positive count is reported.</li>
+    <li>The report gives each row on validation and on test, for all lines, for the lines with GeneEffect (stage
+      one's input is in sample) and without GeneEffect (stage one's input is out of sample), and for the cancer and
+      non-cancer lines, each with its line count.</li>
   </ul>
   <div class="wrap"><table>
     <caption>Lines that get a score, for each side of the SL split.</caption>
@@ -119,10 +126,12 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
   derived line stays on the side of its parent and of the other lines from the same donor. The stage-two control with
   measured GeneEffect can run only on lines with a ModelID. The non-cancer lines are outside the cancer lines that train
   stage one, so the results show them as a separate group.</p>
-  <p>The SL split draws only training lines with GeneEffect, because stage one follows the SL split and scores each
-  validation and test line against its measured GeneEffect. Thus a line without GeneEffect stays on the training side
-  in this build. hTERT-RPE1 is also placed on the training side by hand (decision 2026-11-04), with its patient group
-  PT-JWRsco. The placement is one reviewed row of <code>configs/benchmarks/sl_split_placements.csv</code>; the split
+  <p>Stage one and stage two are separate. The stage-one benchmark keeps the final split. Stage two reads stage
+  one's production table: one fit of the chosen configuration on every labelled line, with no validation set. If an
+  SL validation or test line without GeneEffect shares a patient with labelled lines, that fit leaves those lines out
+  and records them. The SL split draws every line with basal scRNA and labels, with or without GeneEffect, and the
+  split table gives each line's group. hTERT-RPE1 is placed on the training side by hand (decision 2026-11-04), with
+  its patient group PT-JWRsco. The placement is one reviewed row of <code>configs/benchmarks/sl_split_placements.csv</code>; the split
   records it under <code>placed</code> and in its inputs. The draw of every other line does not change.</p>
   <p>The table gives the identity of the 15 lines. We read each accession and each parent from Cellosaurus on 2026-11-04.
   The patient group is the DepMap PatientID of a related line with a ModelID. If no related line has a ModelID, the
@@ -181,9 +190,11 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
   <ul>
     <li>The merged hTERT-RPE1 row adds the lists and the counts of its five spellings. RPE1-iCas9 is an engineered
       derivative and "RPE" is not a Cellosaurus synonym. The merge of these two spellings follows the studies' text.</li>
-    <li>A line in the group of a held-out line or of a training line must take the same side. eHAP, eHAP iCas9 and HeLa S3
-      thus go to train. hTERT-RPE1 and OMM2.3 share a donor with bulk-labelled lines that train the prior. If the draw
-      moves one of the two to validation or test, the split policy excludes those bulk lines.</li>
+    <li>A line in the group of a held-out line or of a training line must take the same side. eHAP (with eHAP iCas9)
+      and HeLa S3 thus go to train. If the draw moves a line without GeneEffect to validation or test, the production
+      fit leaves out the labelled lines of its patient.</li>
+    <li>Limits: stage two trains mostly on in-sample stage-one inputs, so the number for the lines without GeneEffect
+      is a low estimate. That group is small and mostly non-cancer.</li>
     <li>hTERT-RPE1, eHAP, HMLE, 293T, HeLa S3 and WA09 have a reviewed basal scRNA source (wave 3 of the extra
       sources). HEK293-A does not use the HEK-293 cells; it stays a separate line without a score. Until the next
       build, these lines get no score, and the counts of scored lines above do not change.</li>

@@ -29,11 +29,10 @@ Replace this section on every update; history lives in `results/` and the protoc
   ([record](results/stage_one_prior_input/README.md)). The next build makes all current checkpoints unusable.
 - **Stage two** (SL protocol §10): pair identity wins; predicted or measured GeneEffect adds nothing over each gene's
   mean ([record](results/sl_stage_two_seed0/README.md)). Not SL context evidence. Both: [status](results/status.html).
-- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): 58 studies, 310 lists, 135 lines. Code for the
-  2026-11-04 decisions is in: lines without a ModelID join by Cellosaurus ID
-  (`configs/benchmarks/sl_line_identities.csv`); SL lines with basal scRNA and no GeneEffect enter the final split as
-  unlabelled training lines; hTERT-RPE1 is placed on SL train by hand; extra-source wave 3 adds 19 SL lines. **Next**:
-  the H20 cleanup and one build (sources to SL split), then prior and baselines.
+- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): 58 studies, 310 lists, 135 lines; code for the
+  2026-11-04 decisions is in (Cellosaurus IDs, unlabelled SL lines in the final split, wave 3 adds 19 lines). Stage
+  one and stage two are separate: stage two reads stage one's production fit (`prior-production`); the SL split draws
+  lines with and without GeneEffect; the headline is recall in the top 10%. **Next**: H20 cleanup, one build, rerun.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands

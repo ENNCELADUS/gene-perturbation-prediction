@@ -1,8 +1,9 @@
 # Baselines on the multi-study SL benchmark (docs/specs/2026-10-29-multi-study-sl-benchmark-design.md):
-# pair identity, pan-essentiality, the default prior refitted on the SL split (A-blind, predicted
-# GeneEffect in the line) and the measured GeneEffect as a reference (ModelID lines only), scored per
-# (study, line) list and reported for all, cancer and non-cancer lines.
-# `hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id ID` (CPU), after the prior export.
+# pair identity, pan-essentiality, stage one's production prediction of GeneEffect (one full fit on every
+# labelled line, `hpc/run.sh prior-production`) and the measured GeneEffect as a reference (lines with
+# GeneEffect only). Headline: recall in the top 10% of each list; reported on validation and test for all
+# lines, the lines with and without GeneEffect, and the cancer and non-cancer lines.
+# `hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id ID` (CPU), after the production fit.
 kind: sl_benchmark_baselines
 seed: 0
 output_root: outputs/sl
@@ -11,6 +12,6 @@ labels: data/sl_studies/benchmark/labels.parquet
 split: configs/benchmarks/cell_line_sl_split.json
 gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
 model: data/sl_dependency_v0/raw/depmap/Model.csv
-prior: outputs/context_prior/default_prior_sl_split_seed0/export
+stage_one: outputs/context_prior/stage_one_production_seed0/production/predictions.parquet
 top_k: 20
 bootstrap: 1000

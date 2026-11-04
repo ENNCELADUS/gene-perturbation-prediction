@@ -152,6 +152,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `noise_report`: The noise diagnosis's ``results.md``.
 - `noise_sections`: The noise diagnosis's sections (protocol §14).
 - `prior_export`: Export of a prior config's reference row for the single-cell correction.
+- `production`: Stage one's production fit: the reference row fitted once on every labelled line, one GeneEffect table for every single-cell line, which stage two reads.
 - `single_cell_stack`: Single-cell statistics stacked on a prior run's export (protocol §13).
 
 ### `experiments/stage_one/` (`python -m` runs `run`)
@@ -172,7 +173,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 
 ### `experiments/sl/`
 
-- `benchmark_baselines`: Baselines on the multi-study SL benchmark: pair identity, pan-essentiality, the prior's predicted and the measured GeneEffect (ModelID lines only), scored per (study, line) list and reported for all, cancer and non-cancer lines.
+- `benchmark_baselines`: Baselines on the multi-study SL benchmark: pair identity, pan-essentiality, stage one's production prediction and the measured GeneEffect (lines with GeneEffect only); headline recall in the top 10% of each list, reported for all lines, each GeneEffect group, cancer and non-cancer lines.
 - `stage_two`: Stage two, first run (SL protocol §10): a PARIS head and a viability-embedding head, scored per held-out line and screen of the SL screen benchmark against their controls.
 
 ### `experiments/states/`

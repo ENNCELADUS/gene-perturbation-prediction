@@ -42,15 +42,20 @@ used as label sources.
    recorded before any model is scored. Every row keeps its continuous score. A pair whose gene is depleted alone
    in a line is unlabelled in that line. A study with positives only cannot form a list, and its pairs are reported
    by name outside the headline.
-6. **Metric.** A *list* is the set of pairs that one study tested in one line. For each list, the score is the
-   AUPRC of the model's ranking against the study's call, divided by the list's positive rate. The headline is the
-   mean over test lines of the mean over each line's lists, so a line that many studies tested counts once.
-   Controls: pair identity (the pair's hit rate in the same study's training lines), pan-essentiality and a
-   context-ablated model.
-7. **Split.** A fixed random split of lines, about 60% training, 20% validation and 20% test, drawn within each
-   lineage. Lines from one patient stay on one side. Stage one follows this split, so all stage-one rows are
-   scored again on it. A line without GeneEffect can be on any side: stage one predicts its GeneEffect from scRNA.
-   Validation selects the model; test is scored once.
+6. **Metric** (changed 2026-11-04). A *list* is the set of pairs that one study tested in one line. Its negatives
+   are "tested, not called", not true negatives, so the metrics are positive-unlabelled ones. The headline is
+   recall in the top 10%: rank each known positive inside its own list, credit it when it falls in the top 10% of
+   that list (a tie block shares its credit; a random ranking gives 0.10), pool the positives of all lists of a
+   line, and take the mean over lines. Report the model minus the pair-identity control per line, with a bootstrap
+   interval over lines, and each line's positive count. Second: AUROC (the mean percentile of the known positives
+   among the negatives of their list). Third: AUPRC divided by the positive rate, for comparison with the
+   literature. No minimum positive count removes a line. Controls: pair identity (the pair's hit rate in the same
+   study's training lines), pan-essentiality and a context-ablated model.
+7. **Split** (changed 2026-11-04). A fixed random split of lines, about 60% training, 20% validation and 20% test,
+   drawn within each lineage, for stage two only. Lines from one patient stay on one side. The draw takes every
+   line with basal scRNA and labels, with or without GeneEffect, and each line records its group
+   (`with_geneeffect` or `without_geneeffect`). Stage one keeps the final split. Validation selects the model; test
+   is scored once.
 8. **Pairs scored.** The headline scores all pairs of a list. The split of pairs into seen and unseen pairs (seen
    means the pair was tested in a training line) is a later ablation.
 
@@ -88,8 +93,14 @@ Settled on 2026-11-04 (user decisions; [data card](../data/sl-benchmark.html)):
 - hTERT-RPE1 (`CVCL_4388`) is on the SL train side by hand, with its patient group (`PT-JWRsco`, the six RPE1-ss DepMap
   subclones). The reviewed placement is one row of `configs/benchmarks/sl_split_placements.csv`; the split records it
   under `placed` and in its inputs. The draw of every other line does not change.
-- Decision 7 says that a line without GeneEffect can be on each side. The SL split draws only labelled training lines,
-  because stage one follows the SL split and scores each validation and test line against its measured GeneEffect.
-  Thus a line without GeneEffect stays on the training side in this build. This is open for a later decision.
-- The stage-two control with measured GeneEffect is scored only on lines with a ModelID. Results show the non-cancer
-  lines as a separate group.
+- Stage one and stage two are separate. The stage-one benchmark keeps the final split (validation selects, test is
+  scored once). Stage one's production fit is one fit of the chosen configuration on every labelled line, with no
+  validation set and no cross-fitting (`src/experiments/prior/production.py`). It writes one GeneEffect table for
+  every single-cell line, and stage two reads it. If an SL validation or test line without GeneEffect shares a
+  patient with labelled lines, the production fit leaves those labelled lines out and records them.
+- The SL report gives every row on validation and on test, for all lines, the lines with GeneEffect (the
+  screened-line use case: stage one's input is in sample) and the lines without GeneEffect (the new-patient use
+  case: stage one's input is out of sample), and the cancer and non-cancer lines, each with its line count. The
+  control with measured GeneEffect is scored only on the lines with GeneEffect. Limits: stage two trains mostly on
+  in-sample inputs, so the number for the lines without GeneEffect is a low estimate; that group is small and
+  mostly non-cancer.
