@@ -123,6 +123,22 @@
       },
       "other_sources": []
     },
+    "ACH-000023": {
+      "source": "mixseq",
+      "accession": "figshare 10.6084/m9.figshare.10298696",
+      "identifiers": [
+        "ACH-000023"
+      ],
+      "condition": "expt 10 DMSO 24 h",
+      "condition_class": "basal_2d",
+      "patient_id": "PT-lVglGI",
+      "lineage": "Pancreas",
+      "cells": 85,
+      "arms": {
+        "DMSO_24hr_expt10": 85
+      },
+      "other_sources": []
+    },
     "ACH-000024": {
       "source": "gse242465",
       "accession": "GSE242465",
@@ -3852,6 +3868,7 @@
     "ACH-000750",
     "ACH-000751",
     "ACH-000803",
+    "ACH-000842",
     "ACH-000868",
     "ACH-000875",
     "ACH-000897",
@@ -3868,10 +3885,7 @@
     "ACH-002509"
   ],
   "pending": {},
-  "excluded": {
-    "ACH-000023": "shares PatientID PT-lVglGI with held-out line ACH-000022",
-    "ACH-000842": "shares PatientID PT-IPboWn with held-out line ACH-000651"
-  },
+  "excluded": {},
   "inputs": {
     "candidates": {
       "path": "configs/benchmarks/single_cell_atlas_candidates.csv"
