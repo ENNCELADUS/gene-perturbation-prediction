@@ -3,7 +3,8 @@ of ``configs/data/extra_single_cell_sources_26Q1.json`` per run: each admitted l
 (labelled, or an SL benchmark line without GeneEffect) the map's choice takes from a
 source (never a 226 line), named only through accepted map rows,
 with its basal arms above the QC floor. A source's ``qc/<source>.json`` is written
-last, a source that has one is skipped, and no h5ad is overwritten."""
+last; a source that has one builds only the admitted lines it lacks and adds them to it
+(under ``grown``), and no h5ad is overwritten."""
 
 from __future__ import annotations
 
@@ -297,15 +298,19 @@ def run(
         if source["wave"] != wave or (only and name not in only):
             continue
         report_path = output / "qc" / f"{name}.json"
-        if report_path.exists():
-            print(f"{name}: built", flush=True)
-            continue
         taken = (
             {**admission.labelled, **admission.unlabelled}
             if second_source is None
             else {m: line["second"] for m, line in planned.items()}
         )
         wanted = [m for m, s in taken.items() if s == name]
+        old = json.loads(report_path.read_text()) if report_path.exists() else None
+        if old is not None:
+            # a built source grows by the admitted lines its report lacks
+            wanted = [m for m in wanted if m not in {*old["lines"], *old["not_built"]}]
+            if not wanted:
+                print(f"{name}: built", flush=True)
+                continue
         if second_source is not None and not wanted:
             continue
         partial = [m for m in wanted if (output / f"{m}.h5ad").exists()]
@@ -315,6 +320,13 @@ def run(
             )
         print(f"{name}: building {len(wanted)} lines", flush=True)
         report = build_source(name, source, context, output, wanted)
+        if old is not None:
+            grown = {k: report[k] for k in ("libraries", "dropped", "lines")}
+            report = old | {
+                "lines": {**old["lines"], **report["lines"]},
+                "not_built": sorted({*old["not_built"], *report["not_built"]}),
+                "grown": [*old.get("grown", []), grown],
+            }
         temporary = report_path.with_name(f".{report_path.name}.tmp")
         temporary.write_text(json.dumps(report, indent=2, default=float) + "\n")
         os.replace(temporary, report_path)

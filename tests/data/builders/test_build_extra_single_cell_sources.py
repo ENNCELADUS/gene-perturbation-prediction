@@ -243,6 +243,22 @@ def test_sources_resume_and_refuse_interrupted_output(tmp_path):
         run(tmp_path / "spec.json", 1, out)
 
 
+def test_a_built_source_grows_by_a_newly_admitted_line(tmp_path):
+    build_world(tmp_path)
+    out = tmp_path / "out"
+    run(tmp_path / "spec.json", 1, out)
+    report = _report(out, "geo")
+    first = report["lines"].pop(EXTRA_A)  # as if line A were admitted later
+    (out / "qc" / "geo.json").write_text(json.dumps(report))
+    (out / f"{EXTRA_A}.h5ad").unlink()
+    other = (out / f"{EXTRA_B}.h5ad").stat().st_mtime_ns
+    run(tmp_path / "spec.json", 1, out)
+    grown = _report(out, "geo")
+    assert grown["lines"][EXTRA_A] == first
+    assert [list(g["lines"]) for g in grown["grown"]] == [[EXTRA_A]]
+    assert (out / f"{EXTRA_B}.h5ad").stat().st_mtime_ns == other
+
+
 def test_sources_option_builds_only_the_named_sources(tmp_path):
     build_world(tmp_path)
     out = tmp_path / "out"

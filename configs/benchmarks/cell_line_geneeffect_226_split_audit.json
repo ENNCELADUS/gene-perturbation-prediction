@@ -2,13 +2,13 @@
   "atlas_original_model_id_overlap": 0,
   "cohort_counts": {
     "new_cell_line_atlas_179": {
-      "test": 27,
-      "train": 125,
+      "test": 28,
+      "train": 124,
       "val": 27
     },
     "original_context_47": {
-      "test": 1,
-      "train": 46,
+      "test": 0,
+      "train": 47,
       "val": 0
     }
   },
@@ -50,9 +50,7 @@
     "primary_objective": 15.657894736842104,
     "primary_optimal": true
   },
-  "original_contexts_test": [
-    "ACH-000681"
-  ],
+  "original_contexts_test": [],
   "patient_group_cross_split": 0,
   "schema_version": "cell-line-geneeffect-226-split-audit-v2",
   "selection_provenance": {
@@ -99,5 +97,28 @@
       "kinker_sccle": 23
     }
   },
-  "status": "verified_unified_split"
+  "status": "verified_unified_split",
+  "moved_2026_11_04": {
+    "to_train": [
+      "ACH-000022",
+      "ACH-000097",
+      "ACH-000111",
+      "ACH-000223",
+      "ACH-000651",
+      "ACH-000681",
+      "ACH-000785",
+      "ACH-000859"
+    ],
+    "from_train": {
+      "ACH-000330": "test",
+      "ACH-000468": "val",
+      "ACH-000528": "test",
+      "ACH-000563": "val",
+      "ACH-000668": "test",
+      "ACH-000711": "val",
+      "ACH-000721": "test",
+      "ACH-000926": "test"
+    },
+    "note": "counts and cohort_counts follow the move; the geneeffect slice gene counts are from before it"
+  }
 }
