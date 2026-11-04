@@ -23,7 +23,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
-from src.data.splits import FixedSplit, assert_same_membership, membership
+from src.data.splits import FixedSplit
 from src.model.losses import dependency_logits
 from src.training.checkpoint import (
     TrainState,
@@ -149,14 +149,13 @@ def _checkpoint(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def load_strict(
-    path: Path, model: nn.Module, config: Mapping[str, Any], split: FixedSplit
+    path: Path, model: nn.Module, config: Mapping[str, Any]
 ) -> dict[str, Any]:
     """A stage-one checkpoint's payload, its weights loaded strictly into ``model``;
-    refused under another config or split membership."""
+    refused under another config."""
     payload = load_checkpoint(path)
     if payload["config"] != json.loads(json.dumps(config)):
         raise ValueError(f"{path} was written under another config; use a new run id")
-    assert_same_membership(payload["membership"], split)
     model.load_state_dict(payload["weights"])
     return payload
 
@@ -212,7 +211,7 @@ def fit(
     generator = torch.Generator().manual_seed(int(config["seed"]))
     last, best = run_dir / "last.pt", run_dir / "best.pt"
     if last.is_file():
-        payload = load_strict(last, model, record, split)
+        payload = load_strict(last, model, record)
         if ema is not None:
             ema.load_state_dict(payload["ema"])
         optimizer.load_state_dict(payload["optimizer"])
@@ -231,7 +230,6 @@ def fit(
                 "epoch": state.best_epoch,
                 "score": state.best_score,
                 "config": record,
-                "membership": membership(split),
             },
         )
 
@@ -263,7 +261,6 @@ def fit(
                 "generator": generator.get_state(),
                 "rng": capture_rng_state(device),
                 "config": record,
-                "membership": membership(split),
             },
         )
 

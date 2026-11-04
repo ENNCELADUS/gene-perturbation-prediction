@@ -1089,8 +1089,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   from 2026-10-21; the first Task 3 queue selected on selective Spearman, and picked the same winner). Epoch 0 is the
   base, a candidate when its score is defined (it usually is: the base varies across genes); its within-gene R² is
   the base row's. The delta lives on the GPU in bf16, copied by gene chunk from its
-  memory map; checkpoints record the split membership and load strictly; a resume or a run directory refuses another
-  config. `last.pt` is written before `best.pt`, and a resume rewrites a `best.pt` that lags the recorded best epoch.
+  memory map; checkpoints load strictly; a resume or a run directory refuses another config. `last.pt` is written before `best.pt`, and a resume rewrites a `best.pt` that lags the recorded best epoch.
 - **Outputs.** `outputs/stage_one/<task>/<config stem>[__fold<k>]/`: `best.pt`, `last.pt`, `predictions.parquet` (every
   line × every gene, scoring units), `V.npy` (the 32-d viability embedding, Cilantro's `l3` output before its activation,
   every line × panel gene, fp16; `V.json` marks the lines trained on as in-sample) and `row.json`. A main run scores
