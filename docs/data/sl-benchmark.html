@@ -72,7 +72,7 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
     <li>The rule of each study sets the label of a pair: positive (SL) or negative. The rules are in
       <code>configs/benchmarks/sl_label_rules.csv</code>. The first choice is the authors' call. The second choice is the
       authors' cut. The last choice is FDR &lt; 0.05.</li>
-    <li>145 rule rows are ready. 40 rule rows are unusable, because the study gives no SL pairs or no cut that we can apply.</li>
+    <li>The rules file has 145 rows from 58 studies. Each row has a reader that applies its rule.</li>
     <li>A line gets a score only if it has prepared basal scRNA, a side in the SL split and a list with both classes.
       These lines hold 21,189 of the 55,147 positives.</li>
     <li>The metric of a list is its AUPRC divided by its positive rate. The score of a line is the mean over its lists.
