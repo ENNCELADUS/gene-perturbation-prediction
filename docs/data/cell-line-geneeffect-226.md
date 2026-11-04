@@ -16,9 +16,8 @@ then it was the only split, used by the final run of the historical staged GeneE
 | New single-cell atlas | 125 | 27 | 27 |
 | Total membership | 171 | 27 | 28 |
 
-The 47 original contexts are fixed in train except A549 (`ACH-000681`), fixed in test since 2026-10-11 because all three screens of
-the SL benchmark test it ([SL protocol](../04-sl-ranking-protocol.md)); the split was rebuilt in
-place, and the earlier 172/27/27 version, with A549 in train, is in git history. The 179 new
+The 47 original contexts are fixed in train. A549 (`ACH-000681`) was in test from 2026-10-11 to 2026-11-04. On 2026-11-04 the held-out lines PA-TU-8988S, SW 620 and A549, whose patients have other lines with data, moved to train with their patient groups; PK-45H (validation), ABC-1 and HT-55 (test) took their places (same lineage, a patient with no other DepMap line, drawn with seed 0). The JSON records the
+moves under `moved_2026_11_04`. The 179 new
 contexts retain the deterministic patient-grouped MILP partition; no PatientID crosses split
 sides and GeneEffect values did not determine membership. Moving A549 leaves the
 coverage gene universe unchanged (17,931 genes), so the prepared caches did not change.

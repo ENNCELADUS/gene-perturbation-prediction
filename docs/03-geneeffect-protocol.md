@@ -44,16 +44,15 @@ and bulk extras.
 
 | Cohort | Members | Labeled | Role |
 | --- | ---: | ---: | --- |
-| train | 379 | 377 | supervised fitting: the 226's 171 training lines and the 208 single-cell extras; PC9 and HeLa have no 26Q1 GeneEffect row |
+| train | 400 | 384 | supervised fitting: the 226's 171 training lines and the single-cell extras; 16 lines (PC9, HeLa and SL lines) have no 26Q1 GeneEffect row |
 | validation | 27 | 27 | once-per-epoch evaluation, checkpoint selection, early stopping |
 | test | 28 | 28 | one-shot final evaluation |
 
-The bulk-only lines (713 labelled, 576 unlabelled) join the training side of the linear prior
-through bulk RNA (§10); 12 lines sharing a patient with a held-out line are never read.
+The bulk-only lines (708 labelled, 570 unlabelled) join the training side of the linear prior
+through bulk RNA (§10); 7 lines sharing a patient with a held-out line are never read (none has GeneEffect or bulk RNA).
 
-The 47 original basal/SL-context union lines are fixed in train except A549, fixed in test
-since 2026-10-11 for the SL benchmark (the split was rebuilt in place; results recorded before
-that date used the 172/27/27 version with A549 in train). The 179 atlas lines
+The 47 original basal/SL-context union lines are fixed in train. A549 was in test from
+2026-10-11 to 2026-11-04. On 2026-11-04 the held-out lines PA-TU-8988S, SW 620 and A549, whose patients have other lines with data, moved to train with their patient groups; PK-45H (validation), ABC-1 and HT-55 (test) took their places (same lineage, a patient with no other DepMap line, drawn with seed 0). The 179 atlas lines
 follow a patient-grouped partition: no patient's lines are split across cohorts, and
 GeneEffect values did not determine membership. The nine-context SL split never substitutes for
 this benchmark and is no longer the plan: the planned SL split nests in this one

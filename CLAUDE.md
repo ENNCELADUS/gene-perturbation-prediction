@@ -30,7 +30,7 @@ Replace this section on every update; history lives in `results/` and the protoc
 - **Stage two** (SL protocol §10): pair identity wins; predicted or measured GeneEffect adds nothing over each gene's
   mean ([record](results/sl_stage_two_seed0/README.md)). Not SL context evidence. Both: [status](results/status.html).
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels rebuilt 2026-11-04 into
-  `data/sl_studies/benchmark_v2` (H20); the headline reads genetic two-class screens (76 lines: 45/15/16), recall in
+  `data/sl_studies/benchmark_v2` (H20); the headline reads genetic two-class screens (77 lines: 44/17/16), recall in
   the top 10% averaged over screens, studies, then lines. H20 `outputs/` is empty. **Next**: `prior-production`, then
   `sl-baselines`; the screen-weighted BCE stage-two model is decided (design spec) but not built.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
@@ -89,9 +89,9 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
   recording `expression_space` under `data/geneeffect_joint/v2`; training opens those caches and never rebuilds them. An
   existing root grows by the lines it lacks, in the recorded space.
 - `configs/benchmarks/cell_line_geneeffect_split.json` (the **final split**, [card](docs/data/cell-line-geneeffect-split.md)) is
-  the sole membership authority: 379 single-cell training lines, 27 validation, 28 test (A549 since 2026-10-11), 713
-  labelled and 576 unlabelled bulk-only lines that join the prior's training side through bulk RNA, and 12 excluded
-  (counts before the 2026-11-04 build, which adds SL lines without GeneEffect to `train` + `unlabeled_train`). Gene
+  the sole membership authority: 400 single-cell training lines (16 unlabelled), 27 validation, 28 test (A549 in train
+  since 2026-11-04), 708 labelled and 570 unlabelled bulk-only lines that join the prior's training side through bulk
+  RNA, and 7 excluded (patient-mates of held-out lines without any data). Gene
   means, selective genes, residual SD and context PCA fit on its labelled training lines;
   `src/data/splits.py:assert_fit_eligible` guards every fit.
 - Checkpoint selection reads validation only: `val_selective_spearman` for the joint model, the per-line residual Spearman
