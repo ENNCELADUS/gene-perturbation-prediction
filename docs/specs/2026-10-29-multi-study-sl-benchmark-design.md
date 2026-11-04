@@ -104,3 +104,10 @@ Settled on 2026-11-04 (user decisions; [data card](../data/sl-benchmark.html)):
   control with measured GeneEffect is scored only on the lines with GeneEffect. Limits: stage two trains mostly on
   in-sample inputs, so the number for the lines without GeneEffect is a low estimate; that group is small and
   mostly non-cancer.
+- A screened line that shares a patient with a drawn line goes to the same side; only unscreened lines of that
+  patient are excluded (the first build lost HeLa S3 and eHAP under the earlier rule).
+
+Built on 2026-11-04 ([data card](../data/sl-benchmark.html), [baselines](../../results/sl_study_benchmark/summary.html)):
+135 lines, 82 with a score (train 50, validation 16, test 16); 5 scored held-out lines have no GeneEffect (validation
+2, test 3). The production fit of stage one leaves out HAP1 (the patient of eHAP, an SL test line). On test, pair
+identity scores recall 0.465 in the top 10% and stage one 0.268, the same as each gene's mean (0.259).
