@@ -38,6 +38,7 @@ IDENTITIES = {
     "rt_hash": ("rt_barcodes", "rt_map", "hash_table", "min_count", "min_ratio"),
     "guides": ("path", "sep", "cell_column", "guide_column", "controls", "identifier"),
     "species": ("gene_prefix", "min_fraction", "pattern", "identifier"),
+    "probe_negative": ("probe_h5", "feature", "max_count", "identifier"),
 }
 
 
@@ -289,6 +290,22 @@ def identify(
             [None] * n,
             {"species_cells": int(sum(v is not None for v in lines))},
         )
+    if kind == "probe_negative":
+        # A cell of a Flex library is the line's when the probes whose id holds
+        # ``feature`` (a label of other cells, e.g. EGFP) count at most
+        # ``max_count`` in Cell Ranger's per-probe raw matrix.
+        counts = _probe_counts(root / identity["probe_h5"], identity["feature"])
+        lines = [
+            identity["identifier"]
+            if counts.get(cell, 0) <= identity["max_count"]
+            else None
+            for cell in library.cells
+        ]
+        return (
+            lines,
+            [None] * n,
+            {"negative_cells": int(sum(v is not None for v in lines))},
+        )
     if kind == "pool":
         if library.symbols is None:
             raise ValueError("pool identity needs gene symbols")
@@ -306,6 +323,25 @@ def identify(
         )
         return calls, [None] * n, {"clusters": table}
     return _rt_hash(library, identity, root)
+
+
+def _probe_counts(path: Path, feature: str) -> dict[str, int]:
+    """Barcode -> summed count of the probes whose id holds ``feature``."""
+    import h5py
+
+    with h5py.File(path, "r") as handle:
+        matrix = handle["matrix"]
+        ids = [value.decode() for value in matrix["features"]["id"][:]]
+        rows = np.flatnonzero([feature in value for value in ids])
+        if not len(rows):
+            raise ValueError(f"{path}: no probe holds {feature!r}")
+        counts = sparse.csc_matrix(
+            (matrix["data"][:], matrix["indices"][:], matrix["indptr"][:]),
+            shape=tuple(matrix["shape"][:]),
+        )
+        totals = np.asarray(counts[rows].sum(axis=0)).ravel()
+        barcodes = [value.decode() for value in matrix["barcodes"][:]]
+    return {b: int(t) for b, t in zip(barcodes, totals) if t}
 
 
 def _rt_hash(

@@ -879,3 +879,21 @@ def test_mixture_reader_and_species_identity(tmp_path):
     lines, _, report = identify(library, spec, tmp_path, {}, Path("."))
     assert lines == ["HEK293", None, None]  # b is mouse; c is another method
     assert report == {"species_cells": 1}
+
+
+def test_probe_negative_identity_drops_cells_with_the_label_probe(tmp_path):
+    counts = sparse.csc_matrix(np.array([[0, 3, 0], [5, 1, 2]]))  # probes x barcodes
+    with h5py.File(tmp_path / "probes.h5", "w") as handle:
+        matrix = handle.create_group("matrix")
+        for key in ("data", "indices", "indptr"):
+            matrix[key] = getattr(counts, key)
+        matrix["shape"] = np.array(counts.shape)
+        matrix["barcodes"] = np.array([b"a", b"b", b"c"])
+        matrix.create_group("features")["id"] = np.array([b"X|EGFP|1", b"Y|GENE|1"])
+    library = Library(
+        sparse.csr_matrix((3, 1)), ["a", "b", "c"], ["g"], None, None, [], None
+    )
+    spec = {"kind": "probe_negative", "probe_h5": "probes.h5", "feature": "|EGFP|",
+            "max_count": 0, "identifier": "PLC/PRF/5"}  # fmt: skip
+    lines, _, report = identify(library, spec, tmp_path, {}, Path("."))
+    assert lines == ["PLC/PRF/5", None, "PLC/PRF/5"] and report == {"negative_cells": 2}
