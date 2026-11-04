@@ -51,11 +51,11 @@ def production_split(
     split: FixedSplit, extra: ExtraLines, out: Mapping[str, str]
 ) -> tuple[FixedSplit, ExtraLines]:
     """Every single-cell line on the training side: validation and test lines with
-    GeneEffect become labelled training lines; a left-out single-cell line is
-    predicted but gives no target (``unlabeled_train``), and every left-out line's
-    bulk RNA is dropped."""
-    unlabelled = {*split.unlabeled_train, *out}
+    GeneEffect become labelled training lines. A left-out line keeps its expression
+    and gives no GeneEffect target: a single-cell one is ``unlabeled_train``, a
+    bulk-only one an unlabelled encoder row."""
     lines = [*split.train, *split.val, *split.test]
+    unlabelled = {*split.unlabeled_train, *out}
     return (
         FixedSplit(
             train=tuple(lines),
@@ -65,8 +65,8 @@ def production_split(
         ),
         ExtraLines(
             tuple(m for m in extra.labelled if m not in out),
-            extra.unlabelled,
-            {**extra.excluded, **out},
+            (*extra.unlabelled, *(m for m in extra.labelled if m in out)),
+            dict(extra.excluded),
         ),
     )
 
