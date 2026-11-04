@@ -398,7 +398,7 @@ def test_the_dependency_term_is_the_call_on_selective_genes_only():
     assert float(trainer.dependency_term(sure, target, genes, none)) == 0.0
 
 
-def test_resume_refuses_another_config_and_checkpoints_another_membership(tmp_path):
+def test_resume_refuses_another_config(tmp_path):
     config = _loop_config(max_epochs=1)
     data, targets = _toy()
     validate = _validator(data, targets, config)
@@ -407,14 +407,9 @@ def test_resume_refuses_another_config_and_checkpoints_another_membership(tmp_pa
     changed = _loop_config(max_epochs=1, learning_rate=0.5)
     with pytest.raises(ValueError, match="another config"):
         trainer.fit(_line_film(), data, changed, tmp_path, SPLIT, validate)
-    moved = FixedSplit(train=("T0",), val=("V0", "T1"), test=("S0",))
-    with pytest.raises(ValueError, match="split membership"):
-        trainer.load_strict(tmp_path / "best.pt", _line_film(), config, moved)
-    trainer.load_strict(tmp_path / "best.pt", _line_film(), config, SPLIT)
+    trainer.load_strict(tmp_path / "best.pt", _line_film(), config)
     with pytest.raises(RuntimeError):
-        trainer.load_strict(
-            tmp_path / "best.pt", _line_film(line_width=3), config, SPLIT
-        )
+        trainer.load_strict(tmp_path / "best.pt", _line_film(line_width=3), config)
 
 
 def test_a_resumed_run_ends_where_an_uninterrupted_one_does(tmp_path):

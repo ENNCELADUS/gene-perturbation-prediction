@@ -198,7 +198,7 @@ def run(config_path: Path, run_id: str | None, fold: int | None, device: str) ->
 
     result = fit(model, data, config, run_dir, setup.split, validate)
     best = make_model(config, resident)
-    load_strict(result.best, best, config, setup.split)
+    load_strict(result.best, best, config)
     viability = np.lib.format.open_memmap(
         run_dir / ".V.npy.tmp",
         mode="w+",

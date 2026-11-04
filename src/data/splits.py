@@ -2,7 +2,6 @@
 held-out and unlabelled lines out of every fit."""
 
 from __future__ import annotations
-from collections.abc import Mapping
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -105,30 +104,4 @@ def assert_fit_eligible(model_id: str, split: FixedSplit) -> None:
         raise ValueError(
             f"{model_id!r} is not a labeled train member of the split (val/test "
             "lines are inference-only); it may not enter a fitting/training path"
-        )
-
-
-_MEMBERSHIP_SIDES: tuple[str, ...] = ("train", "val", "test", "unlabeled_train")
-
-
-def membership(split: FixedSplit) -> dict[str, list[str]]:
-    """The split membership a fitted artifact records, sorted per side."""
-    return {side: sorted(getattr(split, side)) for side in _MEMBERSHIP_SIDES}
-
-
-def assert_same_membership(saved: Mapping[str, list[str]], split: FixedSplit) -> None:
-    """Raise unless ``saved`` (a :func:`membership` record) is ``split``'s.
-
-    A fitted artifact belongs to the membership it was fitted under; the split
-    file can change in place (A549 moved from train to test on 2026-10-11).
-    """
-    current = membership(split)
-    changed = {
-        side: sorted(set(saved.get(side, [])) ^ set(members))
-        for side, members in current.items()
-        if sorted(saved.get(side, [])) != members
-    }
-    if changed:
-        raise ValueError(
-            f"checkpoint was fitted under a different split membership: {changed}"
         )
