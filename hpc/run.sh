@@ -6,12 +6,12 @@ usage() {
 Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh revision CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh test CHECKPOINT
-       hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]   (linear context prior, CPU)
-       hpc/run.sh prior-selected CONFIG --run-id ID   (the reference prior's data-selected genes, CPU)
-       hpc/run.sh prior-export CONFIG --run-id ID   (the reference prior's predictions for the correction, CPU)
-       hpc/run.sh prior-production CONFIG --sl-split SPLIT --run-id ID   (stage one's production fit for stage two, CPU)
-       hpc/run.sh prior-stack CONFIG --run-id ID   (single-cell statistics stacked on a prior export, CPU)
-       hpc/run.sh prior-noise CONFIG --run-id ID [--sections A,B]   (what limits the prior, CPU)
+       hpc/run.sh linear-model CONFIG [--run-id ID] [--experiments A,B]   (linear model, CPU)
+       hpc/run.sh linear-model-selected CONFIG --run-id ID   (the reference linear model's data-selected genes, CPU)
+       hpc/run.sh linear-model-export CONFIG --run-id ID   (the reference linear model's predictions for the correction, CPU)
+       hpc/run.sh linear-model-production CONFIG --sl-split SPLIT --run-id ID   (stage one's production fit for stage two, CPU)
+       hpc/run.sh linear-model-stack CONFIG --run-id ID   (single-cell statistics stacked on a linear model export, CPU)
+       hpc/run.sh linear-model-noise CONFIG --run-id ID [--sections A,B]   (what limits the linear model, CPU)
        hpc/run.sh pie-reproduce --run-id ID [--device cuda] [--steps fetch,download,evaluate,compare]   (PIE's released checkpoints, GPU)
        hpc/run.sh ladder-inputs CONFIG [--steps lines,cells,mean,summaries|tx1] [--shard I/N]   (stage-one inputs; tx1 on a GPU)
        hpc/run.sh pie-precompute CONFIG --steps rescore|pilot|basis|full|assemble [--shard I/N] [--device cuda]   (frozen-PIE deltas, GPU)
@@ -19,33 +19,33 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh stage-one CONFIG [--run-id ID] [--fold K] [--device cuda]   (one stage-one run, 1 GPU)
        hpc/run.sh stage-one-queue --gpus 0,1,2,3 [--folds main,0,1,2,3,4] CONFIG...   (stage-one runs, one per listed GPU)
        hpc/run.sh stage-one-report CONFIG [--device cuda]   (a stage-one report over runs, 1 GPU)
-       hpc/run.sh stage-one-prior CONFIG --run-id ID   (the default prior refitted on the stage-one frame, CPU)
+       hpc/run.sh stage-one-linear-model CONFIG --run-id ID   (the default linear model refitted on the stage-one frame, CPU)
        hpc/run.sh sl-paris CONFIG --run-id ID [--genes N]   (PARIS, ported to Python, CPU, .venv-pie)
        hpc/run.sh sl-stage-two CONFIG --run-id ID   (SL stage two on stage one's GeneEffect, CPU, .venv-pie)
        hpc/run.sh sl-baselines CONFIG --run-id ID   (baselines on the multi-study SL benchmark, CPU, .venv-pie)
        hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
        hpc/run.sh pie-precompute CONFIG --steps states|assemble_states --set NAME[,NAME]|ALL [--shard I/N]   (frozen PIE on state inputs, GPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment; pie-reproduce,
-pie-precompute and the stage-one commands except stage-one-prior always run in
+pie-precompute and the stage-one commands except stage-one-linear-model always run in
 .venv-pie.
 `all` uses every visible GPU (CUDA_VISIBLE_DEVICES is respected) for every
 GPU step; --gpus restricts it to the listed ids among the visible ones.
 `revision` runs training, validation evaluation and baselines for one config
 (no response comparison, no readout) and writes summary.md and revision.json.
-`prior` runs the named experiments (default: all) of a linear context prior
+`linear-model` runs the named experiments (default: all) of a linear model
 config: every bridge setting, block set and penalty, scored on validation and
-test, into outputs/context_prior/<id>/ (rows/, results.md).
-`prior-selected` fits the config's reference row and tabulates its
-data-selected stage into outputs/context_prior/<id>/data_selected/.
-`prior-export` writes the config's reference row, out of fold for the
-single-cell training lines, into outputs/context_prior/<id>/export/.
-`prior-production` fits the config's reference row once on every labelled line
+test, into outputs/linear_model/<id>/ (rows/, results.md).
+`linear-model-selected` fits the config's reference row and tabulates its
+data-selected stage into outputs/linear_model/<id>/data_selected/.
+`linear-model-export` writes the config's reference row, out of fold for the
+single-cell training lines, into outputs/linear_model/<id>/export/.
+`linear-model-production` fits the config's reference row once on every labelled line
 (stage one's production fit) and writes the GeneEffect of every single-cell
-line into outputs/context_prior/<id>/production/; stage two reads it.
-`prior-stack` stacks each arm's single-cell statistics on the export of the
-config's prior_run, into outputs/context_prior/<id>/single_cell_stack/.
-`prior-noise` runs the noise diagnosis's sections (default: all) against the
-config's prior_run, into outputs/context_prior/<id>/noise/.
+line into outputs/linear_model/<id>/production/; stage two reads it.
+`linear-model-stack` stacks each arm's single-cell statistics on the export of the
+config's linear_model_run, into outputs/linear_model/<id>/single_cell_stack/.
+`linear-model-noise` runs the noise diagnosis's sections (default: all) against the
+config's linear_model_run, into outputs/linear_model/<id>/noise/.
 `pie-reproduce` fetches PIE's released checkpoints, scores them with the
 vendored PIE on their test splits and compares the released metrics, into
 outputs/pie_reproduction/<id>/ (results.md); PIE's assets go to data/pie/
@@ -64,7 +64,7 @@ predictions.parquet, V.npy, row.json); --fold K trains without frame fold K.
 process per listed GPU, a GPU listed twice running two (other kinds of config are
 skipped); `stage-one-report`
 scores a report config's rows into outputs/stage_one/<task>/<config stem>/
-(results.md); `stage-one-prior` writes the prior reference the report and the
+(results.md); `stage-one-linear-model` writes the linear model reference the report and the
 components reader read.
 `cell-states` runs the state telemetry of a configs/stage_one/states config
 (src.experiments.states.state_telemetry): `fit` writes the fit samples and plan, runs
@@ -81,7 +81,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|prior|prior-selected|prior-export|prior-production|prior-stack|prior-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-prior|sl-paris|sl-stage-two|sl-baselines|cell-states) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|linear-model|linear-model-selected|linear-model-export|linear-model-production|linear-model-stack|linear-model-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-linear-model|sl-paris|sl-stage-two|sl-baselines|cell-states) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -99,12 +99,12 @@ pie_environment() {
 case "$command" in
   all) exec "$python_bin" -m src.experiments.joint.all "$@" ;;
   revision) exec "$python_bin" -m src.experiments.joint.revision "$@" ;;
-  prior) exec "$python_bin" -m src.experiments.prior.context_prior "$@" ;;
-  prior-selected) exec "$python_bin" -m src.experiments.prior.data_selected_analysis "$@" ;;
-  prior-export) exec "$python_bin" -m src.experiments.prior.prior_export "$@" ;;
-  prior-production) exec "$python_bin" -m src.experiments.prior.production "$@" ;;
-  prior-stack) exec "$python_bin" -m src.experiments.prior.single_cell_stack "$@" ;;
-  prior-noise) exec "$python_bin" -m src.experiments.prior.noise_diagnosis "$@" ;;
+  linear-model) exec "$python_bin" -m src.experiments.linear_model.linear_model "$@" ;;
+  linear-model-selected) exec "$python_bin" -m src.experiments.linear_model.data_selected_analysis "$@" ;;
+  linear-model-export) exec "$python_bin" -m src.experiments.linear_model.linear_model_export "$@" ;;
+  linear-model-production) exec "$python_bin" -m src.experiments.linear_model.production "$@" ;;
+  linear-model-stack) exec "$python_bin" -m src.experiments.linear_model.single_cell_stack "$@" ;;
+  linear-model-noise) exec "$python_bin" -m src.experiments.linear_model.noise_diagnosis "$@" ;;
   pie-reproduce)
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.stage_one.pie_reproduction "$@" ;;
@@ -124,7 +124,7 @@ case "$command" in
   stage-one-report)
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.stage_one report "$@" ;;
-  stage-one-prior) exec "$python_bin" -m src.experiments.stage_one.prior_reference "$@" ;;
+  stage-one-linear-model) exec "$python_bin" -m src.experiments.stage_one.linear_model_reference "$@" ;;
   sl-paris) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.paris "$@" ;;
   sl-stage-two) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.stage_two "$@" ;;
   sl-baselines) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.benchmark_baselines "$@" ;;

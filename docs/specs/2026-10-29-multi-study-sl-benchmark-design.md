@@ -94,7 +94,7 @@ Settled on 2026-11-04 (user decisions; [data card](../data/sl-benchmark.html)):
   under `placed` and in its inputs. The draw of every other line does not change.
 - Stage one and stage two are separate. The stage-one benchmark keeps the final split (validation selects, test is
   scored once). Stage one's production fit is one fit of the chosen configuration on every labelled line, with no
-  validation set and no cross-fitting (`src/experiments/prior/production.py`). It writes one GeneEffect table for
+  validation set and no cross-fitting (`src/experiments/linear_model/production.py`). It writes one GeneEffect table for
   every single-cell line, and stage two reads it. If an SL validation or test line without GeneEffect shares a
   patient with labelled lines, the production fit leaves those labelled lines out and records them.
 - The SL report gives every row on validation and on test, for all lines, the lines with GeneEffect (the

@@ -1,6 +1,6 @@
-# Linear context prior experiments, run bridge_remedies_penalty_grid_20261005
+# Linear model experiments, run bridge_remedies_penalty_grid_20261005
 
-Shared expression space: 9711 genes (60 training lines took the training mean for some). The prior fits 953 labelled lines of 1405 training-side lines with bulk RNA; 167 of the 170 labelled single-cell training lines have bulk RNA and fit the bridge. 3057 selective genes.
+Shared expression space: 9711 genes (60 training lines took the training mean for some). The linear model fits 953 labelled lines of 1405 training-side lines with bulk RNA; 167 of the 170 labelled single-cell training lines have bulk RNA and fit the bridge. 3057 selective genes.
 
 Selective Spearman: macro mean over the selective genes of the Spearman across lines of the residual. Gain: selective Spearman minus that of the reference row (experiment `affine`, first setting, expression components alone at their best validation penalty), with its 95% paired line-bootstrap interval. Oracle: validation lines' bulk RNA as input (off-contract). A gene-level block set has a row per components and gene penalty pair. Nothing here is synthetic-lethality evidence.
 

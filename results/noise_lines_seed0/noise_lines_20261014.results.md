@@ -1,10 +1,10 @@
 # Noise diagnosis `noise_lines_20261014`
 
-Prior run `outputs/context_prior/default_prior_final_split_20261012`. Selective Spearman is the macro mean over the selective genes; gains are 95% paired line bootstraps. Nothing is chosen here; nothing here is synthetic-lethality evidence.
+Linear model run `outputs/linear_model/default_linear_model_final_split_20261012`. Selective Spearman is the macro mean over the selective genes; gains are 95% paired line bootstraps. Nothing is chosen here; nothing here is synthetic-lethality evidence.
 
 ## Learning curve
 
-The reference row refitted on nested patient-grouped fractions of the training side (lines: training side / labelled / paired), each beside its gene mean (the prior's intercept on the fraction's labelled lines). Within-gene R² is pooled over the selective genes against the training gene mean (which scores 0); gains are 95% paired line bootstraps.
+The reference row refitted on nested patient-grouped fractions of the training side (lines: training side / labelled / paired), each beside its gene mean (the linear model's intercept on the fraction's labelled lines). Within-gene R² is pooled over the selective genes against the training gene mean (which scores 0); gains are 95% paired line bootstraps.
 
 Line-specific part:
 
@@ -40,18 +40,18 @@ Whole prediction (per-line Pearson across genes; RMSE over every pair):
 | 1 | val | 0.9136 | 0.9095 | 0.1776 | 0.1816 |
 | 1 | test | 0.9149 | 0.9112 | 0.1760 | 0.1795 |
 
-Cilantro-SL's stage one (as released, trained on every labelled line, so in-sample on these lines) against the full prior and its gene mean, all on the validation and test pairs stage one covers:
+Cilantro-SL's stage one (as released, trained on every labelled line, so in-sample on these lines) against the full linear model and its gene mean, all on the validation and test pairs stage one covers:
 
 | Predictor | Split | Pairs | Selective Spearman | Within-gene R² | Absolute Pearson | RMSE |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | cilantro | val | 49,509 (20,503 selective) | 0.1692 (1252 genes) | 0.0391 | 0.9326 | 0.2298 |
-| prior | val | 49,509 (20,503 selective) | 0.2153 (1262 genes) | 0.0518 | 0.9277 | 0.2387 |
+| linear model | val | 49,509 (20,503 selective) | 0.2153 (1262 genes) | 0.0518 | 0.9277 | 0.2387 |
 | gene_mean | val | 49,509 (20,503 selective) | undefined (0 genes) | -0.0031 | 0.9234 | 0.2453 |
 | cilantro | test | 53,272 (21,911 selective) | 0.1963 (1270 genes) | 0.0491 | 0.9316 | 0.2296 |
-| prior | test | 53,272 (21,911 selective) | 0.2210 (1285 genes) | 0.0508 | 0.9260 | 0.2393 |
+| linear model | test | 53,272 (21,911 selective) | 0.2210 (1285 genes) | 0.0508 | 0.9260 | 0.2393 |
 | gene_mean | test | 53,272 (21,911 selective) | undefined (0 genes) | 0.0032 | 0.9222 | 0.2451 |
 
-| Split | Cilantro R² over gene mean | Prior R² over Cilantro |
+| Split | Cilantro R² over gene mean | Linear model R² over Cilantro |
 | --- | ---: | ---: |
 | val | 0.0423 [0.0150, 0.0659] | 0.0127 [-0.0095, 0.0375] |
 | test | 0.0458 [0.0275, 0.0622] | 0.0018 [-0.0154, 0.0215] |

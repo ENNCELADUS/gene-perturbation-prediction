@@ -27,8 +27,8 @@ _LOGGER = logging.getLogger(__name__)
 
 #: Jurkat and HepG2: the response sources whose controls define ``T``.
 TARGET_SUM_SOURCES: Final[tuple[str, str]] = ("ACH-000995", "ACH-000739")
-#: K562 supplies the copy-prior baseline, so scored genes need its label.
-COPY_PRIOR_DONOR: Final[str] = "ACH-000551"
+#: K562 supplies the copy baseline, so scored genes need its label.
+COPY_BASELINE_DONOR: Final[str] = "ACH-000551"
 #: Processes reading the ``T`` sources and the response anchors, all at once
 #: (two ``T`` sources plus four anchors in the joint config).
 RESPONSE_PROCESSES: Final[int] = 8
@@ -169,11 +169,11 @@ def _encode_missing_tx1(
     )
 
 
-#: Paths that say which lines exist, not how a line is prepared: the prior
+#: Paths that say which lines exist, not how a line is prepared: the linear model
 #: export is read by training and evaluation only, and the split grows the root
 #: (its lines are recorded in the manifest; the gene panel of an existing root is
 #: the recorded one). A recorded value of either is ignored too.
-_LINE_SET_PATHS: Final[frozenset[str]] = frozenset({"prior", "split"})
+_LINE_SET_PATHS: Final[frozenset[str]] = frozenset({"linear_model", "split"})
 
 
 def preparation_settings(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -273,7 +273,7 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
 
     from src.data.builders.build_exp13_esm2_universe import (
         build_coverage_universe,
-        restrict_coverage_universe_to_copy_prior,
+        restrict_coverage_universe_to_copy_baseline,
         write_embedding_union,
     )
     from src.data.expression import median_library_size
@@ -293,12 +293,12 @@ def prepare_inputs(config: Mapping[str, Any]) -> Path:
     paths, settings = config["paths"], config["preparation"]
     split = load_geneeffect_split(Path(paths["split"]))
     labels = load_geneeffect_long(Path(paths["gene_effect"]), split)
-    assert_fit_eligible(COPY_PRIOR_DONOR, split)
+    assert_fit_eligible(COPY_BASELINE_DONOR, split)
     donor = labels.loc[
-        (labels.model_id == COPY_PRIOR_DONOR) & np.isfinite(labels.gene_effect),
+        (labels.model_id == COPY_BASELINE_DONOR) & np.isfinite(labels.gene_effect),
         "gene_symbol",
     ]
-    candidates = restrict_coverage_universe_to_copy_prior(
+    candidates = restrict_coverage_universe_to_copy_baseline(
         build_coverage_universe(labels, split), tuple(donor)
     )
     hvg_order = tuple(load_hvg_gene_order(Path(paths["state_model_dir"])))

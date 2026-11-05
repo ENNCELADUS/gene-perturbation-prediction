@@ -34,7 +34,7 @@ line's cells. In order:
    line predict GeneEffect better than from its whole-line mean, and what per-state account of its GeneEffect does the
    model give?
 
-Every arm trains on the same labelled lines as the default prior (§4.1), so its 0.2045 / 0.2025 is a like-for-like
+Every arm trains on the same labelled lines as the default linear model (§4.1), so its 0.2045 / 0.2025 is a like-for-like
 bar.
 
 The noise diagnosis tested one route (cells → a few summaries → a linear model), whose nulls cannot separate absent
@@ -86,13 +86,13 @@ expression never reaches the latents: it enters only as each decoded gene's own 
   cannot be handled cleanly: left in, the label is in the input; zeroed, the pair's input differs from every other
   line's by exactly its label at that column (leave-one-out target encoding), a label channel present in training
   and absent on held-out lines that a head knowing the line through Δ can learn. And with the source in, part of Δ is
-  g's GeneEffect pattern across lines, which the base and the prior already hold, not the simulated knockdown in line
+  g's GeneEffect pattern across lines, which the base and the linear model already hold, not the simulated knockdown in line
   c. GeneEffect enters stage one only as the training target. PIE saw this source for
   about 97% of its training perturbations, so masking moves its input; the pilot measures what it costs PIE.
 - **Context.** For line `c`: PIE's control-mean evidence on one decode panel shared by every line (the protocol's
   GeneEffect genes with a `gene_text` entry): for a line with cells, its definition (the mean over cells of `log1p`
   CP10K); for a bulk-only line, the bulk profile rescaled to PIE's CP10K scale (a bulk profile has no cells to average
-  logs over); a gene the line's source does not list taking the training-line mean, as the prior fills it (PIE's
+  logs over); a gene the line's source does not list taking the training-line mean, as the linear model fills it (PIE's
   frozen evidence encoder blanks a whole row on any NaN); and the line's Cellosaurus text where a record exists.
 - **Knockdown of g.** The perturbation tokens of gene g; same-perturbation evidence from g's responses in the
   checkpoint's training data; same-context evidence empty (no responses in our lines).
@@ -260,11 +260,11 @@ are paired views of a line for stability telemetry, never extra lines.
 
 - **Lines.** Every arm trains on the same 981 lines (the **frame**): the 377 labelled single-cell training lines of the
   [final split](../data/cell-line-geneeffect-split.md), its 28 lymphoid and myeloid lines and the lines without bulk
-  RNA included, and the 604 bulk-only labelled lines the default prior fits (lymphoid and myeloid bulk-only lines
-  dropped, as it drops them). The prior's own 947 labelled lines hold 343 of the 377. It validates on
+  RNA included, and the 604 bulk-only labelled lines the default linear model fits (lymphoid and myeloid bulk-only lines
+  dropped, as it drops them). The linear model's own 947 labelled lines hold 343 of the 377. It validates on
   the split's 27 lines and scores its 28 test lines once. Cell channels exist only on the 377 single-cell lines and
   are absent on bulk-only lines, so arms differ only in their channels. (A 377-line frame, chosen first, was dropped:
-  it starts near 0.17, the learning curve's value at that size, against the prior's 0.2045, and a per-gene base
+  it starts near 0.17, the learning curve's value at that size, against the linear model's 0.2045, and a per-gene base
   cannot change selective Spearman.)
 - **Base and target.** `m_g` is the gene's mean measured GeneEffect over the 981 frame lines (single-cell training
   lines admitted by `assert_fit_eligible`, bulk-only labelled lines from `load_bulk_lines`, which refuses any overlap
@@ -310,7 +310,7 @@ output unchanged; there is no sum pooling and no cell-count input.
 
 | Channel | Tokens | Built from |
 | --- | --- | --- |
-| Mean | one per gene the line's profile lists: gene encoder + embedded value | the line's profile in the prior's bulk space. A line with cells always reads its cells: `log1p` of the mean over cells of each cell's CP10K (PIE's per-cell normalisation, then a log pseudo-bulk, not a mean of `log1p`, which moves with a gene's variance and dropout), mapped by an affine bridge refitted on it over the paired lines (a training line's bridge fitted outside its fold). Bulk RNA is the input only for bulk-only lines. Row: a separate bulk encoder instead of the bridge (below). An unlisted gene is absent, never a NaN in a shared row |
+| Mean | one per gene the line's profile lists: gene encoder + embedded value | the line's profile in the linear model's bulk space. A line with cells always reads its cells: `log1p` of the mean over cells of each cell's CP10K (PIE's per-cell normalisation, then a log pseudo-bulk, not a mean of `log1p`, which moves with a gene's variance and dropout), mapped by an affine bridge refitted on it over the paired lines (a training line's bridge fitted outside its fold). Bulk RNA is the input only for bulk-only lines. Row: a separate bulk encoder instead of the bridge (below). An unlisted gene is absent, never a NaN in a shared row |
 | Per-gene spread | none; enters gene g's evidence | the excess of the detected fraction and of the SD of `log1p` CP10K over their depth-expected values (`mean_i(1 − exp(−μ_g L_i / T))` for detection; the Poisson trend for SD) |
 | Summaries | one token | the noise diagnosis's per-line features: 23 program fractions and means, cluster shares at 8 and 16 |
 | QC and cycle cells | one per cell | the cell's log UMI, genes detected, mitochondrial and ribosomal fractions, S and G2/M scores, doublet score |
@@ -337,7 +337,7 @@ The gene encoder projects these and sums them; a gene without an entry has that 
 | ESM C 600M | protein sequence | ~19,200 | computed on the H20 from the reviewed human UniProt sequences PIE's `esm2` uses |
 | ESM3-open | sequence and structure | ~19,200 | the same sequences; a swap row for ESM C |
 | `string_space` | interaction network | 19,699 | PIE_sources (STRING v12) |
-| Gene2vec | co-expression | ~24,000 | the matrix Cilantro's stage one reads; its best gene prior (Fig. 2C) |
+| Gene2vec | co-expression | ~24,000 | the matrix Cilantro's stage one reads; its best gene embedding (Fig. 2C) |
 
 PIE's `depmap_gene_effect` is never a gene-encoder source (§3.2).
 
@@ -389,7 +389,7 @@ single-cell lines alone (what the bulk-only lines add).
 
 Reference rows:
 - the base;
-- the default prior, now on the same labelled lines and the same input: the like-for-like linear reference;
+- the default linear model, now on the same labelled lines and the same input: the like-for-like linear reference;
 - a **shared nonlinear reader of the same 128 components**: one network conditioned on the gene encoder, no per-gene
   parameter, so the linear-to-nonlinear step is measured on fixed inputs;
 - lineage only; Cellosaurus text only; own expression `x_cg` only.
@@ -499,7 +499,7 @@ measures what a nonlinear reader of the mean still sees after residualisation.
 **Question.** How does accuracy depend on the number of cells read from a line?
 
 **Definition.**
-- Held-out lines: the trained mean-only, HVG cells and Tx1 cells arms, and the default prior, score validation and
+- Held-out lines: the trained mean-only, HVG cells and Tx1 cells arms, and the default linear model, score validation and
   test lines read from 10, 25, 50, 100 and 200 cells and from all of them, 16 random draws per size and line (a line
   with fewer cells reads them all and is counted). Every input that depends on the bag is rebuilt from the same draw:
   the mean channel, the cell tokens and, for a virtual-cell-family model, the frozen PIE's deltas (recomputed for 4 of
@@ -555,14 +555,14 @@ selective genes for every row of this task, comparators included. The precompute
 
    Exploratory rows: the log-sum-exp combiner; cycling-score-weighted inputs; per-state deviations from the shared head,
    shrunk toward zero (penalty on validation); K = 4, 6, 8; linear against small nonlinear shared head. References: the
-   best ladder model, the default prior and the refitted matched-input linear reference of Task 3.
+   best ladder model, the default linear model and the refitted matched-input linear reference of Task 3.
 2. **Planted state effects**, before any further build: targets on the real lines and masses,
    `y(c, g) + β Σ_k π_ck f_k(g)` with `f_k` a random function of the gene-query sources, at three signal sizes and with
    one rare state (mass under 5%) and one low-spread state; recovery of each `f_k` from the saved state scores
    (Pearson and slope over held-out lines, line-bootstrap intervals), not only of the line-level target.
 3. **Fine-tuned states (option three)**, after people read the pilot: the batch-aware mixture as initialisation; its
    centres and covariances fine-tuned (never the encoder) with memberships an inductive function of the frozen
-   embedding; loss = GeneEffect + KL(memberships ‖ initial) + a weak usage prior pooled over lines, each line weighted
+   embedding; loss = GeneEffect + KL(memberships ‖ initial) + a weak usage penalty pooled over lines, each line weighted
    equally. Needs the differentiable PIE path (§6): parameters frozen, dropout off, gradients through the control
    evidence and decode, only membership-independent work cached; the zero flag follows the support rule of the state
    inputs. Reports drift: marker-gene overlap with the initial states, mass change, the KL; nearest real cells saved as
@@ -575,7 +575,7 @@ Plausibility, reported for every state run: a gene-by-state direction table, fix
 - DNA replication and mitosis genes (the MCMs, PCNA, POLA1, PLK1, KIF11, CDK1) score more negative in S and G2/M states;
 - GPX4 scores more negative in mesenchymal or EMT-like states;
 - TP53 and CDKN1A score positive in senescence-like states of TP53-wild-type lines;
-- JAK1 and STAT1 score toward interferon-like states (weak prior; monoculture interferon states are rare).
+- JAK1 and STAT1 score toward interferon-like states (weak evidence; monoculture interferon states are rare).
 
 Each state also gets its identity checks from Task 8, and every row reports train-versus-validation gaps.
 
@@ -604,7 +604,7 @@ actually respond that way.
 | `hpc/run.sh` | edit | `pie-reproduce`, `ladder-inputs`, `pie-precompute`, `gene-sources` and `stage-one` commands |
 | `docs/03-geneeffect-protocol.md` | edit | §15 for the stage-one inputs; a new section for the stage-one model |
 | `src/data/ladder_reader.py` | new | memory-mapped readers of Task 2's outputs, the index check, targets with an excluded fold, the ΔE states |
-| `src/experiments/stage_one/prior_reference.py` | new | the default prior refitted on the frame's mean channel (Task 3's linear reference and its 128 components) |
+| `src/experiments/stage_one/linear_model_reference.py` | new | the default linear model refitted on the frame's mean channel (Task 3's linear reference and its 128 components) |
 | `src/experiments/run_dir.py`, `src/training/schedule.py` | new | run-directory binding and the learning-rate schedule, lifted so `.venv-pie` can import them |
 | `src/data/planted_terms.py` | new | Task 6's planted terms and Task 9's planted state effects |
 | `src/experiments/states/programs.py`, `hpc/states/setup.sh` | new | consensus NMF, starCAT and scVI fits in `.venv-states` |
@@ -644,10 +644,10 @@ On synthetic fixtures:
 ## 8. Out of scope, and follow-ups
 
 Out of scope: training or fine-tuning PIE; SL pairs (stage two reads the saved `V(c, g)` later); PIE's chemical
-sources as gene sources; any change to the split, the metric or the default prior.
+sources as gene sources; any change to the split, the metric or the default linear model.
 
 Stage two (its own design) needs, from stage one: out-of-fold `V(c, g)` and predictions for training lines (in-sample
-values for training lines would leak into the SL classifier, as the prior's export avoids), and predictions on edited
+values for training lines would leak into the SL classifier, as the linear model's export avoids), and predictions on edited
 contexts (gene A's expression set to zero, or the after-state of knocking A down) for the SL definition's "B's
 dependency with A lost"; the gene-only virtual-cell arm cannot provide the latter.
 
@@ -661,5 +661,5 @@ Follow-ups, each its own design when taken up:
 - bulk-only lines as training lines for stage one;
 - a Tx1 cell arm from randomly initialised Tx1 weights, to separate pretraining from Tx1's input pipeline;
 - a learning curve with the bridge held at all paired lines, five patient orders and the penalty re-chosen per scale;
-- batch: per-line and per-gene distributions of the deposit swap's differences, and a prior row with per-deposit
+- batch: per-line and per-gene distributions of the deposit swap's differences, and a linear model row with per-deposit
   centring or a per-deposit bridge.

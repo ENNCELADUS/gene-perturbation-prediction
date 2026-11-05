@@ -1,6 +1,6 @@
-# Linear context prior experiments, run cilantro_encodings_20261012
+# Linear model experiments, run cilantro_encodings_20261012
 
-Shared expression space: 8737 genes (201 training lines took the training mean for some). The prior fits 947 labelled lines of 1399 training-side lines with bulk RNA; 343 of the 377 labelled single-cell training lines have bulk RNA and fit the bridge. 4323 selective genes.
+Shared expression space: 8737 genes (201 training lines took the training mean for some). The linear model fits 947 labelled lines of 1399 training-side lines with bulk RNA; 343 of the 377 labelled single-cell training lines have bulk RNA and fit the bridge. 4323 selective genes.
 
 Selective Spearman: macro mean over the selective genes of the Spearman across lines of the residual. Gain: selective Spearman minus that of the reference row (experiment `affine`, first setting, block set `selected`, components penalty 1, gene penalty 10), with its 95% paired line-bootstrap interval. Oracle: validation lines' bulk RNA as input (off-contract). A gene-level block set has a row per components and gene penalty pair. Nothing here is synthetic-lethality evidence.
 

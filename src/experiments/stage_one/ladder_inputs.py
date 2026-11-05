@@ -51,10 +51,12 @@ def settings(setup: Setup) -> dict[str, Any]:
         "gene_effect": setup.joint["paths"]["gene_effect"],
         "basal_raw_umi": setup.joint["paths"]["basal_raw_umi"],
         "features": dict(setup.joint["features"]),
-        "model": setup.prior["paths"]["model"],
-        "bulk_expression": setup.prior["paths"]["bulk_expression"],
-        "reference": setup.prior["paths"]["reference"],
-        "exclude_lineages": list(setup.prior["training_side"]["exclude_lineages"]),
+        "model": setup.linear_model["paths"]["model"],
+        "bulk_expression": setup.linear_model["paths"]["bulk_expression"],
+        "reference": setup.linear_model["paths"]["reference"],
+        "exclude_lineages": list(
+            setup.linear_model["training_side"]["exclude_lineages"]
+        ),
         "cell_states": dict(setup.noise["cell_states"]),
         "prepared_target_sum": float(prepared["expression_space"]["target_sum"]),
         "hvg_order": list(prepared["hvg_order"]),
@@ -70,7 +72,7 @@ def open_manifest(setup: Setup) -> dict[str, Any]:
         "pie_input": "mean over cells of log1p(CP10K); bulk-only lines "
         "log1p(TPM / 100)",
         "pseudobulk": "log1p(mean over cells of CP10K), then the default "
-        "prior's space (quantile-normalised to the training side's bulk)",
+        "linear_model's space (quantile-normalised to the training side's bulk)",
         "hvg_cells": "log1p(x * T / L) over STATE's HVGs, "
         f"T = {current['prepared_target_sum']}",
         "tx1": "raw UMI",
@@ -115,8 +117,8 @@ def load_frame(setup: Setup) -> Frame:
     """The frame: single-cell training lines admitted by ``assert_fit_eligible``,
     then bulk-only labelled lines with bulk RNA outside the dropped lineages
     (``load_bulk_lines`` refuses any overlap with the split); the training side
-    the prior quantile-normalises against, and its paired lines."""
-    from src.context_prior.folds import patient_folds
+    the linear model quantile-normalises against, and its paired lines."""
+    from src.linear_model.folds import patient_folds
     from src.data.depmap import read_model_ids, read_models
     from src.data.extra_lines import load_bulk_lines
     from src.data.splits import assert_fit_eligible, load_geneeffect_split
@@ -124,9 +126,9 @@ def load_frame(setup: Setup) -> Frame:
     split_path = Path(setup.joint["paths"]["split"])
     split = load_geneeffect_split(split_path)
     extra = load_bulk_lines(split_path, split)
-    models = read_models(Path(setup.prior["paths"]["model"]))
-    bulk = read_model_ids(Path(setup.prior["paths"]["bulk_expression"]))
-    dropped = set(setup.prior["training_side"]["exclude_lineages"])
+    models = read_models(Path(setup.linear_model["paths"]["model"]))
+    bulk = read_model_ids(Path(setup.linear_model["paths"]["bulk_expression"]))
+    dropped = set(setup.linear_model["training_side"]["exclude_lineages"])
 
     def kept(ids: Sequence[str]) -> list[str]:
         return [m for m in ids if models.at[m, "lineage"] not in dropped]
@@ -169,7 +171,7 @@ def gene_text_keys(setup: Setup) -> list[str]:
 
 def build_lines(setup: Setup, frame: Frame) -> dict[str, Any]:
     """``lines.parquet`` and ``genes.parquet``."""
-    from src.context_prior.targets import fit_definitions
+    from src.linear_model.targets import fit_definitions
     from src.data.depmap import read_depmap_matrix
     from src.data.ladder_cells import symbol_key
     from src.data.prepared import read_manifest
@@ -214,7 +216,7 @@ def build_lines(setup: Setup, frame: Frame) -> dict[str, Any]:
         "single_cell_train_lymphoid_myeloid": int(
             sum(
                 frame.models.at[m, "lineage"]
-                in set(setup.prior["training_side"]["exclude_lineages"])
+                in set(setup.linear_model["training_side"]["exclude_lineages"])
                 for m in frame.single_cell_train
             )
         ),
@@ -338,7 +340,7 @@ def build_cells(setup: Setup, frame: Frame) -> dict[str, Any]:
     genes = read_genes(setup.root)
     panel = list(genes.index[genes["in_panel"]])
     union = cell_genes(
-        panel, bulk_gene_columns(Path(setup.prior["paths"]["bulk_expression"]))
+        panel, bulk_gene_columns(Path(setup.linear_model["paths"]["bulk_expression"]))
     )
     programs = list(setup.noise["cell_states"]["programs"])
     cycle = tuple(programs.index(name) for name in CYCLE_PROGRAMS)
@@ -414,8 +416,8 @@ def read_cells(root: Path, model_id: str) -> dict[str, np.ndarray]:
 def build_mean(setup: Setup, frame: Frame) -> dict[str, Any]:
     """``mean/``: the mean channel, the quantile-normalised pseudo-bulk of every
     split line, the paired lines' bulk, and PIE's input with its listed mask."""
-    from src.context_prior.bridge import bridge_quality, fit_bridge, oof_bridged
-    from src.context_prior.space import (
+    from src.linear_model.bridge import bridge_quality, fit_bridge, oof_bridged
+    from src.linear_model.space import (
         fill_unmeasured,
         measured_genes,
         quantile_normalize,
@@ -429,7 +431,7 @@ def build_mean(setup: Setup, frame: Frame) -> dict[str, Any]:
     union = json.loads((setup.root / "cells" / "genes.json").read_text())["genes"]
     position = {g: i for i, g in enumerate(union)}
     # Only training-side bulk is read: no validation or test line's bulk RNA.
-    bulk = read_depmap_matrix(Path(setup.prior["paths"]["bulk_expression"]))
+    bulk = read_depmap_matrix(Path(setup.linear_model["paths"]["bulk_expression"]))
     bulk = bulk.loc[[m for m in bulk.index if m in set(frame.side)]]
     bulk_genes = list(bulk.columns)
     cells = {m: read_cells(setup.root, m) for m in frame.cell_lines}
@@ -494,7 +496,7 @@ def build_mean(setup: Setup, frame: Frame) -> dict[str, Any]:
 def build_summaries(setup: Setup, frame: Frame) -> dict[str, Any]:
     """``summaries.parquet``: per split line, program fractions and means and
     cluster shares, from all cells."""
-    from src.context_prior.noise import cluster_proportions, program_features
+    from src.linear_model.noise import cluster_proportions, program_features
     from src.data.prepared import read_manifest, read_prepared_line
     from src.experiments.prepare import NOISE_DIR
 

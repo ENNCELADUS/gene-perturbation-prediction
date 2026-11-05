@@ -313,7 +313,7 @@ def pie_listed(ladder: Ladder) -> pd.DataFrame:
 
 
 def mean_channel(ladder: Ladder) -> pd.DataFrame:
-    """The mean channel (lines x space genes) in the default prior's space."""
+    """The mean channel (lines x space genes) in the default linear model's space."""
     frame = pd.read_parquet(ladder.root / "mean" / "mean_channel.parquet")
     return _on_lines(ladder, frame, "mean/mean_channel.parquet")
 
@@ -361,7 +361,7 @@ def text_on_axis(path: Path, axis: Sequence[str]) -> tuple[np.ndarray, np.ndarra
 class LineTokens:
     """One token per gene a line's profile lists, carrying both values (§3.3):
     PIE's input (the mean of log1p CP10K, on the panel) and the mean channel (the
-    log1p pseudo-bulk in the prior's space). ``values`` is lines x tokens x 4:
+    log1p pseudo-bulk in the linear model's space). ``values`` is lines x tokens x 4:
     ``[pie value, pie listed, mean-channel value, in the space]``, a value zero
     where its flag is; a token is present when either flag is."""
 

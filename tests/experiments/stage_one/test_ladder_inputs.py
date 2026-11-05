@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.context_prior.bridge import fit_bridge
+from src.linear_model.bridge import fit_bridge
 from src.experiments.stage_one import ladder_inputs as ladder
 from tests.fixtures.ladder import (
     BULK_LABELLED,

@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 
 import src.baselines.residual as residual_ladder
-from src.baselines.residual import COPY_PRIOR, GENE_MEAN
+from src.baselines.residual import COPY_BASELINE, GENE_MEAN
 from src.data.labels import fit_gene_means
 from src.data.splits import FixedSplit
 
@@ -69,7 +69,7 @@ def _context(lines: list[str], features: dict[str, dict[str, float]]) -> pd.Data
     )
 
 
-def _prior(genes: list[str]) -> pd.Series:
+def _linear_model(genes: list[str]) -> pd.Series:
     return pd.Series([-1.0 - 0.05 * i for i in range(len(genes))], index=genes)
 
 
@@ -82,9 +82,9 @@ def _split(train, val, test, unlabeled_train=()) -> FixedSplit:
     )
 
 
-def _ladder(labels, split, contexts=None, prior=None, pca_components=3):
+def _ladder(labels, split, contexts=None, linear_model=None, pca_components=3):
     return residual_ladder.run_r1_ladder(
-        labels, contexts or {}, prior, split=split, pca_components=pca_components
+        labels, contexts or {}, linear_model, split=split, pca_components=pca_components
     )
 
 
@@ -131,22 +131,24 @@ def test_context_pca_ridge_recovers_a_planted_signal() -> None:
         assert np.corrcoef(gene["residual_prediction"], gene["residual"])[0, 1] > 0.9
 
 
-def test_gene_mean_predicts_zero_and_copy_prior_a_per_gene_constant() -> None:
+def test_gene_mean_predicts_zero_and_copy_baseline_a_per_gene_constant() -> None:
     lines = [f"L{i}" for i in range(8)]
     labels = _labels_no_signal(lines, _BASE_GENES)
     predictions = _ladder(
-        labels, _split(lines[:5], lines[5:7], lines[7:]), prior=_prior(_BASE_GENES)
+        labels,
+        _split(lines[:5], lines[5:7], lines[7:]),
+        linear_model=_linear_model(_BASE_GENES),
     )
     gene_mean = predictions.loc[predictions["method"] == GENE_MEAN]
     assert len(gene_mean) == 3 * len(_BASE_GENES)
     assert (gene_mean["residual_prediction"] == 0.0).all()
-    copy_prior = predictions.loc[predictions["method"] == COPY_PRIOR]
-    spread = copy_prior.groupby("gene_symbol")["residual_prediction"].nunique()
+    copy_baseline = predictions.loc[predictions["method"] == COPY_BASELINE]
+    spread = copy_baseline.groupby("gene_symbol")["residual_prediction"].nunique()
     assert (spread == 1).all()
     # centred on the training-line mean, never a fold-varying one
     means = fit_gene_means(labels, lines[:5], min_lines=3)
-    expected = _prior(_BASE_GENES) - means
-    first = copy_prior.drop_duplicates("gene_symbol").set_index("gene_symbol")
+    expected = _linear_model(_BASE_GENES) - means
+    first = copy_baseline.drop_duplicates("gene_symbol").set_index("gene_symbol")
     assert np.allclose(first["residual_prediction"], expected.loc[first.index])
 
 
@@ -228,11 +230,11 @@ def test_fixed_split_sparse_train_labels_keep_exact_baseline_coverage() -> None:
         labels,
         _split(train, val, test),
         {"ctx": _context([*train, *val, *test], {"signal": context_value})},
-        _prior(genes),
+        _linear_model(genes),
     )
     expected_methods = {
         GENE_MEAN,
-        COPY_PRIOR,
+        COPY_BASELINE,
         "nearest_line[ctx]",
         "context_pca_ridge[ctx]",
     }
@@ -315,7 +317,7 @@ def test_fixed_split_rejects_undeclared_unknown_train() -> None:
 
 
 def _synthetic_inputs():
-    """Eleven lines on 12 genes; ACH-000551 (the K562 copy-prior donor) trains."""
+    """Eleven lines on 12 genes; ACH-000551 (the K562 copy-baseline donor) trains."""
     from src.data.context_pca import fit_context_pca, pooled_context
     from src.data.prepared import PreparedInputs, PreparedLine
     from src.data.q_sc import QScFeatures
@@ -372,7 +374,7 @@ def test_baselines_run_on_synthetic_inputs(tmp_path: Path) -> None:
 
     assert set(result.summary) == {
         GENE_MEAN,
-        COPY_PRIOR,
+        COPY_BASELINE,
         "nearest_line[tx1]",
         "nearest_line[hvg]",
         "context_pca_ridge[tx1]",
@@ -391,11 +393,16 @@ def test_baselines_run_on_synthetic_inputs(tmp_path: Path) -> None:
     assert not (tmp_path / "test").exists()
 
 
-def test_baselines_add_the_prior_controls_with_a_prior(tmp_path: Path) -> None:
+def test_baselines_add_the_linear_model_controls_with_a_linear_model(
+    tmp_path: Path,
+) -> None:
     import dataclasses
 
-    from src.baselines.prior_controls import PRIOR, PRIOR_PLUS_TX1_RIDGE
-    from src.data.prior_offsets import PriorOffsets
+    from src.baselines.linear_model_controls import (
+        LINEAR_MODEL,
+        LINEAR_MODEL_PLUS_TX1_RIDGE,
+    )
+    from src.data.linear_model_offsets import LinearModelOffsets
     from src.experiments.joint.baselines import run_baselines
 
     inputs = _synthetic_inputs()
@@ -405,14 +412,16 @@ def test_baselines_add_the_prior_controls_with_a_prior(tmp_path: Path) -> None:
         index=list(lines),
         columns=list(inputs.genes),
     )
-    prior = dataclasses.replace(
+    linear_model = dataclasses.replace(
         inputs,
-        prior=PriorOffsets(
+        linear_model=LinearModelOffsets(
             {"run_id": "r", "reference": {}}, values, inputs.residual_scale
         ),
     )
-    result = run_baselines({}, split="val", out_dir=tmp_path / "val", inputs=prior)
-    assert {PRIOR, PRIOR_PLUS_TX1_RIDGE} <= set(result.summary)
-    assert result.summary[PRIOR]["val_selective_spearman"] is not None
-    controls = result.predictions.loc[result.predictions.method == PRIOR]
+    result = run_baselines(
+        {}, split="val", out_dir=tmp_path / "val", inputs=linear_model
+    )
+    assert {LINEAR_MODEL, LINEAR_MODEL_PLUS_TX1_RIDGE} <= set(result.summary)
+    assert result.summary[LINEAR_MODEL]["val_selective_spearman"] is not None
+    controls = result.predictions.loc[result.predictions.method == LINEAR_MODEL]
     assert set(controls.model_id) == set(inputs.split.val)

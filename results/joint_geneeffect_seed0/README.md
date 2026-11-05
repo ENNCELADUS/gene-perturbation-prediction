@@ -11,16 +11,16 @@ All methods have exactly the same 478501 observed (ModelID, gene_symbol) keys ac
 | joint_best_epoch3 | 0.01611905 | 0.18038516 | 0.91050399 | 0.73338939 | 0.05414127 | 0.05280360 | 0.0773% |
 | context_pca_ridge[hvg] | 0.01635306 | 0.18167029 | 0.90920119 | 0.72759752 | 0.07736289 | 0.08323587 | -1.3733% |
 | context_pca_ridge[tx1] | 0.01625512 | 0.18106113 | 0.90983343 | 0.72777157 | 0.12160618 | 0.11573946 | -0.7662% |
-| copy_prior | 0.03389791 | 0.26316988 | 0.81686034 | 0.54343217 | undefined | undefined | -110.1347% |
+| copy_baseline | 0.03389791 | 0.26316988 | 0.81686034 | 0.54343217 | undefined | undefined | -110.1347% |
 | gene_mean | 0.01613152 | 0.18044272 | 0.91047146 | 0.73393976 | undefined | undefined | 0.0000% |
 | nearest_line[hvg] | 0.02853913 | 0.24133962 | 0.84602658 | 0.58732115 | 0.05900657 | 0.06130214 | -76.9154% |
 | nearest_line[tx1] | 0.02868782 | 0.24203011 | 0.84576280 | 0.59698253 | 0.06077659 | 0.05973719 | -77.8371% |
 
 ## Interpretation
 
-1. Joint Huber loss improves over gene mean by only 0.0773%; absolute Spearman is slightly lower. The high absolute Pearson is already present in the context-blind prior.
+1. Joint Huber loss improves over gene mean by only 0.0773%; absolute Spearman is slightly lower. The high absolute Pearson is already present in the context-blind linear model.
 2. Joint residual Pearson/Spearman are below Tx1 PCA-ridge and below the other contextual baselines in this run. This does not establish useful context-modeling superiority.
-3. Gene-mean and copy-prior have undefined residual correlations because their per-gene predictions are constant across contexts; these are not zeros.
+3. Gene-mean and copy-baseline have undefined residual correlations because their per-gene predictions are constant across contexts; these are not zeros.
 4. Response MSE/energy/total are 85.58490/370.35131/455.93621 over 3285 held-out conditions from four training anchors. These reuse the response holdout and do not represent responses measured on the 27 GeneEffect test lines.
 
 These are GeneEffect results, not SL interaction evidence; Tx1 pretraining exposure limits remain.

@@ -18,7 +18,7 @@ from src.data.io import read_json
 from src.experiments.joint.config import load_config
 from src.experiments.joint.pipeline import (
     BASELINE_NAMES,
-    PRIOR_CONTROLS,
+    LINEAR_MODEL_CONTROLS,
     Job,
     check_resume_processes,
     choose_gpus,
@@ -260,7 +260,7 @@ def validation_section(config: dict, run: Path) -> list[str]:
         **{
             name: baselines.get(method)
             for method, name in BASELINE_NAMES.items()
-            if method in baselines or method not in PRIOR_CONTROLS
+            if method in baselines or method not in LINEAR_MODEL_CONTROLS
         },
     }
     lines = [
@@ -283,7 +283,7 @@ def validation_section(config: dict, run: Path) -> list[str]:
     lines += [
         "",
         "Undefined correlations come from predictors that are constant per gene "
-        "across lines (gene mean, copy prior); they are not zero.",
+        "across lines (gene mean, copy-baseline); they are not zero.",
     ]
     return lines
 

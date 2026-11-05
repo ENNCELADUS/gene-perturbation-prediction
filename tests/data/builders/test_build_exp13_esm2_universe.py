@@ -7,7 +7,7 @@ from src.data.builders.build_exp13_esm2_universe import (
     build_coverage_universe,
     build_embedding_union,
     inspect_npz_coverage,
-    restrict_coverage_universe_to_copy_prior,
+    restrict_coverage_universe_to_copy_baseline,
     write_embedding_union,
 )
 
@@ -87,11 +87,11 @@ def test_npz_coverage_rejects_malformed_resolved_dtype(tmp_path: Path) -> None:
 
 def test_common_panel_keeps_finite_k562_availability_restriction():
     candidates = build_coverage_universe(_labels(), _split())
-    assert restrict_coverage_universe_to_copy_prior(candidates, ("PASS",)).symbols == (
-        "PASS",
-    )
+    assert restrict_coverage_universe_to_copy_baseline(
+        candidates, ("PASS",)
+    ).symbols == ("PASS",)
     with pytest.raises(ValueError, match="empty"):
-        restrict_coverage_universe_to_copy_prior(candidates, ("OTHER",))
+        restrict_coverage_universe_to_copy_baseline(candidates, ("OTHER",))
 
 
 def test_writer_separates_scored_and_response_union_and_reports_exclusions(tmp_path):

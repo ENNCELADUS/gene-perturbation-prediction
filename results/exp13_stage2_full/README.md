@@ -9,7 +9,7 @@ has no scientific run yet; the results below belong to the original staged run.
 The fixed split contains 172 train, 27 validation, and 27 test cell lines over
 17,787 GeneEffect genes. Stage 2 used 170 supervised train lines plus two registered
 unlabelled train lines, one seed, and the full five-block model. The comparison set
-is the registered residual ladder: context-PCA ridge, nearest-line, copy-prior, and
+is the registered residual ladder: context-PCA ridge, nearest-line, copy-baseline, and
 gene-mean.
 
 ## Method and provenance
@@ -46,7 +46,7 @@ context-conditioned baselines on both reported rank metrics.
 | End-to-end full | 0.022472 | not emitted | 0.021720 | not emitted |
 | Context-PCA ridge | **0.085132** | [0.082183, 0.088122] | **0.099327** | [0.071360, 0.127331] |
 | Nearest-line | 0.046196 | [0.043214, 0.049070] | 0.057667 | [0.032391, 0.084318] |
-| Copy-prior | undefined | constant across lines | 0.005736 | [-0.012518, 0.024908] |
+| Copy-baseline | undefined | constant across lines | 0.005736 | [-0.012518, 0.024908] |
 | Gene-mean | undefined | constant residual | undefined | constant residual |
 
 The end-to-end point estimate trails context-PCA ridge by 0.062660 per gene and

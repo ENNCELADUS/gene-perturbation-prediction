@@ -6,7 +6,7 @@
       "labelled_lines": 126,
       "paired_lines": 41,
       "val": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.11322270322270322,
           "selective_spearman_scored": 4323,
           "within_gene_r2": -3.6760758260978577e-05,
@@ -47,7 +47,7 @@
         }
       },
       "test": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.1330504513219644,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.013019666446908107,
@@ -94,7 +94,7 @@
       "labelled_lines": 251,
       "paired_lines": 86,
       "val": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.1616585167730206,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.025562452374985556,
@@ -135,7 +135,7 @@
         }
       },
       "test": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.14118582889529474,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.02195701724314436,
@@ -182,7 +182,7 @@
       "labelled_lines": 486,
       "paired_lines": 165,
       "val": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.17784915113159389,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.03421625192488753,
@@ -223,7 +223,7 @@
         }
       },
       "test": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.17531430362278297,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.03509253485213293,
@@ -270,7 +270,7 @@
       "labelled_lines": 721,
       "paired_lines": 246,
       "val": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.1930032336902566,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.03852833535124167,
@@ -311,7 +311,7 @@
         }
       },
       "test": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.19030936221844585,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.03938042760188498,
@@ -358,7 +358,7 @@
       "labelled_lines": 839,
       "paired_lines": 297,
       "val": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.20514836026286407,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.04272488942308239,
@@ -399,7 +399,7 @@
         }
       },
       "test": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.20065867558857706,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.04139626781335626,
@@ -446,7 +446,7 @@
       "labelled_lines": 947,
       "paired_lines": 343,
       "val": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.20450646893394983,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.042828672515236144,
@@ -487,7 +487,7 @@
         }
       },
       "test": {
-        "prior": {
+        "linear_model": {
           "selective_spearman": 0.20247152730025797,
           "selective_spearman_scored": 4323,
           "within_gene_r2": 0.04229215962868127,
@@ -540,7 +540,7 @@
         "absolute_pearson": 0.932556437761105,
         "rmse": 0.22981160879135132
       },
-      "prior": {
+      "linear_model": {
         "selective_spearman": 0.2152985102275751,
         "selective_spearman_scored": 1262,
         "within_gene_r2": 0.0518290637695803,
@@ -568,7 +568,7 @@
           0.06586718342343482
         ]
       },
-      "prior_over_cilantro": {
+      "linear_model_over_cilantro": {
         "difference": 0.012693657497898431,
         "interval": [
           -0.009537945129294503,
@@ -586,7 +586,7 @@
         "absolute_pearson": 0.9316063203057018,
         "rmse": 0.22959738969802856
       },
-      "prior": {
+      "linear_model": {
         "selective_spearman": 0.2210241909001705,
         "selective_spearman_scored": 1285,
         "within_gene_r2": 0.050842192389839,
@@ -614,7 +614,7 @@
           0.06219563920389506
         ]
       },
-      "prior_over_cilantro": {
+      "linear_model_over_cilantro": {
         "difference": 0.0017741157206439882,
         "interval": [
           -0.015415758833468468,

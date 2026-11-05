@@ -2,7 +2,7 @@
 
 Updated 2026-10-11. The extended related work of the [research blueprint](01-blueprint.md), written as the
 related-work section of a paper. The blueprint states only how this project differs; this document gives the
-prior art behind each statement. It is a focused review, not an exhaustive novelty search. It mirrors the Notion page
+earlier work behind each statement. It is a focused review, not an exhaustive novelty search. It mirrors the Notion page
 https://app.notion.com/p/3f6c3591aaf68105996dc71d2543c9d0; edit both together.
 
 ## 1. Synthetic-lethality benchmarks and their holdout settings
@@ -129,7 +129,7 @@ gene-holdout result reproduces at two-class AP 0.54, not the reported 0.71.
 
 ## 4. Dependency prediction from molecular context
 
-Predicting dependencies from a cell's molecular profile has prior art. DeepDEP predicts cancer dependencies
+Predicting dependencies from a cell's molecular profile has earlier work. DeepDEP predicts cancer dependencies
 from integrative genomic profiles and transfers them to tumours
 ([Chiu et al., Science Advances 2021](https://doi.org/10.1126/sciadv.abh1275)); Recursive Feature Machines do
 the same from expression and mutations (§3). Stage one is therefore not new as a task; what remains open is

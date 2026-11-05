@@ -3,21 +3,21 @@
 Runs of 2026-10-07 and 2026-10-08 on the H20 container on port 30838 (worktree `/2023533015/VCC_Project_correction`,
 branch `feat/single-cell-correction`), following
 [protocol §12](../../docs/03-geneeffect-protocol.md#12-single-cell-correction): the head starts at zero on the default
-linear context prior, so the model before the first update (epoch −1, the prior alone) is a `best.pt` candidate. Records:
-the [prior export](prior_export.json) and the `summary.md` of every run (`summary_<run>.md`); checkpoints, predictions
+linear model, so the model before the first update (epoch −1, the linear model alone) is a `best.pt` candidate. Records:
+the [linear model export](linear_model_export.json) and the `summary.md` of every run (`summary_<run>.md`); checkpoints, predictions
 and `revision.json` stay in `outputs/geneeffect_correction/<run id>/` on the host. Nothing here is synthetic-lethality
 evidence.
 
-**Result: STATE absent wins, and the winner is the prior alone.** In all six runs (four objectives with STATE absent,
+**Result: STATE absent wins, and the winner is the linear model alone.** In all six runs (four objectives with STATE absent,
 then standardised MSE with frozen and with trainable STATE) `best.pt` is the model before its first update, so every
-stack scores exactly the prior: selective Spearman 0.2290 validation / 0.2338 test. Every trained epoch of every run
+stack scores exactly the linear model: selective Spearman 0.2290 validation / 0.2338 test. Every trained epoch of every run
 scores lower on validation while the training lines' score rises. The linear version of the correction, the Tx1
-context-PCA ridge fitted on what the prior leaves, lowers the prior too (0.1826 / 0.1823).
+context-PCA ridge fitted on what the linear model leaves, lowers the linear model too (0.1826 / 0.1823).
 
-## The prior export
+## The linear model export
 
-`hpc/run.sh prior-export configs/context_prior/default_prior.yaml --run-id default_prior_export` (CPU, about two
-minutes; code at `fa97aed`) wrote `outputs/context_prior/default_prior_export/export/`: 170 labelled single-cell
+`hpc/run.sh linear-model-export configs/linear_model/default_linear_model.yaml --run-id default_linear_model_export` (CPU, about two
+minutes; code at `fa97aed`) wrote `outputs/linear_model/default_linear_model_export/export/`: 170 labelled single-cell
 training lines out of fold (the bridge and every stage refitted without the line's patient-grouped fold), 27
 validation and 27 test lines from the full fit, in residual-SD units.
 
@@ -27,22 +27,22 @@ validation and 27 test lines from the full fit, in residual-SD units.
 | Validation | 0.2290 | 0.1974 | 0.2229 | 0.1179 |
 | Test | 0.2338 | 0.1910 | 0.2286 | 0.1139 |
 
-Validation and test reproduce the default prior's row of the
-[follow-ups](../default_prior_followups_seed0/README.md). The out-of-fold training score is close to validation, so
+Validation and test reproduce the default linear model's row of the
+[follow-ups](../default_linear_model_followups_seed0/README.md). The out-of-fold training score is close to validation, so
 the training offsets carry the error a query line will have.
 
 ## Objective screen, STATE absent
 
 `hpc/run.sh revision configs/correction/<objective>_no_state.yaml --run-id correction_<objective>_no_state_seed0`,
 one run after another on 4 GPUs (code at `75b825a`), about 30 s per epoch. In every run `train/best.pt` is the model
-before its first update, the prior alone: validation selective Spearman 0.2290 at epoch −1, and each of the five trained
+before its first update, the linear model alone: validation selective Spearman 0.2290 at epoch −1, and each of the five trained
 epochs scores lower, so early stopping (patience 5) ends the run after epoch 4.
 
 Validation selective Spearman by epoch (training-diagnostic lines in brackets):
 
 | Epoch | Huber | Standardised MSE | Line ranking | Dependency classification |
 | ---: | ---: | ---: | ---: | ---: |
-| −1 (the prior alone) | **0.2290** (0.1967) | **0.2290** (0.1967) | **0.2290** (0.1967) | **0.2290** (0.1967) |
+| −1 (the linear model alone) | **0.2290** (0.1967) | **0.2290** (0.1967) | **0.2290** (0.1967) | **0.2290** (0.1967) |
 | 0 | 0.2026 (0.2371) | 0.2116 (0.2495) | 0.1923 (0.2167) | 0.2096 (0.2555) |
 | 1 | 0.2046 (0.2630) | 0.2100 (0.2677) | 0.1825 (0.2450) | 0.2073 (0.2809) |
 | 2 | 0.2004 (0.2744) | 0.2071 (0.2908) | 0.1796 (0.2520) | 0.2015 (0.3050) |
@@ -51,28 +51,28 @@ Validation selective Spearman by epoch (training-diagnostic lines in brackets):
 
 The head fits the training lines from the first epoch (training-diagnostic Spearman 0.197 → 0.25–0.35) while
 validation falls. The validation SD ratio rises from 0.118 at the start to 0.15–0.18 after one epoch and 0.21–0.23
-after five: the head's component is larger than the shrunk prior's own prediction, so it sets the per-gene ranking.
+after five: the head's component is larger than the shrunk linear model's own prediction, so it sets the per-gene ranking.
 
-Because all four `best.pt` are the prior alone, the four runs have identical rows (from each `summary.md`):
+Because all four `best.pt` are the linear model alone, the four runs have identical rows (from each `summary.md`):
 
 | Model | Val selective Spearman | Test selective Spearman | Val AUPR lift | Test AUPR lift | Val residual Pearson | Test residual Pearson | Val SD ratio |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Stack (`best.pt`: the prior alone) | 0.2290 | 0.2338 | 0.1974 | 0.1910 | 0.2229 | 0.2286 | 0.118 |
-| Linear context prior | 0.2290 | 0.2338 | 0.1974 | 0.1910 | 0.2229 | 0.2286 | 0.118 |
-| Linear context prior + Tx1 context-PCA ridge | 0.1826 | 0.1823 | 0.1683 | 0.1596 | 0.1836 | 0.1824 | 0.294 |
+| Stack (`best.pt`: the linear model alone) | 0.2290 | 0.2338 | 0.1974 | 0.1910 | 0.2229 | 0.2286 | 0.118 |
+| Linear model | 0.2290 | 0.2338 | 0.1974 | 0.1910 | 0.2229 | 0.2286 | 0.118 |
+| Linear model + Tx1 context-PCA ridge | 0.1826 | 0.1823 | 0.1683 | 0.1596 | 0.1836 | 0.1824 | 0.294 |
 | Context-PCA ridge (Tx1) | 0.1296 | 0.1206 | 0.1335 | 0.1263 | 0.1330 | 0.1216 | 0.273 |
 | Context-PCA ridge (HVG) | 0.1174 | 0.1185 | 0.1265 | 0.1211 | 0.1145 | 0.1105 | 0.237 |
 | Nearest line (Tx1) | 0.0810 | 0.0599 | 0.1120 | 0.1052 | 0.0851 | 0.0608 | 1.023 |
 | Nearest line (HVG) | 0.0806 | 0.0709 | 0.1134 | 0.1019 | 0.0787 | 0.0715 | 0.989 |
-| Gene mean, K562 copy prior | undefined | undefined | 0.0000 | 0.0000 | undefined | undefined | 0.000 |
+| Gene mean, K562 copy-baseline | undefined | undefined | 0.0000 | 0.0000 | undefined | undefined | 0.000 |
 
 Paired line bootstrap of selective Spearman (1,000 resamples, seed 0):
 
 | Stack minus | Validation | Test |
 | --- | --- | --- |
 | Context-PCA ridge (Tx1) | +0.0993 [0.0663, 0.1266] | +0.1131 [0.0784, 0.1411] |
-| Linear context prior | 0.0000 [0.0000, 0.0000] | 0.0000 [0.0000, 0.0000] |
-| Linear context prior + Tx1 context-PCA ridge | +0.0464 [0.0220, 0.0684] | +0.0514 [0.0264, 0.0730] |
+| Linear model | 0.0000 [0.0000, 0.0000] | 0.0000 [0.0000, 0.0000] |
+| Linear model + Tx1 context-PCA ridge | +0.0464 [0.0220, 0.0684] | +0.0514 [0.0264, 0.0730] |
 
 **Choice** (protocol §9.3). All four tie exactly at `best.pt` (`compare_runs` gives 0.0000 [0.0000, 0.0000] for
 standardised MSE minus each other objective); only the trained epochs separate them, and standardised MSE has the
@@ -89,7 +89,7 @@ Validation selective Spearman by epoch (training-diagnostic lines in brackets):
 
 | Epoch | STATE absent | Frozen STATE | Trainable STATE |
 | ---: | ---: | ---: | ---: |
-| −1 (the prior alone) | **0.2290** (0.1967) | **0.2290** (0.1967) | **0.2290** (0.1967) |
+| −1 (the linear model alone) | **0.2290** (0.1967) | **0.2290** (0.1967) | **0.2290** (0.1967) |
 | 0 | 0.2116 (0.2495) | 0.2102 (0.2490) | 0.2101 (0.2500) |
 | 1 | 0.2100 (0.2677) | 0.2085 (0.2697) | 0.2074 (0.2682) |
 | 2 | 0.2071 (0.2908) | 0.2004 (0.2923) | 0.2017 (0.2940) |
@@ -98,7 +98,7 @@ Validation selective Spearman by epoch (training-diagnostic lines in brackets):
 
 STATE changes the head's path little: each epoch is within 0.007 of the STATE-absent run, slightly lower on
 validation, and the validation SD ratio climbs the same way (0.118 → 0.151 → 0.22). Both `best.pt` are again the
-prior alone, so both summaries equal the STATE-absent run's apart from their headers (the table above), and
+linear model alone, so both summaries equal the STATE-absent run's apart from their headers (the table above), and
 `compare_runs` gives 0.0000 [0.0000, 0.0000] on validation and on test for frozen minus STATE absent and for
 trainable minus STATE absent.
 
@@ -107,10 +107,10 @@ epochs point the same way.
 
 ## Per lineage
 
-Mean over a lineage's lines of the per-line residual Spearman across the selective genes; the stack equals the prior
+Mean over a lineage's lines of the per-line residual Spearman across the selective genes; the stack equals the linear model
 in every run. With 1–7 lines per lineage it is descriptive only.
 
-| Lineage | Val lines | Val prior | Val prior + Tx1 ridge | Val Tx1 ridge | Test lines | Test prior | Test prior + Tx1 ridge | Test Tx1 ridge |
+| Lineage | Val lines | Val linear model | Val linear model + Tx1 ridge | Val Tx1 ridge | Test lines | Test linear model | Test linear model + Tx1 ridge | Test Tx1 ridge |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Biliary Tract | 1 | 0.2950 | 0.1499 | 0.0899 | 1 | 0.2753 | 0.3056 | 0.2248 |
 | Bladder/Urinary Tract | 1 | 0.1187 | 0.0876 | 0.0490 | 1 | 0.2795 | 0.1782 | 0.1195 |
@@ -128,5 +128,5 @@ in every run. With 1–7 lines per lineage it is descriptive only.
 | Skin | 1 | 0.3956 | 0.3136 | 0.2238 | 1 | 0.1663 | 0.1767 | 0.1197 |
 | Uterus | 1 | 0.2944 | 0.1924 | 0.0767 | 1 | -0.0064 | -0.1062 | -0.1712 |
 
-The prior plus the Tx1 ridge beats the prior alone in 2 of 15 validation lineages (Bowel, Kidney) and 4 of 15 test
+The linear model plus the Tx1 ridge beats the linear model alone in 2 of 15 validation lineages (Bowel, Kidney) and 4 of 15 test
 lineages (Biliary Tract, Pancreas, Pleura, Skin), each a single line.

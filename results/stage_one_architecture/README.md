@@ -26,7 +26,7 @@ Per-line residual Spearman (the selector) and within-gene R²; every row in the 
 
 | Row | Val per-line | Test per-line | Val within-gene R² | Test within-gene R² |
 | --- | ---: | ---: | ---: | ---: |
-| default prior refitted on the frame | 0.2146 | 0.2283 | 0.0462 | 0.0474 |
+| default linear model refitted on the frame | 0.2146 | 0.2283 | 0.0462 | 0.0474 |
 | FiLM on ΔE, selective genes | 0.1774 | 0.1716 | 0.0195 | 0.0089 |
 | FiLM on ΔE, full panel | 0.1737 | 0.1891 | 0.0130 | 0.0243 |
 | multi-encoder on ΔE, full panel | 0.1721 | 0.2022 | 0.0201 | 0.0332 |
@@ -58,10 +58,10 @@ Left minus right, per-line residual Spearman, 95% paired line-bootstrap interval
 
 | Contrast | Validation | Test |
 | --- | --- | --- |
-| FiLM on ΔE − prior | −0.069 [−0.099, −0.042] | −0.075 [−0.104, −0.048] |
-| hybrid on ΔE − prior | −0.075 [−0.098, −0.055] | −0.055 [−0.073, −0.038] |
-| multi-encoder on ΔE − prior | −0.091 [−0.113, −0.070] | −0.091 [−0.116, −0.063] |
-| components reader − prior | −0.088 [−0.107, −0.068] | −0.073 [−0.093, −0.054] |
+| FiLM on ΔE − linear model | −0.069 [−0.099, −0.042] | −0.075 [−0.104, −0.048] |
+| hybrid on ΔE − linear model | −0.075 [−0.098, −0.055] | −0.055 [−0.073, −0.038] |
+| multi-encoder on ΔE − linear model | −0.091 [−0.113, −0.070] | −0.091 [−0.116, −0.063] |
+| components reader − linear model | −0.088 [−0.107, −0.068] | −0.073 [−0.093, −0.054] |
 | FiLM on ΔE − FiLM on ΔL | +0.065 [+0.019, +0.108] | +0.060 [+0.021, +0.097] |
 | multi-encoder on ΔE − multi-encoder on ΔL | +0.052 [+0.016, +0.088] | +0.040 [−0.009, +0.094] |
 | FiLM on ΔH − FiLM on ΔL | +0.025 [−0.010, +0.054] | −0.002 [−0.023, +0.015] |
@@ -85,14 +85,14 @@ Left minus right, per-line residual Spearman, 95% paired line-bootstrap interval
 - **Training to validation gap.** The ΔE rows reach training selective Spearman 0.35–0.40 against 0.13–0.16 on
   validation, and within-gene R² 0.14–0.20 against −0.01 to +0.02.
 - **The hybrid ran to the epoch cap.** Its best epoch is 28 of 30; the others stopped early (best epochs 3–21).
-- Out of fold over the 377 single-cell training lines (telemetry) keeps the same order: prior 0.192, multi-encoder on
+- Out of fold over the 377 single-cell training lines (telemetry) keeps the same order: linear model 0.192, multi-encoder on
   ΔE full panel 0.168, FiLM on ΔE full panel 0.159.
 
 ## Reading
 
-No trained row reaches the default prior refitted on the frame: every listed contrast with the prior is below zero on
+No trained row reaches the default linear model refitted on the frame: every listed contrast with the linear model is below zero on
 both splits, and the best trained rows on validation (FiLM on ΔE, selective or full panel, 0.177 / 0.174) sit about
-0.04 under it, with within-gene R² less than half the prior's. Among the frozen PIE's deltas ΔE carries the line
+0.04 under it, with within-gene R² less than half the linear model's. Among the frozen PIE's deltas ΔE carries the line
 signal: it beats ΔL in both families and its line-permuted and no-Δ controls, and beats own expression only, while
 ΔH does not beat a per-gene ridge on ΔH itself, and ΔL does no better than the Cellosaurus text it reads. Adding a
 context encoder (multi-encoder) does not help FiLM, PIE's warm start hurts the direct readout, the full-panel profile

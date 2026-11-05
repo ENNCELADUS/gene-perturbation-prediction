@@ -1,6 +1,6 @@
-"""The stage-one configs: the ladder's inputs and every stage-one run, prior reference
-and report (PIE stage-one design; protocol §15, §16). Every key explicit, unknown keys
-rejected."""
+"""The stage-one configs: the ladder's inputs and every stage-one run, linear model
+reference and report (PIE stage-one design; protocol §15, §16). Every key explicit,
+unknown keys rejected."""
 
 from collections.abc import Mapping
 from pathlib import Path
@@ -14,7 +14,7 @@ _LADDER_GROUPS = {
     "pie": "pilot_genes components lines_per_batch",
     "tx1": "batch_size max_length",
 }
-_LADDER_TOP_LEVEL = "seed prior_config noise_config ladder_root"
+_LADDER_TOP_LEVEL = "seed linear_model_config noise_config ladder_root"
 
 
 def validate_ladder_config(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -36,12 +36,12 @@ def load_ladder_config(path: Path) -> dict[str, Any]:
 
 # --- the stage-one model (PIE stage-one design §3.3, §4; protocol §16) -------------
 
-STAGE_ONE_KINDS = ("train", "prior_reference", "report")
+STAGE_ONE_KINDS = ("train", "linear_model_reference", "report")
 STAGE_ONE_ARMS = ("film", "multi_encoder", "direct_readout", "hybrid")
 STAGE_ONE_TRUNK_ARMS = ("direct_readout", "hybrid")
 #: The pair input before the FiLM layer: a frozen-PIE delta, a learned constant
-#: (``none``), a line-level reference input, or the prior's prediction alone
-#: (``prior``).
+#: (``none``), a line-level reference input, or the linear model's prediction alone
+#: (``linear_model``).
 #: ``dE_full``: the profile delta on the full decode panel (``pie/full/``), kept
 #: for the selective genes only.
 STAGE_ONE_DELTAS = ("dH", "dE", "dL", "dE_full")
@@ -56,7 +56,7 @@ STAGE_ONE_INPUTS = (
     "lineage",
     "text",
     "own_x",
-    "prior",
+    "linear_model",
 )
 STAGE_ONE_OWN_SLOTS = ("own_h", "own_dp", "own_x")
 STAGE_ONE_GENE_SOURCES = (
@@ -68,13 +68,13 @@ STAGE_ONE_GENE_SOURCES = (
 )
 _STAGE_ONE_TOP_LEVEL = {
     "train": "kind task seed output_root data model train eval",
-    "prior_reference": "kind task seed output_root ladder_config",
+    "linear_model_reference": "kind task seed output_root ladder_config",
     "report": "kind task output_root ladder_config bootstrap_repeats rows contrasts",
 }
 _STAGE_ONE_GROUPS = {
     "data": (
         "ladder_config gene_sources centre_gene_sources input own_slots permuted "
-        "prior_run genes"
+        "linear_model_run genes"
     ),
     "model": "arm gene_width hidden state_width context trunk",
     "train": (
@@ -90,7 +90,7 @@ _STAGE_ONE_TRUNK = (
 )
 _STAGE_ONE_ROWS = {
     "base": "name kind",
-    "prior": "name kind run",
+    "linear_model": "name kind run",
     "dh_ridge": "name kind penalty",
     "run": "name kind config",
 }
@@ -132,20 +132,21 @@ def _validate_stage_one_data(data: Mapping[str, Any]) -> None:
         raise ValueError(f"data.genes must be one of {STAGE_ONE_GENE_SETS}")
     if data["input"] == "dE_full" and data["genes"] != "selective_full":
         raise ValueError("data.input dE_full exists for data.genes selective_full only")
-    # prior_run: the components input reads its component scores; every other
-    # input reads its prediction as a pair feature (``prior`` alone, or beside a
+    # linear_model_run: the components input reads its component scores; every other
+    # input reads its prediction as a pair feature (``linear_model`` alone, or beside a
     # delta).
-    if data["input"] in ("components", "prior") and not isinstance(
-        data["prior_run"], str
+    if data["input"] in ("components", "linear_model") and not isinstance(
+        data["linear_model_run"], str
     ):
-        raise ValueError(f"data.prior_run: required for input {data['input']}")
-    if data["prior_run"] is not None and data["input"] not in (
+        raise ValueError(f"data.linear_model_run: required for input {data['input']}")
+    if data["linear_model_run"] is not None and data["input"] not in (
         "components",
-        "prior",
+        "linear_model",
         *STAGE_ONE_DELTAS,
     ):
         raise ValueError(
-            "data.prior_run: for components, prior or a frozen-PIE delta, else null"
+            "data.linear_model_run: for components, linear_model "
+            "or a frozen-PIE delta, else null"
         )
 
 
@@ -255,8 +256,8 @@ def _validate_stage_one_report(config: Mapping[str, Any]) -> None:
 
 def validate_stage_one_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Keys of a stage-one config: a training run (``kind: train``), the default
-    prior refitted on the frame (``prior_reference``) or a report over runs
-    (``report``); each kind's groups and choices are checked."""
+    linear model refitted on the frame (``linear_model_reference``) or a report over
+    runs (``report``); each kind's groups and choices are checked."""
     if not isinstance(config, Mapping) or config.get("kind") not in STAGE_ONE_KINDS:
         raise ValueError(f"kind must be one of {STAGE_ONE_KINDS}")
     require_keys(config, set(_STAGE_ONE_TOP_LEVEL[config["kind"]].split()), "config")

@@ -42,14 +42,27 @@ with open(os.environ["ARG_LOG"], "a") as handle:
             ],
         ),
         (
-            ["prior", "a b.yaml", "--run-id", "r"],
-            ["-m", "src.experiments.prior.context_prior", "a b.yaml", "--run-id", "r"],
-        ),
-        (
-            ["prior-noise", "a b.yaml", "--run-id", "r", "--sections", "cell_states"],
+            ["linear-model", "a b.yaml", "--run-id", "r"],
             [
                 "-m",
-                "src.experiments.prior.noise_diagnosis",
+                "src.experiments.linear_model.linear_model",
+                "a b.yaml",
+                "--run-id",
+                "r",
+            ],
+        ),
+        (
+            [
+                "linear-model-noise",
+                "a b.yaml",
+                "--run-id",
+                "r",
+                "--sections",
+                "cell_states",
+            ],
+            [
+                "-m",
+                "src.experiments.linear_model.noise_diagnosis",
                 "a b.yaml",
                 "--run-id",
                 "r",

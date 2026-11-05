@@ -1,5 +1,6 @@
-"""A stage-one report: every row's predictions (runs, the prior, the base, the ridge)
-scored on validation, test and out of fold, the paired contrasts, and results.md."""
+"""A stage-one report: every row's predictions (runs, the linear model, the base, the
+ridge) scored on validation, test and out of fold, the paired contrasts, and
+results.md."""
 
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import pandas as pd
 from src.data import ladder_reader as reader
 from src.data.io import read_json, write_json, write_text
 from src.experiments.run_dir import assert_bound, interval, number
-from src.experiments.stage_one.resident import finished_prior, same_ladder
+from src.experiments.stage_one.resident import finished_linear_model, same_ladder
 from src.experiments.stage_one.ridge import cached_ridge
 from src.experiments.stage_one.run import REPORTED, ROW, SPLITS, run_directory
 from src.experiments.stage_one.setup import Setup, load_setup
@@ -80,8 +81,8 @@ def row_predictions(
         frame = ridge[float(row["penalty"])]
         return {"val": frame.loc[val], "test": frame.loc[test], "oof": frame.loc[cells]}
     out: dict[str, pd.DataFrame | None] = {"val": None, "test": None, "oof": None}
-    if kind == "prior":
-        run_dir = finished_prior(row["run"], report_ladder)
+    if kind == "linear_model":
+        run_dir = finished_linear_model(row["run"], report_ladder)
         if run_dir is None:
             return out
         for split, wanted in (("val", val), ("test", test), ("oof", cells)):
@@ -117,7 +118,7 @@ def _contrast(
     both sides, the selective Spearman difference the selective genes defined on
     both sides (a row predicting the base for a gene is undefined there), and
     within-gene R² every gene."""
-    from src.context_prior.noise import line_sums, r2_gain
+    from src.linear_model.noise import line_sums, r2_gain
     from src.eval.accuracy import (
         BOOTSTRAP_SEED,
         defined_genes,

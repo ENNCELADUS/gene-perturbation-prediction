@@ -56,7 +56,7 @@ one experiment (train, select `best.pt` on validation, score it once on test).
    paired bootstrap interval, the simpler one (c, then a, then b) is preferred.
 
 Every run reports, on validation and on test, against the `all` run's baselines on the same metrics: the Tx1 and HVG context-PCA
-ridges, nearest line, K562 copy prior and gene mean, with a 27-line paired bootstrap of the selector
+ridges, nearest line, K562 copy baseline and gene mean, with a 27-line paired bootstrap of the selector
 difference to the Tx1 ridge.
 
 ## 4. Execution

@@ -89,7 +89,7 @@
       "test_residual_spearman_per_gene_scored": 4447,
       "test_residual_spearman_per_gene_undefined": 0
     },
-    "copy_prior": {
+    "copy_baseline": {
       "test_geneeffect_loss": 0.03389791026711464,
       "test_geneeffect_rmse": 0.26316988468170166,
       "test_geneeffect_mae": 0.181854248046875,
@@ -189,7 +189,7 @@
         "residual": 8.563782527559738e-08
       }
     },
-    "copy_prior": {
+    "copy_baseline": {
       "rows": 478501,
       "target_max_abs_diff": {
         "gene_effect": 1.7184217759869114e-07,

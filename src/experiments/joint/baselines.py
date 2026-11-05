@@ -20,9 +20,10 @@ class BaselineResult:
 
 
 def run_baselines(config, *, split, out_dir, inputs=None):
-    """Fit the control ladder on train lines; score ``split``. With a prior export
-    (``paths.prior``) the prior alone and the prior plus the Tx1 ridge join the
-    ladder. ``inputs`` replaces ``load_inputs`` (synthetic tests)."""
+    """Fit the control ladder on train lines; score ``split``. With a linear model
+    export (``paths.linear_model``), the linear model alone and the linear model plus
+    the Tx1 ridge join the ladder. ``inputs`` replaces ``load_inputs`` (synthetic
+    tests)."""
     import numpy as np
 
     from src.baselines.residual import run_r1_ladder
@@ -74,11 +75,11 @@ def run_baselines(config, *, split, out_dir, inputs=None):
     )
     # Scored on the model's absolute-per-line and residual-per-gene axes, adding back
     # the same fixed training means the model uses.
-    if inputs.prior is not None:
-        from src.baselines.prior_controls import prior_control_rows
+    if inputs.linear_model is not None:
+        from src.baselines.linear_model_controls import linear_model_control_rows
 
         predictions = pd.concat(
-            [predictions, prior_control_rows(inputs, split)], ignore_index=True
+            [predictions, linear_model_control_rows(inputs, split)], ignore_index=True
         )
     means = predictions.gene_symbol.map(inputs.train_gene_means)
     predictions["geneeffect_prediction"] = predictions.residual_prediction + means

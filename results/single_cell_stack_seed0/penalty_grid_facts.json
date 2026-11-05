@@ -5,8 +5,8 @@
   "target_genes": 17787,
   "selective_genes": 3057,
   "statistic_genes": 9585,
-  "prior_identity": {
-    "run_id": "default_prior_export",
+  "linear_model_identity": {
+    "run_id": "default_linear_model_export",
     "reference": {
       "experiment": "affine",
       "block_set": "selected",
@@ -14,7 +14,7 @@
       "gene_penalty": 10.0
     }
   },
-  "prior_alone": {
+  "linear_model_alone": {
     "val": {
       "selective_spearman": 0.2289696658882135,
       "selective_aupr_lift": 0.1973582893442864,

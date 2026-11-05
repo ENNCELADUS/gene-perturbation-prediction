@@ -3,11 +3,11 @@
 For each split regime (pair-holdout cv1, gene-holdout cv3) and fold, from the test rows
 classify.py writes: the released metrics (two-class AP, which is what
 `average_precision_score` on one-hot labels returns, and positive-class F1 at the
-argmax), then positive-class AUPR, its prior and AUPR minus prior, and AUROC, at row
-level (one row per line and pair, as the released code scores) and at pair level (the
-line scores averaged, as the paper describes). Conformal coverage and mean set size over
-an alpha grid come from the released conformal outputs (first fold only, as notebook 6
-runs it). Writes report.json and report.md in the run directory.
+argmax), then positive-class AUPR, its base rate, AUPR minus the base rate and AUROC,
+at row level (one row per line and pair, as the released code scores) and at pair level
+(the line scores averaged, as the paper describes). Conformal coverage and mean set
+size over an alpha grid come from the released conformal outputs (first fold only, as
+notebook 6 runs it). Writes report.json and report.md in the run directory.
 """
 
 from __future__ import annotations
@@ -28,7 +28,8 @@ REGIMES = {"cv1": "pair-holdout", "cv3": "gene-holdout"}
 def classifier_metrics(labels, p_non_sl, p_sl) -> dict:
     """The released compute_acc() metrics from both softmax columns (two-class AP; F1
     at the argmax; AUROC and two-class AP are 0 on a single-class fold, as released),
-    then positive-class AUPR, prior, AUPR minus prior and AUROC (undefined there)."""
+    then positive-class AUPR, the base rate, AUPR minus the base rate and AUROC
+    (undefined there)."""
     import numpy as np
     from sklearn.metrics import average_precision_score, f1_score, roc_auc_score
 
@@ -37,7 +38,7 @@ def classifier_metrics(labels, p_non_sl, p_sl) -> dict:
     both = len(np.unique(labels)) == 2
     released_ap = average_precision_score(np.eye(2)[labels], probs) if both else 0.0
     aupr = average_precision_score(labels, probs[:, 1]) if both else float("nan")
-    prior = float(labels.mean())
+    base_rate = float(labels.mean())
     return {
         "n": int(len(labels)),
         "positives": int(labels.sum()),
@@ -46,8 +47,8 @@ def classifier_metrics(labels, p_non_sl, p_sl) -> dict:
             f1_score(labels, probs.argmax(axis=1), average="binary", zero_division=0)
         ),
         "aupr": float(aupr),
-        "prior": prior,
-        "aupr_minus_prior": float(aupr - prior),
+        "base_rate": base_rate,
+        "aupr_minus_base_rate": float(aupr - base_rate),
         "auroc": float(roc_auc_score(labels, probs[:, 1])) if both else float("nan"),
     }
 

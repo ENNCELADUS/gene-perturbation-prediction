@@ -1,6 +1,6 @@
 """Stage-one runs on the stage-one inputs test's world, with synthetic frozen-PIE
 arrays, gene sources and Cellosaurus text beside it: the reader's guards and targets,
-the profile delta's states, training runs, the prior reference and the report."""
+the profile delta's states, training runs, the linear model reference and the report."""
 
 from __future__ import annotations
 
@@ -118,9 +118,9 @@ def world(tmp_path_factory):
         with_text,
         rng.normal(size=(len(with_text), TEXT_DIM)),
     )
-    prior = yaml.safe_load(Path(config["prior_config"]).read_text())
-    prior["prior"].update(components=3, selected_genes=2)
-    Path(config["prior_config"]).write_text(yaml.safe_dump(prior))
+    linear_model = yaml.safe_load(Path(config["linear_model_config"]).read_text())
+    linear_model["linear_model"].update(components=3, selected_genes=2)
+    Path(config["linear_model_config"]).write_text(yaml.safe_dump(linear_model))
     (root / "ladder.yaml").write_text(yaml.safe_dump(config))
     return root, ladder_root, changes
 
@@ -362,23 +362,27 @@ def test_a_fold_run_trains_without_its_fold(world):
     assert not any(in_sample[lines.index(m)] for m in held)
 
 
-def test_prior_reference_components_reader_and_report(world):
-    from src.experiments.stage_one.prior_reference import run as prior_run
+def test_linear_model_reference_components_reader_and_report(world):
+    from src.experiments.stage_one.linear_model_reference import run as linear_model_run
 
     root = world[0]
-    config = yaml.safe_load((CONFIGS / "prior_reference.yaml").read_text())
+    config = yaml.safe_load((CONFIGS / "linear_model_reference.yaml").read_text())
     config.update(
         output_root=str(root / "outputs"), ladder_config=str(root / "ladder.yaml")
     )
-    prior_dir = prior_run(config, "prior_reference_seed0")
+    linear_model_dir = linear_model_run(config, "linear_model_reference_seed0")
     setup = _setup(world)
-    oof = pd.read_parquet(prior_dir / "predictions_oof.parquet")
+    oof = pd.read_parquet(linear_model_dir / "predictions_oof.parquet")
     assert list(oof.index) == setup.ladder.frame
     for name in ("main", "fold0", "fold1"):
-        components = pd.read_parquet(prior_dir / "components" / f"{name}.parquet")
+        components = pd.read_parquet(
+            linear_model_dir / "components" / f"{name}.parquet"
+        )
         assert list(components.index) == setup.ladder.line_ids
         assert components.shape[1] == 3
-    reader_path = _config(root, "components_reader", prior_run=str(prior_dir))
+    reader_path = _config(
+        root, "components_reader", linear_model_run=str(linear_model_dir)
+    )
     torch.manual_seed(0)
     for fold in (None, 0, 1):
         stage_one.run(reader_path, None, fold, "cpu")
@@ -390,15 +394,19 @@ def test_prior_reference_components_reader_and_report(world):
         "bootstrap_repeats": 20,
         "rows": [
             {"name": "base", "kind": "base"},
-            {"name": "prior", "kind": "prior", "run": str(prior_dir)},
+            {
+                "name": "linear_model",
+                "kind": "linear_model",
+                "run": str(linear_model_dir),
+            },
             {"name": "dH ridge", "kind": "dh_ridge", "penalty": 10.0},
             {"name": "components reader", "kind": "run", "config": str(reader_path)},
             {"name": "missing", "kind": "run", "config": str(_config(root, "film_dL"))},
         ],
         "contrasts": [
-            ["components reader", "prior"],
+            ["components reader", "linear_model"],
             ["dH ridge", "base"],
-            ["missing", "prior"],
+            ["missing", "linear_model"],
         ],
     }
     path = root / "configs" / "report.yaml"
@@ -426,7 +434,7 @@ def test_prior_reference_components_reader_and_report(world):
     left = pd.read_parquet(
         root / "outputs" / "architecture" / "components_reader" / "predictions.parquet"
     ).loc[val]
-    right = pd.read_parquet(prior_dir / "predictions_val.parquet").loc[val]
+    right = pd.read_parquet(linear_model_dir / "predictions_val.parquet").loc[val]
     both = set(defined_genes(left, truth, selective)) & set(
         defined_genes(right, truth, selective)
     )
@@ -434,58 +442,63 @@ def test_prior_reference_components_reader_and_report(world):
     assert len(contrast["line_spearman"]["interval"]) == 2
     against_base = results["contrasts"][1]["val"]["selective_spearman"]
     assert against_base["genes"] == 0 and against_base["difference"] is None
-    _check_prior_out_of_fold(setup, prior_dir, root)
-    _check_reads_are_bound(root, path, reader_path, prior_dir, out)
+    _check_linear_model_out_of_fold(setup, linear_model_dir, root)
+    _check_reads_are_bound(root, path, reader_path, linear_model_dir, out)
 
 
-def _check_prior_out_of_fold(setup, prior_dir: Path, root: Path) -> None:
-    """The prior's fold-0 lines are predicted with the components fitted without
+def _check_linear_model_out_of_fold(setup, linear_model_dir: Path, root: Path) -> None:
+    """The linear model's fold-0 lines are predicted with the components fitted without
     fold 0, the components the reader's fold-0 run reads."""
-    from src.context_prior.prior import PriorInputs, PriorSpec, fit_prior, total
-    from src.context_prior.reference import load_reference
-    from src.context_prior.views import fit_expression_components
-    from src.experiments.prior.config import load_prior_config
-    from src.experiments.prior.base import stages
+    from src.linear_model.linear_model import (
+        LinearModelInputs,
+        LinearModelSpec,
+        fit_linear_model,
+        total,
+    )
+    from src.linear_model.reference import load_reference
+    from src.linear_model.views import fit_expression_components
+    from src.experiments.linear_model.config import load_linear_model_config
+    from src.experiments.linear_model.base import stages
 
     ladder = setup.ladder
-    prior = load_prior_config(Path(setup.config["prior_config"]))
-    reference = prior["reference"]
+    linear_model = load_linear_model_config(Path(setup.config["linear_model_config"]))
+    reference = linear_model["reference"]
     expression = reader.mean_channel(ladder).astype(np.float64)
     kept = [m for m in ladder.frame if ladder.folds[m] != 0]
     held = [m for m in ladder.frame if ladder.folds[m] == 0]
-    inputs = PriorInputs(
+    inputs = LinearModelInputs(
         expression=expression.loc[ladder.frame],
         residual=setup.truth(ladder.frame),
         components=fit_expression_components(expression.loc[kept], 3),
         reference=load_reference(
-            Path(prior["paths"]["reference"]),
+            Path(linear_model["paths"]["reference"]),
             blocked={*ladder.role_lines("val", "test"), *setup.excluded},
         ),
         lineage=ladder.lines.loc[ladder.frame, "lineage"],
         patients=ladder.lines["patient_id"].astype(str).to_dict(),
     )
-    spec = PriorSpec(
+    spec = LinearModelSpec(
         tuple(
             stages(
-                prior,
+                linear_model,
                 reference["block_set"],
                 reference["components_penalty"],
                 reference["gene_penalty"],
             )
         )
     )
-    fitted = fit_prior(spec, inputs, fit_lines=kept, encoder_lines=kept)
+    fitted = fit_linear_model(spec, inputs, fit_lines=kept, encoder_lines=kept)
     expected = total(fitted.predict(expression.loc[held]))
-    written = pd.read_parquet(prior_dir / "predictions_oof.parquet").loc[held]
+    written = pd.read_parquet(linear_model_dir / "predictions_oof.parquet").loc[held]
     assert np.allclose(written.to_numpy(), expected.to_numpy(), atol=1e-5)
 
 
 def _check_reads_are_bound(
-    root: Path, report_path: Path, reader_path: Path, prior_dir: Path, out: Path
+    root: Path, report_path: Path, reader_path: Path, linear_model_dir: Path, out: Path
 ) -> None:
     """The queue and the report read a finished run only under the config it was
-    bound to, a prior only from the report's ladder and with its row.json, and the
-    ridge's cache only from the inputs it was computed from."""
+    bound to, a linear model only from the report's ladder and with its row.json, and
+    the ridge's cache only from the inputs it was computed from."""
     run_dir = root / "outputs" / "architecture" / "components_reader"
     bound = run_dir / "run_config.json"
     original = bound.read_text()
@@ -499,20 +512,20 @@ def _check_reads_are_bound(
         stage_one_report.report(report_path, "cpu")
     bound.write_text(original)
 
-    prior_bound = prior_dir / "run_config.json"
-    original = prior_bound.read_text()
+    linear_model_bound = linear_model_dir / "run_config.json"
+    original = linear_model_bound.read_text()
     changed = json.loads(original)
     changed["config"]["ladder_config"] = str(root / "elsewhere.yaml")
-    prior_bound.write_text(json.dumps(changed))
+    linear_model_bound.write_text(json.dumps(changed))
     with pytest.raises(ValueError, match="the report"):
         stage_one_report.report(report_path, "cpu")
-    prior_bound.write_text(original)
-    (prior_dir / "row.json").rename(prior_dir / "row.json.aside")
+    linear_model_bound.write_text(original)
+    (linear_model_dir / "row.json").rename(linear_model_dir / "row.json.aside")
     results = json.loads(
         (stage_one_report.report(report_path, "cpu") / "results.json").read_text()
     )
-    assert results["scores"]["prior"]["val"] is None
-    (prior_dir / "row.json.aside").rename(prior_dir / "row.json")
+    assert results["scores"]["linear_model"]["val"] is None
+    (linear_model_dir / "row.json.aside").rename(linear_model_dir / "row.json")
 
     fingerprint = out / "dh_ridge" / "fingerprint.json"
     original = fingerprint.read_text()
@@ -623,62 +636,80 @@ def test_the_full_stream_raises_the_open_file_limit_its_maps_need(monkeypatch):
         reader.open_file_limit(5_347)
 
 
-def test_film_reads_the_priors_prediction_as_a_pair_feature(world):
-    """The prior-input rows read the prior reference's prediction minus the base,
-    frame lines out of fold; the permuted control keeps each line's own prior."""
-    from src.experiments.stage_one.prior_reference import run as prior_run
+def test_film_reads_the_linear_models_prediction_as_a_pair_feature(world):
+    """The rows with the ``linear_model`` input read the linear model reference's
+    prediction minus the base, frame lines out of fold; the permuted control keeps each
+    line's own linear model."""
+    from src.experiments.stage_one.linear_model_reference import run as linear_model_run
 
     root = world[0]
-    config = yaml.safe_load((CONFIGS / "prior_reference.yaml").read_text())
+    config = yaml.safe_load((CONFIGS / "linear_model_reference.yaml").read_text())
     config.update(
         output_root=str(root / "outputs"), ladder_config=str(root / "ladder.yaml")
     )
-    prior_dir = str(prior_run(config, "prior_input_seed0"))
+    linear_model_dir = str(linear_model_run(config, "linear_model_input_seed0"))
     setup = _setup(world)
     ladder = setup.ladder
     targets = setup.targets(None)
-    data = {"prior_run": prior_dir, "ladder_config": str(root / "ladder.yaml")}
-    feature = device_inputs.prior_feature(setup, data, targets.m_g)
+    data = {
+        "linear_model_run": linear_model_dir,
+        "ladder_config": str(root / "ladder.yaml"),
+    }
+    feature = device_inputs.linear_model_feature(setup, data, targets.m_g)
     val = ladder.role_lines("val")[0]
-    written = pd.read_parquet(Path(prior_dir) / "predictions_val.parquet").loc[val]
+    written = pd.read_parquet(Path(linear_model_dir) / "predictions_val.parquet").loc[
+        val
+    ]
     base = reader.base_prediction(ladder, targets.m_g, [val]).loc[val]
     column = ladder.line_ids.index(val)
     expected = (written - base).loc[list(ladder.panel)].to_numpy()
     assert np.allclose(feature[:, column], expected, atol=1e-5)
 
-    names = ("film_prior", "film_prior_dE", "permuted_film_prior_dE")
+    names = (
+        "film_linear_model",
+        "film_linear_model_dE",
+        "permuted_film_linear_model_dE",
+    )
     paths = {
-        name: _config(root, f"../prior_input/{name}", prior_run=prior_dir)
+        name: _config(
+            root, f"../linear_model_input/{name}", linear_model_run=linear_model_dir
+        )
         for name in names
     }
     permuted = device_inputs.Resident(
         setup,
-        load_stage_one_config(paths["permuted_film_prior_dE"]),
+        load_stage_one_config(paths["permuted_film_linear_model_dE"]),
         None,
         targets,
         torch.device("cpu"),
         ladder.panel,
     )
     batch = permuted.batch(torch.arange(3), torch.arange(5))
-    assert torch.equal(batch.prior, torch.from_numpy(feature[:3, :5]))
+    assert torch.equal(batch.linear_model, torch.from_numpy(feature[:3, :5]))
     torch.manual_seed(0)
     for name in names:
         row = json.loads(
             (stage_one.run(paths[name], None, None, "cpu") / "row.json").read_text()
         )
         assert np.isfinite(row["scores"]["val"]["within_gene_r2"])
-    for path in (CONFIGS.parent / "prior_input").glob("*.yaml"):
+    for path in (CONFIGS.parent / "linear_model_input").glob("*.yaml"):
         load_stage_one_config(path)
 
 
 @pytest.mark.parametrize(
     "edit, message",
     [
-        ({"input": "prior", "prior_run": None}, "required for input prior"),
-        ({"input": "lineage", "prior_run": "somewhere"}, "for components, prior"),
+        (
+            {"input": "linear_model", "linear_model_run": None},
+            "required for input linear_model",
+        ),
+        (
+            {"input": "lineage", "linear_model_run": "somewhere"},
+            "for components, linear_model",
+        ),
     ],
 )
-def test_the_prior_run_is_required_or_refused_by_input(tmp_path, edit, message):
+def test_the_linear_model_run_is_required_or_refused_by_input(tmp_path, edit, message):
     config = yaml.safe_load((CONFIGS / "lineage_only.yaml").read_text())
     config["data"].update(edit)
     path = tmp_path / "config.yaml"

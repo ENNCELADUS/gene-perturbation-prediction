@@ -8,7 +8,7 @@ the run's GeneEffect columns (an Ensembl ID several symbols share is dropped), a
 writes ``model_id, gene_symbol, prediction, cilantro_label`` as CSV. The regressor
 trained on every row of these lines, so its predictions on them are in-sample. No
 retraining; the noise diagnosis's learning curve scores the file
-(configs/context_prior/noise_diagnosis.yaml).
+(configs/linear_model/noise_diagnosis.yaml).
 
 ``.venv-cilantro/bin/python hpc/cilantro/stage_one_predictions.py --run-dir
 outputs/cilantro_reproduction/as_released_gc95M --out

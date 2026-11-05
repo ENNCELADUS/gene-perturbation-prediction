@@ -289,7 +289,7 @@ class GeneEffectNestedHead(nn.Module):
         self.gene_projection = nn.Linear(dims.e_g, self.factor_rank)
         self.context_linear = nn.Linear(dims.z_c, self.factor_rank)
         # C starts at zero: with h's zero output layer the head predicts zero before
-        # the first update, so a stack equals its prior there.
+        # the first update, so a stack equals its linear model there.
         nn.init.zeros_(self.context_linear.weight)
         nn.init.zeros_(self.context_linear.bias)
         self.context_residual = SwiGLU(

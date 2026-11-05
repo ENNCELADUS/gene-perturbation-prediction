@@ -1,22 +1,22 @@
 # Learning curve over DepMap lines, seed 0
 
 Run `noise_lines_20261014` of 2026-10-14 on the H20 container on port 30838, CPU only, branch `feat/line-curve` at
-`8de5f1f`: `hpc/run.sh prior-noise configs/context_prior/noise_diagnosis.yaml --run-id noise_lines_20261014 --sections
-learning_curve`, against the final split's default prior (`default_prior_final_split_20261012`: 0.2045 validation /
+`8de5f1f`: `hpc/run.sh linear-model-noise configs/linear_model/noise_diagnosis.yaml --run-id noise_lines_20261014 --sections
+learning_curve`, against the final split's default linear model (`default_linear_model_final_split_20261012`: 0.2045 validation /
 0.2025 test, [record](../final_split_seed0/README.md)). Design: [noise diagnosis §3.2](../../docs/specs/2026-10-12-noise-diagnosis-design.md);
 protocol §14. Tables: [results](noise_lines_20261014.results.md), [JSON](noise_lines_20261014.learning_curve.json).
 Cilantro-SL's predictions: `hpc/cilantro/stage_one_predictions.py` on the released `as_released_gc95M` stage one
 (`outputs/cilantro_analysis/stage_one_split_lines.csv` on the H20; 102,972 pairs, 4,681 genes, 54 of the 55 validation
 and test lines). Nothing here is synthetic-lethality evidence.
 
-**Question.** Does using up DepMap's labelled lines make the prior predict GeneEffect more accurately, above all in the
+**Question.** Does using up DepMap's labelled lines make the linear model predict GeneEffect more accurately, above all in the
 part it adjusts per line? One patient order (seed 0); the variance from which lines are dropped is not measured.
 
 ## Line-specific part
 
-Gene mean is the prior's intercept refitted on the fraction's labelled lines. Within-gene R² is pooled over the
+Gene mean is the linear model's intercept refitted on the fraction's labelled lines. Within-gene R² is pooled over the
 selective genes in residual-SD units against the 377-line training gene mean (which scores 0). Gains are 95% paired line
-bootstraps; "over full" is the row minus the full prior.
+bootstraps; "over full" is the row minus the full linear model.
 
 | Fraction | Lines (side / labelled) | Split | Selective Spearman | Over full | Within-gene R² | Gene mean R² | R² over gene mean | R² over full | AUPR lift | Residual Pearson |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -35,25 +35,25 @@ bootstraps; "over full" is the row minus the full prior.
 
 ## Whole prediction
 
-Per-line Pearson across genes and RMSE over every pair, prior against its gene mean: 0.9096 / 0.9088 at 1/8 to 0.9136 /
+Per-line Pearson across genes and RMSE over every pair, linear model against its gene mean: 0.9096 / 0.9088 at 1/8 to 0.9136 /
 0.9095 at all lines on validation (test 0.9119 / 0.9106 to 0.9149 / 0.9112); RMSE 0.1814 / 0.1822 to 0.1776 / 0.1816
 (test 0.1788 / 0.1801 to 0.1760 / 0.1795).
 
 ## Cilantro-SL's stage one on its covered pairs
 
-In-sample (it trained on every labelled line, these included), so an upper bound for it; scored with the full prior and
+In-sample (it trained on every labelled line, these included), so an upper bound for it; scored with the full linear model and
 its gene mean on the pairs it covers (a gene among the line's top 2,048 expressed).
 
 | Predictor | Split | Pairs (selective) | Selective Spearman (genes) | Within-gene R² | Absolute Pearson | RMSE |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Cilantro | val | 49,509 (20,503) | 0.1692 (1,252) | 0.0391 | 0.9326 | 0.2298 |
-| prior | val | | 0.2153 (1,262) | 0.0518 | 0.9277 | 0.2387 |
+| linear model | val | | 0.2153 (1,262) | 0.0518 | 0.9277 | 0.2387 |
 | gene mean | val | | undefined | −0.0031 | 0.9234 | 0.2453 |
 | Cilantro | test | 53,272 (21,911) | 0.1963 (1,270) | 0.0491 | 0.9316 | 0.2296 |
-| prior | test | | 0.2210 (1,285) | 0.0508 | 0.9260 | 0.2393 |
+| linear model | test | | 0.2210 (1,285) | 0.0508 | 0.9260 | 0.2393 |
 | gene mean | test | | undefined | 0.0032 | 0.9222 | 0.2451 |
 
-Cilantro's R² over the gene mean +0.0423 [+0.0150, +0.0659] / +0.0458 [+0.0275, +0.0622]; the prior's over Cilantro
+Cilantro's R² over the gene mean +0.0423 [+0.0150, +0.0659] / +0.0458 [+0.0275, +0.0622]; the linear model's over Cilantro
 +0.0127 [−0.0095, +0.0375] / +0.0018 [−0.0154, +0.0215].
 
 ## Reading
@@ -63,9 +63,9 @@ Cilantro's R² over the gene mean +0.0423 [+0.0150, +0.0659] / +0.0458 [+0.0275,
   [−0.0034, +0.0067] test and within-gene R² by +0.0001 / +0.0009, every interval spanning zero. The earlier record's
   "still rises" came from the 3/4 → all step, which is all in 3/4 → 7/8.
 - **The per-line adjustment is right in size, but small.** Within-gene R² is above the row's gene mean at every
-  fraction (intervals above zero), and the full prior explains 4.3% / 4.2% of the selective genes' line-specific
+  fraction (intervals above zero), and the full linear model explains 4.3% / 4.2% of the selective genes' line-specific
   variance.
 - **Whole-prediction metrics hide it.** Absolute Pearson and RMSE move in the third decimal; they measure the gene mean.
-- **Cilantro does not beat the prior even in-sample.** On its covered pairs it carries line-specific signal (R² over the
+- **Cilantro does not beat the linear model even in-sample.** On its covered pairs it carries line-specific signal (R² over the
   gene mean above zero) but scores lower selective Spearman and R², with the R² difference's interval spanning zero. Its
   higher absolute Pearson and lower RMSE come with a gene mean fitted on these lines.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.context_prior.reference import load_reference
+from src.linear_model.reference import load_reference
 from src.data.builders.build_context_reference import (
     closest_paralogs,
     driver_status,

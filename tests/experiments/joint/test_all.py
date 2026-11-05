@@ -157,11 +157,11 @@ def test_all_end_to_end_writes_summary(finished):
         assert f"| {arm} |" in summary
     assert "- STATE as in the joint model vs MLP on HVG: all folds:" in summary
     assert "- MLP on Tx1 vs MLP on HVG: all folds:" in summary
-    # Without a prior export the prior controls are not run and not listed.
+    # Without a linear model export, the linear model controls are not run or listed.
     ladder = {
         method: name
         for method, name in joint_pipeline.BASELINE_NAMES.items()
-        if method not in joint_pipeline.PRIOR_CONTROLS
+        if method not in joint_pipeline.LINEAR_MODEL_CONTROLS
     }
     rows = [
         "Joint model",
@@ -175,7 +175,7 @@ def test_all_end_to_end_writes_summary(finished):
     }
     for row in rows:
         assert row in table and "not produced" not in table[row][-1], row
-    for method in joint_pipeline.PRIOR_CONTROLS:
+    for method in joint_pipeline.LINEAR_MODEL_CONTROLS:
         assert joint_pipeline.BASELINE_NAMES[method] not in table
     # Gene mean is constant per gene across lines: undefined, never 0.
     columns = list(pipeline.VALIDATION_COLUMNS)

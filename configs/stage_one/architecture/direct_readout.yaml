@@ -13,7 +13,7 @@ data:
   input: none
   own_slots: []
   permuted: false
-  prior_run: null
+  linear_model_run: null
   genes: panel
 model:
   arm: direct_readout

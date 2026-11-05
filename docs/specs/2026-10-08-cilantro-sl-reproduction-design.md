@@ -108,7 +108,7 @@ the stage-one variants, the paper's ablations, gene-only and ESM+MLP are not imp
 For every run:
 
 - **Paper-comparable:** two-class AP and positive-class F1 at row level.
-- **Standard:** positive-class AUPR, AUPR minus prior and AUROC, at row level and at pair level
+- **Standard:** positive-class AUPR, AUPR minus base rate and AUROC, at row level and at pair level
   (mean over lines).
 - **Stage one:** RMSE, Spearman and R², in-sample and on held-out lines.
 - **Conformal:** empirical coverage and mean set size against 1 − α over an α grid, and confidence
@@ -138,7 +138,7 @@ on the H20; curated results to `results/cilantro_reproduction_seed0/`.
 - **DepMap 26Q1 instead of 23Q4.** The H20 reaches neither Google Drive nor figshare, and the user
   chose the 26Q1 files already on it over moving the 23Q4 files through the laptop. Expression is one
   default profile per model (1,719 lines); 1,140 lines have both expression and gene effect, against
-  the paper's 1,021. Phase 1 is therefore the released code on the paper's labels and gene prior
+  the paper's 1,021. Phase 1 is therefore the released code on the paper's labels and gene embeddings
   with a newer DepMap release; its numbers are read against the paper's, not expected to equal them.
   26Q1 also has an ATXN8 column, which the gc95M symbol map sends to TWNK's Ensembl ID; notebook 1's
   HVG loop fails on a repeated ID, so the first column per ID (TWNK) is kept.
@@ -386,7 +386,7 @@ detects only a few thousand genes, so nearly all of them fit in 2048 tokens.
 ### 5.5 Evaluation
 
 - **Main:** the held-out-context split under protocol §7. Coverage and class counts come first, then
-  AUPR minus prior per test context and as a macro (PC9 and HeLa count as one cluster in the
+  AUPR minus base rate per test context and as a macro (PC9 and HeLa count as one cluster in the
   de-duplicated macro), AUROC as secondary, endpoint-seen strata, and a two-way dyadic bootstrap with
   2,000 replicates. The paper's two-class AP and F1 are reported alongside.
 - **Secondary:** the paper's pair-holdout and gene-holdout five-fold CV over the five training
@@ -404,7 +404,7 @@ guaranteed. The secondary CV keeps the paper's within-fold 10% calibration.
 
 All are scored on the same covered rows:
 
-- pair-identity prior and anchor-gene prior;
+- pair-identity baseline and anchor-gene baseline;
 - null alone, −min(ŷ(a, c), ŷ(b, c)) from Cilantro's stage-one output, plus measured 26Q1 gene
   effect for 22RV1;
 - the classifier on the gene-mean block alone;

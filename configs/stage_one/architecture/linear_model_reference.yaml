@@ -1,0 +1,9 @@
+# Task 3's linear reference: the default linear model (the ladder config's linear_model_config, its reference row)
+# refitted on the frame's 981 lines' mean channel and labels, the input every arm reads; also the 128
+# component scores the components reader reads. `hpc/run.sh stage-one-linear-model CONFIG --run-id linear_model_reference_seed0`
+# (project environment, CPU).
+kind: linear_model_reference
+task: architecture
+seed: 0
+output_root: outputs/stage_one
+ladder_config: configs/stage_one/ladder_inputs.yaml

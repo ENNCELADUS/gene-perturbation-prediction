@@ -6,9 +6,9 @@
 - B-interface: shared_bias_fraction=0.8236
 - B-unfreeze: shared_bias_fraction=0.8688
 
-## Matched coverage: the train-side perturbation-mean prior versus no-change
+## Matched coverage: the train-side perturbation-mean baseline versus no-change
 
-Each first line reports the train-side perturbation-mean prior against the no-change reference on exactly the genes that prior covers -- a property of the prior, not of any adapted state. The second line gives that state's own (model) loss and its ratio to no-change on the same covered set.
+Each first line reports the train-side perturbation-mean baseline against the no-change reference on exactly the genes that baseline covers -- a property of the baseline, not of any adapted state. The second line gives that state's own (model) loss and its ratio to no-change on the same covered set.
 
 - B-continue/external ACH-000995 (all): perturbation_mean_loss=39.16 > no_change_loss_on_covered=34.33
   - B-continue model/no_change on the covered set: model_loss=173.5, ratio=5.054

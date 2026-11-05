@@ -107,7 +107,7 @@ condition set, and the Jurkat error grows as source training continues.
 ### Interface-isolation diagnostic, existing-export analysis: bias decomposition and matched coverage
 
 Shared per-context bias fraction of the adapted states' Jurkat error: interface-only adaptation 0.824,
-extended interface-only adaptation 0.861, interface adaptation with STATE unfrozen 0.869. The train-side perturbation-mean prior is worse than
+extended interface-only adaptation 0.861, interface adaptation with STATE unfrozen 0.869. The train-side perturbation-mean baseline is worse than
 no-change on every anchor's covered condition set (Jurkat 39.16 vs 34.33); the adapted
 states' ratios on the same covered sets are 1.0–1.7 on source anchors and 4.8–5.1 on
 Jurkat.
@@ -163,7 +163,7 @@ expression-residual interface early-stopped at epochs 8–31.
 | Native basal path + trainable Tx1 context term (zero-init) | 2.86 | 11.85 | 5.62 | 27.7 | 12.00 [11.63, 12.39] | – | no |
 
 Expression-residual interface internal-validation ratios on the source anchors are below 1 in every fold (0.83–0.96).
-On the HepG2 fold the train-side perturbation-mean prior (51.4) beats both the expression-residual interface (54.9) and
+On the HepG2 fold the train-side perturbation-mean baseline (51.4) beats both the expression-residual interface (54.9) and
 no-change (54.8). The native basal path (ESM-2 perturbation tokens) starts at the native raw-count loss (336–466) and descends to
 288–409 in 50 epochs; the native basal path + trainable Tx1 context term descends to 22–38 because its trainable Tx1 context layer learns
 a count-space offset. The native basal path + Tx1 term + expression residual was not eligible and did not run.
@@ -215,7 +215,7 @@ keeps the largest held-out identity use of any trained arm but never lowers the 
   isolating it.
 - **The head result is stable** at all three head seeds; the response block adds nothing at any seed; the explicit
   context-slope head does not separate from Tx1 PCA8-ridge.
-- **Shared bias dominates** the adapted states' Jurkat error (82–87%), and the perturbation-mean prior is not a useful
+- **Shared bias dominates** the adapted states' Jurkat error (82–87%), and the perturbation-mean baseline is not a useful
   reference on covered sets.
 
 ## Verdict and scope

@@ -22,8 +22,12 @@ from src.experiments.sl.paris import reference_lines
 
 SCREENS = ("harle_2025", "ito_2021", "klingbeil_2024")
 VIABILITY_WIDTH = 32
-#: An arm is a stage-one report row (``prior`` or ``run``) or the measurement.
-ARM_KEYS = {"prior": {"kind", "run"}, "run": {"kind", "config"}, "measured": {"kind"}}
+#: An arm is a stage-one report row (``linear_model`` or ``run``) or the measurement.
+ARM_KEYS = {
+    "linear_model": {"kind", "run"},
+    "run": {"kind", "config"},
+    "measured": {"kind"},
+}
 CONTROLS = ("pair_identity", "pan_essentiality", "a_blind")
 PARIS_COLUMNS = ("importance_max", "importance_sum", "r_sum", "r_gap", "selected")
 

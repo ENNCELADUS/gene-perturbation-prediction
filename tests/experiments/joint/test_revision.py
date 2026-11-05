@@ -205,7 +205,7 @@ def test_revision_json_and_summary(finished, bootstrap, monkeypatch):
     assert "0.0700 on the validation lines" in text
 
 
-def test_best_before_the_first_update_is_the_prior_alone(
+def test_best_before_the_first_update_is_the_linear_model_alone(
     finished, bootstrap, monkeypatch
 ):
     monkeypatch.setattr(revision, "git_revision", lambda: "abc123")
@@ -225,26 +225,26 @@ def test_best_before_the_first_update_is_the_prior_alone(
     assert record["training"]["best_epoch"] == 0
     assert record["training"]["val_selective_spearman"] == 0.09
     text = summary.read_text()
-    assert "the model before its first update (the prior alone)" in text
+    assert "the model before its first update (the linear model alone)" in text
     assert "3 epochs trained" in text
 
 
-def test_summary_bootstraps_the_stack_against_every_prior_control(
+def test_summary_bootstraps_the_stack_against_every_linear_model_control(
     finished, bootstrap, monkeypatch
 ):
     monkeypatch.setattr(revision, "git_revision", lambda: "abc123")
     for split in ("val", "test"):
         path = finished / f"baselines/{split}/metrics.json"
         metrics = json.loads(path.read_text())
-        metrics["context_prior"] = metric_row(0.06, split=split)
-        metrics["context_prior+context_pca_ridge[tx1]"] = metric_row(0.065, split=split)
+        metrics["linear_model"] = metric_row(0.06, split=split)
+        metrics["linear_model+context_pca_ridge[tx1]"] = metric_row(0.065, split=split)
         path.write_text(json.dumps(metrics))
         pd.concat(
             [
                 frame("context_pca_ridge[tx1]", 0.1),
                 frame("gene_mean", 0.0),
-                frame("context_prior", 0.15),
-                frame("context_prior+context_pca_ridge[tx1]", 0.12),
+                frame("linear_model", 0.15),
+                frame("linear_model+context_pca_ridge[tx1]", 0.12),
             ]
         ).to_parquet(finished / f"baselines/{split}/predictions.parquet")
     revision.write_outputs(
@@ -254,15 +254,15 @@ def test_summary_bootstraps_the_stack_against_every_prior_control(
     comparisons = [b["comparison"] for b in record["val"]["bootstraps"]]
     assert comparisons == [
         "Joint model minus Context-PCA ridge (Tx1)",
-        "Joint model minus Linear context prior",
-        "Joint model minus Linear context prior + Tx1 context-PCA ridge",
+        "Joint model minus Linear model",
+        "Joint model minus Linear model + Tx1 context-PCA ridge",
     ]
     assert len(bootstrap) == 6  # three comparisons on each split
     lineages = record["val"]["lineages"]
     assert [row["lineage"] for row in lineages] == ["Lung", "Skin"]
-    assert {"Joint model", "Linear context prior"} <= set(lineages[0])
+    assert {"Joint model", "Linear model"} <= set(lineages[0])
     summary = (finished / "summary.md").read_text()
-    assert "Joint model minus Linear context prior:" in summary
+    assert "Joint model minus Linear model:" in summary
     assert "| Lung | 1 |" in summary
 
 

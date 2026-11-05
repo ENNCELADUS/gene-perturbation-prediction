@@ -1,5 +1,5 @@
 """Fetch and pin the noise diagnosis's reference cell-state programs under
-configs/context_prior/reference/: Tirosh et al. 2016's cell-cycle genes, Gavish et al.
+configs/linear_model/reference/: Tirosh et al. 2016's cell-cycle genes, Gavish et al.
 2023's malignant meta-programs and the studies behind each, sources recorded in
 ``provenance.json``. A config chooses which programs a run reads; none is dropped."""
 

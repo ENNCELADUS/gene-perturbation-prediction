@@ -1,0 +1,22 @@
+# The linear-model-input stage's report (protocol §16; decided 2026-10-22): FiLM reading the frame-refitted
+# linear model's prediction alone, beside ΔE, and beside line-permuted ΔE, against the linear model itself and
+# Task 3's FiLM on ΔE. `hpc/run.sh stage-one-report CONFIG` -> outputs/stage_one/linear_model_input/report_linear_model_input/.
+# People read it; nothing is chosen in code.
+kind: report
+task: linear_model_input
+output_root: outputs/stage_one
+ladder_config: configs/stage_one/ladder_inputs.yaml
+bootstrap_repeats: 1000
+rows:
+  - {name: base, kind: base}
+  - {name: linear_model, kind: linear_model, run: outputs/stage_one/architecture/linear_model_reference_seed0}
+  - {name: film dE, kind: run, config: configs/stage_one/architecture/film_dE.yaml}
+  - {name: film linear_model, kind: run, config: configs/stage_one/linear_model_input/film_linear_model.yaml}
+  - {name: film linear_model dE, kind: run, config: configs/stage_one/linear_model_input/film_linear_model_dE.yaml}
+  - {name: permuted film linear_model dE, kind: run, config: configs/stage_one/linear_model_input/permuted_film_linear_model_dE.yaml}
+contrasts:
+  - [film linear_model dE, film linear_model]
+  - [film linear_model dE, permuted film linear_model dE]
+  - [film linear_model dE, linear_model]
+  - [film linear_model, linear_model]
+  - [film linear_model dE, film dE]

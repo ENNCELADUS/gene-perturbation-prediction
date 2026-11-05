@@ -1,6 +1,6 @@
 # Task 3 of the PIE stage-one design (docs/specs/2026-10-16-pie-geneeffect-ladder-design.md §3.3, §5;
-# protocol §16): the shared nonlinear reader of the default prior's 128 expression
-# components (the stage-one prior run's components, fold-wise in a fold run), conditioned on the gene encoder.
+# protocol §16): the shared nonlinear reader of the default linear model's 128 expression
+# components (the stage-one linear model run's components, fold-wise in a fold run), conditioned on the gene encoder.
 # `hpc/run.sh stage-one CONFIG [--fold K]`, or every config through `hpc/run.sh stage-one-queue`.
 kind: train
 task: architecture
@@ -13,7 +13,7 @@ data:
   input: components
   own_slots: []
   permuted: false
-  prior_run: outputs/stage_one/architecture/prior_reference_seed0
+  linear_model_run: outputs/stage_one/architecture/linear_model_reference_seed0
   genes: panel
 model:
   arm: film

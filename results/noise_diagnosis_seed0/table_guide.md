@@ -6,11 +6,11 @@ what its number is. The findings are in the [README](README.md).
 
 ## Terms
 
-- **The prior.** The default linear context prior (GeneEffect protocol §10, `configs/context_prior/default_prior.yaml`):
+- **The linear model.** The default linear model (GeneEffect protocol §10, `configs/linear_model/default_linear_model.yaml`):
   128 expression components (penalty 1), then per gene its 50 data-selected genes (penalty 10), fitted on 947
   labelled lines. The **export** is its out-of-fold prediction of every training line (five patient-grouped folds).
 - **Selective Spearman** (protocol §6, as are the other metrics) over the 4,323 selective genes of the 377 labelled training lines. Validation
-  has 27 lines, test 28. The prior scores 0.2045 / 0.2025.
+  has 27 lines, test 28. The linear model scores 0.2045 / 0.2025.
 - **Gain `x [lo, hi]`.** A row's selective Spearman minus a reference's on the same lines. The bracket is a 95% paired
   line bootstrap (1,000 resamples of the lines, the same draw for both).
 - **Median `[Q25, Q75]`.** For agreements and reliabilities, the bracket is the quartiles over genes, not an interval.
@@ -29,7 +29,7 @@ cells.
 | `bridge_r` | Per gene, the Pearson across those 343 lines between bridged pseudo-bulk (out of fold) and bulk RNA | 0.453 (selective 0.400) |
 | `bridge_over_ceiling` | `bridge_r` over √`paired_reliability`, the most sampling noise would allow | 0.484: the bridge reaches under half of what sampling noise allows; the rest of the gap is systematic |
 
-**Draw table.** The prior, fitted once, is queried with fewer cells of each validation and test line. Cells are
+**Draw table.** The linear model, fitted once, is queried with fewer cells of each validation and test line. Cells are
 ordered by a hash of line and cell barcode; draws are nested.
 
 | Row | What it does | Number (val / test; gain over all cells) |
@@ -48,10 +48,10 @@ selective gene, the Pearson across lines between the predictions from the two ha
 
 ## Learning curve
 
-What the section does: refits the prior on less of the training side, to see whether more lines would help. Patients
+What the section does: refits the linear model on less of the training side, to see whether more lines would help. Patients
 are put in a seeded order, a fraction keeps the lines of its first patients (so fractions nest), and bridge, components
 and data-selected genes are all refitted. Columns: `Training side` are all lines with expression (the components are
-fitted on them); `Labelled` lines fit the ridges; `Paired` lines fit the bridge. Gains are against the full prior.
+fitted on them); `Labelled` lines fit the ridges; `Paired` lines fit the bridge. Gains are against the full linear model.
 
 | Row | What it does | Number (val / test) |
 | --- | --- | --- |
@@ -59,18 +59,18 @@ fitted on them); `Labelled` lines fit the ridges; `Paired` lines fit the bridge.
 | 0.25 | 354 lines, 251 labelled, 86 paired | 0.1617 / 0.1412 |
 | 0.5 | 708 lines, 486 labelled, 165 paired | 0.1778 / 0.1753 |
 | 0.75 | 1,060 lines, 721 labelled, 246 paired | 0.1930 / 0.1903; −0.0115 / −0.0122, intervals below zero |
-| 1 | The full prior: 1,399 lines, 947 labelled, 343 paired | 0.2045 / 0.2025 |
+| 1 | The full linear model: 1,399 lines, 947 labelled, 343 paired | 0.2045 / 0.2025 |
 
 ## Deposit confound
 
-What the section does: asks whether the deposit a training line's cells come from explains what the prior gets
+What the section does: asks whether the deposit a training line's cells come from explains what the linear model gets
 wrong on it, beyond lineage. Over the 377 labelled single-cell training lines, per selective gene, η² is the share of
 a quantity's variance across lines that lies between groups; the table gives its mean over genes. Deposits with fewer
 than 5 lines are pooled as `other` (10 groups); lineages give 25.
 
 | Row | What it does | Number |
 | --- | --- | ---: |
-| error × deposit | η² of the prior's error (measured residual minus the export) by deposit; the null shuffles deposits among lines of one lineage (1,000 times) | 0.0365 against null 0.0315 (95th percentile 0.0332, p 0.001) |
+| error × deposit | η² of the linear model's error (measured residual minus the export) by deposit; the null shuffles deposits among lines of one lineage (1,000 times) | 0.0365 against null 0.0315 (95th percentile 0.0332, p 0.001) |
 | error × lineage | The same by lineage; the null shuffles lineages among all lines | 0.0927 against 0.0640 |
 | residual × deposit | η² of the label itself (GeneEffect minus the gene mean), which no single-cell deposit touches | 0.0384 against 0.0339 |
 | residual × lineage | The same by lineage | 0.1093 against 0.0640 |
@@ -100,12 +100,12 @@ all lines (1.0 = average).
 ## Deposit swap
 
 What the section does: reads the same lines from two deposits. It uses the 99 labelled training lines that have a
-second public deposit, each predicted out of fold (the prior refitted without the line's fold). Scores are selective
+second public deposit, each predicted out of fold (the linear model refitted without the line's fold). Scores are selective
 Spearman over these 99 lines, not the held-out lines, so they sit below 0.2045.
 
 | Row | What it does | Number (gain over primary) |
 | --- | --- | --- |
-| `primary` | The line read from the cells the prior was built on; reproduces the export | 0.1828 |
+| `primary` | The line read from the cells the linear model was built on; reproduces the export | 0.1828 |
 | `second` | The line read from another deposit's cells, through the same bridge | 0.1894; +0.0066 [−0.0052, +0.0184] |
 | `half_a` | Half of the primary deposit's cells | 0.1813; −0.0015 [−0.0030, −0.0002] |
 | `half_b` | The other half | 0.1812; −0.0016 [−0.0029, −0.0002] |
@@ -120,10 +120,10 @@ selective genes, `Inputs` over the space genes' normalised pseudo-bulk (measured
 
 ## Cell states
 
-What the section does: tests whether a line's mix of cell states adds to the prior. Each arm gives each line a few
-features, fits a ridge from them to what the export leaves on the training lines, adds that to the prior on validation
+What the section does: tests whether a line's mix of cell states adds to the linear model. Each arm gives each line a few
+features, fits a ridge from them to what the export leaves on the training lines, adds that to the linear model on validation
 and test, and scores it. The penalty is the ridge's: at 1 the added part is large, at 1,000 nearly nothing (the row
-then equals the prior).
+then equals the linear model).
 
 | Arm | What it does | Number (best penalty, val; test) |
 | --- | --- | --- |
@@ -139,14 +139,14 @@ line's source lists (median 0.911). 81 lines list under 90%, and an unlisted gen
 
 ## Cilantro encodings
 
-What the section does: puts Cilantro-SL's input reductions in front of the prior. Both pseudo-bulk and bulk are
+What the section does: puts Cilantro-SL's input reductions in front of the linear model. Both pseudo-bulk and bulk are
 transformed the same way before the bridge: each gene is divided by its nonzero median over training bulk
-(Geneformer's normalisation), then ranked within the line. Every row keeps the prior's components penalty 1 and gene
+(Geneformer's normalisation), then ranked within the line. Every row keeps the linear model's components penalty 1 and gene
 penalty 10. Gains are against the first row.
 
 | Row | What it does | Number (val / test; val gain) |
 | --- | --- | --- |
-| `affine`, `-` | The prior itself (the reference) | 0.2045 / 0.2025 |
+| `affine`, `-` | The linear model itself (the reference) | 0.2045 / 0.2025 |
 | `rank_value, top_k None` | Every gene's value replaced by its within-line rank, 1 − rank/G | 0.2023 / 0.2037; −0.0022 [−0.0076, +0.0033] |
 | `rank_value, top_k 2048` | Only the line's top 2,048 genes keep a rank value (1 − rank/2048); the rest are 0 | 0.1853 / 0.1948; −0.0192 [−0.0300, −0.0092] |
 | `expression, top_k 2048` | The same top 2,048 genes keep their normalised expression; the rest are 0 (truncation without ranking) | 0.1904 / 0.1996; −0.0142 [−0.0201, −0.0067] |

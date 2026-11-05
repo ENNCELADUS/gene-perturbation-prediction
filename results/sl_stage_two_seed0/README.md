@@ -9,8 +9,8 @@ and NCI-H1299, and the test lines are A549, MDA-MB-231 and SK-MES-1. The heads a
 
 There are four arms:
 
-- the default linear prior refitted on the frame;
-- FiLM on the prior and ΔE;
+- the default linear model refitted on the frame;
+- FiLM on the linear model and ΔE;
 - FiLM on ΔE;
 - measured GeneEffect, as a reference.
 
@@ -51,13 +51,13 @@ ranking's AUPRC equals the hit rate: 0.07, 0.12, 0.04, 0.05 and 0.06.
 | PARIS alone | 0.256 | 0.365 | 0.090 | 0.167 | 0.102 | 0.196 | 0.644 |
 | *PARIS head, by GeneEffect input* | | | | | | | |
 | Each gene's mean GeneEffect (context-ablated) | 0.367 | 0.555 | 0.248 | 0.398 | 0.358 | 0.385 | 0.842 |
-| Linear prior | 0.319 | 0.490 | 0.251 | 0.378 | 0.361 | 0.360 | 0.838 |
-| FiLM on the prior and ΔE | 0.313 | 0.475 | 0.242 | 0.386 | 0.368 | 0.357 | 0.837 |
+| Linear model | 0.319 | 0.490 | 0.251 | 0.378 | 0.361 | 0.360 | 0.838 |
+| FiLM on the linear model and ΔE | 0.313 | 0.475 | 0.242 | 0.386 | 0.368 | 0.357 | 0.837 |
 | FiLM on ΔE | 0.333 | 0.514 | 0.240 | 0.364 | 0.339 | 0.358 | 0.827 |
 | Measured GeneEffect (reference) | 0.404 | 0.551 | 0.296 | 0.370 | 0.392 | 0.403 | 0.838 |
 | *Viability-embedding head, by stage-one run* | | | | | | | |
-| FiLM on the prior and ΔE | 0.210 | 0.355 | 0.106 | 0.206 | 0.298 | 0.235 | 0.785 |
-| FiLM on the prior and ΔE, each gene's mean V (context-ablated) | 0.713 | 0.829 | 0.187 | 0.388 | 0.381 | 0.500 | **0.899** |
+| FiLM on the linear model and ΔE | 0.210 | 0.355 | 0.106 | 0.206 | 0.298 | 0.235 | 0.785 |
+| FiLM on the linear model and ΔE, each gene's mean V (context-ablated) | 0.713 | 0.829 | 0.187 | 0.388 | 0.381 | 0.500 | **0.899** |
 | FiLM on ΔE | 0.261 | 0.415 | 0.182 | 0.304 | 0.363 | 0.305 | 0.818 |
 | FiLM on ΔE, each gene's mean V (context-ablated) | 0.700 | 0.763 | 0.199 | 0.389 | 0.480 | 0.506 | 0.887 |
 
@@ -70,12 +70,12 @@ epoch. Random AUPRC is 0.13, 0.015 and 0.03.
 | Pan-essentiality | 0.227 | 0.236 | 0.179 | 0.214 | 0.795 |
 | PARIS alone | 0.383 | 0.071 | 0.090 | 0.181 | 0.633 |
 | PARIS head, each gene's mean GeneEffect | 0.538 | 0.288 | 0.222 | 0.349 | 0.850 |
-| PARIS head, linear prior | 0.509 | 0.320 | 0.220 | 0.350 | 0.849 |
-| PARIS head, FiLM on the prior and ΔE | 0.504 | 0.329 | 0.217 | 0.350 | 0.844 |
+| PARIS head, linear model | 0.509 | 0.320 | 0.220 | 0.350 | 0.849 |
+| PARIS head, FiLM on the linear model and ΔE | 0.504 | 0.329 | 0.217 | 0.350 | 0.844 |
 | PARIS head, FiLM on ΔE | 0.504 | 0.329 | 0.217 | 0.350 | 0.843 |
 | PARIS head, measured GeneEffect | 0.484 | **0.416** | 0.262 | 0.387 | 0.863 |
-| V head, FiLM on the prior and ΔE | 0.386 | 0.137 | 0.151 | 0.225 | 0.832 |
-| V head, FiLM on the prior and ΔE, each gene's mean V | 0.836 | 0.150 | 0.247 | 0.411 | 0.903 |
+| V head, FiLM on the linear model and ΔE | 0.386 | 0.137 | 0.151 | 0.225 | 0.832 |
+| V head, FiLM on the linear model and ΔE, each gene's mean V | 0.836 | 0.150 | 0.247 | 0.411 | 0.903 |
 | V head, FiLM on ΔE | 0.437 | 0.212 | 0.202 | 0.284 | 0.865 |
 | V head, FiLM on ΔE, each gene's mean V | 0.857 | 0.149 | 0.290 | 0.432 | **0.908** |
 
@@ -89,13 +89,13 @@ have a 95% two-way dyadic bootstrap interval above or below zero.
 
 | Arm | Contrast | Mean | Above 0 | Below 0 |
 | --- | --- | ---: | ---: | ---: |
-| linear prior | PARIS head − its context-ablated head | −0.026 | 0 | 0 |
-| FiLM on the prior and ΔE | PARIS head − its context-ablated head | −0.029 | 0 | 0 |
+| linear model | PARIS head − its context-ablated head | −0.026 | 0 | 0 |
+| FiLM on the linear model and ΔE | PARIS head − its context-ablated head | −0.029 | 0 | 0 |
 | FiLM on ΔE | PARIS head − its context-ablated head | −0.027 | 0 | 0 |
 | measured | PARIS head − its context-ablated head | +0.017 | 0 | 0 |
-| linear prior | PARIS head − PARIS alone | +0.164 | 3 | 0 |
-| linear prior | PARIS head − pair identity | −0.222 | 0 | 2 |
-| FiLM on the prior and ΔE | V head − its context-ablated head | −0.265 | 0 | 4 |
+| linear model | PARIS head − PARIS alone | +0.164 | 3 | 0 |
+| linear model | PARIS head − pair identity | −0.222 | 0 | 2 |
+| FiLM on the linear model and ΔE | V head − its context-ablated head | −0.265 | 0 | 4 |
 | FiLM on ΔE | V head − its context-ablated head | −0.201 | 0 | 2 |
 
 On validation, the measured arm's PARIS head beats its context-ablated head in one of three contexts. No predicted
@@ -106,7 +106,7 @@ arm does so in any context.
 - **Pair identity wins everywhere.** This control is the pair's hit rate in the same screen's training lines. It
   holds even on varying pairs.
 - **Predicted GeneEffect adds nothing over the gene mean.** Each predicted arm's PARIS head equals the head that
-  reads each gene's frame mean GeneEffect, within its intervals. The prior and the two FiLM rows are
+  reads each gene's frame mean GeneEffect, within its intervals. The linear model and the two FiLM rows are
   indistinguishable from one another.
 - **Measured GeneEffect is about as flat.** It gains +0.017 on test, and no test interval excludes zero. Even a
   perfect stage one would barely move this head on this benchmark.

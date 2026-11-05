@@ -1,30 +1,30 @@
-# Noise diagnosis of the default prior, seed 0
+# Noise diagnosis of the default linear model, seed 0
 
 Runs of 2026-10-12 on the H20 container on port 30838, CPU only, branch `feat/noise-diagnosis`, on the
-[final split](../../docs/data/cell-line-geneeffect-split.md) and its default prior (`default_prior_final_split_20261012`:
+[final split](../../docs/data/cell-line-geneeffect-split.md) and its default linear model (`default_linear_model_final_split_20261012`:
 0.2045 validation / 0.2025 test, [record](../final_split_seed0/README.md)). Design:
 [noise diagnosis](../../docs/specs/2026-10-12-noise-diagnosis-design.md); protocol §14. Nothing here is
 synthetic-lethality evidence.
 
-- `noise_20261012`: `hpc/run.sh prior-noise` with `configs/context_prior/noise_diagnosis.yaml`
+- `noise_20261012`: `hpc/run.sh linear-model-noise` with `configs/linear_model/noise_diagnosis.yaml`
   ([table](noise_20261012.results.md)). `learning_curve`, `cell_sampling` and `cell_states` at
   `97a3066`; `deposit_confound` and `deposit_swap` at `a1bdadc`, which reads Tahoe-100M as one deposit (the first
   `deposit_confound`, at `97a3066`, pooled the one extra Tahoe line as `other`; η² moved by less than 0.0003).
-- `cilantro_encodings_20261012`: `hpc/run.sh prior` with `configs/context_prior/cilantro_encodings.yaml` at `97a3066`
+- `cilantro_encodings_20261012`: `hpc/run.sh linear-model` with `configs/linear_model/cilantro_encodings.yaml` at `97a3066`
   ([table](cilantro_encodings_20261012.results.md)).
 - Row by row: what each row of both tables does and what its number is ([table guide](table_guide.md)).
 - Inputs built for it: per-line cell draws and per-cell program scores under `data/geneeffect_joint/v2/noise/` (434
   lines), the 99 planned second deposits under `data/sl_dependency_v0/processed/basal_raw_umi_second_source/` (all built,
   none missing).
 
-**Question.** Does technical noise in a line's single cells limit the default prior: sampling of cells, the deposit the
+**Question.** Does technical noise in a line's single cells limit the default linear model: sampling of cells, the deposit the
 cells come from, too few training lines, unmodelled cell states? And do Cilantro-SL's
 input reductions (rank-value encoding, the top 2,048 genes) clean the input?
 
 ## Per-cell sampling does not bind
 
 Two halves of a line's cells give pseudo-bulks with a per-gene split-half reliability (Spearman-Brown, 434 lines) of
-0.939 [0.886, 0.967], 0.947 on the selective genes. The prior's predictions from the two halves agree at 0.990 per
+0.939 [0.886, 0.967], 0.947 on the selective genes. The linear model's predictions from the two halves agree at 0.990 per
 selective gene. Queried with draws of each validation and test line's cells:
 
 | Cells per line | Val | Val gain | Test | Test gain |
@@ -33,7 +33,7 @@ selective gene. Queried with draws of each validation and test line's cells:
 | 25 | 0.2033 | −0.0012 [−0.0058, +0.0036] | 0.2013 | −0.0012 [−0.0059, +0.0040] |
 | 50 | 0.2044 | −0.0001 [−0.0034, +0.0030] | 0.2016 | −0.0008 [−0.0039, +0.0025] |
 | half A | 0.2049 | +0.0004 [−0.0013, +0.0019] | 0.2025 | +0.0001 [−0.0023, +0.0018] |
-| all (the prior) | 0.2045 | | 0.2025 | |
+| all (the linear model) | 0.2045 | | 0.2025 | |
 
 Ten cells per line read as well as all of them within the intervals. The bridge's out-of-fold agreement with bulk RNA
 (0.453 per gene, 0.400 on selective genes) is half of what the split-half reliability allows (0.484 of the ceiling):
@@ -77,7 +77,7 @@ curve is flat (−0.0006 [−0.0062, +0.0050] validation).
 ## Cell states and Cilantro's encodings add nothing
 
 Per-line features from the training lines' cells (Tirosh S and G2M plus the 21 Gavish meta-programs without a cell-line
-study; K-means at 8 and 16 clusters on line-centred cells), stacked on the prior's export: the best row at any penalty
+study; K-means at 8 and 16 clusters on line-centred cells), stacked on the linear model's export: the best row at any penalty
 is +0.0010 on validation (`program_means` at 100: [+0.0001, +0.0018]; test +0.0009 [−0.0007, +0.0024]), and program
 fractions never beat program means (+0.0000 [−0.0009, +0.0009] at the same penalty). Each source lists a median 0.911 of
 the scoring set (unlisted genes score as unexpressed); 81 lines list under 90%.
@@ -91,6 +91,6 @@ the scoring set (unlisted genes score as unexpressed); 81 lines list under 90%.
 Rank-value encoding is a tie; truncating to 2,048 genes loses on validation (bridge agreement falls from 0.453 to
 0.302 and 0.252 per gene).
 
-**Reading.** The technical noise of single cells does not limit the default prior: it reads a line from ten cells as
+**Reading.** The technical noise of single cells does not limit the default linear model: it reads a line from ten cells as
 well as from all of them, and neither state programs, clusters nor Cilantro's reductions improve it. Deposit batch
 changes a line's input more than anything else measured here but not its accuracy.

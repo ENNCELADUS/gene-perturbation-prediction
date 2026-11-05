@@ -40,7 +40,7 @@ the SL task differently, and this protocol is rewritten to match before stage tw
   output `data/sl_screens/benchmark/` on the H20, described in the [SL benchmark card](data/sl-benchmark.html). The
   labels follow Kebabci's rule but are not Kebabci's labels: on Ito's ten lines the rule gives 1,511 SL calls in
   47,315 points against their 958 in 41,244, because their GEMINI was recomputed from counts and their pairs were
-  filtered, neither released. Before a first run: the default prior and its out-of-fold export rerun on the
+  filtered, neither released. Before a first run: the default linear model and its out-of-fold export rerun on the
   rebuilt split, then the SL head. The context screen's table below stays a built artifact: its unanimity filters drop the 8,866
   screen pairs whose evidence differs between lines, and some of its aggregated rows may not be fitness screens (the
   A549;CAPAN1;MEL202;MEWO;OMM23 group reads, from the Harle and Chan papers' text, as a Cas9-negative
@@ -229,19 +229,19 @@ Controls, all reported as per-context lift on the same universe (§8):
 
 | Control | Definition | Shortcut removed |
 | --- | --- | --- |
-| Pair-identity prior | pair identity / train-context label frequency | pair memorisation |
-| Anchor-gene prior | anchor-gene frequency, `max(r_a, r_b)` | gene-level memorisation the pair-identity prior misses |
+| Pair-identity baseline | pair identity / train-context label frequency | pair memorisation |
+| Anchor-gene baseline | anchor-gene frequency, `max(r_a, r_b)` | gene-level memorisation the pair-identity baseline misses |
 | Null alone | $\psi$ alone, predicted and measured | ranking that is only the null |
 | Gene-mean block alone | the $\mu_{\text{train}}$ block alone | pan-essentiality |
-| Baseline-ladder backbone | the strongest residual control of the GeneEffect baseline ladder replacing the backbone | a backbone beating no simple prior |
+| Baseline-ladder backbone | the strongest residual control of the GeneEffect baseline ladder replacing the backbone | a backbone beating no simple baseline |
 | Context-ablated head | identically trained head with the three context dimensions ablated | a context claim with no context information |
 | Measured references | the measured-profile arm and the measured all-lines ceiling | reference only, never a bar |
 
-The pair-identity prior is a lift, not an absolute bar: on the unsplit first build of the
+The pair-identity baseline is a lift, not an absolute bar: on the unsplit first build of the
 context-screen table it reached AUPR 1.0 on Jurkat, HeLa and PC9, so the split, not a
 threshold, handles those contexts. The context-ablated head also includes
 fixed deterministic context derangements and a permutation null. Declare the minimum
-per-context incremental AUPR − prior attributable to the context block before reading
+per-context incremental AUPR − base rate attributable to the context block before reading
 any test label; statistical distinguishability alone does not clear it, and below it no
 context claim is licensed at any absolute AUPR.
 
@@ -254,7 +254,7 @@ diagnostic, not an SL test score. Among SL test contexts only 22RV1 is GeneEffec
 its per-context cross-gene Spearman is reportable and cannot support a context claim.
 
 **SL.** Coverage and post-filter class counts precede every performance number. Report
-AUPR − prior per test context and as a macro; AUROC is secondary. Stratify each AUPR
+AUPR − base rate per test context and as a macro; AUROC is secondary. Stratify each AUPR
 by whether both, one or neither endpoint appeared in SL training. The de-duplicated
 diagnostic macro weights observable label clusters: PC9/HeLa share one cluster but keep
 separate scores. Uncertainty uses a two-way dyadic bootstrap over both endpoints, 2,000
@@ -342,8 +342,8 @@ batches of 1,024, at most 50 epochs, the epoch kept with the highest mean AUPRC 
   Input: the pair's PARIS evidence in both directions, order-free (larger and summed importance, summed r and its
   gap, directions selected; an unselected direction reads 0), the arm's GeneEffect of A and B in the line (sum,
   gap, minimum) and the screen. Arms, given as stage-one report rows and read as the report reads them: the
-  frame-refitted default prior, FiLM on the prior and ΔE, FiLM on ΔE, and the measured GeneEffect as a
-  reference, never a bar. A training line reads the arm out of fold (the prior's fold export, or the stage-one
+  frame-refitted default linear model, FiLM on the linear model and ΔE, FiLM on ΔE, and the measured GeneEffect as a
+  reference, never a bar. A training line reads the arm out of fold (the linear model's fold export, or the stage-one
   run that left its fold out); a held-out line reads the main fit. PARIS runs in its `Ginicorrected` mode:
   a 20-gene pilot of the Boruta mode finished no gene in 32 minutes.
 - **Viability-embedding head** (stage-one arms only). Input `[V_A + V_B ; |V_A − V_B| ; screen]` (67), with V from

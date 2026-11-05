@@ -1,7 +1,7 @@
-"""The residual control ladder (gene mean, copy prior, nearest line, context-PCA ridge),
-fitted once on a fixed split's supervised training lines and scored on its validation
-and test lines. Predictions centre on the fold-independent ``mu_bar_g``: one centred on
-the fold-fit ``mu_hat_g`` would score Spearman +1.0 by construction."""
+"""The residual control ladder (gene mean, copy baseline, nearest line, context-PCA
+ridge), fitted once on a fixed split's supervised training lines and scored on its
+validation and test lines. Predictions centre on the fold-independent ``mu_bar_g``: one
+centred on the fold-fit ``mu_hat_g`` would score Spearman +1.0 by construction."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from src.data.splits import FixedSplit, assert_fit_eligible
 _LOGGER = logging.getLogger(__name__)
 
 GENE_MEAN: str = "gene_mean"
-COPY_PRIOR: str = "copy_prior"
+COPY_BASELINE: str = "copy_baseline"
 NEAREST_LINE: str = "nearest_line"
 CONTEXT_PCA_RIDGE: str = "context_pca_ridge"
 VAL_SLICE: str = "val"
@@ -97,22 +97,23 @@ def _gene_mean_rows(
     return [_row(slice_name, held_out_id, GENE_MEAN, held, g, 0.0) for g in held.index]
 
 
-def _copy_prior_rows(
+def _copy_baseline_rows(
     slice_name: str,
     rt: ResidualTargets,
     held_out_id: str,
-    prior: pd.Series,
+    linear_model: pd.Series,
     mu_bar: pd.Series,
 ) -> list[dict]:
-    """copy_prior rows: delta_hat = prior_g - mu_bar_g (fold-independent)."""
+    """copy_baseline rows: delta_hat = linear_model_g - mu_bar_g (fold-independent)."""
     held = rt.long.loc[rt.long["model_id"] == held_out_id].set_index("gene_symbol")
-    genes = held.index.intersection(prior.index).intersection(mu_bar.index)
+    genes = held.index.intersection(linear_model.index).intersection(mu_bar.index)
     if len(genes) == 0:
-        _LOGGER.warning("copy_prior: no overlapping genes for line %s", held_out_id)
+        _LOGGER.warning("copy_baseline: no overlapping genes for line %s", held_out_id)
         return []
-    delta = prior.loc[genes] - mu_bar.loc[genes]
+    delta = linear_model.loc[genes] - mu_bar.loc[genes]
     return [
-        _row(slice_name, held_out_id, COPY_PRIOR, held, g, delta.loc[g]) for g in genes
+        _row(slice_name, held_out_id, COPY_BASELINE, held, g, delta.loc[g])
+        for g in genes
     ]
 
 
@@ -145,7 +146,7 @@ def _run_fixed_evals(
     eval_specs: Sequence[tuple[str, str]],
     mu_bar: pd.Series,
     context_views: Mapping[str, pd.DataFrame],
-    copy_prior: pd.Series | None,
+    copy_baseline: pd.Series | None,
     config: _LadderConfig,
 ) -> list[dict]:
     """Fit each fixed-split baseline once and batch-predict val plus test."""
@@ -165,9 +166,9 @@ def _run_fixed_evals(
     rows: list[dict] = []
     for slice_name, held_out_id in eval_specs:
         rows.extend(_gene_mean_rows(slice_name, rt, held_out_id))
-        if copy_prior is not None:
+        if copy_baseline is not None:
             rows.extend(
-                _copy_prior_rows(slice_name, rt, held_out_id, copy_prior, mu_bar)
+                _copy_baseline_rows(slice_name, rt, held_out_id, copy_baseline, mu_bar)
             )
 
     train_label_rows = rt.long.loc[rt.long["model_id"].isin(train_ids)]
@@ -302,7 +303,7 @@ def _validate_split(labels: pd.DataFrame, split: FixedSplit) -> tuple[str, ...]:
 def run_r1_ladder(
     labels: pd.DataFrame,
     context_views: Mapping[str, pd.DataFrame],
-    copy_prior: pd.Series | None,
+    copy_baseline: pd.Series | None,
     *,
     split: FixedSplit,
     pca_components: int = 8,
@@ -319,7 +320,7 @@ def run_r1_ladder(
         (TEST_SLICE, held) for held in split.test
     ]
     rows = _run_fixed_evals(
-        labels, train, eval_specs, mu_bar, context_views, copy_prior, config
+        labels, train, eval_specs, mu_bar, context_views, copy_baseline, config
     )
     if not rows:
         raise ValueError("R1 ladder produced no predictions; check inputs")

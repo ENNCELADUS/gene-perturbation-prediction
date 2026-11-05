@@ -22,7 +22,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `ladder_reader`: Readers of the stage-one inputs (``data/geneeffect_joint/v2/ladder/``, protocol §15) and their GPU-resident form, each array checked against ``lines.parquet`` and the decode panel; numpy, pandas and torch only, so ``.venv-pie`` reads them too.
 - `noise_inputs`: Per-line inputs of the noise diagnosis from a line's raw basal cells.
 - `prepared`: Prepared joint-training inputs (``lines/<ModelID>.npz``, ``response/`` and the ``prepared_inputs.json`` manifest, written last), opened with train-only fitting or a checkpoint's restored state.
-- `prior_offsets`: The linear context prior's export (``hpc/run.sh prior-export``) as the joint model reads it.
+- `linear_model_offsets`: The linear model's export (``hpc/run.sh linear-model-export``) as the joint model reads it.
 - `pseudobulk`: Per-line pseudo-bulk.
 - `q_sc`: Per-gene basal expression summaries ``q_sc`` of one cell line.
 - `response`: The response anchors' observed perturbation responses, from source to prepared targets.
@@ -34,7 +34,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `bootstrap_exp13_uniprot_cache`: Build the Exp13 UniProt cache from local reviewed artifacts.
 - `build_cell_line_geneeffect_226_split`: Build the 226-context GeneEffect split (the final split's single-cell core).
 - `build_cell_line_geneeffect_split`: Build the final cell-line split (docs/data/cell-line-geneeffect-split.md), its JSON and ``.csv`` table, from the 226 split and the two extra-line files, which stay its provenance and enter no fit.
-- `build_context_reference`: Fetch and pin the linear context prior's reference tables, committed under configs/context_prior/reference/ because the H20 cannot fetch them.
+- `build_context_reference`: Fetch and pin the linear model's reference tables, committed under configs/linear_model/reference/ because the H20 cannot fetch them.
 - `build_exp13_esm2_universe`: The Exp13 ESM2 gene universe.
 - `build_extra_bulk_lines`: Build configs/benchmarks/extra_bulk_lines_26Q1.json from the 26Q1 files (docs/data/extra-bulk-lines-26q1.md).
 - `build_extra_single_cell_lines`: The frozen single-cell identity map and the extra single-cell membership built from it (docs/data/single-cell-atlas-search.md).
@@ -44,7 +44,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `build_sl_split`: Build the SL split from the final split and the multi-study SL benchmark's lists; a reviewed placement (``configs/benchmarks/sl_split_placements.csv``) keeps a line and its patient on the training side.
 - `build_sl_study_benchmark`: Build the multi-study SL benchmark's labels from configs/benchmarks/sl_label_rules.csv (docs/data/sl-benchmark.html).
 - `sl_study_readers/`: One reader per ready label rule of the multi-study SL benchmark (core screens, combinatorial screens, anchor screens).
-- `build_state_programs`: Fetch and pin the noise diagnosis's reference cell-state programs under configs/context_prior/reference/.
+- `build_state_programs`: Fetch and pin the noise diagnosis's reference cell-state programs under configs/linear_model/reference/.
 - `cellosaurus_context`: Cellosaurus text of the labelled lines as PIE's ``context_text``, keyed by ModelID.
 - `demultiplex`: Naming each called cell's line in a deposited library.
 - `embed_protein_sources`: Protein gene sources for the stage-one gene encoder (ladder design §4.4).
@@ -86,26 +86,26 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 
 ### `baselines/`
 
-- `prior_controls`: Controls built on the linear context prior.
-- `residual`: The residual control ladder (gene mean, copy prior, nearest line, context-PCA ridge), fitted once on a fixed split's supervised training lines and scored on its validation and test lines.
+- `linear_model_controls`: Controls built on the linear model.
+- `residual`: The residual control ladder (gene mean, copy baseline, nearest line, context-PCA ridge), fitted once on a fixed split's supervised training lines and scored on its validation and test lines.
 - `tx1_gmm`: Basal Tx1 population distributions with train-only per-gene ridge readouts.
 
-### `context_prior/`
+### `linear_model/`
 
 - `alignment`: Celligner's contrastive PCA on paired profiles.
 - `bridge`: The per-gene affine bridge from quantile-normalised pseudo-bulk to bulk, and what every bridge remedy shares.
 - `folds`: Patient-grouped, seeded folds of training-side lines.
 - `gene_features`: Features of gene g in line c.
 - `noise`: Statistics of the noise diagnosis.
-- `prior`: The linear context prior.
-- `reference`: The pinned reference tables of the linear context prior.
-- `ridge`: Closed-form ridge stages of the linear context prior, each with a per-gene intercept.
-- `single_cell`: Per-gene single-cell statistics of a line's basal cells (the prepared ``q_sc`` caches: log-space mean, detected fraction, log-space variance) stacked on the prior as a two-stage ridge (protocol §13).
+- `linear-model`: The linear model.
+- `reference`: The pinned reference tables of the linear model.
+- `ridge`: Closed-form ridge stages of the linear model, each with a per-gene intercept.
+- `single_cell`: Per-gene single-cell statistics of a line's basal cells (the prepared ``q_sc`` caches: log-space mean, detected fraction, log-space variance) stacked on the linear model as a two-stage ridge (protocol §13).
 - `space`: One expression space for bulk and pseudo-bulk.
 - `targets`: The metric's fixed definitions, fitted on the labelled training lines only.
 - `views`: Context views a query line can supply, computed identically from bulk and bridged pseudo-bulk.
 
-### `context_prior/remedies/`
+### `linear_model/remedies/`
 
 - `affine`: The reference bridge.
 - `contrastive`: Contrastive-PCA remedy.
@@ -125,7 +125,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `all`: One automatic run.
 - `baselines`: Evaluate train-fitted residual baselines on the prepared common panel.
 - `compare_runs`: Paired line bootstrap of selective Spearman between two runs of one split.
-- `config`: The joint GeneEffect model's config (``all``, ``revision``, ``test``; the prior and the ladder read it too).
+- `config`: The joint GeneEffect model's config (``all``, ``revision``, ``test``; the linear model and the ladder read it too).
 - `evaluate`: Score a saved joint checkpoint on one split with its saved preprocessing, never fitting (``hpc/run.sh test``).
 - `pipeline`: What the joint model's runs (``all`` and ``revision``) share.
 - `response_arms`: The six response-model arms the comparison scores in STATE's log expression space.
@@ -141,19 +141,19 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `heads`: The readout head on the frozen joint backbone's cached features.
 - `run`: The readout-head run (``all``'s last step).
 
-### `experiments/prior/`
+### `experiments/linear_model/`
 
-- `base`: The fitted linear context prior every prior command shares.
-- `config`: The linear context prior's configs.
-- `context_prior`: Linear context prior experiments.
-- `data_selected_analysis`: What the data-selected stage of the reference prior carries.
+- `base`: The fitted linear model every linear model command shares.
+- `config`: The linear model's configs.
+- `linear_model`: Linear model experiments.
+- `data_selected_analysis`: What the data-selected stage of the reference linear model carries.
 - `diagnosis`: What the noise diagnosis reads.
-- `noise_diagnosis`: What limits the default prior.
+- `noise_diagnosis`: What limits the default linear model.
 - `noise_report`: The noise diagnosis's ``results.md``.
 - `noise_sections`: The noise diagnosis's sections (protocol §14).
-- `prior_export`: Export of a prior config's reference row for the single-cell correction.
+- `linear_model_export`: Export of a linear model config's reference row for the single-cell correction.
 - `production`: Stage one's production fit: the reference row fitted once on every labelled line, one GeneEffect table for every single-cell line, which stage two reads.
-- `single_cell_stack`: Single-cell statistics stacked on a prior run's export (protocol §13).
+- `single_cell_stack`: Single-cell statistics stacked on a linear model run's export (protocol §13).
 
 ### `experiments/stage_one/` (`python -m` runs `run`)
 
@@ -164,7 +164,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `pie_precompute`: The frozen PIE's deltas for every line x panel gene, and on the cell-state pseudo-contexts (PIE stage-one design §3.2, §3.5; protocol §15), in ``.venv-pie``, with PIE's ``depmap_gene_effect`` token never served.
 - `pie_reproduction`: PIE reproduction (PIE stage-one design Task 1).
 - `pie_states`: The frozen PIE on cell-state pseudo-contexts (design §3.5, Task 8).
-- `prior_reference`: The default prior's reference row refitted on the stage-one frame's mean channel, the like-for-like linear reference (PIE stage-one design Task 3; protocol §16), with its out-of-fold predictions and the expression components the components reader reads.
+- `linear_model_reference`: The default linear model's reference row refitted on the stage-one frame's mean channel, the like-for-like linear reference (PIE stage-one design Task 3; protocol §16), with its out-of-fold predictions and the expression components the components reader reads.
 - `report`: A stage-one report.
 - `resident`: What a stage-one run keeps on the device.
 - `ridge`: The per-gene ridge on the decoder-feature delta (a report row).

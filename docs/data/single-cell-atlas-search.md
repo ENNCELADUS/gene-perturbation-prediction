@@ -339,4 +339,4 @@ DMS 53) put the knee near 125 UMI, so nearly all of their deposited barcodes pas
 OPM-2 and Dufva hashtag lanes have many doublets (reported per lane). The prepared extras are
 training-side data only: validation and test lines are unchanged. Since 2026-10-12 the 208 are
 training lines of the [final split](cell-line-geneeffect-split.md), which every fit reads: the
-metric's definitions, the joint model and the prior fit on them like on the 226's training lines.
+metric's definitions, the joint model and the linear model fit on them like on the 226's training lines.

@@ -5,7 +5,7 @@ as_released_gc95M --dictionary gc95M` (five launches resumed by run id, the last
 code at `c674b55` through the harness of the [reproduction design](../../docs/specs/2026-10-08-cilantro-sl-reproduction-design.md)
 (phase 1, §4), 100 epochs, the fast deletion and classifier paths (design §4.4), DepMap 26Q1 in place of the paper's
 23Q4. Tables: [report.json](report.json) (the run's `report.md` in JSON); the two analyses below,
-[stage_one_vs_gene_mean.json](stage_one_vs_gene_mean.json) and [default_prior_whole_matrix.json](default_prior_whole_matrix.json),
+[stage_one_vs_gene_mean.json](stage_one_vs_gene_mean.json) and [default_linear_model_whole_matrix.json](default_linear_model_whole_matrix.json),
 were one-off scripts on the host (`outputs/cilantro_analysis/`). Nothing here is synthetic-lethality evidence for this
 project's task.
 
@@ -26,8 +26,8 @@ both genes have a row, with its one global label: 12,808,732 (line, pair) rows.
 | Stage-one fit on its own training rows: RMSE / Spearman / R² | 0.229 / 0.851 / 0.868 | 0.230 / 0.864 / 0.85 |
 | Gene-holdout two-class AP (5 folds) | 0.542 ± 0.015 | 0.7148 |
 | Pair-holdout two-class AP | 0.806 ± 0.007 | — |
-| Gene-holdout AUROC; positive-class AUPR minus prior | 0.556; 0.045 | — |
-| Pair-holdout AUROC; positive-class AUPR minus prior | 0.823; 0.436 | — |
+| Gene-holdout AUROC; positive-class AUPR minus base rate | 0.556; 0.045 | — |
+| Pair-holdout AUROC; positive-class AUPR minus base rate | 0.823; 0.436 | — |
 | Conformal coverage at every α (both regimes) | on the target | on the target |
 | Singleton prediction sets at 98% target coverage | 6% gene-holdout, 21% pair-holdout | most |
 
@@ -49,9 +49,9 @@ On the line-specific part (each gene's deviation from its mean over lines), stag
 within-gene variance on its own training rows (per-gene Spearman mean 0.139, median 0.098, over 4,756 genes with
 at least 20 lines). The paper scores stage one only on the rows it trained on and never on held-out lines.
 
-For comparison, our default linear context prior on all 17,787 panel genes and every labelled entry: whole-matrix
+For comparison, our default linear model on all 17,787 panel genes and every labelled entry: whole-matrix
 Spearman 0.732 / 0.715 / 0.733 (training out of fold / validation / test) against 0.730 / 0.708 / 0.727 for the
-training-line gene mean ([default_prior_whole_matrix.json](default_prior_whole_matrix.json)). Whole-matrix
+training-line gene mean ([default_linear_model_whole_matrix.json](default_linear_model_whole_matrix.json)). Whole-matrix
 agreement is the gene mean in both projects; context accuracy is not.
 
 ## How it treats cell lines

@@ -116,8 +116,8 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 
 <section>
   <div class="ledger" role="list">
-    <div role="listitem"><span class="what">Stage one: GeneEffect</span><span class="chip neg">Below the prior</span>
-      <span>No trained architecture is better than the default linear prior refitted on the frame (0.215 validation, 0.228 test). When FiLM reads the prior's prediction, it gets 0.199–0.203. This is still below the prior.</span></div>
+    <div role="listitem"><span class="what">Stage one: GeneEffect</span><span class="chip neg">Below the linear model</span>
+      <span>No trained architecture is better than the default linear model refitted on the frame (0.215 validation, 0.228 test). When FiLM reads the linear model's prediction, it gets 0.199–0.203. This is still below the linear model.</span></div>
     <div role="listitem"><span class="what">Cell-state telemetry</span><span class="chip pos">Complete</span>
       <span>The run built 17 state vocabularies and read them through the frozen PIE. The deposit of origin controls most vocabularies. A mix of states adds little to the line's mean input.</span></div>
     <div role="listitem"><span class="what">Stage two: SL ranking</span><span class="chip flat">No context signal</span>
@@ -147,7 +147,7 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
         <tr><td>Single-cell training</td><td>379</td><td class="l">377 have 26Q1 GeneEffect (PC9 and HeLa have none)</td></tr>
         <tr><td>Validation</td><td>27</td><td class="l">select checkpoints</td></tr>
         <tr><td>Test</td><td>28</td><td class="l">scored one time for each config; A549 since 2026-10-11</td></tr>
-        <tr><td>Bulk-only, labelled</td><td>713</td><td class="l">add bulk RNA to the training data of the prior</td></tr>
+        <tr><td>Bulk-only, labelled</td><td>713</td><td class="l">add bulk RNA to the training data of the linear model</td></tr>
         <tr><td>Bulk-only, unlabelled</td><td>576</td><td class="l">encoder rows only</td></tr>
         <tr><td>Excluded</td><td>12</td><td class="l">share a patient with a held-out line</td></tr>
       </tbody>
@@ -173,15 +173,15 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
     <div class="scroll"><table>
       <thead><tr><th>Model</th><th>Val per-line</th><th>Test per-line</th><th>Val within-gene R²</th><th>Test within-gene R²</th></tr></thead>
       <tbody>
-        <tr class="group"><td colspan="5">Prior and context-blind controls</td></tr>
-        <tr><td>Default linear prior refitted on the frame</td><td><b>0.2146</b></td><td><b>0.2283</b></td><td><b>0.0462</b></td><td><b>0.0474</b></td></tr>
+        <tr class="group"><td colspan="5">Linear model and context-blind controls</td></tr>
+        <tr><td>Default linear model refitted on the frame</td><td><b>0.2146</b></td><td><b>0.2283</b></td><td><b>0.0462</b></td><td><b>0.0474</b></td></tr>
         <tr><td>Lineage only</td><td>0.1090</td><td>0.1433</td><td>0.0041</td><td>0.0087</td></tr>
         <tr><td>Own expression only</td><td>0.0301</td><td>0.0455</td><td class="neg-n">−0.0130</td><td class="neg-n">−0.0155</td></tr>
         <tr><td>Base (no line input)</td><td>0.0098</td><td>0.0475</td><td class="neg-n">−0.0024</td><td>0.0017</td></tr>
-        <tr class="group"><td colspan="5">FiLM that reads the prior's prediction</td></tr>
-        <tr><td>FiLM on the prior and ΔE</td><td>0.2033</td><td>0.1954</td><td>0.0452</td><td>0.0335</td></tr>
-        <tr><td>FiLM on the prior</td><td>0.1988</td><td>0.2144</td><td>0.0373</td><td>0.0375</td></tr>
-        <tr><td>FiLM on the prior and line-permuted ΔE</td><td>0.1972</td><td>0.2122</td><td>0.0368</td><td>0.0366</td></tr>
+        <tr class="group"><td colspan="5">FiLM that reads the linear model's prediction</td></tr>
+        <tr><td>FiLM on the linear model and ΔE</td><td>0.2033</td><td>0.1954</td><td>0.0452</td><td>0.0335</td></tr>
+        <tr><td>FiLM on the linear model</td><td>0.1988</td><td>0.2144</td><td>0.0373</td><td>0.0375</td></tr>
+        <tr><td>FiLM on the linear model and line-permuted ΔE</td><td>0.1972</td><td>0.2122</td><td>0.0368</td><td>0.0366</td></tr>
         <tr class="group"><td colspan="5">Architectures on the frozen PIE's deltas</td></tr>
         <tr><td>FiLM on ΔE, selective genes</td><td>0.1774</td><td>0.1716</td><td>0.0195</td><td>0.0089</td></tr>
         <tr><td>FiLM on ΔE, full panel</td><td>0.1737</td><td>0.1891</td><td>0.0130</td><td>0.0243</td></tr>
@@ -201,10 +201,10 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
     <div class="scroll"><table>
       <thead><tr><th>Contrast</th><th>Validation</th><th>Test</th></tr></thead>
       <tbody>
-        <tr><td>FiLM on the prior and ΔE − the prior itself</td><td>−0.011 [−0.028, +0.005]</td><td class="neg-n">−0.033 [−0.054, −0.014]</td></tr>
-        <tr><td>FiLM on the prior − the prior itself</td><td class="neg-n">−0.016 [−0.022, −0.010]</td><td class="neg-n">−0.014 [−0.018, −0.010]</td></tr>
-        <tr><td>FiLM: prior and ΔE − prior and permuted ΔE</td><td>+0.006 [−0.010, +0.022]</td><td>−0.017 [−0.037, +0.000]</td></tr>
-        <tr><td>FiLM on ΔE − the prior</td><td class="neg-n">−0.069 [−0.099, −0.042]</td><td class="neg-n">−0.075 [−0.104, −0.048]</td></tr>
+        <tr><td>FiLM on the linear model and ΔE − the linear model itself</td><td>−0.011 [−0.028, +0.005]</td><td class="neg-n">−0.033 [−0.054, −0.014]</td></tr>
+        <tr><td>FiLM on the linear model − the linear model itself</td><td class="neg-n">−0.016 [−0.022, −0.010]</td><td class="neg-n">−0.014 [−0.018, −0.010]</td></tr>
+        <tr><td>FiLM: linear model and ΔE − linear model and permuted ΔE</td><td>+0.006 [−0.010, +0.022]</td><td>−0.017 [−0.037, +0.000]</td></tr>
+        <tr><td>FiLM on ΔE − the linear model</td><td class="neg-n">−0.069 [−0.099, −0.042]</td><td class="neg-n">−0.075 [−0.104, −0.048]</td></tr>
         <tr><td>FiLM on ΔE − FiLM on ΔL</td><td>+0.065 [+0.019, +0.108]</td><td>+0.060 [+0.021, +0.097]</td></tr>
         <tr><td>Multi-encoder on ΔE − line-permuted</td><td>+0.094 [+0.054, +0.134]</td><td>+0.086 [+0.043, +0.125]</td></tr>
         <tr><td>FiLM on ΔE − own expression only</td><td>+0.116 [+0.081, +0.151]</td><td>+0.108 [+0.071, +0.147]</td></tr>
@@ -215,14 +215,14 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 
   <h3>Reading</h3>
   <ul class="reading">
-    <li><b>No trained row is better than the linear prior.</b> All contrasts with the prior are below zero on the two splits (Table 3).</li>
+    <li><b>No trained row is better than the linear model.</b> All contrasts with the linear model are below zero on the two splits (Table 3).</li>
     <li><b>ΔE alone has real line signal.</b> It is better than ΔL, its line-permuted and no-Δ controls, and own expression only.</li>
-    <li><b>ΔE adds nothing to the prior.</b> FiLM on the prior and ΔE is equal to the same model on line-permuted ΔE.</li>
+    <li><b>ΔE adds nothing to the linear model.</b> FiLM on the linear model and ΔE is equal to the same model on line-permuted ΔE.</li>
     <li><b>PIE's warm start makes the direct readout worse,</b> by 0.07–0.09.</li>
     <li><b>The trained rows overfit.</b> The ΔE rows get a training selective Spearman of 0.35–0.40, but only 0.13–0.16 on validation.</li>
   </ul>
   <p class="sources">Records: <a href="stage_one_architecture/README.md">architecture arms</a> (code <code>f5fefbe</code>, 2026-10-22) ·
-  <a href="stage_one_prior_input/README.md">FiLM that reads the prior</a> (code <code>0c47b7f</code>, 2026-10-22).</p>
+  <a href="stage_one_linear_model_input/README.md">FiLM that reads the linear model</a> (code <code>0c47b7f</code>, 2026-10-22).</p>
 </section>
 
 <section>
@@ -280,12 +280,12 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
         <tr><td>PARIS alone</td><td>0.256</td><td>0.365</td><td>0.090</td><td>0.167</td><td>0.102</td><td>0.196</td><td>0.644</td></tr>
         <tr class="group"><td colspan="8">PARIS head, by GeneEffect input</td></tr>
         <tr><td>Mean GeneEffect of each gene (context-ablated)</td><td>0.367</td><td>0.555</td><td>0.248</td><td>0.398</td><td>0.358</td><td>0.385</td><td>0.842</td></tr>
-        <tr><td>Linear prior</td><td>0.319</td><td>0.490</td><td>0.251</td><td>0.378</td><td>0.361</td><td>0.360</td><td>0.838</td></tr>
-        <tr><td>FiLM on the prior and ΔE</td><td>0.313</td><td>0.475</td><td>0.242</td><td>0.386</td><td>0.368</td><td>0.357</td><td>0.837</td></tr>
+        <tr><td>Linear model</td><td>0.319</td><td>0.490</td><td>0.251</td><td>0.378</td><td>0.361</td><td>0.360</td><td>0.838</td></tr>
+        <tr><td>FiLM on the linear model and ΔE</td><td>0.313</td><td>0.475</td><td>0.242</td><td>0.386</td><td>0.368</td><td>0.357</td><td>0.837</td></tr>
         <tr><td>FiLM on ΔE</td><td>0.333</td><td>0.514</td><td>0.240</td><td>0.364</td><td>0.339</td><td>0.358</td><td>0.827</td></tr>
         <tr><td>Measured GeneEffect (reference)</td><td>0.404</td><td>0.551</td><td>0.296</td><td>0.370</td><td>0.392</td><td>0.403</td><td>0.838</td></tr>
         <tr class="group"><td colspan="8">Viability-embedding head, by stage-one run</td></tr>
-        <tr><td>FiLM on the prior and ΔE</td><td>0.210</td><td>0.355</td><td>0.106</td><td>0.206</td><td>0.298</td><td>0.235</td><td>0.785</td></tr>
+        <tr><td>FiLM on the linear model and ΔE</td><td>0.210</td><td>0.355</td><td>0.106</td><td>0.206</td><td>0.298</td><td>0.235</td><td>0.785</td></tr>
         <tr><td>… mean V of each gene (context-ablated)</td><td>0.713</td><td>0.829</td><td>0.187</td><td>0.388</td><td>0.381</td><td>0.500</td><td><b>0.899</b></td></tr>
         <tr><td>FiLM on ΔE</td><td>0.261</td><td>0.415</td><td>0.182</td><td>0.304</td><td>0.363</td><td>0.305</td><td>0.818</td></tr>
         <tr><td>… mean V of each gene (context-ablated)</td><td>0.700</td><td>0.763</td><td>0.199</td><td>0.389</td><td>0.480</td><td>0.506</td><td>0.887</td></tr>
@@ -304,12 +304,12 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
         <tr><td>PARIS alone</td><td>0.383</td><td>0.071</td><td>0.090</td><td>0.181</td><td>0.633</td></tr>
         <tr class="group"><td colspan="6">PARIS head, by GeneEffect input</td></tr>
         <tr><td>Mean GeneEffect of each gene (context-ablated)</td><td>0.538</td><td>0.288</td><td>0.222</td><td>0.349</td><td>0.850</td></tr>
-        <tr><td>Linear prior</td><td>0.509</td><td>0.320</td><td>0.220</td><td>0.350</td><td>0.849</td></tr>
-        <tr><td>FiLM on the prior and ΔE</td><td>0.504</td><td>0.329</td><td>0.217</td><td>0.350</td><td>0.844</td></tr>
+        <tr><td>Linear model</td><td>0.509</td><td>0.320</td><td>0.220</td><td>0.350</td><td>0.849</td></tr>
+        <tr><td>FiLM on the linear model and ΔE</td><td>0.504</td><td>0.329</td><td>0.217</td><td>0.350</td><td>0.844</td></tr>
         <tr><td>FiLM on ΔE</td><td>0.504</td><td>0.329</td><td>0.217</td><td>0.350</td><td>0.843</td></tr>
         <tr><td>Measured GeneEffect (reference)</td><td>0.484</td><td><b>0.416</b></td><td>0.262</td><td>0.387</td><td>0.863</td></tr>
         <tr class="group"><td colspan="6">Viability-embedding head, by stage-one run</td></tr>
-        <tr><td>FiLM on the prior and ΔE</td><td>0.386</td><td>0.137</td><td>0.151</td><td>0.225</td><td>0.832</td></tr>
+        <tr><td>FiLM on the linear model and ΔE</td><td>0.386</td><td>0.137</td><td>0.151</td><td>0.225</td><td>0.832</td></tr>
         <tr><td>… mean V of each gene (context-ablated)</td><td>0.836</td><td>0.150</td><td>0.247</td><td>0.411</td><td>0.903</td></tr>
         <tr><td>FiLM on ΔE</td><td>0.437</td><td>0.212</td><td>0.202</td><td>0.284</td><td>0.865</td></tr>
         <tr><td>… mean V of each gene (context-ablated)</td><td>0.857</td><td>0.149</td><td>0.290</td><td>0.432</td><td><b>0.908</b></td></tr>
@@ -322,13 +322,13 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
     <div class="scroll"><table>
       <thead><tr><th>Contrast</th><th>Mean</th><th>Above 0</th><th>Below 0</th></tr></thead>
       <tbody>
-        <tr><td>PARIS head − context-ablated, linear prior</td><td class="neg-n">−0.026</td><td>0</td><td>0</td></tr>
-        <tr><td>PARIS head − context-ablated, FiLM on the prior and ΔE</td><td class="neg-n">−0.029</td><td>0</td><td>0</td></tr>
+        <tr><td>PARIS head − context-ablated, linear model</td><td class="neg-n">−0.026</td><td>0</td><td>0</td></tr>
+        <tr><td>PARIS head − context-ablated, FiLM on the linear model and ΔE</td><td class="neg-n">−0.029</td><td>0</td><td>0</td></tr>
         <tr><td>PARIS head − context-ablated, FiLM on ΔE</td><td class="neg-n">−0.027</td><td>0</td><td>0</td></tr>
         <tr><td>PARIS head − context-ablated, measured GeneEffect</td><td>+0.017</td><td>0</td><td>0</td></tr>
-        <tr><td>PARIS head (linear prior) − PARIS alone</td><td>+0.164</td><td>3</td><td>0</td></tr>
-        <tr><td>PARIS head (linear prior) − pair identity</td><td class="neg-n">−0.222</td><td>0</td><td>2</td></tr>
-        <tr><td>V head − context-ablated, FiLM on the prior and ΔE</td><td class="neg-n">−0.265</td><td>0</td><td>4</td></tr>
+        <tr><td>PARIS head (linear model) − PARIS alone</td><td>+0.164</td><td>3</td><td>0</td></tr>
+        <tr><td>PARIS head (linear model) − pair identity</td><td class="neg-n">−0.222</td><td>0</td><td>2</td></tr>
+        <tr><td>V head − context-ablated, FiLM on the linear model and ΔE</td><td class="neg-n">−0.265</td><td>0</td><td>4</td></tr>
         <tr><td>V head − context-ablated, FiLM on ΔE</td><td class="neg-n">−0.201</td><td>0</td><td>2</td></tr>
       </tbody>
     </table></div>

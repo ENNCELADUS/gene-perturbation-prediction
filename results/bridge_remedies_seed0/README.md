@@ -1,8 +1,8 @@
-# Bridge remedies for the linear context prior, seed 0
+# Bridge remedies for the linear model, seed 0
 
 Run `bridge_remedies_20261004`, 2026-10-04, on the H20 container on port 30838 (worktree
 `/2023533015/VCC_Project_bridge_remedies`, branch `feat/bridge-remedies`), CPU only, config
-`configs/context_prior/bridge_remedies.yaml`;
+`configs/linear_model/bridge_remedies.yaml`;
 protocol §10 of the [GeneEffect protocol](../../docs/03-geneeffect-protocol.md). The runner's only automatic choice is
 the components penalty under gene-level blocks, taken as the best validation point estimate for components alone.
 Every choice below is read on validation. Full table: [results.md](results.md). Nothing here is synthetic-lethality
@@ -18,10 +18,10 @@ evidence.
 directory. The rows kept from `4b895f5` compute exactly what `b98a3c9` computes; the fix changes no validation or test
 score.
 
-Training side as the [first runs](../context_prior_seed0/README.md) chose it: 953 labelled lines with bulk RNA (of
+Training side as the [first runs](../linear_model_seed0/README.md) chose it: 953 labelled lines with bulk RNA (of
 1,405 training-side lines; Lymphoid and Myeloid extras dropped); 167 of the 170 labelled single-cell training lines
 have bulk RNA and fit the bridge; shared space 9,711 genes (60 training lines took the training mean for some); 3,057
-selective genes, 2,396 of them in the space. The prior uses 128 expression components, five patient-grouped folds,
+selective genes, 2,396 of them in the space. The linear model uses 128 expression components, five patient-grouped folds,
 1,000 bootstrap resamples and 50 data-selected genes. Penalties (× n): components 0.1, 1, 10, 100, 1000; gene-level
 0.1, 1, 10. For own expression and partners the gene-level penalty shrinks each gene's deviation from pooled weights
 that are fitted unshrunk; for data-selected genes it is a ridge toward zero. Block sets: components alone, plus own
@@ -32,7 +32,7 @@ a 95% paired line-bootstrap interval.
 
 ## Result
 
-**No remedy beats the reference on validation.** The reference reproduces the first runs' chosen prior to four
+**No remedy beats the reference on validation.** The reference reproduces the first runs' chosen linear model to four
 decimals: 0.2232 on validation and 0.2227 on test. Under the runner's components-penalty pick no gene-level block set
 gains over the reference on validation under any remedy; the
 [rerun over the full penalty grid](#rerun-over-the-full-penalty-grid) reverses that.
@@ -79,8 +79,8 @@ and 64. The reference itself chose 10 over 1000 by 0.00003. Under those six sett
 collapse to 0.065–0.119 on validation and 0.093–0.143 on bulk input. Data-selected genes and all three lose
 0.010–0.026 against the setting's own components. Those rows measure the tie, not the remedy.
 
-Denoising fits the prior on the reference's bulk rows and reads the reference's oracle input, so its oracle rows are
-the reference prior on bulk input, at components penalty 1 (rank 16) and 1000 (ranks 32 and 64). Each cell gives gene
+Denoising fits the linear model on the reference's bulk rows and reads the reference's oracle input, so its oracle rows are
+the reference linear model on bulk input, at components penalty 1 (rank 16) and 1000 (ranks 32 and 64). Each cell gives gene
 penalty 0.1 / 1 / 10.
 
 | Input, components penalty | Components alone | + own expression and partners | + data-selected genes | + all three |
@@ -172,7 +172,7 @@ None of the following is chosen on test.
 ## Rerun over the full penalty grid
 
 Run `bridge_remedies_penalty_grid_20261005`, 2026-10-05, same host and training side, code `d314b74`, config
-`configs/context_prior/bridge_remedies_penalty_grid.yaml`: every gene-level block set fitted at every components
+`configs/linear_model/bridge_remedies_penalty_grid.yaml`: every gene-level block set fitted at every components
 penalty (0.1–1000) and gene penalty (0.1–1000, extended from 10), for the affine bridge, contrastive 4/0 and 8/4,
 and gating at 0.7. Full table: [results_penalty_grid.md](results_penalty_grid.md). The best row per block set on
 validation, with its test score; gains are over the reference row (components alone at penalty 10).
@@ -212,7 +212,7 @@ validation, with its test score; gains are over the reference row (components al
   genetic interaction.
 
 **Decision (2026-10-07).** The user integrated no remedy and added the gene-level blocks; the
-[follow-ups](../default_prior_followups_seed0/README.md) then found own expression and partners add +0.0010 on
-validation (interval spanning zero) once data-selected genes are in. The default prior is the affine bridge with
+[follow-ups](../default_linear_model_followups_seed0/README.md) then found own expression and partners add +0.0010 on
+validation (interval spanning zero) once data-selected genes are in. The default linear model is the affine bridge with
 expression components at penalty 1 and data-selected genes at gene penalty 10 (0.2290 / 0.2338), and the single-cell
 correction stacks on it.

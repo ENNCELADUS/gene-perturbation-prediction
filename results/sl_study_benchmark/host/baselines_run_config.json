@@ -8,7 +8,7 @@
     "split": "configs/benchmarks/cell_line_sl_split.json",
     "gene_effect": "data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv",
     "model": "data/sl_dependency_v0/raw/depmap/Model.csv",
-    "stage_one": "outputs/context_prior/stage_one_production_seed0/production/predictions.parquet",
+    "stage_one": "outputs/linear_model/stage_one_production_seed0/production/predictions.parquet",
     "top_k": 20,
     "bootstrap": 1000
   }

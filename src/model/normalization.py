@@ -128,10 +128,10 @@ class BlockStandardizer:
                     continue
                 if means[name].shape != batch_mean.shape:
                     raise ValueError(f"{name} width changed across streamed batches")
-                prior_count = counts[name]
-                total = prior_count + batch_count
+                earlier_count = counts[name]
+                total = earlier_count + batch_count
                 delta = batch_mean - means[name]
-                m2[name] += batch_m2 + delta**2 * prior_count * batch_count / total
+                m2[name] += batch_m2 + delta**2 * earlier_count * batch_count / total
                 means[name] += delta * batch_count / total
                 counts[name] = total
         if expected_blocks is None:

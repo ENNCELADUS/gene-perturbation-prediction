@@ -1,12 +1,12 @@
 # Single-cell statistics stack `single_cell_stack_grid_20261011`
 
-Stacked on prior run `outputs/context_prior/default_prior_export`. Each arm fits a two-stage ridge (own statistics, then data-selected statistics) on what the prior's out-of-fold export leaves on the training lines, and adds it to the export. Selective Spearman and its gains are macro means over the selective genes; intervals are 95% paired line bootstraps. Nothing is chosen here; nothing here is synthetic-lethality evidence.
+Stacked on linear model run `outputs/linear_model/default_linear_model_export`. Each arm fits a two-stage ridge (own statistics, then data-selected statistics) on what the linear model's out-of-fold export leaves on the training lines, and adds it to the export. Selective Spearman and its gains are macro means over the selective genes; intervals are 95% paired line bootstraps. Nothing is chosen here; nothing here is synthetic-lethality evidence.
 
-Prior alone: validation 0.2290, test 0.2338.
+Linear model alone: validation 0.2290, test 0.2338.
 
 ## Arm `mean`: mean
 
-| Own shrinkage | Selected penalty | Validation | Gain over prior (val) | Gain over `mean` (val) | Test | Gain over prior (test) | Gain over `mean` (test) |
+| Own shrinkage | Selected penalty | Validation | Gain over linear model (val) | Gain over `mean` (val) | Test | Gain over linear model (test) | Gain over `mean` (test) |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 10 | 100 | 0.2329 | +0.0040 [-0.0042, +0.0140] |  | 0.2409 | +0.0072 [-0.0024, +0.0156] |  |
 | 10 | 1000 | 0.2308 | +0.0018 [+0.0001, +0.0037] |  | 0.2366 | +0.0028 [+0.0004, +0.0051] |  |
@@ -17,7 +17,7 @@ Prior alone: validation 0.2290, test 0.2338.
 
 ## Arm `distribution`: detected, variance
 
-| Own shrinkage | Selected penalty | Validation | Gain over prior (val) | Gain over `mean` (val) | Test | Gain over prior (test) | Gain over `mean` (test) |
+| Own shrinkage | Selected penalty | Validation | Gain over linear model (val) | Gain over `mean` (val) | Test | Gain over linear model (test) | Gain over `mean` (test) |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 10 | 100 | 0.2340 | +0.0050 [-0.0036, +0.0155] | +0.0011 [-0.0005, +0.0026] | 0.2404 | +0.0066 [-0.0039, +0.0160] | -0.0006 [-0.0025, +0.0015] |
 | 10 | 1000 | 0.2311 | +0.0021 [-0.0001, +0.0044] | +0.0003 [-0.0009, +0.0015] | 0.2368 | +0.0031 [+0.0006, +0.0053] | +0.0003 [-0.0007, +0.0011] |
@@ -28,7 +28,7 @@ Prior alone: validation 0.2290, test 0.2338.
 
 ## Arm `single_cell`: mean, detected, variance
 
-| Own shrinkage | Selected penalty | Validation | Gain over prior (val) | Gain over `mean` (val) | Test | Gain over prior (test) | Gain over `mean` (test) |
+| Own shrinkage | Selected penalty | Validation | Gain over linear model (val) | Gain over `mean` (val) | Test | Gain over linear model (test) | Gain over `mean` (test) |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 10 | 100 | 0.2329 | +0.0039 [-0.0052, +0.0145] | -0.0000 [-0.0020, +0.0020] | 0.2397 | +0.0059 [-0.0042, +0.0155] | -0.0013 [-0.0031, +0.0008] |
 | 10 | 1000 | 0.2312 | +0.0022 [-0.0002, +0.0047] | +0.0004 [-0.0010, +0.0018] | 0.2369 | +0.0031 [+0.0004, +0.0056] | +0.0003 [-0.0008, +0.0014] |

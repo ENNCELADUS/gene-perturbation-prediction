@@ -283,11 +283,11 @@ def test_prepare_refuses_reuse_under_different_settings(tmp_path):
 
 
 def test_line_set_paths_do_not_change_preparation_settings(tmp_path):
-    """The prior export is read by training, not preparation, and the split grows
+    """The linear model export is read by training, not preparation, and the split grows
     a root: neither path makes a root unusable, recorded or not."""
     config = build_world(tmp_path)
     moved = json.loads(json.dumps(config))
-    moved["paths"]["prior"] = "outputs/context_prior/some_export/export"
+    moved["paths"]["linear_model"] = "outputs/linear_model/some_export/export"
     moved["paths"]["split"] = "elsewhere.json"
     assert preparation_settings(moved) == preparation_settings(config)
     moved["paths"]["basal_raw_umi"] = "other_cells"
@@ -322,7 +322,7 @@ def test_train_means_fit_on_supervised_train_only(prepared, monkeypatch):
         assert inputs.train_gene_means[gene] == pytest.approx(
             labels.loc[supervised, column].mean()
         )
-    assert "GE" not in inputs.genes  # the copy-prior donor has no value
+    assert "GE" not in inputs.genes  # the copy-baseline donor has no value
     assert set(inputs.labels["model_id"]) == {*supervised, *VAL}
     np.testing.assert_allclose(
         inputs.labels["residual"],

@@ -78,7 +78,7 @@ class Resident:
         self.tokens = self.text = self.evidence = None
         self.width, self.own_width, self.variance_kept = 0, 0, None
         self.line_classes: list[str] | None = None
-        self.prior = None
+        self.linear_model = None
         slots = list(data["own_slots"]) + (["own_x"] if kind == "own_x" else [])
         if kind in reader.PIE_ARRAYS or kind == "dE_full" or slots:
             index = reader.check_pie_index(ladder)
@@ -142,10 +142,10 @@ class Resident:
             line = self._line_input(setup, data, kind, fold, targets)
             self.line = torch.tensor(line, device=device)
             self.width = line.shape[1]
-        if data["prior_run"] is not None and kind != "components":
-            self.prior = torch.from_numpy(prior_feature(setup, data, targets.m_g)).to(
-                device
-            )
+        if data["linear_model_run"] is not None and kind != "components":
+            self.linear_model = torch.from_numpy(
+                linear_model_feature(setup, data, targets.m_g)
+            ).to(device)
         text, text_present = reader.context_text(ladder)
         self.text_dim = text.shape[1]
         if arm != "film":
@@ -175,7 +175,7 @@ class Resident:
         if kind == "components":
             name = "main" if fold is None else f"fold{fold}"
             frame = pd.read_parquet(
-                Path(data["prior_run"]) / "components" / f"{name}.parquet"
+                Path(data["linear_model_run"]) / "components" / f"{name}.parquet"
             )
             if [str(m) for m in frame.index] != ladder.line_ids:
                 raise ValueError(
@@ -257,22 +257,24 @@ class Resident:
         if self.evidence is not None:
             batch.evidence = self.evidence[0][genes][:, lines]
             batch.evidence_have = self.evidence[1][genes][:, lines]
-        if self.prior is not None:
-            # Never permuted: the permuted control keeps the line's own prior.
-            batch.prior = self.prior[genes][:, lines]
+        if self.linear_model is not None:
+            # Never permuted: the permuted control keeps the line's own linear model.
+            batch.linear_model = self.linear_model[genes][:, lines]
         return batch
 
 
-def prior_feature(setup: Setup, data: Mapping[str, Any], m_g: pd.Series) -> np.ndarray:
-    """The prior reference's prediction minus the run's base, in z units (panel
+def linear_model_feature(
+    setup: Setup, data: Mapping[str, Any], m_g: pd.Series
+) -> np.ndarray:
+    """The linear model reference's prediction minus the run's base, in z units (panel
     genes x ladder lines): frame lines out of fold, validation and test lines from
     the fit on the whole frame. A fold run's training lines read predictions whose
     fits saw the held-out fold's labels, so its out-of-fold telemetry is slightly
     optimistic; validation and test are unaffected."""
     ladder = setup.ladder
-    run_dir = finished_prior(data["prior_run"], data["ladder_config"])
+    run_dir = finished_linear_model(data["linear_model_run"], data["ladder_config"])
     if run_dir is None:
-        raise FileNotFoundError(f"{data['prior_run']} has no row.json")
+        raise FileNotFoundError(f"{data['linear_model_run']} has no row.json")
     predictions = pd.concat(
         [
             pd.read_parquet(run_dir / f"predictions_{name}.parquet")
@@ -283,7 +285,7 @@ def prior_feature(setup: Setup, data: Mapping[str, Any], m_g: pd.Series) -> np.n
     predictions.index = [str(m) for m in predictions.index]
     missing = sorted(set(ladder.line_ids) - set(predictions.index))
     if missing:
-        raise ValueError(f"the prior predicts no {missing[:5]}")
+        raise ValueError(f"the linear model predicts no {missing[:5]}")
     panel = list(ladder.panel)
     base = reader.base_prediction(ladder, m_g, ladder.line_ids).loc[:, panel]
     values = predictions.loc[ladder.line_ids, panel] - base
@@ -295,14 +297,14 @@ def same_ladder(path: str | Path, report_ladder: str | Path, what: str) -> None:
         raise ValueError(f"{what} read {path}, the report {report_ladder}")
 
 
-def finished_prior(run: str | Path, report_ladder: str | Path) -> Path | None:
-    """The prior reference's run directory once its ``row.json`` exists, checked to
-    read the report's ladder."""
+def finished_linear_model(run: str | Path, report_ladder: str | Path) -> Path | None:
+    """The linear model reference's run directory once its ``row.json`` exists,
+    checked to read the report's ladder."""
     run_dir = Path(run)
     if not (run_dir / "row.json").is_file():
         return None
     bound = read_json(run_dir / "run_config.json")["config"]
-    if bound["kind"] != "prior_reference":
-        raise ValueError(f"{run_dir} is not a prior reference run")
+    if bound["kind"] != "linear_model_reference":
+        raise ValueError(f"{run_dir} is not a linear model reference run")
     same_ladder(bound["ladder_config"], report_ladder, str(run_dir))
     return run_dir
