@@ -202,6 +202,15 @@ run's sequential weights, test scores, metrics pickle and conformal outputs for 
 path resumes on the fast path unchanged: the gene files are the same, and `perturb.py` first
 removes any gene whose files are incomplete.
 
+`hpc/cilantro/run.sh RUN_ID --dictionary gc95M --benchmark` runs Cilantro-SL on the multi-study SL benchmark
+(`benchmark_gc95M`, 2026-11-05). The token set is the 500 HVGs and the benchmark's genes (18,729 genes) in place of
+the SynLethDB genes, and only the SL split's lines are tokenized (1,144). The released deletion step runs as above
+(about 4 h on four H20s). Then `benchmark.py` refits the released stage one, with the released settings, on the
+rows of the split's single-cell training and bulk labelled lines that have GeneEffect. It trains the released classifier on
+the training lines' genetic pairs, with each line's own label (SL when half or more of its rows are SL). It writes the SL
+probability of each held-out (line, pair) to `benchmark/scores.parquet`. A pair whose genes are not both in the line's
+top 2,048 tokens gets 0.5, so these pairs tie. `--gene-subset 200 --epochs 2` makes a smoke run (`benchmark_smoke`, 5 min).
+
 The port's coverage report (step 0, CPU only) runs in the project environment:
 `.venv-tx1/bin/python -m src.experiments.historical.cilantro_coverage --out outputs/cilantro_coverage/<id>`.
 
@@ -367,8 +376,8 @@ OMP_NUM_THREADS=32 MKL_NUM_THREADS=32 nohup bash -c "hpc/run.sh linear-model-pro
   > outputs/launches/sl_benchmark_chain.log 2>&1 &
 ```
 
-The config's `extra_scores` adds line-blind scores per (gene A, gene B) from other harnesses; the run stops if a
-held-out pair has no score. KG4SL makes one (`hpc/kg4sl/`, its own environment `.venv-kg4sl`, Python 3.11 and
+The config's `extra_scores` adds scores from other harnesses, per (gene A, gene B) or, when the table has `model_id`,
+per (line, gene A, gene B); the run stops if a held-out row has no score. KG4SL makes one (`hpc/kg4sl/`, its own environment `.venv-kg4sl`, Python 3.11 and
 TensorFlow 2.15 on CPU). The released code (commit `be3626a`) needs TensorFlow 1.15 and Python 3.6, which the H20
 cannot install, so `official.patch` runs it in TensorFlow 2's `compat.v1` graph mode: the import line and Xavier as
 `glorot_uniform` (the same initializer). Send the code from the laptop, then build:
