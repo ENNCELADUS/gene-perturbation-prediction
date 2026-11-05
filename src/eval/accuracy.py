@@ -30,7 +30,7 @@ from src.eval.metrics import (
 )
 
 if TYPE_CHECKING:
-    from src.context_prior.targets import Definitions
+    from src.linear_model.targets import Definitions
 
 #: The metrics ``score`` keeps, and the seed of every paired line bootstrap.
 METRICS = (
@@ -241,7 +241,7 @@ def _predict(
     accelerator,
 ) -> tuple[np.ndarray, np.ndarray]:
     """This rank's row positions and float32 residual predictions of the stack
-    (prior offset plus head).
+    (linear model offset plus head).
 
     Batches are consecutive ``batch_size`` rows in dataset order; rank ``r`` of
     ``W`` takes batches ``r, r + W, ...``.
@@ -256,7 +256,7 @@ def _predict(
         rows = range(start, min(start + batch_size, len(dataset)))
         batch = dataset.collate(rows)
         with accelerator.autocast() if accelerator else nullcontext():
-            predicted = model(batch.conditions).float() + batch.prior
+            predicted = model(batch.conditions).float() + batch.linear_model
         positions.append(np.asarray(rows, dtype=np.int64))
         predictions.append(predicted.cpu().numpy())
     if not positions:

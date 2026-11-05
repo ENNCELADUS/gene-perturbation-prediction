@@ -111,7 +111,7 @@ def build_world(root: Path) -> dict:
         index=labeled,
         columns=[f"{g} ({i + 1})" for i, g in enumerate(PANEL_CANDIDATES)],
     )
-    frame.loc[K562, "GE (5)"] = np.nan  # no copy-prior donor value -> off panel
+    frame.loc[K562, "GE (5)"] = np.nan  # no copy-baseline donor value -> off panel
     frame.to_csv(root / "gene_effect.csv")
 
     (root / "basal_raw_umi").mkdir()

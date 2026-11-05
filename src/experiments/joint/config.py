@@ -1,5 +1,5 @@
-"""The joint GeneEffect model's config (``all``, ``revision``, ``test``; the prior and
-the ladder read it too): every key explicit, unknown keys rejected."""
+"""The joint GeneEffect model's config (``all``, ``revision``, ``test``; the linear
+model and the ladder read it too): every key explicit, unknown keys rejected."""
 
 from collections.abc import Mapping
 from pathlib import Path
@@ -31,7 +31,7 @@ _GROUPS = {
     ),
     "paths": (
         "split gene_effect basal_raw_umi tx1_model_dir tx1_cache esm2_embeddings "
-        "state_checkpoint state_model_dir perturbseq_sources prior"
+        "state_checkpoint state_model_dir perturbseq_sources linear_model"
     ),
 }
 _TOP_LEVEL = "output_root prepared_root"

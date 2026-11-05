@@ -1,5 +1,5 @@
 """What every track's strict config loader shares: every key explicit, unknown keys
-rejected. Each track's loader lives in its package (``joint``, ``prior``,
+rejected. Each track's loader lives in its package (``joint``, ``linear_model``,
 ``stage_one``, ``states``)."""
 
 from collections.abc import Mapping

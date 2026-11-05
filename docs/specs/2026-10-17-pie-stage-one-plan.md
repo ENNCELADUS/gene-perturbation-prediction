@@ -19,7 +19,7 @@ the gene sources, context text, cells, mean channel and summaries; only the last
 | 0 | `feat/ladder-inputs` | Close Task 2: last Tx1 shard, doc fixes, two precompute guards, merge | `results/ladder_inputs/README.md` |
 | 1A | `feat/stage-one` | Shared stage-one stack and Task 3's independent rows | Task 3 results: the hybrid's Δ, the leading family |
 | 1B (parallel) | `feat/state-telemetry` | Task 8 | which vocabularies Task 9 precomputes |
-| 2 | `feat/stage-one-prior-input` | The prior-input rows (protocol §16) first; Task 3's second half and Task 4 wait on their reading | whether ΔE adds to the prior; architecture; gene query |
+| 2 | `feat/stage-one-linear-model-input` | The linear-model-input rows (protocol §16) first; Task 3's second half and Task 4 wait on their reading | whether ΔE adds to the linear model; architecture; gene query |
 | 3 | `feat/data-ladder`, `feat/cell-states` | Task 5, alongside Task 9's frozen-state pilot and planted state effects | ladder contrasts; states pilot, before fine-tuned states are built |
 | 4 | same | Task 6, Task 7, Task 9 fine-tuned states | planted recovery, cell-count curve, drift; before end-to-end states are built |
 | 5 | `feat/cell-states` | Task 9 end-to-end states | final per-state account |
@@ -32,7 +32,7 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
   - Add `scikit-learn` to `.venv-pie` as a `geneeffect` dependency group in `third_party/pie/pyproject.toml`, re-locked;
     `hpc/pie/setup.sh` syncs it. The scorer `src/eval/accuracy.py` imports sklearn.
   - Lift `make_scheduler` (`src/training/trainer.py:97`, a module that imports accelerate) into `src/training/schedule.py`.
-  - The prior reference and the sklearn mixtures run in the project env.
+  - The linear model reference and the sklearn mixtures run in the project env.
   - cNMF, starCAT and scvi-tools run in a new `.venv-states` (`hpc/states/setup.sh`).
   - Environments exchange files only.
 - **Residency.**
@@ -48,7 +48,7 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
   - after = before + Δ̂Cᵀ.
   - The share of x_c's variance kept is reported.
 - **Run directories.** `outputs/stage_one/<task>/<config stem>[__fold<k>]/`. `_bind` and `_locked` move from
-  `src/experiments/prior/context_prior.py:520–545` to `src/experiments/run_dir.py`.
+  `src/experiments/linear_model/linear_model.py:520–545` to `src/experiments/run_dir.py`.
 - **Out-of-fold telemetry (Task 3 rows).** `--fold k` drops fold k from training and refits `m_g` without it. μ_g, σ_g
   and the selective genes stay the protocol's; selection stays on validation.
 - **State pseudo-contexts in `pie_precompute`.**
@@ -62,12 +62,12 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
 - **New tracked tables.**
   - `configs/benchmarks/single_cell_source_chemistry.csv`: the assay per deposit (per line or arm where a deposit mixes kits), for scVI's nuisance and Task 5's
     covariate.
-  - `configs/context_prior/reference/kinker_programs.tsv`: Kinker's 12 programs, with provenance.
+  - `configs/linear_model/reference/kinker_programs.tsv`: Kinker's 12 programs, with provenance.
   - Task 5's ambient score doesn't exist; it is reported as unavailable.
 - **V(c, g).** Every run writes the 32-d V for all lines × panel genes in fp16, with training lines marked as in-sample.
 - **Recorded by people, never computed by a rule:** the hybrid's Δ, the winning family, the gene query, Task 8's
   vocabulary list, and the go-ahead for fine-tuned and end-to-end states. Recorded 2026-10-22, after Tasks 3 and 8:
-  the hybrid's Δ is ΔE and the leading family FiLM; since no row reached the prior, FiLM reads the prior's prediction
+  the hybrid's Δ is ΔE and the leading family FiLM; since no row reached the linear model, FiLM reads the linear model's prediction
   as an input (not as the base: the final model is one network) before the rest of Wave 2; Task 9 precomputes the
   cycle, recurrent programs, line-centred scVI K 6 and HVG K 8 vocabularies, with QC K 8 as its control.
 
@@ -124,14 +124,14 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
   - the per-gene ridge on line-centred ΔH (dual closed form on the GPU);
   - `report`, which writes `results.md` with every §4.1 metric, the calibration slope, contrasts with 1,000-resample
     `paired_line_bootstrap` intervals (`src/eval/metrics.py:605`) and the out-of-fold table.
-- `src/experiments/stage_one/prior_reference.py` (project env): refits the default prior on the 981 frame lines' `mean_channel`
-  rows, via `context_prior.prior_inputs:300`, `stages:363`, `prior.fit_prior:266` and `crossfit:364` with the frame
+- `src/experiments/stage_one/linear_model_reference.py` (project env): refits the default linear model on the 981 frame lines' `mean_channel`
+  rows, via `linear_model.linear_model_inputs:300`, `stages:363`, `linear_model.fit_linear_model:266` and `crossfit:364` with the frame
   folds. It writes validation, test and out-of-fold predictions and the 128 component scores, which the shared
   nonlinear reader of 128 components needs.
 
 **Edits:**
-- `src/eval/`: move `long_frame`, `score` and `gain` from `src/experiments/prior/context_prior.py:234–290` into
-  `src/eval/accuracy.py`, and re-import them from `context_prior`. Add `calibration_slope` to `src/eval/metrics.py`.
+- `src/eval/`: move `long_frame`, `score` and `gain` from `src/experiments/linear_model/linear_model.py:234–290` into
+  `src/eval/accuracy.py`, and re-import them from `linear_model`. Add `calibration_slope` to `src/eval/metrics.py`.
   The scorer receives `(m_g − μ_g)/σ_g + z`.
 - `src/experiments/config.py`: `validate_stage_one_config` / `load_stage_one_config`, following the `_GROUPS` and
   `_require_keys` pattern, with groups data, model, train and eval.
@@ -140,15 +140,15 @@ Waves 2–5 are outlined here and get their file-level detail when the previous 
   - `stage-one-queue --gpus … [--folds main,0,1,2,3,4] CONFIG...`, one process per GPU, skipping runs whose `row.json`
     exists;
   - `stage-one-report`;
-  - `stage-one-prior` (project env).
+  - `stage-one-linear-model` (project env).
 
 **Configs** (`configs/stage_one/architecture/`):
 - `direct_readout`, `direct_readout_warm`;
 - `film_{dH,dE,dL}`, `multi_{dH,dE,dL}`;
 - `nodelta_film`, `permuted_{film,multi}_{dH,dE,dL}`;
 - `components_reader`, `lineage_only`, `text_only`, `own_x_only`;
-- `prior_reference`;
-- `report_3a`, which also lists the untrained rows: the base, the prior and the ΔH ridge.
+- `linear_model_reference`;
+- `report_3a`, which also lists the untrained rows: the base, the linear model and the ΔH ridge.
 
 **Tests:**
 - Cilantro FiLM and tail parity (skipped when the H20 copy is absent).
@@ -172,7 +172,7 @@ trunk takes about 1 min per epoch. Under a day on 4 × H20 (an estimate; the fir
 
 **Launch (H20, after pull and the `.venv-pie` re-sync):**
 ```
-hpc/run.sh stage-one-prior configs/stage_one/architecture/prior_reference.yaml --run-id prior_reference_seed0
+hpc/run.sh stage-one-linear-model configs/stage_one/architecture/linear_model_reference.yaml --run-id linear_model_reference_seed0
 nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3 --folds main,0,1,2,3,4 configs/stage_one/architecture/*.yaml > outputs/launches/stage_one_3a.log 2>&1 &
 hpc/run.sh stage-one-report configs/stage_one/architecture/report_3a.yaml
 ```
@@ -265,7 +265,7 @@ Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each ta
     pseudo-contexts (`ACH-x|draw|n|d`, about 4.7M pairs).
   - **Task 9, fine-tuned states, after people read the pilot:** `src/model/pie_differentiable.py` (gradients enabled,
     dropout off, only membership-independent work cached, the zero flag from membership support) and a
-    `DifferentiableMixture` initialised from the scVI GMM, with a KL term to the start and a weak usage prior, plus
+    `DifferentiableMixture` initialised from the scVI GMM, with a KL term to the start and a weak usage penalty, plus
     drift reports. Tests: it matches the precompute's outputs and agrees with finite differences.
 - **Wave 5.** Task 9 end-to-end states: the same mixture randomly initialised on the frozen line-centred latent, against
   permuted memberships and the whole-line input.
@@ -275,7 +275,7 @@ Waves 1A and 1B share the 4 GPUs: Task 3's queue and the Task 8 PIE pass each ta
 - **Each wave, locally:** the suite against a baseline taken before the wave, and ruff (CLAUDE.md's commands); the
   synthetic end-to-end tests above.
 - **On the H20:**
-  - the `.venv-pie` import check: `python -c "import src.eval.accuracy, src.eval.metrics, src.context_prior.targets"`;
+  - the `.venv-pie` import check: `python -c "import src.eval.accuracy, src.eval.metrics, src.linear_model.targets"`;
   - one short run per new command before the queue;
   - confirm `row.json`, `results.md` and the run manifests exist and that epoch-0 validation equals the base row.
 - **Silent-error checks with tests:**

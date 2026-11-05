@@ -145,14 +145,16 @@ def build_world(root: Path) -> dict:
         tx1_model_dir=str(root / "tx1_model"),
     )
     (root / "joint.yaml").write_text(yaml.safe_dump(joint))
-    prior = yaml.safe_load(Path("configs/context_prior/default_prior.yaml").read_text())
-    prior["joint_config"] = str(root / "joint.yaml")
-    prior["paths"].update(
+    linear_model = yaml.safe_load(
+        Path("configs/linear_model/default_linear_model.yaml").read_text()
+    )
+    linear_model["joint_config"] = str(root / "joint.yaml")
+    linear_model["paths"].update(
         model=str(root / "Model.csv"), bulk_expression=str(root / "bulk.csv")
     )
-    (root / "prior.yaml").write_text(yaml.safe_dump(prior))
+    (root / "linear_model.yaml").write_text(yaml.safe_dump(linear_model))
     noise = yaml.safe_load(
-        Path("configs/context_prior/noise_diagnosis.yaml").read_text()
+        Path("configs/linear_model/noise_diagnosis.yaml").read_text()
     )
     noise["cell_states"].update(
         programs=list(PROGRAMS), cluster_components=2, cluster_counts=[2, 3]
@@ -160,7 +162,7 @@ def build_world(root: Path) -> dict:
     (root / "noise.yaml").write_text(yaml.safe_dump(noise))
     config = yaml.safe_load(Path("configs/stage_one/ladder_inputs.yaml").read_text())
     config.update(
-        prior_config=str(root / "prior.yaml"),
+        linear_model_config=str(root / "linear_model.yaml"),
         noise_config=str(root / "noise.yaml"),
         ladder_root=str(root / "ladder"),
         frame={"folds": 2},

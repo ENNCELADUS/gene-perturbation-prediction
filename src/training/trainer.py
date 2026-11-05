@@ -1,6 +1,6 @@
 """Joint training loop: one ``train.objective`` (``src.model.losses``) every update,
-validation once per epoch and, with a prior, before the first update (epoch -1, so
-the prior alone can be ``best.pt``); ``best.pt`` and early stopping follow
+validation once per epoch and, with a linear model, before the first update (epoch -1,
+so the linear model alone can be ``best.pt``); ``best.pt`` and early stopping follow
 ``val_selective_spearman`` only."""
 
 import json
@@ -89,8 +89,8 @@ def train_update(model, optimizer, scheduler, dependency_batch, config, accelera
     dependency_batch = dependency_batch.to(accelerator.device)
     with accelerator.autocast():
         delta_hat = model(dependency_batch.conditions)
-    # The stack: the prior's offset plus the head's output, in residual units.
-    prediction = delta_hat + dependency_batch.prior
+    # The stack: the linear model's offset plus the head's output, in residual units.
+    prediction = delta_hat + dependency_batch.linear_model
     dependency_loss = geneeffect_loss(
         prediction,
         dependency_batch.residual,
@@ -215,9 +215,9 @@ def fit(
                     accelerator,
                 )
 
-    if restored is None and inputs.prior is not None:
-        # The head's output layers start at zero, so the model is its prior here:
-        # "the prior alone" is scored and eligible for best.pt.
+    if restored is None and inputs.linear_model is not None:
+        # The head's output layers start at zero, so the model is its linear model here:
+        # "the linear model alone" is scored and eligible for best.pt.
         close_epoch(-1)
     for epoch in range(state.next_epoch, train["max_epochs"]):
         if state.bad_epochs >= train["patience"]:

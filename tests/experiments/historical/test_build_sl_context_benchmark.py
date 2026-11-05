@@ -513,5 +513,5 @@ def test_context_statistics_expose_a_single_gene_label_function() -> None:
     assert stats.loc["A549", "top_positive_gene_share"] == 1.0
     assert stats.loc["K562", "top_positive_gene_share"] == 1.0
     assert stats.loc["A549", "n_distinct_positive_genes"] == 3
-    assert stats.loc["A549", "positive_prior"] == pytest.approx(2 / 3)
+    assert stats.loc["A549", "positive_base_rate"] == pytest.approx(2 / 3)
     assert stats.loc["A549", "n_rows_sharing_source_row_with_other_context"] == 0

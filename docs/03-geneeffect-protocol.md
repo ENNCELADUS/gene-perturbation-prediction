@@ -6,9 +6,9 @@ current wiring follows the [expression-space and `all`-run design](specs/2026-10
 commands are in the [runbook](../hpc/README.md). The 2026-10-03
 [revision](specs/2026-10-03-geneeffect-revision-design.md) replaced the joint model's head, objective, selection rule
 and STATE treatment: §4–§6 state the current rules; §7 and §8 are historical records of earlier runs. §9 holds
-the response-model comparison and the `all` and `revision` runs, §10 the linear context prior (a CPU control), §12 the
+the response-model comparison and the `all` and `revision` runs, §10 the linear model (a CPU control), §12 the
 single-cell correction that stacks the joint head on it, §13 the linear single-cell statistics stack (the first test of
-whether single-cell resolution adds to pseudo-bulk), §14 the noise diagnosis (what limits the default prior, before any
+whether single-cell resolution adds to pseudo-bulk), §14 the noise diagnosis (what limits the default linear model, before any
 denoising model), §15 the inputs of the PIE-based stage-one model and §16 the model, its training and its report. The
 [SL ranking protocol](04-sl-ranking-protocol.md) builds on this backbone; nothing here is SL evidence.
 
@@ -48,7 +48,7 @@ and bulk extras.
 | validation | 27 | 27 | once-per-epoch evaluation, checkpoint selection, early stopping |
 | test | 28 | 28 | one-shot final evaluation |
 
-The bulk-only lines (708 labelled, 570 unlabelled) join the training side of the linear prior
+The bulk-only lines (708 labelled, 570 unlabelled) join the training side of the linear model
 through bulk RNA (§10); 7 lines sharing a patient with a held-out line are never read (none has GeneEffect or bulk RNA).
 
 The 47 original basal/SL-context union lines are fixed in train. A549 was in test from
@@ -166,8 +166,8 @@ $r=64$ (`model.factor_rank`). $C$ reads only the line context: a linear map $A$ 
 residual branch (SwiGLU 128 → 128, dropout, linear 128 → $r$). With $C=A\tilde z$ the first term is
 a reduced-rank regression on the context components, the form of the Tx1 context-PCA ridge. $A$
 (weight and bias) and the residual branch's output layer start at zero, as does $h$'s output, so
-the head predicts zero before its first update and a stack on the linear context prior (§12)
-starts at the prior; the first gradient reaches $A$ through $G$.
+the head predicts zero before its first update and a stack on the linear model (§12)
+starts at the linear model; the first gradient reaches $A$ through $G$.
 $h$ encodes each enabled block separately (linear then LayerNorm: $q$ with its mask → 16, $s$ with
 its masks → 16, $\Delta$ → 32, $e_g$ → 32), concatenates them, applies dropout and a SwiGLU layer of
 width 64, and ends in a zero-initialised linear map to one value; it never sees the context.
@@ -247,8 +247,8 @@ response wiring, basal path and validation splits from the expression-space desi
 learning rates, schedule and selection from the revision design.
 
 Validation runs once per completed epoch over the 27 validation lines, the only validation
-split, and, when the config names a prior export (§12), once before the first update (epoch
-−1), so the prior alone is a candidate for `best.pt`. **Only the maximum validation selective-gene Spearman (§6) selects `best.pt` and
+split, and, when the config names a linear model export (§12), once before the first update (epoch
+−1), so the linear model alone is a candidate for `best.pt`. **Only the maximum validation selective-gene Spearman (§6) selects `best.pt` and
 controls early stopping** (patience 5, at most 30 epochs); an undefined selector stops the run
 rather than counting as a loss. Each epoch also scores 27 fixed training lines, chosen as
 the validation split's size, as a telemetry curve (`train_eval_`): the fit is observed, never
@@ -400,11 +400,11 @@ centering: for a fixed gene, subtracting its fixed mean does not change Pearson.
 are centred on the fold-fit training mean $\mu_g^{(-c)}$ and predictions on the
 fold-independent $\bar\mu_g$; centring a prediction on the fold-fit mean scores Spearman
 $+1$ by construction. Constant predictions have undefined correlation: gene-mean and
-copy-prior residual correlations stay missing, with scored and undefined counts reported,
+copy-baseline residual correlations stay missing, with scored and undefined counts reported,
 never zero-filled.
 
 Every model is compared on identical observed keys with the controls fitted on training
-lines only: gene mean, K562 copy prior, nearest line, and context-PCA ridge on both the Tx1
+lines only: gene mean, K562 copy baseline, nearest line, and context-PCA ridge on both the Tx1
 embedding and the log-space HVG mean and variance features (§3.4); §11 says what they license.
 
 ## 7. Results
@@ -591,10 +591,10 @@ no response comparison and no readout; resume and run-directory rules are those 
 `summary.md` holds, per split, one table (selective Spearman, selective AUPR lift, residual
 Pearson over variable genes, Huber, SD ratio) for the joint model and every control, the
 paired line bootstrap of selective Spearman for the joint model minus the Tx1 context-PCA
-ridge (and, with a prior export, minus each prior control of §12), and a descriptive
+ridge (and, with a linear model export, minus each linear model control of §12), and a descriptive
 per-lineage table (the mean over a lineage's lines of the per-line residual Spearman across the
 selective genes), then the best epoch with its training-diagnostic and validation selective
-Spearman; a best epoch before the first update is reported as the prior alone. The lineages come
+Spearman; a best epoch before the first update is reported as the linear model alone. The lineages come
 from the split table next to the split file (`cell_line_geneeffect_split.csv`). One
 config is one experiment at seed 0; there is no multi-seed stage. Runs are screened
 one at a time: the three objectives under frozen STATE, then the winning objective with
@@ -603,10 +603,10 @@ trainable STATE and with no STATE. A winner has the highest `val_selective_spear
 simpler is preferred (no STATE, then frozen, then trainable). Test numbers are reported for
 every run and never used to choose. The screens are model selection, not SL evidence.
 
-## 10. Linear context prior
+## 10. Linear model
 
 The [context-generalization design](specs/2026-10-04-context-generalization-design.md) adds a
-closed-form, CPU-only **linear context prior** that predicts the GeneEffect residual of §3.3 in
+closed-form, CPU-only **linear model** that predicts the GeneEffect residual of §3.3 in
 units of the per-gene residual SD from a line's expression alone. It is a control, not a
 model of the joint pipeline: its own results table reports it beside the controls of §6, and §12
 stacks the joint head on it. It reads the design's shared expression space (bulk TPM for bulk lines,
@@ -615,19 +615,19 @@ those of §3.3 and §6, so every number stays on the metrics of §6. A missing t
 zero residual in fitting and is skipped in scoring. Lines outside the 226 enter the training side under
 §11 and the [data card](data/extra-bulk-lines-26q1.md).
 
-`hpc/run.sh prior CONFIG [--run-id ID] [--experiments A,B]` runs the experiment runner
-(`src/experiments/prior/context_prior.py`). The config names the paths, the training side (the
-lineages dropped from the extra lines), the prior (component count, folds, bootstrap repeats,
+`hpc/run.sh linear-model CONFIG [--run-id ID] [--experiments A,B]` runs the experiment runner
+(`src/experiments/linear_model/linear_model.py`). The config names the paths, the training side (the
+lineages dropped from the extra lines), the linear model (component count, folds, bootstrap repeats,
 data-selected genes), the penalty grids, the **block sets** (each starts with the expression
 components and adds gene-level blocks: own expression, partner group, data-selected genes), the
 pinned **reference row** (experiment, block set, components penalty and gene penalty, on the
 experiment's first setting), and the **experiments**. An experiment is one bridge remedy (`kind`,
-a module under `src/context_prior/remedies/`), a list of **settings** of that remedy, and the
+a module under `src/linear_model/remedies/`), a list of **settings** of that remedy, and the
 block sets to fit under it. A run:
 
 1. **Pseudo-bulk and the bridge inputs.** Preparation sums each line's raw UMI over all its basal
    cells, then CPM and log1p, into the prepared root; this is the only raw-data read. It covers
-   every prepared line (§3.4) and appends the rows of new ones, keeping existing rows. The prior
+   every prepared line (§3.4) and appends the rows of new ones, keeping existing rows. The linear model
    reads the split of its joint config: the labelled single-cell training lines are its
    single-cell side (the bridge pairs those with bulk RNA, and each takes a patient-grouped fold),
    and the split's bulk-only lines outside the config's dropped lineages join its training side
@@ -636,7 +636,7 @@ block sets to fit under it. A run:
    split, whose test line A549 comes from the Tahoe-100M source; 9,711 on the 172/27/27 split); a training
    line lacking one takes the training lines' mean for it (counts in `facts.json`). Bulk and pseudo-bulk
    profiles are quantile-normalised to the mean sorted bulk profile of the training side.
-2. **One bridge setting.** The remedy's `build` turns the normalised sources into the rows the prior
+2. **One bridge setting.** The remedy's `build` turns the normalised sources into the rows the linear model
    is fitted on and the validation, test and oracle query rows. The reference remedy is one
    affine map per gene from normalised pseudo-bulk to normalised bulk, fitted on the training
    lines that have both; a gene whose range across lines is zero maps to its bulk mean. Bridge
@@ -655,7 +655,7 @@ block sets to fit under it. A run:
      those rows (`gene_rows`);
    - **low-rank denoising** replaces the bridged validation and test rows by their projection
      on the leading components of the standardised training bulk.
-3. **Fits and scores.** For every block set the prior is fitted on training lines only and scored
+3. **Fits and scores.** For every block set the linear model is fitted on training lines only and scored
    on validation and test with the metrics of §6; the oracle row scores the validation lines'
    bulk RNA (off-contract: marked in every table, never a model or comparison row). Each row
    carries the selective-Spearman gain over the reference row with a 95% paired line-bootstrap
@@ -665,8 +665,8 @@ Every components penalty is a reported row, and a gene-level block set has a row
 components and gene penalty pair: the components penalty sets how much residual the gene-level
 stages fit, while the scale-free score barely separates components penalties on their own.
 Gains are measured against the reference row the config pins; the setting, block set and bulk-only
-cohort are chosen by reading the table, never in code (§11). `hpc/run.sh prior-selected CONFIG --run-id ID`
-(`src/experiments/prior/data_selected_analysis.py`) fits the reference row, which must end with the
+cohort are chosen by reading the table, never in code (§11). `hpc/run.sh linear-model-selected CONFIG --run-id ID`
+(`src/experiments/linear_model/data_selected_analysis.py`) fits the reference row, which must end with the
 data-selected genes, and writes `data_selected/` into the run directory: per feature, how often
 and how heavily it is selected, whether it is a partner of its target and how much of its variance
 lineage and the expression components explain (`features.csv`); per selective gene, its
@@ -674,10 +674,10 @@ validation and test Spearman with and without the stage (`targets.csv`); and the
 stage's weights masked to its top 10, 50, 200 and 1,000 features or without them
 (`ablation.json`, `summary.md`). The masking does not refit, so correlated features share credit.
 
-`hpc/run.sh prior-export CONFIG --run-id ID` (`src/experiments/prior/prior_export.py`) writes the
-config's reference row into `outputs/context_prior/<run_id>/export/` for the single-cell
-correction (§12): `prior.npz` (lines × genes in residual-SD units, the line and gene order, the
-residual SD it was fitted with) and `prior.json` (run id, reference row, units, lines per split,
+`hpc/run.sh linear-model-export CONFIG --run-id ID` (`src/experiments/linear_model/linear_model_export.py`) writes the
+config's reference row into `outputs/linear_model/<run_id>/export/` for the single-cell
+correction (§12): `linear_model.npz` (lines × genes in residual-SD units, the line and gene order, the
+residual SD it was fitted with) and `linear_model.json` (run id, reference row, units, lines per split,
 and the export's own selective-Spearman scores). Validation and test rows are the reference row
 itself. Each of the 377 labelled single-cell training lines is predicted **out of fold**: the
 bridge and every stage are refitted without the line's patient-grouped fold (the five folds of step
@@ -689,39 +689,39 @@ correction checkpoint may have recorded it. The export runs for the affine bridg
 Each setting writes `rows/<experiment>__<n>.json` and is skipped when the file exists, so a
 rerun with the same run id resumes; `--experiments` restricts a process to the named
 experiments, and two processes may share a run directory (rows are per setting). The run
-directory is `outputs/context_prior/<run_id>/` and holds `run_config.json` (the config it is
+directory is `outputs/linear_model/<run_id>/` and holds `run_config.json` (the config it is
 bound to; a resume with another config is refused), `rows/`, and `results.md`, rewritten from
 whatever rows exist: run facts, then per experiment one table with a line per setting, block
 set and penalty (validation and test selective Spearman, gain over the reference with its
 interval, selective AUPR lift, residual Pearson over variable genes, oracle validation
-selective Spearman) and a bridge-diagnostics table per setting. The prior is not SL evidence.
+selective Spearman) and a bridge-diagnostics table per setting. The linear model is not SL evidence.
 
-The first runs (2026-10-04, [record](../results/context_prior_seed0/README.md)) used an earlier
+The first runs (2026-10-04, [record](../results/linear_model_seed0/README.md)) used an earlier
 runner, now gone, that applied a learning-curve rule to the extra lines and kept blocks by bootstrap
 interval. Read from its tables: without the 133 haematopoietic extras the
-prior on all labelled lines beat the prior on the single-cell training lines (+0.051 [0.027, 0.069]
+linear model on all labelled lines beat the linear model on the single-cell training lines (+0.051 [0.027, 0.069]
 selective Spearman, bridged input), and the chosen config (expression components only) scored
 0.223 on validation and 0.223 on test against 0.130 and 0.121 for the Tx1 context-PCA ridge.
 Gene-level blocks did not survive the bridge (median per-gene bridge correlation 0.43). The
-bridge-remedy run (2026-10-04, `configs/context_prior/bridge_remedies.yaml`,
+bridge-remedy run (2026-10-04, `configs/linear_model/bridge_remedies.yaml`,
 [record](../results/bridge_remedies_seed0/README.md)) found no remedy above the reference on
 validation, but it fitted gene-level blocks on the components-only penalty pick, and on bulk
 input they add +0.0125 at components penalty 1. Its rerun over the full penalty grid
-(`configs/context_prior/bridge_remedies_penalty_grid.yaml`, same record) puts the affine bridge with
+(`configs/linear_model/bridge_remedies_penalty_grid.yaml`, same record) puts the affine bridge with
 all gene-level blocks at components penalty 1 and gene penalty 10 at 0.2300 validation / 0.2352 test,
 +0.0068 [0.0011, 0.0129] and +0.0125 [0.0049, 0.0187] over components alone; no remedy beats the
 affine bridge on validation. The follow-ups on that row (2026-10-07,
-`configs/context_prior/default_prior_followups.yaml`,
-[record](../results/default_prior_followups_seed0/README.md)) found that own expression and partners add
+`configs/linear_model/default_linear_model_followups.yaml`,
+[record](../results/default_linear_model_followups_seed0/README.md)) found that own expression and partners add
 +0.0010 on validation (interval spanning zero) once the data-selected genes are in, and that the
-data-selected genes' gain is spread over thousands of features. The **default prior** is therefore the
+data-selected genes' gain is spread over thousands of features. The **default linear model** is therefore the
 affine bridge with expression components at penalty 1 and data-selected genes at gene penalty 10:
-0.2290 validation / 0.2338 test (`configs/context_prior/default_prior.yaml`). On the 226 split rebuilt
-with A549 in test it scored 0.2302 / 0.2318 (run `default_prior_resplit_20261012`,
-[record](../results/default_prior_rerun_seed0/README.md)). On the **final split** (run
-`default_prior_final_split_20261012`, [record](../results/final_split_seed0/README.md)), whose definitions fit on
+0.2290 validation / 0.2338 test (`configs/linear_model/default_linear_model.yaml`). On the 226 split rebuilt
+with A549 in test it scored 0.2302 / 0.2318 (run `default_linear_model_resplit_20261012`,
+[record](../results/default_linear_model_rerun_seed0/README.md)). On the **final split** (run
+`default_linear_model_final_split_20261012`, [record](../results/final_split_seed0/README.md)), whose definitions fit on
 377 labelled training lines (4,323 selective genes), it scores **0.2045 validation / 0.2025 test**: the change is the
-metric's, since on the same genes it is −0.0014 [−0.0030, 0.0003] on validation against the 226 split's prior. There
+metric's, since on the same genes it is −0.0014 [−0.0030, 0.0003] on validation against the 226 split's linear model. There
 the dropped lineages leave every training-side line: fitting the 24 lymphoid and myeloid single-cell extras cost
 −0.0047 [−0.0084, −0.0009] on validation (test +0.0007, interval spanning zero against the fit without them).
 
@@ -754,14 +754,14 @@ specific to this task.
   ModelID, never by name at run time, and every line sharing a patient with a validation or test
   line is excluded from every fit.
 - **Context claims need context-blind controls.** Residual evaluation against the gene mean, the
-  copy prior, the nearest line and the context ridges (§6) decides whether a model learned
+  copy baseline, the nearest line and the context ridges (§6) decides whether a model learned
   context; high absolute correlation does not. Response improvement is not dependency
   improvement.
-- **The bar is the default prior.** The gene mean is the floor, not the bar: the default linear
-  prior (§10) already beats it on every residual metric from bulk and pseudo-bulk alone, and
+- **The bar is the default linear model.** The gene mean is the floor, not the bar: the default
+  linear model (§10) already beats it on every residual metric from bulk and pseudo-bulk alone, and
   whole-matrix correlation barely separates the two (overall Spearman 0.715 against 0.708 on
   validation, 0.733 against 0.727 on test, over every labelled entry). A model, input or
-  representation adds context information when its selective Spearman exceeds the default prior's
+  representation adds context information when its selective Spearman exceeds the default linear model's
   on validation by a paired line-bootstrap interval above zero; test is reported beside it.
 - **Interpretation is checked against known explanations.** A feature, pathway or cell state
   offered as the reason a gene's dependency differs between lines is reported beside what
@@ -776,32 +776,32 @@ specific to this task.
 ## 12. Single-cell correction
 
 The [context-generalization design](specs/2026-10-04-context-generalization-design.md) (§5.2, §7.2,
-§7.3, §8.2 and its 2026-10-07 amendments) stacks the nested head of §4 on the default linear
-context prior of §10. Wave one builds it without changing any model input.
+§7.3, §8.2 and its 2026-10-07 amendments) stacks the nested head of §4 on the default
+linear model of §10. Wave one builds it without changing any model input.
 
-- **The prior export.** `paths.prior` in a joint config names a `prior-export` directory (§10),
+- **The linear model export.** `paths.linear_model` in a joint config names a `linear-model-export` directory (§10),
   or is null. `load_inputs` reads it and refuses one whose gene order or residual SD differs from
   the joint model's, or that lacks any line the run exposes; the checkpoint records the export's
   identity (run id and reference row) and a restore refuses a checkpoint trained on another export,
   or on none. These checks fail closed; nothing else gates a run.
-- **The stack.** Each GeneEffect row carries the prior's prediction for its line and gene in
+- **The stack.** Each GeneEffect row carries the linear model's prediction for its line and gene in
   residual units (the export's value times $\sigma_g$), and the prediction is that offset plus
   $\hat\delta$. Every objective of §5 and every metric of §6 score the stack, so for `huber` and
-  `standardized_mse` the head fits what the prior leaves. The training lines' offsets are the
+  `standardized_mse` the head fits what the linear model leaves. The training lines' offsets are the
   out-of-fold export, so the head learns at the error a query line will have.
 - **The start.** The head predicts zero before its first update (§4), so the stack starts at the
-  prior, and validation at epoch −1 (§5) lets "the prior alone" win `best.pt`.
-- **Controls.** With a prior export the control ladder adds the prior alone
-  (`context_prior`) and the prior plus the Tx1 context-PCA ridge fitted on what the prior leaves
-  on the labelled training lines (`context_prior+context_pca_ridge[tx1]`; same view, 8
+  linear model, and validation at epoch −1 (§5) lets "the linear model alone" win `best.pt`.
+- **Controls.** With a linear model export the control ladder adds the linear model alone
+  (`linear_model`) and the linear model plus the Tx1 context-PCA ridge fitted on what the linear model leaves
+  on the labelled training lines (`linear_model+context_pca_ridge[tx1]`; same view, 8
   components, ridge $\alpha=1$ as the Tx1 ridge of §6), the linear special case of the head on
   the same target. The revision summary (§9.3) bootstraps the stack minus the Tx1 ridge, minus the
-  prior and minus the prior plus Tx1 ridge, and adds the per-lineage table.
+  linear model and minus the linear model plus Tx1 ridge, and adds the per-lineage table.
 - **Wave one.** `configs/correction/` holds the objective screen with STATE absent, one config
   per objective (`huber`, `standardized_mse`, `line_ranking`, `dependency_classification`), each run with
-  `hpc/run.sh revision CONFIG --run-id <id>` into `outputs/geneeffect_correction/`, on the default prior's
-  export: `outputs/context_prior/default_prior_export/export` on the 172/27/27 split in wave one,
-  `outputs/context_prior/default_prior_final_split_20261012/export` on the final split now. The winner on
+  `hpc/run.sh revision CONFIG --run-id <id>` into `outputs/geneeffect_correction/`, on the default linear model's
+  export: `outputs/linear_model/default_linear_model_export/export` on the 172/27/27 split in wave one,
+  `outputs/linear_model/default_linear_model_final_split_20261012/export` on the final split now. The winner on
   validation then runs with frozen and with trainable STATE. The reading rule is §9.3's (the paired
   bootstrap: `uv run python -m src.experiments.joint.compare_runs RUN_A RUN_B --split val`), with a
   single-term loss also simpler than a two-term one.
@@ -811,10 +811,10 @@ context prior of §10. Wave one builds it without changing any model input.
 ## 13. Single-cell statistics stack
 
 The first test of whether single-cell resolution adds to pseudo-bulk (blueprint §5, Task 2): a linear
-stack of per-gene statistics of a line's basal cells on the default prior's out-of-fold export, run on
-CPU before any distributional model. `configs/context_prior/single_cell_stack.yaml`, run with
-`hpc/run.sh prior-stack CONFIG --run-id <id>` (`src/experiments/prior/single_cell_stack.py`), writes
-`outputs/context_prior/<id>/single_cell_stack/` (`rows/<arm>.json`, `facts.json`, `results.md`).
+stack of per-gene statistics of a line's basal cells on the default linear model's out-of-fold export, run on
+CPU before any distributional model. `configs/linear_model/single_cell_stack.yaml`, run with
+`hpc/run.sh linear-model-stack CONFIG --run-id <id>` (`src/experiments/linear_model/single_cell_stack.py`), writes
+`outputs/linear_model/<id>/single_cell_stack/` (`rows/<arm>.json`, `facts.json`, `results.md`).
 
 - **Statistics.** The `q_sc` summaries preparation caches for every line (§3.4 space, over all of a
   line's source cells): log-space mean, detected fraction and log-space variance of each panel gene.
@@ -822,8 +822,8 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
   training-line mean, and each statistic is quantile-normalised per line to the training lines' mean
   sorted profile, so source depth and vocabulary do not read as context.
 - **Target.** What the export leaves on the labelled single-cell training lines (377 on the final split),
-  $r-\hat r_{\text{prior}}$ in
-  residual-SD units, the prior out of fold, so the stack learns at the prior's deployment error; a
+  $r-\hat r_{\text{linear model}}$ in
+  residual-SD units, the linear model out of fold, so the stack learns at the linear model's deployment error; a
   missing label counts as zero, as in §10. Validation and test add the stack to the export's full fit.
 - **Stack.** Two ridge stages, each on what the earlier leaves: the gene's own statistics (weights
   pooled over genes plus a per-gene deviation shrunk toward them, the knowledge-block ridge of §10),
@@ -833,7 +833,7 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
   like-for-like control), `distribution` (detected fraction and variance) and `single_cell` (all three).
   Every own shrinkage (1, 10, pooled only) and selected penalty (1, 10, 100) is a row.
 - **Reading.** Every row reports validation and test metrics, the selective-Spearman gain over the
-  prior alone and, for the other arms, over `mean` at the same penalties, with 95% paired line-bootstrap
+  linear model alone and, for the other arms, over `mean` at the same penalties, with 95% paired line-bootstrap
   intervals. Single-cell resolution adds information in this linear form when `single_cell` or
   `distribution` beats `mean` on validation by an interval above zero; distributional models
   (state views, partner fractions, STATE's response; a second wave, never built) then start from the
@@ -841,13 +841,13 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
 - **Result (2026-10-11, [record](../results/single_cell_stack_seed0/README.md)).** Two runs (the first grid, then
   selected penalties to 10,000 because every best row sat at 100). No single-cell arm beats `mean` on validation by an
   interval above zero at any penalty pair (largest +0.0011 [−0.0005, +0.0026]), and no arm's best validation row
-  clears the prior: `distribution` 0.2340 (+0.0050 [−0.0036, +0.0155]), `mean` 0.2329, `single_cell` 0.2329, against
-  0.2290 for the prior alone (test 0.2404, 0.2409, 0.2397 against 0.2338). In linear form, a gene's detected fraction
+  clears the linear model: `distribution` 0.2340 (+0.0050 [−0.0036, +0.0155]), `mean` 0.2329, `single_cell` 0.2329, against
+  0.2290 for the linear model alone (test 0.2404, 0.2409, 0.2397 against 0.2338). In linear form, a gene's detected fraction
   and variance across a line's cells add nothing detected beyond its mean expression.
 - **Result on the final split (2026-10-12, [record](../results/final_split_seed0/README.md)).** Stacked on the final
-  split's prior (0.2045 validation / 0.2025 test), every arm's best validation row is 0.2089 (own shrinkage 10,
-  selected penalty 100; +0.0044 over the prior, intervals spanning zero). At selected penalty 1,000 every arm clears the
-  prior by an interval above zero (+0.0014 to +0.0022 on validation, `mean` included), and there one row meets the
+  split's linear model (0.2045 validation / 0.2025 test), every arm's best validation row is 0.2089 (own shrinkage 10,
+  selected penalty 100; +0.0044 over the linear model, intervals spanning zero). At selected penalty 1,000 every arm clears the
+  linear model by an interval above zero (+0.0014 to +0.0022 on validation, `mean` included), and there one row meets the
   reading rule: `single_cell` beats `mean` by +0.0009 [+0.0001, +0.0017] on validation, +0.0003 [−0.0004, +0.0010] on
   test, the only one of 26 comparisons with an interval above zero.
 - **Scope.** Per-line cell-state proportions are not in this stack; §14's `cell_states` stacks them on the
@@ -856,11 +856,11 @@ CPU before any distributional model. `configs/context_prior/single_cell_stack.ya
 ## 14. Noise diagnosis
 
 The [noise-diagnosis design](specs/2026-10-12-noise-diagnosis-design.md) (agreed 2026-10-12) measures which noise
-limits the default prior (§10) before any single-cell model with noise handling of its own is built: per-cell sampling,
+limits the default linear model (§10) before any single-cell model with noise handling of its own is built: per-cell sampling,
 the number of training lines, the deposit a line's cells come from, and cell-state heterogeneity.
-`configs/context_prior/noise_diagnosis.yaml`, run with `hpc/run.sh prior-noise CONFIG --run-id <id> [--sections A,B]`
-(`src/experiments/prior/noise_diagnosis.py`), reads the prior run named by `prior_run` (its bound config and export) and writes
-`outputs/context_prior/<id>/noise/<section>.json`, skipping a section whose file exists, then `results.md`. Every score is
+`configs/linear_model/noise_diagnosis.yaml`, run with `hpc/run.sh linear-model-noise CONFIG --run-id <id> [--sections A,B]`
+(`src/experiments/linear_model/noise_diagnosis.py`), reads the linear model run named by `linear_model_run` (its bound config and export) and writes
+`outputs/linear_model/<id>/noise/<section>.json`, skipping a section whose file exists, then `results.md`. Every score is
 on that run's metric; gains carry 95% paired line-bootstrap intervals.
 
 - **Preparation.** The first section that needs them prepares, from each split line's raw cells, `noise/subsamples.parquet`:
@@ -870,25 +870,25 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals.
   basal cell: the mean log-normalised expression of a program's members minus the cell's mean over the scoring set, the
   pseudo-bulk's DepMap protein-coding genes, one set for every line. A gene a source does not list scores as unexpressed
   (some builders drop zero-count genes), and the share of the set each source lists is reported. Programs are Tirosh's S and G2/M sets
-  and the 21 Gavish meta-programs with no cell-line study among their sources (`configs/context_prior/reference/`,
+  and the 21 Gavish meta-programs with no cell-line study among their sources (`configs/linear_model/reference/`,
   `build_state_programs.py`; the other 20 count Kinker's CCLE pools, the cells of validation and test lines).
-  `noise/second_source/` holds pseudo-bulk of each line's second deposit (below). Any pseudo-bulk enters the prior's space
+  `noise/second_source/` holds pseudo-bulk of each line's second deposit (below). Any pseudo-bulk enters the linear model's space
   as the prepared rows do (§10).
 - **`cell_sampling`.** Per space gene, the split-half Pearson across lines over measured values (a training-mean fill would
   pair equal values) and its Spearman–Brown reliability, beside the
   bridge's out-of-fold agreement with bulk on the paired lines and that agreement over the square root of their
-  reliability (`cell_sampling_genes.csv`, quartiles over all and selective genes). The reference prior, refitted on the
+  reliability (`cell_sampling_genes.csv`, quartiles over all and selective genes). The reference linear model, refitted on the
   whole training side and refused unless it reproduces the export's validation and test rows, is queried with each draw
   of the validation and test lines (a line with fewer cells reads them all and is counted as capped); gains over the full
   pseudo-bulk, and the agreement of the two halves' predictions per selective gene.
 - **`learning_curve`.** The reference row refitted on nested patient-grouped fractions of the training side (1/8 to 7/8;
-  bridge, components and data-selected genes refitted; profile and metric fixed), with the full prior as the last row.
-  Each row sits beside its own gene mean (the prior's intercept on the fraction's labelled lines). Line-specific part:
-  selective Spearman (gain over the full prior), within-gene R² (pooled over selective genes, `1 − SSE / Σ residual²`
+  bridge, components and data-selected genes refitted; profile and metric fixed), with the full linear model as the last row.
+  Each row sits beside its own gene mean (the linear model's intercept on the fraction's labelled lines). Line-specific part:
+  selective Spearman (gain over the full linear model), within-gene R² (pooled over selective genes, `1 − SSE / Σ residual²`
   against the training gene mean, which scores 0; paired line-bootstrap gains over the row's gene mean and over the
-  full prior), AUPR lift and residual Pearson. Whole prediction: per-line Pearson across genes and RMSE, prior and gene
+  full linear model), AUPR lift and residual Pearson. Whole prediction: per-line Pearson across genes and RMSE, linear model and gene
   mean. When `cilantro_predictions` names a file (`hpc/cilantro/stage_one_predictions.py`: the released stage one,
-  trained on every labelled line, so in-sample here), the full prior, its gene mean and stage one are scored on the
+  trained on every labelled line, so in-sample here), the full linear model, its gene mean and stage one are scored on the
   validation and test pairs stage one covers.
 - **`deposit_confound`.** η² of a training line's deposit (the final split table's `expression_source`, the 226's names
   mapped to the identity map's keys so Tahoe-100M is one deposit; deposits under `min_lines` pooled) on the out-of-fold error and on the residual, macro-averaged over selective genes, against a null
@@ -904,10 +904,10 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals.
   program's 90th percentile of the training lines' pooled scores, lines weighted equally), `program_means` (the
   like-for-like control) and `clusters_<k>` (shares of the prepared context cells, centred on their line, nearest each of
   `k` K-means centroids fitted on the training cells' leading principal components). Each is a shared ridge on what the
-  out-of-fold export leaves on the training lines, added to the export; gains over the prior alone and, for fractions,
+  out-of-fold export leaves on the training lines, added to the export; gains over the linear model alone and, for fractions,
   over means at the same penalty.
 - **Cilantro-SL's input reductions** are a bridge remedy of §10, `rank_value`
-  (`configs/context_prior/cilantro_encodings.yaml`, `hpc/run.sh prior`): values divided by each gene's training-side
+  (`configs/linear_model/cilantro_encodings.yaml`, `hpc/run.sh linear-model`): values divided by each gene's training-side
   nonzero median and ranked within the line (rank alone, rank with the top 2,048, and the same top 2,048 keeping their
   expression), applied to bulk and pseudo-bulk before the affine bridge.
 - **Reading** (the design's §6, not code): flat scores from 50 to 100 cells up and split-half reliability above the
@@ -929,7 +929,7 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals.
 ## 15. Stage-one inputs
 
 Task 2 of the [PIE stage-one design](specs/2026-10-16-pie-geneeffect-ladder-design.md) writes the fixed inputs every stage-one arm reads under
-`data/geneeffect_joint/v2/ladder/` (`configs/stage_one/ladder_inputs.yaml`, which names the default prior's config for
+`data/geneeffect_joint/v2/ladder/` (`configs/stage_one/ladder_inputs.yaml`, which names the default linear model's config for
 the split, labels, bulk RNA and dropped lineages and the noise diagnosis's for programs and clusters).
 `hpc/run.sh ladder-inputs CONFIG --steps lines,cells,mean,summaries` (`src/experiments/stage_one/ladder_inputs.py`, project
 environment) and `--steps tx1 --shard I/N` (one GPU per shard); `hpc/run.sh pie-precompute CONFIG --steps …`
@@ -938,7 +938,7 @@ environment) and `--steps tx1 --shard I/N` (one GPU per shard); `hpc/run.sh pie-
 
 - **Frame.** The 981 labelled lines every arm trains on: the split's 377 labelled single-cell training lines (lymphoid,
   myeloid and lines without bulk RNA included) and the 604 bulk-only labelled lines with bulk RNA outside the default
-  prior's dropped lineages; five patient-grouped folds of them (seed 0); validation and test as in §6. A frame line sharing
+  linear model's dropped lineages; five patient-grouped folds of them (seed 0); validation and test as in §6. A frame line sharing
   a patient with a held-out line is refused. Per gene of the §6 definitions: the base `m_g` (mean GeneEffect over the
   frame), the 377-line mean, residual SD, selective and variable flags, and the `gene_text` key (case-insensitive); the
   **decode panel** is the definitions' genes with a key (`lines.parquet`, `genes.parquet`).
@@ -950,7 +950,7 @@ environment) and `--steps tx1 --shard I/N` (one GPU per shard); `hpc/run.sh pie-
   scores (§14), a Scrublet doublet score (NaN below 100 cells). HVG cells are STATE's HVGs in the prepared space
   (`log1p(x T / L)`), the shuffled cells each HVG permuted across the line's cells (seeded by line), and the mean as one
   cell `log1p` of the line's mean normalised HVG profile.
-- **Mean channel** (`mean/`). The default prior's space (§10), on the per-cell CP10K pseudo-bulk. A line with
+- **Mean channel** (`mean/`). The default linear model's space (§10), on the per-cell CP10K pseudo-bulk. A line with
   cells always reads its cells, through an affine bridge refitted on the paired lines (343): a training line's fitted
   outside its frame fold, a held-out line's on all of them. A bulk-only line reads its bulk. No held-out line's bulk RNA
   is read. PIE's input for every line on the panel: a bulk-only line's `log2(TPM + 1)` as `log1p(TPM / 100)`; a gene the
@@ -1032,7 +1032,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   the FiLM condition is the gene encoder ⊕ a context encoder (learned queries attending the line's tokens and its
   Cellosaurus text, one attention per channel, outputs summed). A line token is one per gene in the panel ∪ the mean
   channel's space: its gene encoding plus an embedding of both values (PIE's input, the mean of `log1p` CP10K, where
-  the source lists the gene; the mean channel, `log1p` of the pseudo-bulk mean in the prior's space). *Direct readout*:
+  the source lists the gene; the mean channel, `log1p` of the pseudo-bulk mean in the linear model's space). *Direct readout*:
   a PIE-architecture trunk from fresh weights (`third_party/pie/src/pie/model/geneeffect.py`): the latents
   cross-attend each channel (tokens; text) with its own masked attention, exact over key chunks; processor blocks;
   each gene's query (gene encoder plus its own evidence, PIE's control-mean features of `x_cg`, zero where the
@@ -1049,7 +1049,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
 - **Hybrid** (`hybrid_dE`, added 2026-10-21 once the first queue had read ΔE best in both FiLM families):
   `[direct readout features ; FiLM(ΔE) features]` → Linear 256 → ReLU → tail, the direct part with the cold
   `direct_readout` row's trunk and training settings, the FiLM part with `film_dE`'s, on the panel genes;
-  `report_3a` contrasts it with both and with the prior. It trains after the per-line selector, so its `best.pt` is
+  `report_3a` contrasts it with both and with the linear model. It trains after the per-line selector, so its `best.pt` is
   chosen on per-line residual Spearman.
 - **Full-panel profile delta** (design §3.2's check of the compression). `data.genes: selective_full` restricts a run
   to the selective genes in the panel with a full-panel predicted change (`pie/full/<gene>.npy`, lines × panel,
@@ -1068,16 +1068,16 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
 - **Controls and reference rows.** No-Δ FiLM (the multi-encoder with a learned constant for Δ); line-permuted Δ (per
   gene, the delta, its slots and the before-state read from a seeded permutation of all lines); the shared components
   reader, lineage only (one-hot over the training lines' lineages), Cellosaurus text only and own expression only, each
-  through the FiLM head; untrained in the report: the base, the default prior refitted on the frame
-  (`hpc/run.sh stage-one-prior`, `src/experiments/stage_one/prior_reference.py`, project environment: its reference row on the
+  through the FiLM head; untrained in the report: the base, the default linear model refitted on the frame
+  (`hpc/run.sh stage-one-linear-model`, `src/experiments/stage_one/linear_model_reference.py`, project environment: its reference row on the
   981 lines' mean channel with components fitted on the frame rows; validation and test from the whole frame, out of
   fold from the frame folds with the components refitted outside each fold, the scores the components reader's fold
   runs read; it writes the 128 component scores, fitted on the frame and outside each fold), and a
   per-gene ridge on the line-centred ΔH (no intercept, solved in its dual on the GPU at the report's penalties).
-- **Prior input** (decided 2026-10-22, `configs/stage_one/prior_input/`). `data.prior_run` with any input but
-  `components` appends that prior reference's prediction minus the run's base (z units; frame lines out of fold,
-  validation and test from the whole-frame fit) to FiLM's pair input, never permuted; `input: prior` reads it alone.
-  Rows: FiLM on the prior, on prior + ΔE, on prior + line-permuted ΔE (`report_prior_input`). A fold run's training
+- **Linear model input** (decided 2026-10-22, `configs/stage_one/linear_model_input/`). `data.linear_model_run` with any input but
+  `components` appends that linear model reference's prediction minus the run's base (z units; frame lines out of fold,
+  validation and test from the whole-frame fit) to FiLM's pair input, never permuted; `input: linear_model` reads it alone.
+  Rows: FiLM on the linear model, on linear model + ΔE, on linear model + line-permuted ΔE (`report_linear_model_input`). A fold run's training
   lines read predictions fitted with the held-out fold's labels, so its out-of-fold telemetry is slightly optimistic.
 - **Training** (`src/training/stage_one_trainer.py`, one GPU, no accelerate). An update is a block of genes by a block
   of training lines; AdamW (fused on CUDA), linear warmup then cosine (`src/training/schedule.py`). Without a PIE
@@ -1106,7 +1106,7 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
   the base outside the panel) and within-gene-R² difference, with 95% paired line-bootstrap intervals (1,000
   resamples) on validation and test; each trained row's selected epoch and training-to-validation gap. The report
   and the queue read or skip a finished run only after checking its `run_config.json` against the config and fold,
-  and a run or prior reads the report's ladder config; a prior counts once its `row.json` exists; the ridge's cache
+  and a run or linear model reads the report's ladder config; a linear model counts once its `row.json` exists; the ridge's cache
   is keyed by a fingerprint of the ladder config, labels, lines, panel and `dH.npy`, and refused on a mismatch.
   `outputs/stage_one/<task>/<report config stem>/results.md`.
 - **Scope.** Single-gene dependency on held-out lines; not SL evidence.

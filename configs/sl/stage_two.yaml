@@ -10,9 +10,9 @@ task: stage_two
 ladder_config: configs/stage_one/ladder_inputs.yaml
 benchmark: data/sl_screens/benchmark/pairs.parquet
 paris: outputs/sl/paris/paris_seed0/pairs.parquet
-arms:  # stage-one report rows (prior, run) or the measured GeneEffect
-  linear_prior: {kind: prior, run: outputs/stage_one/architecture/prior_reference_seed0}
-  film_prior_dE: {kind: run, config: configs/stage_one/prior_input/film_prior_dE.yaml}
+arms:  # stage-one report rows (linear_model, run) or the measured GeneEffect
+  linear_model: {kind: linear_model, run: outputs/stage_one/architecture/linear_model_reference_seed0}
+  film_linear_model_dE: {kind: run, config: configs/stage_one/linear_model_input/film_linear_model_dE.yaml}
   film_dE: {kind: run, config: configs/stage_one/architecture/film_dE.yaml}
   measured: {kind: measured}
 head: {hidden: 64, learning_rate: 1.0e-3, weight_decay: 1.0e-4, batch_size: 1024, max_epochs: 50}

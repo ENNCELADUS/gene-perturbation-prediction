@@ -20,7 +20,7 @@ from src.eval.accuracy import BOOTSTRAP_REPEATS, BOOTSTRAP_SEED
 from src.experiments.joint.config import load_config
 from src.experiments.joint.pipeline import (
     BASELINE_NAMES,
-    PRIOR_CONTROLS,
+    LINEAR_MODEL_CONTROLS,
     Job,
     check_resume_processes,
     choose_gpus,
@@ -50,7 +50,7 @@ COLUMNS = (
     ("SD ratio (per gene)", "sd_ratio", "residual_sd_ratio_macro_per_gene"),
 )
 # Controls the joint model is bootstrapped against, in order, when present.
-COMPARED = (TX1_RIDGE, *PRIOR_CONTROLS)
+COMPARED = (TX1_RIDGE, *LINEAR_MODEL_CONTROLS)
 # The best epoch's record in train/metrics.jsonl: training-diagnostic and validation.
 TRAIN_DIAGNOSTIC_KEY = "train_eval_selective_spearman"
 VALIDATION_KEY = "val_selective_spearman"
@@ -284,13 +284,13 @@ def _summary_lines(record: dict[str, Any]) -> list[str]:
         "Selective Spearman and AUPR lift are macro means over the selective "
         "genes; residual Pearson and the SD ratio are macro means over the "
         "variable genes. Undefined correlations come from predictors that are "
-        "constant per gene across lines (gene mean, copy prior); they are not zero.",
+        "constant per gene across lines (gene mean, copy-baseline); they are not zero.",
         "",
     ]
     for split, title in SPLITS.items():
         lines += _split_lines(title, record[split])
     when = (
-        "the model before its first update (the prior alone)"
+        "the model before its first update (the linear model alone)"
         if training["best_epoch"] == 0
         else f"epoch {training['best_epoch']}"
     )

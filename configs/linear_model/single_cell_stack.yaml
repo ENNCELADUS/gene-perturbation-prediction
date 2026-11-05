@@ -1,0 +1,19 @@
+# Single-cell statistics stacked on the default linear model's out-of-fold export (GeneEffect protocol
+# §13): does a line's basal single-cell distribution add to what its pseudo-bulk gives the linear model?
+# The mean arm (log-space mean, close to pseudo-bulk) is the like-for-like control; the
+# distribution arm reads only the detected fraction and variance; single_cell reads all three.
+# Every row is reported on validation and test; nothing is chosen in code. Stacks on the default linear model
+# of the final split (default_linear_model_final_split_20261012); earlier runs stacked on default_linear_model_export
+# (172/27/27 split, 2026-10-11) and default_linear_model_resplit_20261012 (the 226 split with A549 in test).
+seed: 0
+output_root: outputs/linear_model
+linear_model_run: outputs/linear_model/default_linear_model_final_split_20261012
+bootstrap_repeats: 1000
+selected_genes: 50
+penalties:
+  own: [1.0, 10.0, .inf]
+  selected: [1.0, 10.0, 100.0]
+arms:
+  mean: [mean]
+  distribution: [detected, variance]
+  single_cell: [mean, detected, variance]

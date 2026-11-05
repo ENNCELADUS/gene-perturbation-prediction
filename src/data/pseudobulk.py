@@ -1,5 +1,5 @@
 """Per-line pseudo-bulk: raw UMI summed over every basal cell, CPM over the whole
-library, log1p. The single-cell side of the context prior's shared space."""
+library, log1p. The single-cell side of the linear model's shared space."""
 
 from __future__ import annotations
 

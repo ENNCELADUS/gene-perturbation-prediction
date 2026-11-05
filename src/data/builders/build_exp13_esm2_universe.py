@@ -92,20 +92,20 @@ def build_coverage_universe(
     return CoverageUniverse(tuple(qualified), tuple(dropped))
 
 
-def restrict_coverage_universe_to_copy_prior(
-    universe: CoverageUniverse, copy_prior_symbols: Sequence[str]
+def restrict_coverage_universe_to_copy_baseline(
+    universe: CoverageUniverse, copy_baseline_symbols: Sequence[str]
 ) -> CoverageUniverse:
     """Apply the global finite-donor gate before freezing the ESM2 universe."""
-    eligible = set(_unique_symbols(copy_prior_symbols, "copy-prior symbols"))
+    eligible = set(_unique_symbols(copy_baseline_symbols, "copy-baseline symbols"))
     kept = tuple(symbol for symbol in universe.symbols if symbol in eligible)
     dropped = list(universe.dropped)
     dropped.extend(
-        {"gene_symbol": symbol, "reasons": ["copy_prior_missing"]}
+        {"gene_symbol": symbol, "reasons": ["copy_baseline_missing"]}
         for symbol in universe.symbols
         if symbol not in eligible
     )
     if not kept:
-        raise ValueError("copy-prior coverage produced an empty scored universe")
+        raise ValueError("copy-baseline coverage produced an empty scored universe")
     return CoverageUniverse(kept, tuple(dropped))
 
 

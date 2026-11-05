@@ -4,7 +4,7 @@
 `configs/benchmarks/cell_line_geneeffect_split.json` and its table (`.csv`). It is built from three files that stay
 as its provenance: the [226 split](cell-line-geneeffect-226.md) (the held-out partition and the first training
 lines), the [single-cell extras](single-cell-atlas-search.md) and the [bulk extras](extra-bulk-lines-26q1.md).
-Joint configs name it as `paths.split`; the linear prior reads it through its joint config. Nothing here is SL
+Joint configs name it as `paths.split`; the linear model reads it through its joint config. Nothing here is SL
 evidence.
 
 ## Roles
@@ -29,9 +29,9 @@ held-out lines.
 
 - Gene means, variable and selective genes, the residual SD, the context PCA, every trained model and every control
   fit on the 377 labelled single-cell training lines ([GeneEffect protocol §3.3, §11](../03-geneeffect-protocol.md#11-rules)).
-- The linear prior also fits on the `bulk_labelled` lines outside its config's dropped lineages (lymphoid and myeloid)
+- The linear model also fits on the `bulk_labelled` lines outside its config's dropped lineages (lymphoid and myeloid)
   and encodes the `bulk_unlabelled` ones; its bridge pairs the single-cell training lines that have bulk RNA
-  ([protocol §10](../03-geneeffect-protocol.md#10-linear-context-prior)).
+  ([protocol §10](../03-geneeffect-protocol.md#10-linear-model)).
 - Validation selects; test is scored once per config.
 
 ## Table

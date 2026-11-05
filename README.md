@@ -14,7 +14,7 @@
 
 Stage one predicts DepMap GeneEffect for held-out cell lines; stage two ranks SL partners against experimental SL-database labels ([blueprint](docs/01-blueprint.md), §3). The generalization axis is the **cell line**; genes are not held out.
 
-**Status.** Stage one is under way: no architecture yet beats the linear context prior refitted on the stage-one frame ([stage-one record](results/stage_one_architecture/README.md), [prior-input record](results/stage_one_prior_input/README.md)). Stage two ran on the screen benchmark: pair identity wins, and predicted GeneEffect adds nothing over each gene's mean ([stage-two record](results/sl_stage_two_seed0/README.md)), so nothing here is SL context evidence. Both stages are summarised on the [status page](results/status.html); the GeneEffect track's results are in [protocol §7](docs/03-geneeffect-protocol.md#7-results) and [`results/`](results/).
+**Status.** Stage one is under way: no architecture yet beats the linear model refitted on the stage-one frame ([stage-one record](results/stage_one_architecture/README.md), [linear-model-input record](results/stage_one_linear_model_input/README.md)). Stage two ran on the screen benchmark: pair identity wins, and predicted GeneEffect adds nothing over each gene's mean ([stage-two record](results/sl_stage_two_seed0/README.md)), so nothing here is SL context evidence. The SL benchmark baselines, with the labels and a random score as checks of the code, run next; KG4SL and Cilantro-SL follow. Both stages are summarised on the [status page](results/status.html); the GeneEffect track's results are in [protocol §7](docs/03-geneeffect-protocol.md#7-results) and [`results/`](results/).
 
 ## Quick start
 
@@ -50,7 +50,7 @@ Single-gene GeneEffect predictions and DepMap-derived dependency patterns are no
 
 ## Terminology guardrails
 
-- Say **dependency / GeneEffect prediction** for the single-gene task and **SL candidate prioritization** for the pairwise score, never "validated SL target" (benchmark negatives are unconfirmed).
+- Say **dependency / GeneEffect prediction** for the single-gene task and **SL candidate ranking** for the pairwise score, never "validated SL target" (benchmark negatives are unconfirmed).
 - Do not claim SL from single-gene essentiality; a declared null baseline is required. A pan-essentiality lift is not an SL result: the gene-mean block must be ablated, not assumed away.
 - **Never write "interaction" about a model result.** The pair head predicts no joint outcome; an interaction claim needs a joint or measured genetic-interaction quantity.
 - Qualify every held-out-context result with pretraining exposure: task-label holdout is not representation-pretraining holdout (Tx1 saw Tahoe-100M; STATE's released checkpoint saw K562, HepG2 and Jurkat).

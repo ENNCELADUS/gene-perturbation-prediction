@@ -20,8 +20,8 @@ import pytest
 
 from src.data.context_pca import fit_context_pca, pooled_context  # noqa: E402
 from src.data.prepared import PreparedInputs, PreparedLine  # noqa: E402
-from src.data.prior_offsets import (
-    PriorOffsets,
+from src.data.linear_model_offsets import (
+    LinearModelOffsets,
 )
 from src.data.q_sc import QScFeatures  # noqa: E402
 from src.data.splits import FixedSplit  # noqa: E402
@@ -169,9 +169,11 @@ def make_config(
     return config
 
 
-def with_prior(inputs, per_line: dict[str, float]):
+def with_linear_model(inputs, per_line: dict[str, float]):
     frame = pd.DataFrame({gene: pd.Series(per_line) for gene in inputs.genes}).loc[
         :, list(inputs.genes)
     ]
-    prior = PriorOffsets({"run_id": "r", "reference": {}}, frame, inputs.residual_scale)
-    return dataclasses.replace(inputs, prior=prior)
+    linear_model = LinearModelOffsets(
+        {"run_id": "r", "reference": {}}, frame, inputs.residual_scale
+    )
+    return dataclasses.replace(inputs, linear_model=linear_model)

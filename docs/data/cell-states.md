@@ -19,8 +19,8 @@ deltas on those inputs. Task 8's report reads them; Task 9 reads the vocabularie
 | Raw cells | `<basal_raw_umi>/<ModelID>.h5ad` (per-cell PIE input, cNMF, scVI, reference-program scores) |
 | Second deposits | the noise diagnosis's `deposit.second_source_root` (99 lines; `configs/data/second_source_lines_26Q1.json`) |
 | Chemistry per cell | `configs/benchmarks/single_cell_source_chemistry.csv`: one reviewed row per deposit (`source`), and for the five deposits whose libraries mix kits (`mixed`) a row per line (`model_id`) or per arm (`arm`, the h5ad obs column), from the evidence in their notes; a cell takes the most specific matching row |
-| Kinker's 12 recurrent programs | `configs/context_prior/reference/kinker_programs.tsv` (Kinker et al. 2020, Table S4; provenance in `kinker_programs_provenance.json`) |
-| Gavish's 41 meta-programs, hallmarks, Tirosh's cycle | `configs/context_prior/reference/` (`provenance.json`) |
+| Kinker's 12 recurrent programs | `configs/linear_model/reference/kinker_programs.tsv` (Kinker et al. 2020, Table S4; provenance in `kinker_programs_provenance.json`) |
+| Gavish's 41 meta-programs, hallmarks, Tirosh's cycle | `configs/linear_model/reference/` (`provenance.json`) |
 
 Kinker's programs were derived from CCLE pools that hold some of our lines, validation and test lines among them; they
 only name states in the report and never enter a model. Their symbols are of 2020 (IL8, CYR61, KIAA0101, …): a member

@@ -314,7 +314,7 @@ def build_context_text(
             "revision": None,  # the OpenAI API serves the model by name only
             "batch": openai_embed.BATCH,
             "max_tokens": openai_embed.MAX_TOKENS,
-            "prior": provenance_path(released_dir),
+            "linear_model": provenance_path(released_dir),
             "on_conflict": None,
             "params": {
                 "cellosaurus_release": CELLOSAURUS_RELEASE,

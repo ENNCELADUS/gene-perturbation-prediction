@@ -1,5 +1,5 @@
-"""Fetch and pin the linear context prior's reference tables, committed under
-configs/context_prior/reference/ because the H20 cannot fetch them. Line tables hold
+"""Fetch and pin the linear model's reference tables, committed under
+configs/linear_model/reference/ because the H20 cannot fetch them. Line tables hold
 training-side lines only: no validation or test line, nor one sharing their patients."""
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
-"""A ladder config and everything it names: the prior, joint and noise configs at once,
-and the built ladder, the split and the labels on first use."""
+"""A ladder config and everything it names: the linear model, joint and noise configs
+at once, and the built ladder, the split and the labels on first use."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.context_prior.targets import Definitions
+from src.linear_model.targets import Definitions
 from src.data import ladder_reader as reader
 from src.data.extra_lines import ExtraLines
 from src.data.splits import FixedSplit
@@ -20,7 +20,7 @@ from src.data.splits import FixedSplit
 @dataclass(frozen=True)
 class Setup:
     config: Mapping[str, Any]
-    prior: Mapping[str, Any]
+    linear_model: Mapping[str, Any]
     joint: Mapping[str, Any]
     noise: Mapping[str, Any]
 
@@ -102,7 +102,10 @@ class Setup:
 def load_setup(config: Mapping[str, Any] | str | Path) -> Setup:
     """A ladder config (a path, or one already loaded) with the configs it names."""
     from src.experiments.joint.config import load_config
-    from src.experiments.prior.config import load_noise_config, load_prior_config
+    from src.experiments.linear_model.config import (
+        load_noise_config,
+        load_linear_model_config,
+    )
     from src.experiments.stage_one.config import (
         load_ladder_config,
         validate_ladder_config,
@@ -112,10 +115,10 @@ def load_setup(config: Mapping[str, Any] | str | Path) -> Setup:
         validate_ladder_config(config)
     else:
         config = load_ladder_config(Path(config))
-    prior = load_prior_config(Path(config["prior_config"]))
+    linear_model = load_linear_model_config(Path(config["linear_model_config"]))
     return Setup(
         config=config,
-        prior=prior,
-        joint=load_config(Path(prior["joint_config"])),
+        linear_model=linear_model,
+        joint=load_config(Path(linear_model["joint_config"])),
         noise=load_noise_config(Path(config["noise_config"])),
     )

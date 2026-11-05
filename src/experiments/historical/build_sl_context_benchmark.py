@@ -533,7 +533,7 @@ def context_statistics(benchmark: pd.DataFrame) -> pd.DataFrame:
                 "n_positive": n_positive,
                 "n_negative": int((frame["sl_label"] == 0).sum()),
                 "n_pairs": int(len(frame)),
-                "positive_prior": round(n_positive / len(frame), 6),
+                "positive_base_rate": round(n_positive / len(frame), 6),
                 "n_distinct_positive_genes": int(gene_counts.size),
                 "top_positive_gene": (
                     str(gene_counts.index[0]) if gene_counts.size else ""

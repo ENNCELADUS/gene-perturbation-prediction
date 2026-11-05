@@ -102,7 +102,7 @@ a rerun resumes:
    and written; not a gate.
 3. **Response-model comparison** (section 5), folds spread across visible GPUs.
 4. **Joint training** with an automatic timestamped run id, all visible GPUs.
-5. **Validation evaluation** of `best.pt`, the baseline ladder (gene mean, K562 copy prior, nearest
+5. **Validation evaluation** of `best.pt`, the baseline ladder (gene mean, K562 copy baseline, nearest
    line, context-PCA ridge on Tx1 and on log HVG), and the readout head with the explicit
    gene-specific context slope on the new backbone's cached features.
 6. **`summary.md`** under the run directory: `T`, the sanity line, the comparison table and

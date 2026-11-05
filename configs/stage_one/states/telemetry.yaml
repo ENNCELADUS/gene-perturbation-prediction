@@ -8,7 +8,7 @@
 #   hpc/run.sh pie-precompute CONFIG --steps assemble_states --set ALL
 #   hpc/run.sh cell-states CONFIG --steps report
 seed: 0
-# The stage-one inputs this reads (lines, cells, PIE's input, the frozen PIE's pass) and, through it, the prior's and
+# The stage-one inputs this reads (lines, cells, PIE's input, the frozen PIE's pass) and, through it, the linear model's and
 # the noise diagnosis's configs (split, raw cells, prepared space, second deposits).
 ladder_config: configs/stage_one/ladder_inputs.yaml
 output_root: outputs/stage_one/state_telemetry
@@ -53,10 +53,10 @@ inputs:
   permutation_seeds: [0, 1, 2]
   cycling_floor: 0.05
 references:
-  kinker: configs/context_prior/reference/kinker_programs.tsv
-  gavish: configs/context_prior/reference/meta_programs.tsv
-  hallmarks: configs/context_prior/reference/hallmark.tsv
-  tirosh: configs/context_prior/reference/cell_cycle.tsv
+  kinker: configs/linear_model/reference/kinker_programs.tsv
+  gavish: configs/linear_model/reference/meta_programs.tsv
+  hallmarks: configs/linear_model/reference/hallmark.tsv
+  tirosh: configs/linear_model/reference/cell_cycle.tsv
   chemistry: configs/benchmarks/single_cell_source_chemistry.csv
 pie:
   # The Task 2 pilot's genes (pie_precompute.pilot_genes at the ladder config's seed).

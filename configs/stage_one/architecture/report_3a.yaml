@@ -1,7 +1,7 @@
 # Task 3's report (PIE stage-one design §5 Task 3; protocol §16): every architecture row, trained and untrained,
 # on validation, test and out of fold over the single-cell training lines, with the listed contrasts' 95% paired
 # line-bootstrap intervals. `hpc/run.sh stage-one-report CONFIG` -> outputs/stage_one/architecture/report_3a/.
-# The untrained rows: the base m_g, the default prior refitted on the frame (stage_one_prior.py), and a per-gene
+# The untrained rows: the base m_g, the default linear model refitted on the frame (stage_one_linear_model.py), and a per-gene
 # ridge on the line-centred ΔH at three penalties. People read it; nothing is chosen in code.
 kind: report
 task: architecture
@@ -10,7 +10,7 @@ ladder_config: configs/stage_one/ladder_inputs.yaml
 bootstrap_repeats: 1000
 rows:
   - {name: base, kind: base}
-  - {name: prior, kind: prior, run: outputs/stage_one/architecture/prior_reference_seed0}
+  - {name: linear_model, kind: linear_model, run: outputs/stage_one/architecture/linear_model_reference_seed0}
   - {name: dH ridge 10, kind: dh_ridge, penalty: 10.0}
   - {name: dH ridge 100, kind: dh_ridge, penalty: 100.0}
   - {name: dH ridge 1000, kind: dh_ridge, penalty: 1000.0}
@@ -59,12 +59,12 @@ contrasts:
   - [multi dE, permuted multi dE]
   - [multi dL, permuted multi dL]
   - [film dH, dH ridge 100]
-  - [components reader, prior]
-  - [direct readout, prior]
-  - [film dH, prior]
-  - [film dE, prior]
-  - [multi dH, prior]
-  - [multi dE, prior]
+  - [components reader, linear_model]
+  - [direct readout, linear_model]
+  - [film dH, linear_model]
+  - [film dE, linear_model]
+  - [multi dH, linear_model]
+  - [multi dE, linear_model]
   - [film dL, text only]
   - [film dH, own x only]
   - [film dE, own x only]
@@ -73,4 +73,4 @@ contrasts:
   - [multi dE full, multi dE selective]
   - [hybrid dE, direct readout]
   - [hybrid dE, film dE]
-  - [hybrid dE, prior]
+  - [hybrid dE, linear_model]

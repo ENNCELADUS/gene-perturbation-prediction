@@ -1,6 +1,6 @@
 """What the joint model's runs (``all`` and ``revision``) share: the GPU pool their
 processes run on, the training launch under ``accelerate``, the resume check, and the
-names of the baselines and prior controls their summaries report."""
+names of the baselines and linear model controls their summaries report."""
 
 from __future__ import annotations
 
@@ -19,18 +19,17 @@ from src.experiments.joint.config import PRECISION
 
 BASELINE_NAMES = {
     "gene_mean": "Gene mean",
-    "copy_prior": "K562 copy prior",
+    "copy_baseline": "K562 copy-baseline",
     "nearest_line[tx1]": "Nearest line (Tx1)",
     "nearest_line[hvg]": "Nearest line (HVG)",
     "context_pca_ridge[tx1]": "Context-PCA ridge (Tx1)",
     "context_pca_ridge[hvg]": "Context-PCA ridge (HVG)",
-    "context_prior": "Linear context prior",
-    "context_prior+context_pca_ridge[tx1]": (
-        "Linear context prior + Tx1 context-PCA ridge"
-    ),
+    "linear_model": "Linear model",
+    "linear_model+context_pca_ridge[tx1]": ("Linear model + Tx1 context-PCA ridge"),
 }
-# Controls that exist only when the config names a prior export (paths.prior).
-PRIOR_CONTROLS = ("context_prior", "context_prior+context_pca_ridge[tx1]")
+# Controls that exist only when the config names a linear model export
+# (paths.linear_model).
+LINEAR_MODEL_CONTROLS = ("linear_model", "linear_model+context_pca_ridge[tx1]")
 POLL_SECONDS = 10.0
 STOP_SECONDS = 30.0
 

@@ -175,7 +175,7 @@ across held-out lines is reported beside it. Whole-matrix accuracy (Pearson, Spe
 reported beside it but decides nothing, because a context-blind gene mean already supplies almost all of it:
 whole-matrix Pearson 0.91 and Spearman 0.71 on our validation lines, within 0.01 of our best model, and the
 same holds for Cilantro-SL's reported stage-one fit. Context accuracy is read against the gene mean (the
-floor), simple context predictors (a ridge on context principal components) and the linear expression prior,
+floor), simple context predictors (a ridge on context principal components) and the linear expression model,
 which is the bar a model must clear.
 
 **Task B.** For each held-out line and screen, the headline is AUPRC against the line's positive rate, with
@@ -212,7 +212,7 @@ and ARID1A–ARID1B.
 ## 5. Research plan
 
 **Goal.** Predict GeneEffect in unseen cancer cell lines from their basal profile, beyond what a context-blind
-gene mean and a linear expression prior already give, and establish whether an AI-virtual-cell (single-cell
+gene mean and a linear expression model already give, and establish whether an AI-virtual-cell (single-cell
 foundation-model) representation adds to that. Once a model clears the bar, carry its predicted dependencies
 into SL prediction in unseen lines. A clean negative on the AI-virtual-cell question is a result, not a failed
 plan.
@@ -221,11 +221,11 @@ plan.
 
 - *Objective:* predict gene-specific dependency in held-out lines, especially each line's deviation from the
   gene's mean over lines.
-- *Evaluation:* context accuracy on held-out lines (§3.7). The bar is the default linear prior of the GeneEffect
+- *Evaluation:* context accuracy on held-out lines (§3.7). The bar is the default linear model of the GeneEffect
   protocol (§10 there, selective Spearman 0.205 validation / 0.203 test on the final split), cleared by a paired
   line-bootstrap interval above zero on validation; the gene mean is the floor.
 - *Interpretability:* why the same gene's dependency differs between lines: the features, pathways and cell
-  states behind context-specific vulnerabilities, starting from what the winning model exposes (the prior's
+  states behind context-specific vulnerabilities, starting from what the winning model exposes (the linear model's
   data-selected genes carry its gain). Every proposed explanation is set against lineage, the gene's own
   expression, its copy number and its paralogs' expression on the same residual; one that lineage alone carries
   is not a finding about context.
@@ -236,19 +236,19 @@ plan.
   pseudo-bulk average does not. Held-out lines have basal single cells only: perturbation responses exist for
   four anchor lines, so a held-out line's response is a model's prediction, not a measurement.
 - *Approach, in layers:* first, per-gene single-cell statistics (detected fraction and variance across cells)
-  stacked linearly on the default prior, against a mean-expression arm built the same way (GeneEffect protocol
+  stacked linearly on the default linear model, against a mean-expression arm built the same way (GeneEffect protocol
   §13); only where that finds signal, distribution-level models of cellular heterogeneity, cell-state
   proportions and perturbation-sensitive subpopulations, with AI-virtual-cell representations, built from the
   statistic that carries it.
 - *Evaluation:* single-cell and pseudo-bulk arms under identical conditions: the same lines, genes, split,
-  selector and stacking on the same prior; the pseudo-bulk arm is the default prior itself, not a weaker
+  selector and stacking on the same linear model; the pseudo-bulk arm is the default linear model itself, not a weaker
   pseudo-bulk model.
 
 **Order.** The single-cell statistics stack; then, only on its signal, distributional and AI-virtual-cell
-models judged against the default prior; then interpretation of whichever model wins. On 2026-10-11 the 226 split
+models judged against the default linear model; then interpretation of whichever model wins. On 2026-10-11 the 226 split
 was rebuilt in place with A549 moved to test (the SL benchmark below needs it), and on 2026-10-12 the final split
 made the 208 single-cell extras training lines (§3.6), so the metric's gene sets fit on 377 lines. On it the default
-prior scores 0.205 validation / 0.203 test, and the single-cell statistics stack's best rows add +0.004 on validation
+linear model scores 0.205 validation / 0.203 test, and the single-cell statistics stack's best rows add +0.004 on validation
 with intervals spanning zero; at one penalty pair the single-cell arm beats the mean arm on validation (+0.0009
 [+0.0001, +0.0017]) but not on test. Earlier results stay as records of their splits. Evidence so far: the
 joint STATE model trailed the context ridge, and in the single-cell correction every trained epoch lowered

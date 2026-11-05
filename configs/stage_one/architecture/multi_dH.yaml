@@ -13,7 +13,7 @@ data:
   input: dH
   own_slots: [own_dp, own_x]
   permuted: false
-  prior_run: null
+  linear_model_run: null
   genes: panel
 model:
   arm: multi_encoder

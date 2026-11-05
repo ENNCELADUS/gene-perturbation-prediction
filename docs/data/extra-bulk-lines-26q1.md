@@ -2,7 +2,7 @@
 
 **Status:** Membership of the DepMap lines outside the 226-member
 [GeneEffect benchmark](cell-line-geneeffect-226.md) that may join the training side of the
-linear context prior ([protocol §10](../03-geneeffect-protocol.md#10-linear-context-prior),
+linear model ([protocol §10](../03-geneeffect-protocol.md#10-linear-model),
 [design](../specs/2026-10-04-context-generalization-design.md)). Since 2026-10-12 it is an input of
 the [final split](cell-line-geneeffect-split.md): its lines without built single cells are the final
 split's bulk-only lines (708 labelled, 570 unlabelled), which is what fits read; the 205 labelled
@@ -13,7 +13,7 @@ lines with built single cells are single-cell training lines there. Nothing here
 The 226 benchmark gives 169 labelled single-cell training lines. Bulk RNA exists for many
 more DepMap lines, and 26Q1 CRISPRGeneEffect labels for most of them. These lines add
 contexts that the single-cell atlas does not cover. Their bulk RNA fits context encoders
-(expression components, predicted genotype); their GeneEffect labels fit the prior only if
+(expression components, predicted genotype); their GeneEffect labels fit the linear model only if
 the learning-curve rule of protocol §10 passes. They carry no single cells, so a query line
 never arrives as one of them.
 
@@ -37,10 +37,10 @@ patient with a training line are kept; they stay on the training side, in that l
 cross-fitting fold. The file is a pinned list, not a rule recomputed from labels at run time.
 
 **Haematopoietic lineages.** 133 of the labelled lines are haematopoietic. They are kept in
-the first run. The `training_side.exclude_lineages` key of a prior config drops lineages from the
-training side (`Lymphoid` and `Myeloid` in `configs/context_prior/bridge_remedies.yaml`; Model.csv
+the first run. The `training_side.exclude_lineages` key of a linear model config drops lineages from the
+training side (`Lymphoid` and `Myeloid` in `configs/linear_model/bridge_remedies.yaml`; Model.csv
 `OncotreeLineage`). Validation and test hold no haematopoietic line, and the first runs showed that
-keeping them lowered the bridged score ([record](../../results/context_prior_seed0/README.md)). On the
+keeping them lowered the bridged score ([record](../../results/linear_model_seed0/README.md)). On the
 final split the rule covers every training-side line, single-cell training lines included
 ([record](../../results/final_split_seed0/README.md)).
 

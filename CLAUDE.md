@@ -18,21 +18,22 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-11-04)
+## Current state (2026-11-05)
 
 Replace this section on every update; history lives in `results/` and the protocol.
 
 - **Stage one** (PIE design, [plan](docs/specs/2026-10-17-pie-stage-one-plan.md), protocol §16): no architecture arm
-  reaches the default prior refitted on the frame (per-line residual Spearman 0.215 validation / 0.228 test;
-  [record](results/stage_one_architecture/README.md)). FiLM reading the prior's prediction recovers most of it
-  (0.199–0.203) but not all, and ΔE beside the prior adds nothing that line-permuted ΔE does not
-  ([record](results/stage_one_prior_input/README.md)). The next build makes all current checkpoints unusable.
+  reaches the default linear model refitted on the frame (per-line residual Spearman 0.215 validation / 0.228 test;
+  [record](results/stage_one_architecture/README.md)). FiLM reading the linear model's prediction recovers most of it
+  (0.199–0.203) but not all, and ΔE beside the linear model adds nothing that line-permuted ΔE does not
+  ([record](results/stage_one_linear_model_input/README.md)). The next build makes all current checkpoints unusable.
 - **Stage two** (SL protocol §10): pair identity wins; predicted or measured GeneEffect adds nothing over each gene's
   mean ([record](results/sl_stage_two_seed0/README.md)). Not SL context evidence. Both: [status](results/status.html).
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels rebuilt 2026-11-04 into
   `data/sl_studies/benchmark_v2` (H20); the headline reads genetic two-class screens (77 lines: 44/17/16, placed by hand for ~79/11/10% of SL pairs; stage one's sides do not bind it), recall in
-  the top 10% averaged over screens, studies, then lines. H20 `outputs/` is empty. **Next**: `prior-production`, then
-  `sl-baselines`; the screen-weighted BCE stage-two model is decided (design spec) but not built.
+  the top 10% averaged over screens, studies, then lines. `sl-baselines` (with labels and random scores as code checks)
+  runs on the H20 (2026-11-05). **Next**: KG4SL, then Cilantro-SL, on the SL split; the BCE stage-two model is not built.
+- The ridge from expression to GeneEffect is "the linear model" (`src/linear_model`); old-name outputs do not load.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands
@@ -81,7 +82,7 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
 ## Architecture rules
 
 - `data` and `model` never import `training`, `eval` or `experiments`. Each track's commands live in
-  `src/experiments/{joint,prior,stage_one,states}`, retired ones in `historical/`. Tests mirror `src`; shared synthetic
+  `src/experiments/{joint,linear_model,stage_one,states}`, retired ones in `historical/`. Tests mirror `src`; shared synthetic
   worlds live in `tests/fixtures/`.
 - **Expression space.** Everything except Tx1's input is log space: whole-library `normalize_total` to a recorded target `T`,
   `log1p`, then STATE's HVG slice. Tx1 reads raw UMI, not CPM.
@@ -90,13 +91,13 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
   existing root grows by the lines it lacks, in the recorded space.
 - `configs/benchmarks/cell_line_geneeffect_split.json` (the **final split**, [card](docs/data/cell-line-geneeffect-split.md)) is
   the sole membership authority: 400 single-cell training lines (16 unlabelled), 27 validation, 28 test (A549 in train
-  since 2026-11-04), 708 labelled and 570 unlabelled bulk-only lines that join the prior's training side through bulk
+  since 2026-11-04), 708 labelled and 570 unlabelled bulk-only lines that join the linear model's training side through bulk
   RNA, and 7 excluded (patient-mates of held-out lines without any data). Gene
   means, selective genes, residual SD and context PCA fit on its labelled training lines;
   `src/data/splits.py:assert_fit_eligible` guards every fit.
 - Checkpoint selection reads validation only: `val_selective_spearman` for the joint model, the per-line residual Spearman
   for stage one (protocol §6). `all` never runs test; `revision` and `test` score a chosen `best.pt` once.
-- Only split, config, provenance files and the context prior's reference tables are tracked data.
+- Only split, config, provenance files and the linear model's reference tables are tracked data.
 
 ## Pitfalls and claim boundaries
 
@@ -108,11 +109,11 @@ Mistakes here produce a complete-looking **wrong artifact**, not an exception.
 - Resume rejects a conflicting config; a batch-size change needs a new run id. A checkpoint does not record the split
   membership: use a checkpoint only with the split it was trained on.
 - Residuals: targets center on the fold-fit `mu_hat_g^(-c)`, predictions on fold-independent `mu_bar` — centering a prediction
-  on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-prior residual correlations are undefined, not zero.
+  on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-baseline residual correlations are undefined, not zero.
 - Join cell lines by DepMap ModelID, never by informal names at run time (`K-562` ≠ `K562`): a source's spelling becomes a
   ModelID only through a reviewed row of `configs/benchmarks/single_cell_atlas_candidates.csv`. A line without a ModelID
   has the ID of its reviewed row in `configs/benchmarks/sl_line_identities.csv` (Cellosaurus accession, else
   `SL-<study>-<line>`); `read_models` adds those rows. Fit means, gene membership and normalization on labeled training
   lines only.
-- Context claims need residual evaluation against context-blind priors; the rules are in the GeneEffect protocol (§11) and the
+- Context claims need residual evaluation against context-blind baselines; the rules are in the GeneEffect protocol (§11) and the
   SL protocol (§8). Single-gene predictions are not SL or genetic-interaction evidence.

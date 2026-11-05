@@ -14,7 +14,7 @@ data:
   input: dL
   own_slots: []
   permuted: true
-  prior_run: null
+  linear_model_run: null
   genes: panel
 model:
   arm: multi_encoder

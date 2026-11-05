@@ -139,7 +139,7 @@ def per_state_group_share(
     variance across lines explained by ``groups`` (eta squared), against
     ``groups`` permuted among the lines of each stratum (the noise diagnosis's
     null, state by state)."""
-    from src.context_prior.noise import between_share
+    from src.linear_model.noise import between_share
 
     lines = list(frame.index)
     labels = groups.loc[lines].astype(str).to_numpy()
@@ -185,7 +185,7 @@ def confound_section(
     """Mass explained by deposit (eta squared against permutations within
     lineage) and by the lines' median QC (R squared), and each state's
     within-line QC shift in pooled within-line SD units."""
-    from src.context_prior.noise import group_share
+    from src.linear_model.noise import group_share
 
     train = list(frame.index)
     deposit = t.deposits.loc[train]
