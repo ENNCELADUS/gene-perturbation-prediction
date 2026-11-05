@@ -32,7 +32,7 @@ Replace this section on every update; history lives in `results/` and the protoc
   `data/sl_studies/benchmark_v2` (H20); the headline reads genetic two-class screens (77 lines: 44/17/16, placed by hand for ~79/11/10% of SL pairs; stage one's sides do not bind it), recall in
   the top 10% averaged over screens, studies, then lines. `sl-baselines` ran 2026-11-05: pair identity 0.524 val / 0.495
   test leads; GeneEffect (predicted, measured, gene mean) ≈ 0.27–0.41; labels 0.96/0.92 and random 0.09/0.11 pass as code
-  checks. Pair identity has no score in studies without training lines (15/13 of 17/16 lines). **Next**: KG4SL, Cilantro-SL.
+  checks. On held-out seen pairs whose label flips, every GeneEffect scorer is at random (AUROC 0.47–0.56). **Next**: KG4SL.
   The expression-to-GeneEffect ridge is "the linear model" (`src/linear_model`); old-name outputs do not load.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
