@@ -61,6 +61,7 @@ def main() -> None:
     p = paths(args.run_dir)
     out = args.run_dir / "benchmark"
     out.mkdir(parents=True, exist_ok=True)
+    p["models"].mkdir(parents=True, exist_ok=True)
 
     import pickle
 
