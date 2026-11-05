@@ -153,7 +153,13 @@ def test_run_scores_every_list(tmp_path):
     report = (out / "results.md").read_text()
     assert "Table 1" in report and "Measured GeneEffect" in report
     by = {(r["split"], r["scorer"], r["group"]): r for r in metrics["summary"]}
-    scorers = ("pair_identity", "pan_essentiality", "measured_geneeffect")
+    scorers = (
+        "pair_identity",
+        "pan_essentiality",
+        "measured_geneeffect",
+        "labels",
+        "random",
+    )
     assert {(s, c) for s, c, g in by if g == "all"} == {
         (s, c) for s in ("val", "test") for c in scorers
     }
@@ -163,3 +169,6 @@ def test_run_scores_every_list(tmp_path):
     assert by[("test", "measured_geneeffect")]["auprc_lift"] == pytest.approx(4.0)
     # A list of 4 pairs: its top 10% is 0.4 of a pair, all of it the first pair.
     assert by[("test", "measured_geneeffect")]["recall_top10"] == pytest.approx(0.4)
+    # The labels reach the ceiling min(1, 0.1 * 4 / 1); the random score stays below it.
+    assert by[("test", "labels")]["recall_top10"] == pytest.approx(0.4)
+    assert 0.0 <= by[("test", "random")]["recall_top10"] <= 0.4

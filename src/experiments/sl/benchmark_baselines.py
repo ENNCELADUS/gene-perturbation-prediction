@@ -9,9 +9,10 @@ activating anchor or a group-level call are scored but kept out of the headline.
 Scorers: the pair's hit rate in the same study's training lines (pair identity), each
 gene's mean GeneEffect over the training lines (pan-essentiality), stage one's
 production prediction of GeneEffect in the line, and the measured GeneEffect as a
-reference, never a bar (only lines with GeneEffect have it). Every split is reported
-for all lines, the lines with and without GeneEffect, and the cancer and non-cancer
-lines."""
+reference, never a bar (only lines with GeneEffect have it). Two checks of the
+benchmark code: the labels as the score (the ceiling, min(1, 0.1 n / positives) per
+screen) and a seeded random score (about 0.10). Every split is reported for all
+lines, the lines with and without GeneEffect, and the cancer and non-cancer lines."""
 
 from __future__ import annotations
 
@@ -41,7 +42,11 @@ NAMES = {
     "pair_identity": "Pair identity (hit rate in the study's training lines)",
     "pan_essentiality": "Pan-essentiality (gene mean GeneEffect)",
     "measured_geneeffect": "Measured GeneEffect (reference, lines with GeneEffect)",
+    "labels": "Labels as the score (check: the ceiling)",
+    "random": "Random score (check: about 0.10)",
 }
+#: Scorers that check the code or give a reference; never the best row.
+NOT_MODELS = {"measured_geneeffect", "labels", "random"}
 #: The headline's top fraction of each list.
 TOP = 0.10
 
@@ -283,6 +288,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
             held, lambda gene: mean.reindex(held[gene]).to_numpy(dtype=np.float64)
         ),
         "measured_geneeffect": -line_values(effects, held),
+        "labels": held["label"].to_numpy(dtype=np.float64),
+        "random": np.random.default_rng(int(config["seed"])).random(len(held)),
     }
     if predicted is not None:
         scorers["stage_one_production"] = -line_values(predicted, held)
@@ -329,7 +336,7 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         split: max(
             rows[(split, s)]["recall_top10"]
             for s in scorers
-            if (split, s) in rows and s != "measured_geneeffect"  # a reference
+            if (split, s) in rows and s not in NOT_MODELS
         )
         for split in ("val", "test")
     }
@@ -360,7 +367,6 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         f"| Model | Validation ({n['val']} lines) | Test ({n['test']} lines) |",
         "| --- | ---: | ---: |",
         *(f"| {NAMES[s]} | {cell('val', s)} | {cell('test', s)} |" for s in scorers),
-        "| Random ranking | 0.100 | 0.100 |",
         "",
         "**Table 2.** Difference from pair identity in recall in the top 10%, mean "
         "over lines, with a 95% bootstrap interval over lines. Higher is better.",
@@ -368,7 +374,7 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         "| Model − pair identity | Validation | Test |",
         "| --- | ---: | ---: |",
         *(f"| {NAMES[s]} | {gap('val', s)} | {gap('test', s)} |"
-          for s in scorers if s != "pair_identity"),
+          for s in scorers if s not in {"pair_identity", "labels", "random"}),
         "",
         "Other line groups, AUROC and AUPRC are in `metrics.json`; each line in "
         "`lines.csv`; each screen, the non-genetic ones included, in `lists.csv`.",
