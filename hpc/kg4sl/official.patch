@@ -1,0 +1,38 @@
+diff --git a/src/aggregators.py b/src/aggregators.py
+index 6cbabfb..774f8c3 100644
+--- a/src/aggregators.py
++++ b/src/aggregators.py
+@@ -1,4 +1,4 @@
+-import tensorflow as tf
++import tensorflow.compat.v1 as tf
+ from abc import abstractmethod
+ 
+ LAYER_IDS = {}
+@@ -67,7 +67,7 @@ class SumAggregator(Aggregator):
+         super(SumAggregator, self).__init__(batch_size, dim, dropout, act, name)
+ 
+         with tf.variable_scope(self.name):
+-            self.weights = tf.get_variable(shape=[self.dim, self.dim], initializer=tf.contrib.layers.xavier_initializer(), name='weights')
++            self.weights = tf.get_variable(shape=[self.dim, self.dim], initializer=tf.glorot_uniform_initializer(), name='weights')
+             self.bias = tf.get_variable(shape=[self.dim], initializer=tf.zeros_initializer(), name='bias')
+ 
+     def _call(self, self_vectors, neighbor_vectors, neighbor_relations, nodea_embeddings, masks):
+diff --git a/src/model.py b/src/model.py
+index 98efc7c..e3f0eb4 100644
+--- a/src/model.py
++++ b/src/model.py
+@@ -1,4 +1,4 @@
+-import tensorflow as tf
++import tensorflow.compat.v1 as tf
+ from aggregators import SumAggregator
+ from sklearn.metrics import f1_score, roc_auc_score,precision_recall_curve
+ import sklearn.metrics as m
+@@ -18,7 +18,7 @@ class KG4SL(object):
+ 
+     @staticmethod
+     def get_initializer():
+-        return tf.contrib.layers.xavier_initializer()
++        return tf.glorot_uniform_initializer()
+ 
+     def _parse_args(self, args, adj_entity, adj_relation):
+         self.adj_entity = adj_entity # [entity_num, neighbor_sample_size]

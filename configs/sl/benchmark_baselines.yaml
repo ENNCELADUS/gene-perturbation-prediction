@@ -4,7 +4,8 @@
 # GeneEffect only). Headline: recall in the top 10% of each genetic screen, mean over a study's screens,
 # a line's studies and the lines; reported on validation and test for all
 # lines, the lines with and without GeneEffect, and the cancer and non-cancer lines.
-# `hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id ID` (CPU), after the production fit.
+# `hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id ID` (CPU), after the production fit
+# and the KG4SL run (hpc/README.md).
 kind: sl_benchmark_baselines
 seed: 0
 output_root: outputs/sl
@@ -14,5 +15,8 @@ split: configs/benchmarks/cell_line_sl_split.json
 gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
 model: data/sl_dependency_v0/raw/depmap/Model.csv
 stage_one: outputs/linear_model/stage_one_production_seed0/production/predictions.parquet
+# line-blind scores per (gene_a, gene_b) made by other harnesses; KG4SL: hpc/kg4sl/train.py
+extra_scores:
+  kg4sl: outputs/sl/kg4sl/seed0/scores.parquet
 top_k: 20
 bootstrap: 1000

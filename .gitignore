@@ -127,6 +127,7 @@ csc286_eval.py
 !/third_party/pie/
 !/third_party/paris/
 /.venv-cilantro/
+/.venv-kg4sl/
 /.venv-pie/
 # cNMF, starCAT and scvi-tools for the cell-state fits (hpc/states/setup.sh)
 /.venv-states/

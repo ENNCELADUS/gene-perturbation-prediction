@@ -1,0 +1,7 @@
+# KG4SL's released environment (TensorFlow 1.15, Python 3.6) cannot be built on the H20: uv offers no Python
+# older than 3.8. The official code runs under TensorFlow 2's compat.v1 graph mode instead (official.patch).
+tensorflow-cpu==2.15.1
+numpy==1.26.4
+pandas==2.2.3
+pyarrow==17.0.0
+scikit-learn==1.5.2
