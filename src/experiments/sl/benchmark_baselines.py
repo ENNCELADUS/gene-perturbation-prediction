@@ -12,7 +12,8 @@ production prediction of GeneEffect in the line, and the measured GeneEffect as 
 reference, never a bar (only lines with GeneEffect have it). Two checks of the
 benchmark code: the labels as the score (the ceiling, min(1, 0.1 n / positives) per
 screen) and a seeded random score (about 0.10). Every split is reported for all
-lines, the lines with and without GeneEffect, and the cancer and non-cancer lines."""
+lines, the lines with and without GeneEffect, and the cancer and non-cancer lines,
+and for each stratum of held-out pairs (STRATA), ranked inside it in each screen."""
 
 from __future__ import annotations
 
@@ -47,6 +48,15 @@ NAMES = {
 }
 #: Scorers that check the code or give a reference; never the best row.
 NOT_MODELS = {"measured_geneeffect", "labels", "random"}
+#: Strata of held-out pairs. A pair is seen when the same study labelled it in a
+#: training line; it agrees when its label equals the majority of those labels. A new
+#: pair with a gene that no training row has is not reported (too few rows).
+STRATA = {
+    "all": "All pairs",
+    "seen_agree": "Seen pair, label agrees with the training lines",
+    "seen_flip": "Seen pair, label differs from the training lines",
+    "new_pair": "New pair, both genes seen",
+}
 #: The headline's top fraction of each list.
 TOP = 0.10
 
@@ -109,6 +119,24 @@ def pair_identity(training: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
     fill = training.groupby("study_id")["label"].mean()
     scored = rate.reindex(pd.MultiIndex.from_frame(rows[keys])).to_numpy()
     return np.where(np.isnan(scored), rows["study_id"].map(fill).to_numpy(), scored)
+
+
+def strata(training: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
+    """The stratum of each row (STRATA keys; ``unseen_gene`` is not reported). Gene A
+    of an anchor list is one gene or drug for the whole list, so only gene B counts."""
+    keys = ["study_id", "gene_a", "gene_b"]
+    rate = training.groupby(keys)["label"].mean()
+    rate = rate.reindex(pd.MultiIndex.from_frame(rows[keys])).to_numpy()
+    genes = set(training["gene_a"]) | set(training["gene_b"])
+    seen_genes = rows["gene_b"].isin(genes) & (
+        (rows["design"] == "anchor") | rows["gene_a"].isin(genes)
+    )
+    agree = (rate >= 0.5) == rows["label"].to_numpy().astype(bool)
+    return np.select(
+        [~np.isnan(rate) & agree, ~np.isnan(rate), seen_genes.to_numpy()],
+        ["seen_agree", "seen_flip", "new_pair"],
+        "unseen_gene",
+    )
 
 
 def pair_sum(rows: pd.DataFrame, value: Callable[[str], np.ndarray]) -> np.ndarray:
@@ -180,12 +208,15 @@ def line_records(lists: pd.DataFrame) -> pd.DataFrame:
     ranked) recall in the top 10%, AUROC (mean percentile of its positives) and AUPRC
     over the positive rate, averaged over a study's screens, then over the line's
     studies, so neither a large screen nor a study with many screens dominates."""
+    keys = ["split", "scorer", "model_id"]
+    columns = [*keys, "positives", "studies", "screens", *METRICS]
     two_class = (lists["ranked_positives"] > 0) & (lists["percentiles"] > 0)
+    if not (two_class & (lists["condition"] == HEADLINE)).any():
+        return pd.DataFrame(columns=columns)  # e.g. a stratum with one class per screen
     screens = lists[two_class & (lists["condition"] == HEADLINE)].assign(
         recall_top10=lambda x: x["top_credit"] / x["ranked_positives"],
         auroc=lambda x: x["percentile_sum"] / x["percentiles"],
     )
-    keys = ["split", "scorer", "model_id"]
     studies = screens.groupby([*keys, "study_id"]).agg(
         **{m: (m, "mean") for m in METRICS},
         positives=("ranked_positives", "sum"),
@@ -197,7 +228,7 @@ def line_records(lists: pd.DataFrame) -> pd.DataFrame:
         screens=("screens", "sum"),
         studies=("screens", "size"),
     )
-    return lines.reset_index()[[*keys, "positives", "studies", "screens", *METRICS]]
+    return lines.reset_index()[columns]
 
 
 def screen_counts(lists: pd.DataFrame) -> list[dict[str, Any]]:
@@ -293,7 +324,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     }
     if predicted is not None:
         scorers["stage_one_production"] = -line_values(predicted, held)
-    base = held[[*LIST_KEYS, "gene_a", "gene_b", "label"]]
+    held["stratum"] = strata(training, held)
+    base = held[[*LIST_KEYS, "gene_a", "gene_b", "label", "stratum"]]
     scores = pd.concat(
         [base.assign(scorer=name, score=values) for name, values in scorers.items()],
         ignore_index=True,
@@ -303,18 +335,34 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         effects.index
     )
     scores = scores[~without].reset_index(drop=True)
-    lists = list_records(scores, int(config["top_k"]))
-    lines = line_records(lists)
     split_table = pd.read_csv(Path(config["split"]).with_suffix(".csv"), dtype=str)
     groups = line_groups(split_table, non_cancer_lines(Path(config["model"])))
+    by_stratum, results = [], []
+    for stratum in STRATA:
+        chosen = scores if stratum == "all" else scores[scores["stratum"] == stratum]
+        if chosen.empty:
+            continue
+        stratum_lists = list_records(chosen, int(config["top_k"]))
+        stratum_lines = line_records(stratum_lists).assign(stratum=stratum)
+        results += [
+            row | {"stratum": stratum}
+            for row in summary(
+                stratum_lines, groups, int(config["bootstrap"]), int(config["seed"])
+            )
+        ]
+        if not stratum_lines.empty:
+            by_stratum.append(stratum_lines)
+        if stratum == "all":
+            lists = stratum_lists
+    lines = pd.concat(by_stratum, ignore_index=True)
     lines["group"] = lines["model_id"].map(split_table.set_index("model_id")["group"])
     metrics = {
         "run_id": run_id,
         "rows": {"training": len(training), "held": len(held), **dropped,
                  "measured_rows_without_geneeffect": int(without.sum())},
         "screens": screen_counts(lists),
-        "summary": summary(
-            lines, groups, int(config["bootstrap"]), int(config["seed"])),
+        "strata": {k: int(v) for k, v in held["stratum"].value_counts().items()},
+        "summary": results,
     }  # fmt: skip
     write_parquet(run_dir / "scores.parquet", scores)
     lists.to_csv(run_dir / "lists.csv", index=False)
@@ -329,7 +377,14 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
     Table 2, the difference from pair identity. The other line groups, AUROC, AUPRC
     and each screen are in metrics.json, lines.csv and lists.csv."""
     rows = {
-        (r["split"], r["scorer"]): r for r in metrics["summary"] if r["group"] == "all"
+        (r["split"], r["scorer"]): r
+        for r in metrics["summary"]
+        if r["group"] == "all" and r["stratum"] == "all"
+    }
+    strata = {
+        (r["stratum"], r["split"], r["scorer"]): r["recall_top10"]
+        for r in metrics["summary"]
+        if r["group"] == "all"
     }
     scorers = [s for s in NAMES if (("test", s) in rows)]
     best = {
@@ -375,6 +430,19 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         "| --- | ---: | ---: |",
         *(f"| {NAMES[s]} | {gap('val', s)} | {gap('test', s)} |"
           for s in scorers if s not in {"pair_identity", "labels", "random"}),
+        "",
+        "**Table 3.** Recall in the top 10% for each stratum of held-out pairs, "
+        "ranked inside the stratum of each screen, mean over lines (validation / "
+        "test). Higher is better.",
+        "",
+        "| Model | " + " | ".join(STRATA[k] for k in STRATA if k != "all") + " |",
+        "| --- |" + " ---: |" * (len(STRATA) - 1),
+        *("| " + NAMES[s] + " | " + " | ".join(
+            " / ".join(
+                f"{strata[(k, split, s)]:.3f}" if (k, split, s) in strata else "—"
+                for split in ("val", "test"))
+            for k in STRATA if k != "all") + " |"
+          for s in scorers),
         "",
         "Other line groups, AUROC and AUPRC are in `metrics.json`; each line in "
         "`lines.csv`; each screen, the non-genetic ones included, in `lists.csv`.",

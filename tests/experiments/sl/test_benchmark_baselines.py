@@ -19,6 +19,7 @@ from src.experiments.sl.benchmark_baselines import (
     pair_identity,
     positive_ranks,
     run,
+    strata,
     summary,
 )
 
@@ -44,6 +45,21 @@ def labels() -> pd.DataFrame:
     )  # fmt: skip
     frame = pd.DataFrame(rows)
     return frame.assign(label=frame["label"].astype("Int8"))
+
+
+def test_strata_split_seen_pairs_by_agreement_with_the_training_lines():
+    frame = labels().assign(label=lambda x: x["label"].astype(int))
+    training = frame[frame["model_id"].isin(["T0", "T1"])]
+    held = frame[frame["model_id"] == "E0"]
+    # training rates: G0-G1 1.0, G0-G2 0.5, G1-G3 0.0; G2-G3 is never labelled there
+    assert strata(training, held).tolist() == [
+        "seen_flip",
+        "seen_agree",
+        "seen_agree",
+        "new_pair",
+    ]
+    unseen = held.iloc[[3]].assign(gene_b="G9")
+    assert strata(training, unseen).tolist() == ["unseen_gene"]
 
 
 def test_pair_identity_falls_back_to_the_studys_rate():
@@ -152,7 +168,11 @@ def test_run_scores_every_list(tmp_path):
             "positives": 1} in metrics["screens"]  # fmt: skip
     report = (out / "results.md").read_text()
     assert "Table 1" in report and "Measured GeneEffect" in report
-    by = {(r["split"], r["scorer"], r["group"]): r for r in metrics["summary"]}
+    by = {
+        (r["split"], r["scorer"], r["group"]): r
+        for r in metrics["summary"]
+        if r["stratum"] == "all"
+    }
     scorers = (
         "pair_identity",
         "pan_essentiality",
@@ -172,3 +192,7 @@ def test_run_scores_every_list(tmp_path):
     # The labels reach the ceiling min(1, 0.1 * 4 / 1); the random score stays below it.
     assert by[("test", "labels")]["recall_top10"] == pytest.approx(0.4)
     assert 0.0 <= by[("test", "random")]["recall_top10"] <= 0.4
+    # flips: G0-G1 in E0 (SL in both training lines) and G0-G2 in V0 (a 0.5 rate
+    # counts as an SL majority)
+    assert metrics["strata"]["seen_flip"] == 2
+    assert "Table 3" in report

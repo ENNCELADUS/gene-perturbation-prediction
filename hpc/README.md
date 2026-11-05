@@ -354,7 +354,10 @@ GeneEffect only), and writes `scores.parquet`, `lists.csv`, `lines.csv`, `metric
 `outputs/sl/benchmark_baselines/<run id>/`. The headline is recall in the top 10% of each list (the known positives of
 a line's lists pooled, then the mean over lines), with the per-line difference from pair identity; AUROC and AUPRC over
 the positive rate follow. Each row is given for all lines, the lines with and without GeneEffect, and the cancer and
-non-cancer lines. An anchor list is ranked by gene B, so drug anchors keep their lists.
+non-cancer lines. An anchor list is ranked by gene B, so drug anchors keep their lists. Table 3 repeats the headline for each stratum of held-out pairs, ranked inside the
+stratum of each screen: a seen pair (the same study labelled it in a training line) whose label agrees with the
+majority of those labels, a seen pair whose label differs, and a new pair whose genes the training rows have. The
+labels as the score (the ceiling) and a seeded random score (about 0.10) check the code.
 
 ```bash
 R=stage_one_production_seed0
