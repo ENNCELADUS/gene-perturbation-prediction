@@ -8,11 +8,12 @@ preprocessing.py), and also without every edge between the two genes of a benchm
 gene of the same symbol; a symbol with more than one gene entity takes the one with the
 most edges. The model, its neighbour sampling and its settings are the official ones. It
 trains on the training lines' genetic pairs: one sample per ordered pair, SL when at
-least half of its rows are SL (the official data are SynLethDB SL pairs and random
-negatives; ours are the screens' tested pairs). The epoch is the one with the best AUROC
-on the validation lines' pairs (the official rule, read on our validation lines), with
-the official early stop on the training loss. Output: one score per held-out (gene_a,
-gene_b); a pair with a gene outside the graph gets the training SL rate, so it ties.
+least half of its rows are SL, and as many tested non-SL pairs as SL pairs (the official
+data are SynLethDB SL pairs and as many random pairs). The epoch is the one with the
+best AUROC on the validation lines' pairs (the official rule, read on our validation
+lines), with the official early stop on the training loss. Output: one score per held-
+out (gene_a, gene_b); a pair with a gene outside the graph gets the training SL rate, so
+it ties.
 
     PYTHONPATH=third_party/kg4sl/src .venv-kg4sl/bin/python hpc/kg4sl/train.py \
         --out outputs/sl/kg4sl/seed0
@@ -179,6 +180,11 @@ def main() -> None:
         ).astype(np.int64)
 
     train, val = labelled_pairs("train"), labelled_pairs("val")
+    # official ratio, one non-SL pair per SL pair; with all tested pairs (1% SL) the
+    # official L2 shrinks every embedding and the score is one constant
+    positive, negative = train[train[:, 2] == 1], train[train[:, 2] == 0]
+    drawn = np.random.choice(len(negative), len(positive), replace=False)
+    train = np.concatenate([positive, negative[drawn]])
     np.random.shuffle(train)
     held = rows[rows["split"].isin(["val", "test"])].drop_duplicates(
         ["gene_a", "gene_b"]
@@ -234,7 +240,7 @@ def main() -> None:
                 if stalled >= 2:  # the official early stop
                     break
 
-    fill = float(train[:, 2].mean())
+    fill = 0.5  # the training SL rate
     out = held[["gene_a", "gene_b"]].assign(
         score=fill, covered=held["covered"].to_numpy()
     )
@@ -251,6 +257,7 @@ def main() -> None:
         "edges_removed_within_benchmark_pairs": int(within.sum()),
         "symbols_mapped": int(symbol_entity.size),
         "training_pairs": len(train),
+        "tested_training_pairs": len(positive) + len(negative),
         "training_sl_rate": fill,
         "validation_pairs": len(val),
         "held_pairs": len(held),
