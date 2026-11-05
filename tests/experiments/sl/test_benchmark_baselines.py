@@ -151,11 +151,18 @@ def test_run_scores_every_list(tmp_path):
         {"gene_a": ["G0", "G0", "G1", "G2"], "gene_b": ["G1", "G2", "G3", "G3"],
          "score": [0.2, 0.9, 0.1, 0.3]}
     ).to_parquet(tmp_path / "kg4sl.parquet")  # fmt: skip
+    # a per-line score: E0's SL pair (G0, G2) last
+    pd.DataFrame(
+        {"model_id": "E0", "gene_a": ["G0", "G0", "G1", "G2"],
+         "gene_b": ["G1", "G2", "G3", "G3"], "score": [0.9, 0.1, 0.8, 0.7]}
+    ).pipe(lambda f: pd.concat([f, f.assign(model_id="V0")]))\
+        .to_parquet(tmp_path / "cilantro.parquet")  # fmt: skip
     (tmp_path / "config.yaml").write_text(
         f"kind: sl_benchmark_baselines\nseed: 0\noutput_root: {tmp_path}\ntask: base\n"
         f"labels: {tmp_path}/labels.parquet\nsplit: {tmp_path}/split.json\n"
         f"gene_effect: {tmp_path}/ge.csv\nmodel: {tmp_path}/Model.csv\n"
         f"stage_one: null\nextra_scores:\n  kg4sl: {tmp_path}/kg4sl.parquet\n"
+        f"  cilantro_sl: {tmp_path}/cilantro.parquet\n"
         "top_k: 2\nbootstrap: 10\n"
     )
     out = run(load_config(tmp_path / "config.yaml"), "r0")
@@ -186,6 +193,7 @@ def test_run_scores_every_list(tmp_path):
         "labels",
         "random",
         "kg4sl",
+        "cilantro_sl",
     )
     assert {(s, c) for s, c, g in by if g == "all"} == {
         (s, c) for s in ("val", "test") for c in scorers
@@ -200,6 +208,7 @@ def test_run_scores_every_list(tmp_path):
     assert by[("test", "labels")]["recall_top10"] == pytest.approx(0.4)
     assert 0.0 <= by[("test", "random")]["recall_top10"] <= 0.4
     assert by[("test", "kg4sl")]["recall_top10"] == pytest.approx(0.4)
+    assert by[("test", "cilantro_sl")]["recall_top10"] == pytest.approx(0.0)
     # flips: G0-G1 in E0 (SL in both training lines) and G0-G2 in V0 (a 0.5 rate
     # counts as an SL majority)
     assert metrics["strata"]["seen_flip"] == 2

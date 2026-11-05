@@ -46,6 +46,7 @@ NAMES = {
     "labels": "Labels as the score (check: the ceiling)",
     "random": "Random score (check: about 0.10)",
     "kg4sl": "KG4SL (knowledge graph, official code, trained on the training lines)",
+    "cilantro_sl": "Cilantro-SL (Geneformer deletions, official code, refitted)",
 }
 #: Scorers that check the code or give a reference; never the best row.
 NOT_MODELS = {"measured_geneeffect", "labels", "random"}
@@ -325,10 +326,14 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     }
     if predicted is not None:
         scorers["stage_one_production"] = -line_values(predicted, held)
-    # line-blind scores made outside this module (hpc/kg4sl): one per (gene_a, gene_b)
+    # scores made outside this module (hpc/kg4sl, hpc/cilantro): one per (gene_a,
+    # gene_b), or per (model_id, gene_a, gene_b) when the table has model_id
     for name, path in config["extra_scores"].items():
-        table = pd.read_parquet(path).set_index(["gene_a", "gene_b"])["score"]
-        values = table.reindex(pd.MultiIndex.from_frame(held[["gene_a", "gene_b"]]))
+        table = pd.read_parquet(path)
+        keys = [k for k in ("model_id", "gene_a", "gene_b") if k in table.columns]
+        values = table.set_index(keys)["score"].reindex(
+            pd.MultiIndex.from_frame(held[keys])
+        )
         if values.isna().any():
             missing = int(values.isna().sum())
             raise ValueError(f"{path} has no score for {missing} held rows")

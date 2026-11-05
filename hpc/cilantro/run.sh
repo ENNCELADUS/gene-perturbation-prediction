@@ -3,6 +3,7 @@
 #
 #   hpc/cilantro/run.sh RUN_ID --dictionary gc95M|gc30M [--gpus 0,1,2,3] [--procs-per-gpu 2]
 #   hpc/cilantro/run.sh RUN_ID --dictionary gc95M --gene-subset 200 --epochs 2      # smoke run only
+#   hpc/cilantro/run.sh RUN_ID --dictionary gc95M --benchmark   # the multi-study SL benchmark (benchmark.py)
 #
 # Steps (released notebook in brackets): prepare_inputs, tokenize [1], original_embeddings, perturb [2, one shard
 # per process, --procs-per-gpu per GPU], generate [2], sample_negatives [3], setup_input [4], pretrain [5], then
@@ -14,7 +15,7 @@ cd "$(dirname "$0")/../.."
 
 run_id=${1:?RUN_ID required}
 shift
-dictionary="" gpus=0,1,2,3 procs=2 subset=null epochs=100
+dictionary="" gpus=0,1,2,3 procs=2 subset=null epochs=100 benchmark=false
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dictionary) dictionary=$2; shift 2 ;;
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --procs-per-gpu) procs=$2; shift 2 ;;
     --gene-subset) subset=$2; shift 2 ;;
     --epochs) epochs=$2; shift 2 ;;
+    --benchmark) benchmark=true; shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -34,6 +36,8 @@ trap 'kill 0' INT TERM
 mkdir -p "$run_dir/logs"
 
 config="{\"dictionary\": \"$dictionary\", \"gene_subset\": $subset, \"epochs\": $epochs}"
+# the key exists only in benchmark runs, so earlier runs' run.json still match
+[[ $benchmark == true ]] && config="${config%\}}, \"benchmark\": true}"
 if [[ -f $run_dir/run.json ]]; then
   [[ $(cat "$run_dir/run.json") == "$config" ]] || { echo "run.json is $(cat "$run_dir/run.json"), not $config" >&2; exit 1; }
 else
@@ -78,6 +82,13 @@ t = {'shards': n, 'genes': sum(x['genes'] for x in r), 'genes_written': sum(x['g
 'max_shard_seconds': max(x['seconds'] for x in r)}; (d / 'done.json').write_text(json.dumps(t) + '\n'); print(t)" \
     "$run_dir/perturb" "$shards"
   echo "$(date -u +%FT%TZ) done  perturb"
+fi
+
+if [[ $benchmark == true ]]; then
+  step benchmark benchmark/done.json env CUDA_VISIBLE_DEVICES="$first_gpu" "$py" hpc/cilantro/benchmark.py \
+    --run-dir "$run_dir" --epochs "$epochs"
+  echo "$(date -u +%FT%TZ) complete $run_dir"
+  exit 0
 fi
 
 step generate generated_df/sub_embs/done.json "$py" hpc/cilantro/generate_inputs.py --run-dir "$run_dir"

@@ -22,6 +22,20 @@ GENEFORMER_DATA = ROOT / "data" / "cilantro" / "geneformer"
 GENEFORMER_MODEL = GENEFORMER_DATA / "gf-12L-30M-i2048"
 DEPMAP_26Q1 = ROOT / "data" / "sl_dependency_v0" / "raw" / "depmap"
 RUNS = ROOT / "outputs" / "cilantro_reproduction"
+# The multi-study SL benchmark (run.json "benchmark": true): its genes replace the
+# SynLethDB genes in the token universe, and only its split's lines are tokenized.
+SL_LABELS = ROOT / "data" / "sl_studies" / "benchmark_v2" / "labels.parquet"
+SL_SPLIT = ROOT / "configs" / "benchmarks" / "cell_line_sl_split.json"
+#: Sides of the SL split whose lines may be fitted (GeneEffect); the held-out sides.
+SL_FIT_SIDES = ("train", "bulk_labelled")
+SL_HELD_SIDES = ("val", "test")
+
+
+def sl_split_sides() -> dict[str, str]:
+    """ModelID -> side of the SL split, for the fitted and the held-out sides."""
+    split = json.loads(SL_SPLIT.read_text())
+    return {m: s for s in SL_FIT_SIDES + SL_HELD_SIDES for m in split[s]}
+
 
 DICTIONARIES = {
     # What the fork loads by default and the notebooks never override (as released).
