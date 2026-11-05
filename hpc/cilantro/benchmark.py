@@ -135,7 +135,7 @@ def main() -> None:
         va = v.reindex(pd.MultiIndex.from_arrays([rate["model_id"], rate["ens_a"]]))
         vb = v.reindex(pd.MultiIndex.from_arrays([rate["model_id"], rate["ens_b"]]))
         frame = pd.DataFrame(np.hstack([va.to_numpy(), vb.to_numpy()]))
-        frame["SL"] = (rate["label"] >= 0.5).to_numpy()
+        frame["SL"] = (rate["label"] >= 0.5).to_numpy().astype(int)
         for i, (name, key) in enumerate(zip(NAMES, keys)):
             frame.insert(i, name, rate[key].to_numpy())
         return frame
