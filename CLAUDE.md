@@ -27,13 +27,13 @@ Replace this section on every update; history lives in `results/` and the protoc
   [record](results/stage_one_architecture/README.md)). FiLM reading the linear model's prediction recovers most of it
   (0.199–0.203) but not all, and ΔE beside the linear model adds nothing that line-permuted ΔE does not
   ([record](results/stage_one_linear_model_input/README.md)). The next build makes all current checkpoints unusable.
-- **Stage two** (SL protocol §10): pair identity wins; predicted or measured GeneEffect adds nothing over each gene's
-  mean ([record](results/sl_stage_two_seed0/README.md)). Not SL context evidence. Both: [status](results/status.html).
+- **Stage two** (SL protocol §10): pair identity wins ([record](results/sl_stage_two_seed0/README.md), [status](results/status.html)).
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels rebuilt 2026-11-04 into
   `data/sl_studies/benchmark_v2` (H20); the headline reads genetic two-class screens (77 lines: 44/17/16, placed by hand for ~79/11/10% of SL pairs; stage one's sides do not bind it), recall in
-  the top 10% averaged over screens, studies, then lines. `sl-baselines` (with labels and random scores as code checks)
-  runs on the H20 (2026-11-05). **Next**: KG4SL, then Cilantro-SL, on the SL split; the BCE stage-two model is not built.
-- The ridge from expression to GeneEffect is "the linear model" (`src/linear_model`); old-name outputs do not load.
+  the top 10% averaged over screens, studies, then lines. `sl-baselines` ran 2026-11-05: pair identity 0.524 val / 0.495
+  test leads; GeneEffect (predicted, measured, gene mean) ≈ 0.27–0.41; labels 0.96/0.92 and random 0.09/0.11 pass as code
+  checks. Pair identity has no score in studies without training lines (15/13 of 17/16 lines). **Next**: KG4SL, Cilantro-SL.
+  The expression-to-GeneEffect ridge is "the linear model" (`src/linear_model`); old-name outputs do not load.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands
