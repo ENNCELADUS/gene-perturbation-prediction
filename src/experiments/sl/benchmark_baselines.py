@@ -45,6 +45,7 @@ NAMES = {
     "measured_geneeffect": "Measured GeneEffect (reference, lines with GeneEffect)",
     "labels": "Labels as the score (check: the ceiling)",
     "random": "Random score (check: about 0.10)",
+    "kg4sl": "KG4SL (knowledge graph, official code, trained on the training lines)",
 }
 #: Scorers that check the code or give a reference; never the best row.
 NOT_MODELS = {"measured_geneeffect", "labels", "random"}
@@ -66,7 +67,7 @@ def load_config(path: Path) -> dict[str, Any]:
     require_keys(
         config,
         {"kind", "seed", "output_root", "task", "labels", "split", "gene_effect",
-         "model", "stage_one", "top_k", "bootstrap"},
+         "model", "stage_one", "extra_scores", "top_k", "bootstrap"},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_benchmark_baselines":
@@ -324,6 +325,14 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     }
     if predicted is not None:
         scorers["stage_one_production"] = -line_values(predicted, held)
+    # line-blind scores made outside this module (hpc/kg4sl): one per (gene_a, gene_b)
+    for name, path in config["extra_scores"].items():
+        table = pd.read_parquet(path).set_index(["gene_a", "gene_b"])["score"]
+        values = table.reindex(pd.MultiIndex.from_frame(held[["gene_a", "gene_b"]]))
+        if values.isna().any():
+            missing = int(values.isna().sum())
+            raise ValueError(f"{path} has no score for {missing} held rows")
+        scorers[name] = values.to_numpy(dtype=np.float64)
     held["stratum"] = strata(training, held)
     base = held[[*LIST_KEYS, "gene_a", "gene_b", "label", "stratum"]]
     scores = pd.concat(
