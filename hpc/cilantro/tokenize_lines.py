@@ -7,6 +7,10 @@ unchanged). The notebook's unused full-matrix h5ad is not written. The released
 perturber reads its gene list from Human_SL_genes.pkl, which the Drive folder does not
 hold; it is rebuilt here as the tokenized gene universe (the paper: "for all HVGs and
 relevant SL and non-SL genes").
+
+With "benchmark": true in run.json, the genes of the multi-study SL benchmark's labelled
+rows replace the SynLethDB genes, and only the lines of its split are tokenized (the
+HVGs are still chosen over every line).
 """
 
 from __future__ import annotations
@@ -20,11 +24,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (  # noqa: E402
     DICTIONARIES,
     OFFICIAL_DATA,
+    SL_LABELS,
     SYMBOL_MAP,
     configure,
     mark_done,
     paths,
     run_config,
+    sl_split_sides,
 )
 
 
@@ -34,7 +40,9 @@ def main() -> None:
     args = parser.parse_args()
     configure(args.run_dir)
     p = paths(args.run_dir)
-    dictionary = DICTIONARIES[run_config(args.run_dir)["dictionary"]]
+    config = run_config(args.run_dir)
+    dictionary = DICTIONARIES[config["dictionary"]]
+    benchmark = config.get("benchmark", False)
 
     import anndata as ad
     import pandas as pd
@@ -75,8 +83,13 @@ def main() -> None:
             return id_gene_dict[g]
         return " "
 
-    with open(OFFICIAL_DATA / "Human_SL_pairs.pkl", "rb") as f:
-        SL_genes = pickle.load(f)
+    if benchmark:
+        labels = pd.read_parquet(SL_LABELS, columns=["model_id", "gene_a", "gene_b"])
+        labels = labels[labels["model_id"].isin(sl_split_sides())]
+        SL_genes = dict.fromkeys(sorted(set(labels["gene_a"]) | set(labels["gene_b"])))
+    else:
+        with open(OFFICIAL_DATA / "Human_SL_pairs.pkl", "rb") as f:
+            SL_genes = pickle.load(f)
     SL_ensembl = [query_id(g) for g in SL_genes.keys()]
     SL_ensembl = list(filter(lambda x: x != " ", SL_ensembl))
 
@@ -125,6 +138,8 @@ def main() -> None:
     )
 
     adata_hvg = adata2[:, hvgs]
+    if benchmark:
+        adata_hvg = adata_hvg[adata_hvg.obs_names.isin(sl_split_sides())]
     p["tokenize_input"].mkdir(parents=True, exist_ok=True)
     adata_hvg.write_h5ad(p["sl_hvg_h5ad"])
 
