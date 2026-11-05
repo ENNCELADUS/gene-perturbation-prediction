@@ -367,6 +367,26 @@ OMP_NUM_THREADS=32 MKL_NUM_THREADS=32 nohup bash -c "hpc/run.sh linear-model-pro
   > outputs/launches/sl_benchmark_chain.log 2>&1 &
 ```
 
+The config's `extra_scores` adds line-blind scores per (gene A, gene B) from other harnesses; the run stops if a
+held-out pair has no score. KG4SL makes one (`hpc/kg4sl/`, its own environment `.venv-kg4sl`, Python 3.11 and
+TensorFlow 2.15 on CPU). The released code (commit `be3626a`) needs TensorFlow 1.15 and Python 3.6, which the H20
+cannot install, so `official.patch` runs it in TensorFlow 2's `compat.v1` graph mode: the import line and Xavier as
+`glorot_uniform` (the same initializer). Send the code from the laptop, then build:
+
+```bash
+ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git init -q third_party/kg4sl'
+git -C <clone of JieZheng-ShanghaiTech/KG4SL> push ssh://root@10.15.171.204:30838/2023533015/VCC_Project/third_party/kg4sl be3626a6970479affb95fdf6b1d84a6244e52637:refs/heads/pinned
+# on the H20
+git -C third_party/kg4sl checkout pinned && hpc/kg4sl/setup.sh
+PYTHONPATH=third_party/kg4sl/src .venv-kg4sl/bin/python hpc/kg4sl/train.py --out outputs/sl/kg4sl/seed0   # ~1 min
+```
+
+`train.py` uses the official SynLethKG without its SL, non-SL and SR edges and without every edge between the two
+genes of a benchmark pair. It trains the official model with the official settings on the training lines' genetic
+pairs (SL when half or more of the pair's rows are SL), with one tested non-SL pair for each SL pair (the official
+ratio; with all tested pairs, which are 1% SL, the score became one constant). It keeps the epoch with the best
+validation AUROC. A pair with a gene outside the graph (5% of the held-out rows) gets 0.5, so these pairs tie.
+
 ## The `linear-model` command
 
 `hpc/run.sh linear-model CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear model
