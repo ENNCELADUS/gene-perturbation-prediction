@@ -47,7 +47,6 @@ def official_args(epochs: int) -> argparse.Namespace:
         batch_size=512,
         l2_weight=0.0039,
         lr=2e-3,
-        earlystop_flag=True,
     )
 
 
@@ -240,9 +239,8 @@ def main() -> None:
                 if stalled >= 2:  # the official early stop
                     break
 
-    fill = 0.5  # the training SL rate
     out = held[["gene_a", "gene_b"]].assign(
-        score=fill, covered=held["covered"].to_numpy()
+        score=0.5, covered=held["covered"].to_numpy()
     )
     out.loc[held_covered.index, "score"] = best["scores"]
     out.to_parquet(cli.out / "scores.parquet", index=False)
@@ -258,7 +256,6 @@ def main() -> None:
         "symbols_mapped": int(symbol_entity.size),
         "training_pairs": len(train),
         "tested_training_pairs": len(positive) + len(negative),
-        "training_sl_rate": fill,
         "validation_pairs": len(val),
         "held_pairs": len(held),
         "held_pairs_covered": int(held["covered"].sum()),
