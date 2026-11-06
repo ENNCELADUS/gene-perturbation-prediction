@@ -53,6 +53,8 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
 .long { max-height: 70vh; overflow: auto; }
 .long td { white-space: nowrap; }
 .long td.small { white-space: normal; min-width: 22ch; }
+.wide td { max-width: 72ch; }
+.wide td:nth-child(2) { text-align: left; }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
@@ -188,7 +190,7 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
   <p>Results of 2026-11-06, seed 0, on the stage-two benchmark (run <code>benchmark_baselines_all_seed0</code>,
   <code>hpc/run.sh sl-baselines</code>). No baseline reads the basal single-cell profile. Each trained baseline fits
   only on training lines; validation and test lines are scored once.</p>
-  <div class="wrap"><table>
+  <div class="wrap wide"><table>
     <caption>Table 6. Baselines. "Line-specific" means that the score of one pair can change from line to line.</caption>
     <thead><tr><th>Baseline</th><th>Score of a pair in a held-out line</th><th>Fitted on</th><th>Line-specific</th></tr></thead>
     <tbody>
