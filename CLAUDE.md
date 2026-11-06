@@ -32,10 +32,8 @@ Replace this section on every update; history lives in `results/` and the protoc
   headline = recall in the top 10% of genetic two-class screens, averaged over screens, studies, then lines (77 lines,
   44/17/16, placed by hand). 2026-11-05, val / test: pair identity 0.524 / 0.495 leads; KG4SL (official code,
   `hpc/kg4sl`) 0.352 / 0.306 learns the training pairs (label-flip AUROC 0.37 / 0.34); GeneEffect scorers 0.27–0.41, at
-  random on label flips; labels 0.96 / 0.92 and random 0.09 / 0.11 pass as code checks. Cilantro-SL (official code,
-  `hpc/cilantro/run.sh --benchmark`) covers 1.5% of held-out genetic rows (both genes in the line's top 2,048 tokens):
-  0.113 / 0.115 overall; on its covered rows 0.357 / 0.289 (AUROC 0.70 / 0.75), behind only pair identity there.
-  The expression-to-GeneEffect ridge is "the linear model" (`src/linear_model`); old-name outputs do not load.
+  random on label flips; labels 0.96 / 0.92, random 0.09 / 0.11. Cilantro-SL (`hpc/cilantro/run.sh --benchmark`) scores
+  1.5% of held-out rows (both genes in the line's top 2,048 tokens): 0.113 / 0.115; on those rows 0.357 / 0.289.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands
