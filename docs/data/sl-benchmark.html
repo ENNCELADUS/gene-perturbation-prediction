@@ -206,64 +206,40 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
         model and settings, refitted on our split. A pair needs both genes in the line's top 2,048 tokens; the other pairs
         (98.5% of the held-out genetic rows) get 0.5.</td><td>Stage one: training-side lines with GeneEffect;
         classifier: training lines' genetic pairs</td><td>Yes</td></tr>
-      <tr><td>Stage one's predicted GeneEffect</td><td>The negative sum of the two genes' predicted GeneEffect in the line
-        (the linear model, fitted once on all lines with GeneEffect).</td><td>GeneEffect of labelled lines</td><td>Yes</td></tr>
-      <tr><td>Pan-essentiality</td><td>The negative sum of the two genes' mean GeneEffect over the training lines.</td>
-        <td>Training lines' GeneEffect</td><td>No</td></tr>
-      <tr><td><i>Measured GeneEffect (reference)</i></td><td>The negative sum of the two genes' measured GeneEffect in the
-        line. Only for lines with GeneEffect (12 validation, 11 test).</td><td>—</td><td>Yes</td></tr>
       <tr><td><i>Labels (check)</i></td><td>The label itself: the ceiling of the metric, min(1, 0.1 n / SL pairs) for each screen.</td><td>—</td><td>Yes</td></tr>
       <tr><td><i>Random (check)</i></td><td>A seeded random number: about 0.10.</td><td>—</td><td>—</td></tr>
     </tbody></table></div>
+  <p>Table 7 also splits the held-out pairs into strata, ranked inside each stratum of each screen. A pair is
+  <i>seen</i> when the same study labelled it in a training line. It <i>agrees</i> when its label equals the majority of
+  those labels (a fraction of 0.5 or more counts as SL), and it <i>differs</i> when it does not. A <i>new</i> pair has
+  both genes in training rows. The two seen strata are defined with the held-out label, so the training SL fraction
+  scores 0.96 and 0.00 there by construction. The pairs whose label differs test context: the label changes from line
+  to line. In that stratum SL pairs are more than 10% of the rows, so the ceiling of recall is low; read AUROC there.</p>
   <div class="wrap"><table>
-    <caption>Table 7. Recall in the top 10% ↑ (AUROC ↑ in brackets) on all held-out pairs, mean over lines. Best baseline in bold; references and checks in italics.</caption>
-    <thead><tr><th>Baseline</th><th class="num">Validation (17 lines)</th><th class="num">Test (16 lines)</th></tr></thead>
+    <caption>Table 7. Recall in the top 10% ↑ (AUROC ↑ in brackets), validation / test, mean over held-out lines (17 validation, 16 test). Rows: 543,756 in all, 303,670 seen-agree, 8,164 seen-differ, 231,745 new. Best baseline in bold; checks in italics.</caption>
+    <thead><tr><th>Baseline</th><th class="num">All pairs</th><th class="num">Seen pair, label agrees</th><th class="num">Seen pair, label differs</th><th class="num">New pair</th></tr></thead>
     <tbody>
-      <tr><td>Training SL fraction</td><td class="num"><b>0.524</b> (0.77)</td><td class="num"><b>0.495</b> (0.77)</td></tr>
-      <tr><td>KG4SL</td><td class="num">0.352 (0.69)</td><td class="num">0.306 (0.65)</td></tr>
-      <tr><td>Cilantro-SL</td><td class="num">0.113 (0.51)</td><td class="num">0.115 (0.51)</td></tr>
-      <tr><td>Stage one's predicted GeneEffect</td><td class="num">0.373 (0.73)</td><td class="num">0.278 (0.68)</td></tr>
-      <tr><td>Pan-essentiality</td><td class="num">0.369 (0.73)</td><td class="num">0.276 (0.68)</td></tr>
-      <tr><td><i>Measured GeneEffect (reference)</i></td><td class="num"><i>0.412 (0.74)</i></td><td class="num"><i>0.269 (0.64)</i></td></tr>
-      <tr><td><i>Labels (check)</i></td><td class="num"><i>0.964</i></td><td class="num"><i>0.920</i></td></tr>
-      <tr><td><i>Random (check)</i></td><td class="num"><i>0.093</i></td><td class="num"><i>0.106</i></td></tr>
-    </tbody></table></div>
-  <p>Table 8 splits the held-out pairs into strata, ranked inside each stratum of each screen. A pair is <i>seen</i> when
-  the same study labelled it in a training line. It <i>agrees</i> when its label equals the majority of those labels (a
-  fraction of 0.5 or more counts as SL), and it <i>differs</i> when it does not. A <i>new</i> pair has both genes in
-  training rows. The first two strata are defined with the held-out label, so the training SL fraction scores 0.96 and
-  0.00 there by construction. The pairs whose label differs are the test of context: the label changes from line to line.
-  In that stratum SL pairs are more than 10% of the rows, so the ceiling of recall is low; read AUROC there.</p>
-  <div class="wrap"><table>
-    <caption>Table 8. Recall in the top 10% ↑ for each stratum of held-out pairs, validation / test (AUROC ↑ in brackets for the label-differs stratum). Rows: 303,670 seen-agree, 8,164 seen-differ, 231,745 new.</caption>
-    <thead><tr><th>Baseline</th><th class="num">Seen pair, label agrees</th><th class="num">Seen pair, label differs</th><th class="num">New pair</th></tr></thead>
-    <tbody>
-      <tr><td>Training SL fraction</td><td class="num"><b>0.962 / 0.926</b></td><td class="num">0.001 / 0.002 (0.00 / 0.00)</td><td class="num">0.100 / 0.100</td></tr>
-      <tr><td>KG4SL</td><td class="num">0.521 / 0.542</td><td class="num">0.079 / 0.081 (0.37 / 0.34)</td><td class="num">0.278 / 0.228</td></tr>
-      <tr><td>Cilantro-SL</td><td class="num">0.118 / 0.117</td><td class="num"><b>0.102</b> / 0.097 (0.49 / 0.49)</td><td class="num">0.105 / 0.111</td></tr>
-      <tr><td>Stage one's predicted GeneEffect</td><td class="num">0.402 / 0.317</td><td class="num">0.099 / 0.120 (0.49 / 0.47)</td><td class="num"><b>0.311</b> / 0.231</td></tr>
-      <tr><td>Pan-essentiality</td><td class="num">0.403 / 0.317</td><td class="num">0.100 / <b>0.125</b> (0.47 / 0.47)</td><td class="num"><b>0.311 / 0.250</b></td></tr>
-      <tr><td><i>Measured GeneEffect (reference)</i></td><td class="num"><i>0.464 / 0.273</i></td><td class="num"><i>0.096 / 0.104 (0.53 / 0.56)</i></td><td class="num"><i>0.253 / 0.298</i></td></tr>
-      <tr><td><i>Labels (check)</i></td><td class="num"><i>0.962 / 0.926</i></td><td class="num"><i>0.278 / 0.243</i></td><td class="num"><i>0.842 / 0.718</i></td></tr>
-      <tr><td><i>Random (check)</i></td><td class="num"><i>0.119 / 0.103</i></td><td class="num"><i>0.081 / 0.087 (0.47 / 0.45)</i></td><td class="num"><i>0.103 / 0.106</i></td></tr>
+      <tr><td>Training SL fraction</td><td class="num"><b>0.524 / 0.495</b> (0.77 / 0.77)</td><td class="num"><b>0.962 / 0.926</b> (1.00 / 1.00)</td><td class="num">0.001 / 0.002 (0.00 / 0.00)</td><td class="num">0.100 / 0.100 (0.50 / 0.50)</td></tr>
+      <tr><td>KG4SL</td><td class="num">0.352 / 0.306 (0.69 / 0.65)</td><td class="num">0.521 / 0.542 (0.80 / 0.79)</td><td class="num">0.079 / 0.081 (0.37 / 0.34)</td><td class="num"><b>0.278 / 0.228</b> (0.59 / 0.58)</td></tr>
+      <tr><td>Cilantro-SL</td><td class="num">0.113 / 0.115 (0.51 / 0.51)</td><td class="num">0.118 / 0.117 (0.51 / 0.51)</td><td class="num"><b>0.102 / 0.097</b> (0.49 / 0.49)</td><td class="num">0.105 / 0.111 (0.50 / 0.51)</td></tr>
+      <tr><td><i>Labels (check)</i></td><td class="num"><i>0.964 / 0.920</i></td><td class="num"><i>0.962 / 0.926</i></td><td class="num"><i>0.278 / 0.243</i></td><td class="num"><i>0.842 / 0.718</i></td></tr>
+      <tr><td><i>Random (check)</i></td><td class="num"><i>0.093 / 0.106</i></td><td class="num"><i>0.119 / 0.103</i></td><td class="num"><i>0.081 / 0.087 (0.47 / 0.45)</i></td><td class="num"><i>0.103 / 0.106</i></td></tr>
     </tbody></table></div>
   <div class="wrap"><table>
-    <caption>Table 9. Recall in the top 10% ↑ (AUROC ↑ in brackets) on the 6,804 held-out rows that Cilantro-SL can score (both genes in the line's top 2,048 tokens; 13 validation and 14 test lines), ranked inside each screen. Computed once outside the benchmark code.</caption>
+    <caption>Table 8. Recall in the top 10% ↑ (AUROC ↑ in brackets) on the 6,804 held-out rows that Cilantro-SL can score (both genes in the line's top 2,048 tokens; 13 validation and 14 test lines), ranked inside each screen. Computed once outside the benchmark code.</caption>
     <thead><tr><th>Baseline</th><th class="num">Validation</th><th class="num">Test</th></tr></thead>
     <tbody>
       <tr><td>Training SL fraction</td><td class="num">0.324 (<b>0.74</b>)</td><td class="num"><b>0.394</b> (<b>0.80</b>)</td></tr>
       <tr><td>Cilantro-SL</td><td class="num"><b>0.357</b> (0.70)</td><td class="num">0.289 (0.75)</td></tr>
       <tr><td>KG4SL</td><td class="num">0.141 (0.53)</td><td class="num">0.119 (0.46)</td></tr>
-      <tr><td>Stage one's predicted GeneEffect</td><td class="num">0.177 (0.62)</td><td class="num">0.109 (0.56)</td></tr>
-      <tr><td>Pan-essentiality</td><td class="num">0.230 (0.63)</td><td class="num">0.139 (0.56)</td></tr>
       <tr><td><i>Labels (check)</i></td><td class="num"><i>0.764</i></td><td class="num"><i>0.759</i></td></tr>
       <tr><td><i>Random (check)</i></td><td class="num"><i>0.120</i></td><td class="num"><i>0.093</i></td></tr>
     </tbody></table></div>
   <ul>
-    <li><b>The training SL fraction is the best baseline.</b> It copies the pair's label from the training lines and does not read the held-out line.</li>
+    <li><b>Memory of the training labels gives most of the signal.</b> The training SL fraction copies each pair's label from the training lines and does not read the held-out line; on seen pairs whose label agrees it is at the ceiling.</li>
     <li><b>KG4SL learns the training pairs.</b> Its AUROC on pairs whose label differs is below random (0.37 / 0.34): it gives each pair its training label.</li>
-    <li><b>No baseline follows a label that changes between lines.</b> In the label-differs stratum every baseline is at random level or below (AUROC 0.34–0.56).</li>
-    <li><b>Cilantro-SL scores few pairs, but scores them well.</b> It covers 1.5% of the held-out genetic rows. On those rows only the training SL fraction is better, and the rows are pairs of highly expressed genes.</li>
+    <li><b>No baseline follows a label that changes between lines.</b> On pairs whose label differs, no baseline is above random (AUROC 0.00–0.49).</li>
+    <li><b>Cilantro-SL scores few pairs, but scores them well.</b> It covers 1.5% of the held-out genetic rows. On those rows it is near the training SL fraction, and the rows are pairs of highly expressed genes.</li>
   </ul>
 </section>
 </main>
