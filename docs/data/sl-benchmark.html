@@ -236,38 +236,10 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
       <tr><td><i>Random (check)</i></td><td class="num"><i>0.120</i></td><td class="num"><i>0.093</i></td></tr>
     </tbody></table></div>
   <ul>
-    <li><b>Memory of the training labels gives most of the signal.</b> The training SL fraction copies each pair's label from the training lines and does not read the held-out line; on seen pairs whose label agrees it is at the ceiling.</li>
-    <li><b>KG4SL learns the training pairs.</b> Its AUROC on pairs whose label differs is below random (0.37 / 0.34): it gives each pair its training label.</li>
-    <li><b>No baseline follows a label that changes between lines.</b> On pairs whose label differs, no baseline is above random (AUROC 0.00–0.49).</li>
-    <li><b>Cilantro-SL scores few pairs, but scores them well.</b> It covers 1.5% of the held-out genetic rows. On those rows it is near the training SL fraction, and the rows are pairs of highly expressed genes.</li>
-  </ul>
-  <h3>Limits of Cilantro-SL</h3>
-  <p>Run <code>benchmark_gc95M</code> (2026-11-05). Each limit comes from the released design, not from our refit.</p>
-  <ul>
-    <li><b>The input window sets the coverage.</b> Geneformer reads a line as a rank-value sequence: genes sorted by
-      expression divided by the gene's corpus median, cut at 2,048 tokens. Cilantro-SL embeds a gene in a line only by
-      deleting its token from that sequence, so a gene below rank 2,048 has no embedding in that line. The token set
-      holds 18,729 genes (the benchmark's genes and 500 HVGs), thus most genes of each line fall outside the window. A pair
-      needs both genes inside it: 1.5% of the held-out genetic rows, in 13 of 17 validation and 14 of 16 test lines. A
-      gene must also have a Geneformer token, an Ensembl ID and a Gene2vec vector.</li>
-    <li><b>Low or absent expression cannot be read.</b> Loss of a gene's expression is often the context that makes a
-      pair SL (for example, a silenced paralog). A gene that a line does not express has no token in that line, so
-      Cilantro-SL cannot see this context; it gives such a pair 0.5. The covered rows are pairs of highly expressed
-      genes, which is a different population from the benchmark (Table 8).</li>
-    <li><b>Vocabulary question: the token dictionary is very likely not the model's.</b> The released code loads
-      <code>gf-12L-30M-i2048</code>, which was pretrained with the gc30M token dictionary. The Geneformer fork that the code
-      uses loads the gc95M dictionary and gene medians by default, and the notebooks do not change this. Thus a gene's
-      token ID from gc95M probably indexes the embedding that the model learned for a different gene, and the rank order
-      uses gc95M medians. No step raises an error. The benchmark run keeps gc95M to match the released code. We did not
-      measure the effect: the matched run (<code>hpc/cilantro/run.sh RUN_ID --dictionary gc30M --benchmark</code>) has
-      not run. Because gc95M has <code>&lt;cls&gt;</code> and <code>&lt;eos&gt;</code> tokens, the fork's mean pooling
-      also drops the first and the last position of each sequence, although the tokenizer adds no special tokens: the
-      top-ranked gene is not in any embedding (reproduction design §3).</li>
-    <li><b>Stage one is mostly the gene mean.</b> In the reproduction, 85% of GeneEffect variance is between genes, and
-      the released stage one explains 16% of the variance inside each gene, on its own training rows
-      (<a href="../../results/cilantro_reproduction_seed0/README.md">record</a>). The classifier reads the 32-d layer of
-      that regressor, so its line-specific signal is small. On pairs whose label differs between lines it is at random
-      (AUROC 0.49 / 0.49, Table 7).</li>
+    <li><b>Memory of training labels gives most of the signal.</b> The training SL fraction reads no held-out line and is at the ceiling on seen pairs whose label agrees.</li>
+    <li><b>No baseline follows context.</b> On pairs whose label differs between lines, all are at or below random (AUROC 0.00–0.49); KG4SL (0.37 / 0.34) gives each pair its training label.</li>
+    <li><b>Cilantro-SL scores 1.5% of rows.</b> It embeds a gene only by deleting its token from the line's top 2,048 Geneformer tokens, so a pair is scored only when both genes are among the line's most expressed genes; all other pairs get 0.5. Table 8 keeps these 6,804 (line, pair) rows. Unexpressed genes, often the SL context (a silenced paralog), are never read.</li>
+    <li><b>On its own rows, Cilantro-SL is no better than label memory</b> (AUROC 0.70 / 0.75 against 0.74 / 0.80). Its pair embedding comes from a stage one that is mostly the gene mean (16% of within-gene variance, on its training rows; <a href="../../results/cilantro_reproduction_seed0/README.md">record</a>), so the classifier learns which genes are SL, not in which line. The released code also very likely feeds the 30M model gc95M token IDs instead of its gc30M vocabulary, and pooling drops the top-ranked gene; the matched gc30M run has not run.</li>
   </ul>
 </section>
 </main>
