@@ -216,8 +216,8 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
   scores 0.96 and 0.00 there by construction. The pairs whose label differs test context: the label changes from line
   to line. In that stratum SL pairs are more than 10% of the rows, so the ceiling of recall is low; read AUROC there.</p>
   <div class="wrap"><table>
-    <caption>Table 7. Recall in the top 10% ↑ (AUROC ↑ in brackets), validation / test, mean over held-out lines (17 validation, 16 test). Rows: 543,756 in all, 303,670 seen-agree, 8,164 seen-differ, 231,745 new. Best baseline in bold; checks in italics.</caption>
-    <thead><tr><th>Baseline</th><th class="num">All pairs</th><th class="num">Seen pair, label agrees</th><th class="num">Seen pair, label differs</th><th class="num">New pair</th></tr></thead>
+    <caption>Table 7. Recall in the top 10% ↑ (AUROC ↑ in brackets), validation / test, mean over held-out lines (17 validation, 16 test). Column headers give each stratum's share of the held-out rows.</caption>
+    <thead><tr><th>Baseline</th><th class="num">All pairs (100%)</th><th class="num">Seen pair, label agrees (55.8%)</th><th class="num">Seen pair, label differs (1.5%)</th><th class="num">New pair (42.6%)</th></tr></thead>
     <tbody>
       <tr><td>Training SL fraction</td><td class="num"><b>0.524 / 0.495</b> (0.77 / 0.77)</td><td class="num"><b>0.962 / 0.926</b> (1.00 / 1.00)</td><td class="num">0.001 / 0.002 (0.00 / 0.00)</td><td class="num">0.100 / 0.100 (0.50 / 0.50)</td></tr>
       <tr><td>KG4SL</td><td class="num">0.352 / 0.306 (0.69 / 0.65)</td><td class="num">0.521 / 0.542 (0.80 / 0.79)</td><td class="num">0.079 / 0.081 (0.37 / 0.34)</td><td class="num"><b>0.278 / 0.228</b> (0.59 / 0.58)</td></tr>
