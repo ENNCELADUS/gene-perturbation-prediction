@@ -33,8 +33,7 @@ Replace this section on every update; history lives in `results/` and the protoc
   44/17/16, placed by hand). 2026-11-05, val / test: pair identity 0.524 / 0.495 leads; KG4SL (official code,
   `hpc/kg4sl`) 0.352 / 0.306 learns the training pairs (label-flip AUROC 0.37 / 0.34); GeneEffect scorers 0.27–0.41, at
   random on label flips; labels 0.96 / 0.92, random 0.09 / 0.11. Cilantro-SL (`hpc/cilantro/run.sh --benchmark`) scores
-  1.5% of held-out rows (both genes in the line's top 2,048 tokens): 0.113 / 0.115; on those rows 0.357 / 0.289. Its limits (2,048-token window, gc95M dictionary
-  probably not the gc30M model's, gc30M run not done) are in the card's §4.
+  1.5% of held-out rows (both genes in the line's top 2,048 tokens): 0.113 / 0.115; on those 0.357 / 0.289 (limits: card §4).
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands
