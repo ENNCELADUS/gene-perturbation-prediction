@@ -19,6 +19,7 @@ prints every command's arguments.
 | `cell-states`, `pie-precompute --steps states` | the cell-state telemetry and the frozen PIE on its states | CPU; scVI and PIE on GPUs | [Cell states](#the-cell-states) |
 | `sl-paris`, `sl-stage-two` | PARIS (`sl.paris`) and SL stage two on stage one's GeneEffect (`sl.stage_two`) | CPU, `.venv-pie` | [SL stage two](#sl-stage-two) |
 | `sl-baselines` | baselines on the multi-study SL benchmark (`sl.benchmark_baselines`) | CPU, `.venv-pie` | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-conditional` | the modular SL backbone, round zero (`sl.conditional`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 
 GPU use, measured on 30838 in October 2026 (one H20 per job unless noted; SM is `nvidia-smi dmon`'s busy share):
@@ -350,16 +351,19 @@ hpc/run.sh sl-stage-two configs/sl/stage_two.yaml --run-id stage_two_seed0
 
 ## SL benchmark baselines
 
-Stage one and stage two are separate (decision 2026-11-04). The stage-one benchmark keeps the final split. Stage two
-reads one production table: `linear-model-production` fits the configuration that the stage-one benchmark chose (the default
-linear model's reference row, `configs/linear_model/default_linear_model.yaml`) once on every labelled line, with no validation set
-and no cross-fitting, and writes the GeneEffect of every single-cell line to
-`outputs/linear_model/<run id>/production/predictions.parquet`. A labelled line that shares a patient with an SL
-validation or test line without GeneEffect leaves the fit; `production.json` names it.
+Stage one and stage two are separate (decision 2026-11-04). The stage-one benchmark keeps the final split. Since
+2026-11-12, stage two reads the SL backbone's GeneEffect table, fitted without the SL held-out lines (below).
+`linear-model-production` (one fit on every labelled line) is kept for reference only: it reads the GeneEffect of
+most SL held-out lines.
+
+`sl-conditional` (`src.experiments.sl.conditional`, SL protocol §11) is round zero of the modular SL backbone. It
+fits the default linear expression model on the SL split's training side (training lines out of fold) and writes
+`predictions.parquet` (GeneEffect of every SL line), `scores/{conditional,conditional_ablated,head,head_ablated}.parquet`,
+`metrics.json` and `results.md` (stage-one metrics, the head's penalties) to `outputs/sl/conditional/<run id>/`.
 
 `sl-baselines` (`src.experiments.sl.benchmark_baselines`) reads the multi-study SL benchmark's labels, the SL split
-and the production table ([data card](../docs/data/sl-benchmark.html)). It scores each validation and test list with
-pair identity, pan-essentiality, the production prediction and the measured GeneEffect (a reference, on lines with
+and the backbone's GeneEffect table ([data card](../docs/data/sl-benchmark.html)). It scores each validation and test
+list with pair identity, pan-essentiality, the predicted and the measured GeneEffect (a reference, on lines with
 GeneEffect only), and writes `scores.parquet`, `lists.csv`, `lines.csv`, `metrics.json` and `results.md` to
 `outputs/sl/benchmark_baselines/<run id>/`. The headline is recall in the top 10% of each list (the known positives of
 a line's lists pooled, then the mean over lines), with the per-line difference from pair identity; AUROC and AUPRC over
@@ -370,15 +374,15 @@ majority of those labels, a seen pair whose label differs, and a new pair whose 
 labels as the score (the ceiling) and a seeded random score (about 0.10) check the code.
 
 ```bash
-R=stage_one_production_seed0
-OMP_NUM_THREADS=32 MKL_NUM_THREADS=32 nohup bash -c "hpc/run.sh linear-model-production configs/linear_model/default_linear_model.yaml \
-  --sl-split configs/benchmarks/cell_line_sl_split.json --run-id $R \
-  && hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id benchmark_baselines_seed0" \
-  > outputs/launches/sl_benchmark_chain.log 2>&1 &
+OMP_NUM_THREADS=32 MKL_NUM_THREADS=32 nohup bash -c "hpc/run.sh sl-conditional configs/sl/conditional.yaml \
+  --run-id conditional_seed0 \
+  && hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id benchmark_backbone_seed0" \
+  > outputs/launches/sl_backbone_chain.log 2>&1 &
 ```
 
-The config's `extra_scores` adds scores from other harnesses, per (gene A, gene B) or, when the table has `model_id`,
-per (line, gene A, gene B); the run stops if a held-out row has no score. KG4SL makes one (`hpc/kg4sl/`, its own environment `.venv-kg4sl`, Python 3.11 and
+The config's `extra_scores` adds scores from other harnesses, per (gene A, gene B), with the line and the design
+when the table has `model_id` and `design`; the run stops if a held-out row is missing from a table, and a NaN score
+leaves the row unranked by that scorer. KG4SL makes one (`hpc/kg4sl/`, its own environment `.venv-kg4sl`, Python 3.11 and
 TensorFlow 2.15 on CPU). The released code (commit `be3626a`) needs TensorFlow 1.15 and Python 3.6, which the H20
 cannot install, so `official.patch` runs it in TensorFlow 2's `compat.v1` graph mode: the import line and Xavier as
 `glorot_uniform` (the same initializer). Send the code from the laptop, then build:

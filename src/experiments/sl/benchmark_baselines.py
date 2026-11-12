@@ -8,7 +8,8 @@ AUPRC over the positive rate are averaged the same way. Screens under a treatmen
 activating anchor or a group-level call are scored but kept out of the headline.
 Scorers: the pair's hit rate in the same study's training lines (pair identity), each
 gene's mean GeneEffect over the training lines (pan-essentiality), stage one's
-production prediction of GeneEffect in the line, and the measured GeneEffect as a
+prediction of GeneEffect in the line (the SL backbone's reader, fitted without the
+SL held-out lines, ``hpc/run.sh sl-conditional``), and the measured GeneEffect as a
 reference, never a bar (only lines with GeneEffect have it). Two checks of the
 benchmark code: the labels as the score (the ceiling, min(1, 0.1 n / positives) per
 screen) and a seeded random score (about 0.10). Every split is reported for all
@@ -39,7 +40,11 @@ LIST_KEYS = ["split", "design", "condition", "study_id", "list_id", "model_id"]
 HEADLINE = "genetic"
 METRICS = ["recall_top10", "auroc", "auprc_lift"]
 NAMES = {
-    "stage_one_production": "Stage one's predicted GeneEffect",
+    "stage_one": "Stage one's predicted GeneEffect (linear expression model)",
+    "conditional": "Conditional score (backbone: B's predicted change when A is lost)",
+    "conditional_ablated": "Conditional score, context-ablated (training mean profile)",
+    "head": "Backbone head (logistic, on the conditional terms)",
+    "head_ablated": "Backbone head, context-ablated (training mean profile)",
     "pair_identity": "Pair identity (hit rate in the study's training lines)",
     "pan_essentiality": "Pan-essentiality (gene mean GeneEffect)",
     "measured_geneeffect": "Measured GeneEffect (reference, lines with GeneEffect)",
@@ -147,6 +152,34 @@ def strata(training: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
         ["seen_agree", "seen_flip", "new_pair"],
         "unseen_gene",
     )
+
+
+def label_agreement(rows: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    """The stage-two ceiling, from the benchmark's own rows (every side): how often
+    two labels of one pair agree, within a line across lists (``same_line``: another
+    study or screen of the line) and within a study across lines (``same_study``).
+    ``agreement`` is over all label pairs, ``positive_agreement`` the chance that a
+    second label is SL when the first is."""
+
+    def pairs(frame: pd.DataFrame, key: str) -> dict[str, float | int | None]:
+        counts = frame.groupby([key, "gene_a", "gene_b"])["label"].agg(["size", "sum"])
+        counts = counts[counts["size"] >= 2]
+        n, k = counts["size"].to_numpy(float), counts["sum"].to_numpy(float)
+        both, total = k * (k - 1) + (n - k) * (n - k - 1), n * (n - 1)
+        return {
+            "pairs": len(counts),
+            "agreement": float(both.sum() / total.sum()) if len(counts) else None,
+            "positive_agreement": (
+                float((k * (k - 1)).sum() / (k * (n - 1)).sum()) if k.sum() else None
+            ),
+        }
+
+    # one label per line and study, so ``same_study`` compares lines only
+    per_line = rows.drop_duplicates(["study_id", "model_id", "gene_a", "gene_b"])
+    return {
+        "same_line": pairs(rows, "model_id"),
+        "same_study": pairs(per_line, "study_id"),
+    }
 
 
 def pair_sum(rows: pd.DataFrame, value: Callable[[str], np.ndarray]) -> np.ndarray:
@@ -333,18 +366,20 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "random": np.random.default_rng(int(config["seed"])).random(len(held)),
     }
     if predicted is not None:
-        scorers["stage_one_production"] = -line_values(predicted, held)
-    # scores made outside this module (hpc/kg4sl, hpc/cilantro, ...): one per
-    # (gene_a, gene_b), or per (model_id, gene_a, gene_b) when the table has model_id;
-    # an optional ``covered`` column marks the rows the model really scores
+        scorers["stage_one"] = -line_values(predicted, held)
+    # scores made outside this module (hpc/kg4sl, hpc/cilantro, sl-conditional, ...):
+    # one per (gene_a, gene_b), with model_id and design when the table has them; a
+    # held row the table lacks raises, a NaN score leaves the row unranked by that
+    # scorer; an optional ``covered`` column marks the rows the model really scores
     covered = {}
     for name, path in config["extra_scores"].items():
         table = pd.read_parquet(path)
-        keys = [k for k in ("model_id", "gene_a", "gene_b") if k in table.columns]
-        values = table.set_index(keys).reindex(pd.MultiIndex.from_frame(held[keys]))
-        if values["score"].isna().any():
-            missing = int(values["score"].isna().sum())
-            raise ValueError(f"{path} has no score for {missing} held rows")
+        keys = [k for k in ("model_id", "design", "gene_a", "gene_b") if k in table]
+        index = pd.MultiIndex.from_frame(held[keys])
+        missing = int((~index.isin(pd.MultiIndex.from_frame(table[keys]))).sum())
+        if missing:
+            raise ValueError(f"{path} has no row for {missing} held rows")
+        values = table.set_index(keys).reindex(index)
         scorers[name] = values["score"].to_numpy(dtype=np.float64)
         if "covered" in values and not values["covered"].all():
             covered[name] = values["covered"].to_numpy(dtype=bool)
@@ -408,6 +443,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "strata": {k: int(v) for k, v in held["stratum"].value_counts().items()},
         "summary": results,
         "covered": on_covered,
+        "label_agreement": label_agreement(rows),
     }  # fmt: skip
     write_parquet(run_dir / "scores.parquet", scores.drop(columns="row"))
     lists.to_csv(run_dir / "lists.csv", index=False)
@@ -491,10 +527,31 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
           for s in scorers),
         "",
         *covered_table(metrics["covered"]),
+        *agreement_lines(metrics["label_agreement"]),
         "Other line groups, AUROC and AUPRC are in `metrics.json`; each line in "
         "`lines.csv`; each screen, the non-genetic ones included, in `lists.csv`.",
     ]  # fmt: skip
     return "\n".join(lines) + "\n"
+
+
+def agreement_lines(agreement: Mapping[str, Any]) -> list[str]:
+    """The stage-two ceiling (``label_agreement``) as one sentence."""
+
+    def text(entry: Mapping[str, Any]) -> str:
+        if not entry["pairs"]:
+            return "no pair labelled twice"
+        positive = entry["positive_agreement"]
+        return (
+            f"{entry['pairs']:,} pairs, agreement {entry['agreement']:.3f}, SL given "
+            "SL " + ("—" if positive is None else f"{positive:.3f}")
+        )
+
+    return [
+        "Label agreement (the stage-two ceiling), within a line across lists: "
+        f"{text(agreement['same_line'])}; within a study across lines: "
+        f"{text(agreement['same_study'])}.",
+        "",
+    ]
 
 
 def covered_table(covered: Mapping[str, Any]) -> list[str]:
