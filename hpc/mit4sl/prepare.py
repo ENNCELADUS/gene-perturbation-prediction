@@ -141,6 +141,7 @@ def main() -> None:
     )
     cli = parser.parse_args()
     nodes = pd.read_csv(OFFICIAL / "kg_data/Primenode.csv")
+    nodes = nodes[nodes["node_type"] == GENE]  # other types reuse gene names
     name_to_index = dict(zip(nodes["node_name"].str.upper(), nodes["node_index"]))
     with open(OFFICIAL / "kg_data/node_index_dic.json") as f:
         type_index = {int(k): v for k, v in json.load(f)[GENE].items()}
