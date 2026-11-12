@@ -392,6 +392,8 @@ test lines). The backbone has four slots. A later round changes one slot only, s
   term only. The reader is affine in expression, so each term is A's fall in the line times the reader's response
   of B to A; the run checks this for each fit and stops if it is not true. Thus in round zero the line enters only
   through how far A falls: the ranking of an anchor list changes with the line only when A is already low.
+  A gene outside the expression space (or a drug anchor) cannot be edited: its term is 0, a tie. Such rows are
+  not covered; the harness's Table 4 ranks the covered rows alone.
 - **Context-ablated score.** The same score with the training-side mean profile in place of the line's profile.
   It has one value per pair in every held-out line.
 - **Head.** Logistic regression on the training lines' genetic screens with both classes. Inputs: the two terms, the

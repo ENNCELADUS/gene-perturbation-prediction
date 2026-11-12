@@ -194,13 +194,14 @@ def features(
     expression: pd.DataFrame,
 ) -> np.ndarray:
     """The head's inputs (FEATURES). Gene A of an anchor list is one gene or drug
-    for the whole list, so its own values read 0."""
+    for the whole list, so its own values read 0; so does a value the reader cannot
+    give (a gene outside the expression space)."""
     anchor = (rows["design"] == "anchor").to_numpy()
     own_a = np.stack(
         [gather(effects, rows, "gene_a"), gather(expression, rows, "gene_a")]
     )
     own_a[:, anchor] = 0.0
-    return np.column_stack(
+    values = np.column_stack(
         [
             pair_terms,
             own_a[0],
@@ -210,6 +211,7 @@ def features(
             (~anchor).astype(np.float64),
         ]
     )
+    return np.nan_to_num(values, nan=0.0)
 
 
 def weights(rows: pd.DataFrame) -> np.ndarray:
@@ -454,6 +456,11 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "ablated": (terms(rows, ablated_rows, low, held_reader, readers, origin),
                     ablated_effects, ablated_rows),
     }  # fmt: skip
+    # a gene outside the expression space cannot be edited: its term is 0 (a tie),
+    # and the row is not covered (the harness's Table 4 ranks the covered rows)
+    covered = np.isfinite(reading["line"][0]).all(axis=1)
+    for values in reading.values():
+        np.nan_to_num(values[0], copy=False, nan=0.0)
     x = {name: features(rows, *values) for name, values in reading.items()}
     train = (rows["split"] == "train").to_numpy()
     val = (rows["split"] == "val").to_numpy()
@@ -474,17 +481,14 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     out = run_dir / "scores"
     out.mkdir(exist_ok=True)
     for name, values in scores.items():
-        frame = rows[KEYS].assign(score=values).drop_duplicates(KEYS)
+        frame = rows[KEYS].assign(score=values, covered=covered).drop_duplicates(KEYS)
         staging = out / f".{name}.parquet.tmp"
         frame.to_parquet(staging, index=False)
         os.replace(staging, out / f"{name}.parquet")
     table.astype("float32").to_parquet(run_dir / "predictions.parquet")
     coverage = {
-        name: {
-            side: float(np.isfinite(values[(rows["split"] == side).to_numpy()]).mean())
-            for side in ("train", "val", "test")
-        }
-        for name, values in scores.items()
+        side: float(covered[(rows["split"] == side).to_numpy()].mean())
+        for side in ("train", "val", "test")
     }
     metrics = {
         "run_id": run_id,
@@ -541,9 +545,9 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         *(f"| {r['penalty']:g} | {r['val_recall_top10']:.3f} |"
           for r in metrics["head"]["selection"]),
         "",
-        f"Fit lines: {metrics['fit_lines']:,}. Rows with a score (train / val / test): "
-        + "; ".join(f"{name} " + " / ".join(f"{v:.1%}" for v in c.values())
-                    for name, c in metrics["coverage"].items()) + ".",
+        f"Fit lines: {metrics['fit_lines']:,}. Rows whose genes the reader can edit "
+        "(train / val / test): "
+        + " / ".join(f"{v:.1%}" for v in metrics["coverage"].values()) + ".",
         "",
     ]  # fmt: skip
     return "\n".join(lines) + "\n"
