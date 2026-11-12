@@ -412,3 +412,7 @@ test lines). The backbone has four slots. A later round changes one slot only, s
   label differs, the SL rule works in linear form. If it is at random, the reader does not see single genes, and
   pair-aware terms come first. If stage one is near its ceiling, the next rounds change the editor and the scorer,
   not the reader.
+- **Result** ([record](../results/sl_backbone_round_zero_seed0/README.md)): the conditional score equals its
+  context-ablated score (0.295 / 0.288 against 0.296 / 0.295, validation / test). The head (0.374 / 0.322) is the
+  best model after the training SL fraction (0.524 / 0.495), but its gain over its ablation is small and
+  gene-level. No model ranks the label-differs pairs above random. Next: pair-aware terms in the reader.
