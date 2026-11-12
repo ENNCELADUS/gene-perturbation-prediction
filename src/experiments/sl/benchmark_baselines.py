@@ -47,9 +47,17 @@ NAMES = {
     "random": "Random score (check: about 0.10)",
     "kg4sl": "KG4SL (knowledge graph, official code, trained on the training lines)",
     "cilantro_sl": "Cilantro-SL (Geneformer deletions, official code, refitted)",
+    "paris": "PARIS (random-forest dependency pairs, Python port of the R code)",
+    "slidr": "SLIdR (mutation-dependency test, Python port of the R code)",
+    "dekegel_paralog": "De Kegel 2021 paralog classifier (released scores)",
+    "kebabci_paralog": "Kebabci 2026 paralog classifier (reads measured GeneEffect, "
+    "reference, official code, refitted)",
+    "mit4sl": "MiT4SL (cell-line-specific graph model, official code, refitted)",
 }
 #: Scorers that check the code or give a reference; never the best row.
-NOT_MODELS = {"measured_geneeffect", "labels", "random"}
+NOT_MODELS = {"measured_geneeffect", "kebabci_paralog", "labels", "random"}
+#: Scorers ranked beside each partial scorer on the rows it covers (Table 4).
+COVERED_WITH = ("pair_identity", "labels", "random")
 #: Strata of held-out pairs. A pair is seen when the same study labelled it in a
 #: training line; it agrees when its label equals the majority of those labels. A new
 #: pair with a gene that no training row has is not reported (too few rows).
@@ -326,20 +334,24 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     }
     if predicted is not None:
         scorers["stage_one_production"] = -line_values(predicted, held)
-    # scores made outside this module (hpc/kg4sl, hpc/cilantro): one per (gene_a,
-    # gene_b), or per (model_id, gene_a, gene_b) when the table has model_id
+    # scores made outside this module (hpc/kg4sl, hpc/cilantro, ...): one per
+    # (gene_a, gene_b), or per (model_id, gene_a, gene_b) when the table has model_id;
+    # an optional ``covered`` column marks the rows the model really scores
+    covered = {}
     for name, path in config["extra_scores"].items():
         table = pd.read_parquet(path)
         keys = [k for k in ("model_id", "gene_a", "gene_b") if k in table.columns]
-        values = table.set_index(keys)["score"].reindex(
-            pd.MultiIndex.from_frame(held[keys])
-        )
-        if values.isna().any():
-            missing = int(values.isna().sum())
+        values = table.set_index(keys).reindex(pd.MultiIndex.from_frame(held[keys]))
+        if values["score"].isna().any():
+            missing = int(values["score"].isna().sum())
             raise ValueError(f"{path} has no score for {missing} held rows")
-        scorers[name] = values.to_numpy(dtype=np.float64)
+        scorers[name] = values["score"].to_numpy(dtype=np.float64)
+        if "covered" in values and not values["covered"].all():
+            covered[name] = values["covered"].to_numpy(dtype=bool)
     held["stratum"] = strata(training, held)
-    base = held[[*LIST_KEYS, "gene_a", "gene_b", "label", "stratum"]]
+    base = held[[*LIST_KEYS, "gene_a", "gene_b", "label", "stratum"]].assign(
+        row=np.arange(len(held))
+    )
     scores = pd.concat(
         [base.assign(scorer=name, score=values) for name, values in scorers.items()],
         ignore_index=True,
@@ -369,6 +381,24 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         if stratum == "all":
             lists = stratum_lists
     lines = pd.concat(by_stratum, ignore_index=True)
+    # each partial scorer beside the training SL fraction on the rows it covers
+    on_covered = {}
+    for name, mask in covered.items():
+        chosen = scores[
+            scores["row"].isin(np.flatnonzero(mask))
+            & scores["scorer"].isin([name, *COVERED_WITH])
+        ]
+        covered_lines = line_records(list_records(chosen, int(config["top_k"])))
+        on_covered[name] = {
+            "rows": int(mask.sum()),
+            "share": float(mask.mean()),
+            "summary": summary(
+                covered_lines,
+                {"all": groups["all"]},
+                int(config["bootstrap"]),
+                int(config["seed"]),
+            ),
+        }
     lines["group"] = lines["model_id"].map(split_table.set_index("model_id")["group"])
     metrics = {
         "run_id": run_id,
@@ -377,8 +407,9 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "screens": screen_counts(lists),
         "strata": {k: int(v) for k, v in held["stratum"].value_counts().items()},
         "summary": results,
+        "covered": on_covered,
     }  # fmt: skip
-    write_parquet(run_dir / "scores.parquet", scores)
+    write_parquet(run_dir / "scores.parquet", scores.drop(columns="row"))
     lists.to_csv(run_dir / "lists.csv", index=False)
     lines.to_csv(run_dir / "lines.csv", index=False)
     write_json(run_dir / "metrics.json", metrics)
@@ -388,7 +419,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
 
 def results_markdown(metrics: Mapping[str, Any]) -> str:
     """Table 1, recall in the top 10% per scorer on validation and test (all lines);
-    Table 2, the difference from pair identity. The other line groups, AUROC, AUPRC
+    Table 2, the difference from pair identity; Table 3, each stratum; Table 4, each
+    partial scorer on the rows it covers. The other line groups, AUROC, AUPRC
     and each screen are in metrics.json, lines.csv and lists.csv."""
     rows = {
         (r["split"], r["scorer"]): r
@@ -458,10 +490,44 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
             for k in STRATA if k != "all") + " |"
           for s in scorers),
         "",
+        *covered_table(metrics["covered"]),
         "Other line groups, AUROC and AUPRC are in `metrics.json`; each line in "
         "`lines.csv`; each screen, the non-genetic ones included, in `lists.csv`.",
     ]  # fmt: skip
     return "\n".join(lines) + "\n"
+
+
+def covered_table(covered: Mapping[str, Any]) -> list[str]:
+    """Table 4: each scorer that scores only part of the rows, beside the training SL
+    fraction and the labels on those rows (recall in the top 10%, AUROC)."""
+    if not covered:
+        return []
+
+    def cell(summary: list[dict[str, Any]], split: str, scorer: str) -> str:
+        row = next(
+            (r for r in summary if (r["split"], r["scorer"]) == (split, scorer)), None
+        )
+        return "—" if row is None else f"{row['recall_top10']:.3f} ({row['auroc']:.2f})"
+
+    columns = [(s, c) for s in ("val", "test") for c in ("model", *COVERED_WITH[:2])]
+    head = {"model": "model", "pair_identity": "training SL fraction",
+            "labels": "labels"}  # fmt: skip
+    split_name = {"val": "Validation", "test": "Test"}
+    return [
+        "**Table 4.** Recall in the top 10% (AUROC) of each model that scores only "
+        "part of the held-out rows, on those rows only, beside the training SL "
+        "fraction and the labels (the ceiling) on the same rows; mean over lines. "
+        "Higher is better.",
+        "",
+        "| Model | Rows covered | "
+        + " | ".join(f"{split_name[s]}, {head[c]}" for s, c in columns) + " |",
+        "| --- | ---: |" + " ---: |" * len(columns),
+        *(f"| {NAMES.get(name, name)} | {entry['rows']:,} ({entry['share']:.1%}) | "
+          + " | ".join(cell(entry["summary"], s, name if c == "model" else c)
+                       for s, c in columns) + " |"
+          for name, entry in covered.items()),
+        "",
+    ]  # fmt: skip
 
 
 def main(argv: Sequence[str] | None = None) -> int:
