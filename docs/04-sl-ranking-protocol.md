@@ -449,3 +449,10 @@ dependency reader. The line encoder, the context editor, the pair scorer and the
 - **Decision rule** (spec §4). If the conditional score is above its context-ablated score on the partner pairs (the
   interval above zero on validation, the same sign on test), the next module is the line encoder in each line's own
   genes. If not, the next module is the context editor (PIE's profile after A's loss).
+- **Result** ([record](../results/sl_buffer_aware_reader_seed0/README.md)): a null result. On the partner pairs (15% of
+  the held-out rows) the conditional score minus its context-ablated score is −0.004 [−0.018, +0.009] on validation
+  and −0.004 on test; on all pairs −0.006 / −0.003. The partner block changes the scores of partner pairs (Spearman
+  0.59 against the default reader; 0.9995 elsewhere), but not by line. The head on the new terms is the best model
+  (0.383 / 0.328) and is not above its ablation. The stage-one metrics do not change (per-line residual Spearman
+  0.183 / 0.194); two DepMap screens of one line give 0.265 / 0.367 (4 and 8 lines). By the decision rule, the next
+  module is the context editor (PIE's profile after A's loss).

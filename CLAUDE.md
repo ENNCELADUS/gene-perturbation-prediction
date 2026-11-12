@@ -27,8 +27,8 @@ Replace this section on every update; history lives in `results/` and the protoc
   [record](results/stage_one_architecture/README.md)). FiLM reading the linear model's prediction recovers most of it
   (0.199–0.203) but not all, and ΔE beside the linear model adds nothing that line-permuted ΔE does not
   ([record](results/stage_one_linear_model_input/README.md)). The next build makes all current checkpoints unusable.
-- **Stage two**: modular SL backbone, round zero (SL protocol §11, [record](results/sl_backbone_round_zero_seed0/README.md)):
-  head 0.374 / 0.322 beats KG4SL, not the training SL fraction. Next: [buffer-aware reader](docs/specs/2026-11-12-sl-buffer-aware-reader-design.md) (unbuilt).
+- **Stage two**: modular SL backbone; buffer-aware reader (SL protocol §12, [record](results/sl_buffer_aware_reader_seed0/README.md)):
+  null; on partner pairs conditional − ablated −0.004 / −0.004; head 0.383 / 0.328 < training SL fraction. Next: context editor.
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels in `data/sl_studies/benchmark_v2` (H20);
   headline = recall in the top 10% of genetic two-class screens, averaged over screens, studies, then lines (77 lines,
   44/17/16, placed by hand). 2026-11-05, val / test: pair identity 0.524 / 0.495 leads; KG4SL (official code,
