@@ -19,6 +19,7 @@ prints every command's arguments.
 | `cell-states`, `pie-precompute --steps states` | the cell-state telemetry and the frozen PIE on its states | CPU; scVI and PIE on GPUs | [Cell states](#the-cell-states) |
 | `sl-paris`, `sl-stage-two` | PARIS (`sl.paris`) and SL stage two on stage one's GeneEffect (`sl.stage_two`) | CPU, `.venv-pie` | [SL stage two](#sl-stage-two) |
 | `sl-baselines` | baselines on the multi-study SL benchmark (`sl.benchmark_baselines`) | CPU, `.venv-pie` | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 
 GPU use, measured on 30838 in October 2026 (one H20 per job unless noted; SM is `nvidia-smi dmon`'s busy share):
 
@@ -395,6 +396,16 @@ genes of a benchmark pair. It trains the official model with the official settin
 pairs (SL when half or more of the pair's rows are SL), with one tested non-SL pair for each SL pair (the official
 ratio; with all tested pairs, which are 1% SL, the score became one constant). It keeps the epoch with the best
 validation AUROC. A pair with a gene outside the graph (5% of the held-out rows) gets 0.5, so these pairs tie.
+
+`sl-slidr` (`src.experiments.sl.slidr`, a Python port of the official R code, `third_party/slidr/PROVENANCE.md`) runs
+SLIdR's rank test pan-cancer on the training-side lines of the SL split. Each gene of a held-out pair with at least two
+mutated (damaging or hotspot call, or 0 copies) and two wild-type lines is a driver. A pair scores -log10 of the
+smaller mutated-lines p-value of its two orientations, 0 when the wild-type test rejects it (p < 0.1), and -log10 0.5
+when no orientation can be tested (`covered` false). The hotspot matrix came from the laptop (SHA-256 `a86cd8c9…`).
+
+```bash
+hpc/run.sh sl-slidr configs/sl/slidr.yaml --run-id seed0   # outputs/sl/slidr/seed0/scores.parquet
+```
 
 ## The `linear-model` command
 

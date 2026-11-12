@@ -21,6 +21,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh stage-one-report CONFIG [--device cuda]   (a stage-one report over runs, 1 GPU)
        hpc/run.sh stage-one-linear-model CONFIG --run-id ID   (the default linear model refitted on the stage-one frame, CPU)
        hpc/run.sh sl-paris CONFIG --run-id ID [--genes N]   (PARIS, ported to Python, CPU, .venv-pie)
+       hpc/run.sh sl-slidr CONFIG --run-id ID   (SLIdR, ported to Python, CPU)
        hpc/run.sh sl-stage-two CONFIG --run-id ID   (SL stage two on stage one's GeneEffect, CPU, .venv-pie)
        hpc/run.sh sl-baselines CONFIG --run-id ID   (baselines on the multi-study SL benchmark, CPU, .venv-pie)
        hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
@@ -81,7 +82,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|linear-model|linear-model-selected|linear-model-export|linear-model-production|linear-model-stack|linear-model-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-linear-model|sl-paris|sl-stage-two|sl-baselines|cell-states) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|linear-model|linear-model-selected|linear-model-export|linear-model-production|linear-model-stack|linear-model-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-linear-model|sl-paris|sl-slidr|sl-stage-two|sl-baselines|cell-states) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -126,6 +127,7 @@ case "$command" in
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.stage_one report "$@" ;;
   stage-one-linear-model) exec "$python_bin" -m src.experiments.stage_one.linear_model_reference "$@" ;;
   sl-paris) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.paris "$@" ;;
+  sl-slidr) exec "$python_bin" -m src.experiments.sl.slidr "$@" ;;
   sl-stage-two) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.stage_two "$@" ;;
   sl-baselines) exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.benchmark_baselines "$@" ;;
   gene-sources)

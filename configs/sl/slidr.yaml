@@ -1,0 +1,18 @@
+# SLIdR (Srivatsa et al. 2022), ported from the official R code (third_party/slidr/PROVENANCE.md), on the
+# multi-study SL benchmark: pan-cancer rank tests on the SL split's training-side lines (train and
+# bulk_labelled), every gene of a held-out pair tested as the mutated (driver) gene.
+# `hpc/run.sh sl-slidr configs/sl/slidr.yaml --run-id seed0` (CPU, minutes) writes
+# outputs/sl/slidr/seed0/scores.parquet for `sl-baselines`.
+kind: sl_slidr
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
+# a gene is mutated by a damaging or hotspot call, or by a deep loss (0 copies) in copy_number
+mutations:
+  - data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixDamaging.csv
+  - data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv
+copy_number: data/sl_dependency_v0/raw/depmap/PortalOmicsCNGeneLog2.csv
+output_root: outputs/sl
+task: slidr
+min_mutated: 2  # R's min_Nmut: at least this many mutated and wild-type lines
+wt_pvalue: 0.1  # R's WT_pval_thresh
