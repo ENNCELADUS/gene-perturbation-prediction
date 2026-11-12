@@ -2,7 +2,9 @@
 (``third_party/paris/R``, ``RF_exp``). For each dependency gene B a random forest
 predicts B's GeneEffect across cell lines from the expression of the other genes; the
 features A the forest finds important are reported with the Pearson r between B's
-dependency and A's expression. Stage two reads these pairs as SL evidence.
+dependency and A's expression. Stage two reads these pairs as SL evidence. With an
+``sl_split``, PARIS fits on the SL split's training-side lines and also scores each
+held-out pair of the multi-study SL benchmark (``benchmark_scores``).
 
 ``raw``: Boruta (Kursa & Rudnicki) with ranger's raw out-of-bag permutation importance.
 ``Ginicorrected``: ranger ``importance = "impurity_corrected"`` (Nembrini et al. 2018)
@@ -12,6 +14,7 @@ the OOB estimator) are listed in ``third_party/paris/PROVENANCE.md``."""
 from __future__ import annotations
 
 import argparse
+import json
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
@@ -23,6 +26,7 @@ import pandas as pd
 from src.data.io import write_json, write_parquet
 from src.experiments.config import read_yaml, require_keys
 from src.experiments.run_dir import bind
+from src.experiments.sl.slidr import FIT_SIDES, HELD_SIDES
 
 MODES = ("raw", "Ginicorrected")
 COLUMNS = ["dependency_gene", "feature_gene", "importance", "r", "r_pvalue", "mode"]
@@ -266,12 +270,11 @@ def paris(
 
 
 def load_config(path: Path) -> dict[str, Any]:
+    """The stage-two config, or with ``sl_split`` the benchmark config."""
     config = read_yaml(path)
-    require_keys(
-        config,
-        {"ladder_config", "benchmark", "output_root", "task", "mode", "seed", "n_jobs"},
-        "config",
-    )
+    keys = {"ladder_config", "benchmark", "output_root", "task", "mode", "seed",
+            "n_jobs"}  # fmt: skip
+    require_keys(config, keys | ({"sl_split"} & config.keys()), "config")
     if config["mode"] not in MODES:
         raise ValueError(f"{path}: mode {config['mode']!r} is not one of {MODES}")
     return config
@@ -284,20 +287,69 @@ def reference_lines(ladder: Any, pairs: pd.DataFrame) -> list[str]:
     return [m for m in ladder.frame if m not in screened]
 
 
+def sl_split_lines(path: Path) -> tuple[set[str], set[str]]:
+    """The SL split's training-side lines and its held-out lines."""
+    sides = json.loads(Path(path).read_text())
+    return (
+        {m for s in FIT_SIDES for m in sides[s]},
+        {m for s in HELD_SIDES for m in sides[s]},
+    )
+
+
+def held_pairs(labels: pd.DataFrame, held: set[str]) -> pd.DataFrame:
+    """The benchmark's labelled (gene_a, gene_b) pairs in held-out lines."""
+    rows = labels[labels["label"].notna() & labels["model_id"].isin(held)]
+    return rows[["gene_a", "gene_b"]].drop_duplicates().reset_index(drop=True)
+
+
+def benchmark_scores(
+    selected: pd.DataFrame,
+    pairs: pd.DataFrame,
+    dependency_genes: set[str],
+    feature_genes: set[str],
+) -> pd.DataFrame:
+    """Per (gene_a, gene_b): the largest importance of a selected pair with r > 0
+    (lower expression of the feature gene, stronger dependency) with either gene as
+    the dependency gene, else 0. ``covered``: a forest could select the pair (one gene
+    a dependency gene, the other a feature gene)."""
+    positive = selected[selected["r"] > 0]
+    importance = positive.groupby(["dependency_gene", "feature_gene"])[
+        "importance"
+    ].max()
+    a, b = pairs["gene_a"], pairs["gene_b"]
+    value = np.fmax(
+        importance.reindex(pd.MultiIndex.from_arrays([a, b])).to_numpy(np.float64),
+        importance.reindex(pd.MultiIndex.from_arrays([b, a])).to_numpy(np.float64),
+    )
+    covered = (a.isin(dependency_genes) & b.isin(feature_genes)) | (
+        b.isin(dependency_genes) & a.isin(feature_genes)
+    )
+    return pairs.assign(score=np.nan_to_num(value, nan=0.0), covered=covered)
+
+
 def inputs(config: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Dependency (GeneEffect units) and expression on the reference lines: the
-    stage-one frame minus every line of the SL benchmark, so no validation or test
-    line, and no line an SL row is scored on, enters."""
+    """Dependency (GeneEffect units) and expression on the fit lines. Without
+    ``sl_split``: the reference lines, the stage-one frame minus every line of the SL
+    screen benchmark, and its labelled genes. With it: the frame's lines on the SL
+    split's training side, and the genes of the benchmark's held-out pairs. No
+    validation or test line enters."""
     from src.data.ladder_reader import mean_channel
     from src.experiments.stage_one.setup import load_setup
 
     setup = load_setup(config["ladder_config"])
     ladder = setup.ladder
     pairs = pd.read_parquet(config["benchmark"])
-    lines = reference_lines(ladder, pairs)
-    if set(lines) & set(ladder.role_lines("val", "test")):
-        raise ValueError("a validation or test line is among the reference lines")
-    labelled = pairs[pairs["label"].notna()]
+    if "sl_split" in config:
+        fit, held = sl_split_lines(config["sl_split"])
+        lines = [m for m in ladder.frame if m in fit]
+        if set(lines) & held:
+            raise ValueError("an SL validation or test line is among the fit lines")
+        labelled = held_pairs(pairs, held)
+    else:
+        lines = reference_lines(ladder, pairs)
+        if set(lines) & set(ladder.role_lines("val", "test")):
+            raise ValueError("a validation or test line is among the reference lines")
+        labelled = pairs[pairs["label"].notna()]
     genes = sorted(set(labelled["gene_a"]) | set(labelled["gene_b"]))
     genes = [g for g in genes if g in ladder.genes.index]
     units = setup.truth(lines) * ladder.genes["sigma_g"] + ladder.genes["mu_g"]
@@ -326,6 +378,17 @@ def run(config: Mapping[str, Any], run_id: str, genes: int | None = None) -> Pat
     wall = time.perf_counter() - start
     pairs = stack(parts)
     write_parquet(run_dir / "pairs.parquet", pairs)
+    if "sl_split" in config:
+        labels = pd.read_parquet(
+            config["benchmark"], columns=["model_id", "gene_a", "gene_b", "label"]
+        )
+        scores = benchmark_scores(
+            pairs,
+            held_pairs(labels, sl_split_lines(config["sl_split"])[1]),
+            set(dependency.columns),
+            set(expression.columns),
+        )
+        write_parquet(run_dir / "scores.parquet", scores)
     write_json(
         run_dir / "run.json",
         {

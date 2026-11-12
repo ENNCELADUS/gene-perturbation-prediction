@@ -70,3 +70,19 @@ def test_genes_run_in_parallel_workers():
     pairs = paris(dependency, expression, "Ginicorrected", seed=43, n_jobs=2)
     chosen = pairs.groupby("dependency_gene")["feature_gene"].agg(set)
     assert {"f0", "f1"} <= chosen["dep"] and "f5" in chosen["dep2"]
+
+
+def test_benchmark_scores_read_either_orientation_with_a_positive_r():
+    selected = pd.DataFrame(
+        {"dependency_gene": ["B", "C", "D"], "feature_gene": ["A", "A", "E"],
+         "importance": [0.3, 0.9, 0.5], "r": [0.4, -0.6, 0.2]}
+    )  # fmt: skip
+    pairs = pd.DataFrame(
+        {"gene_a": ["A", "A", "E", "A", "X"], "gene_b": ["B", "C", "D", "D", "A"]}
+    )
+    scores = paris_module.benchmark_scores(selected, pairs, {"B", "C", "D"}, {"A", "E"})
+    # A-B selected (dependency B), A-C selected with r < 0 (no SL direction), E-D
+    # selected (dependency D, the reverse order), A-D tested but not selected, X-A
+    # never tested (X is neither a dependency nor a feature gene)
+    assert scores["score"].tolist() == [0.3, 0.0, 0.5, 0.0, 0.0]
+    assert scores["covered"].tolist() == [True, True, True, True, False]
