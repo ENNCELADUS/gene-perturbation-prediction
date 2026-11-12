@@ -115,7 +115,9 @@ lines than the readers. Best reader in bold; the ceiling is a reference row.
 
 - **The buffer-aware reader does not make the line matter.** On the partner pairs, where the module can act, the
   conditional score minus its context-ablated score is −0.004 on validation and −0.004 on test, both intervals
-  around zero. On all pairs it is −0.006 / −0.003. This is a null result.
+  around zero. On all pairs it is −0.006 / −0.003. This is a null result. The reader can edit both genes in only
+  19.5% of the partner rows of the genetic screens (15,848 of 81,362), but the result is the same on those rows:
+  +0.004 [−0.008, +0.015] / +0.003 [−0.024, +0.028]. The gene space does not explain the null.
 - **The reader changes the scores of partner pairs but not their ranking quality.** Its conditional score differs from
   the default reader's score on the partner pairs (Spearman 0.587) and is almost the same elsewhere (0.9995), so the
   partner block acts where it should. On the partner pairs it gains +0.011 / +0.012 over the default reader's
@@ -127,7 +129,9 @@ lines than the readers. Best reader in bold; the ceiling is a reference row.
   ablation are small and do not agree between splits (conditional −0.007 / +0.016; head +0.017 / −0.001).
 - **No model ranks the label-differs pairs above random** (all near 0.06–0.09 against random 0.08 / 0.09).
 - **Stage one.** The partner block does not change the predicted GeneEffect (per-line residual Spearman 0.183 / 0.194
-  against 0.183 / 0.193). Two DepMap screens of one line agree at 0.25–0.37 per-line residual Spearman, so the reader
-  is below the ceiling by about 0.06–0.17 on these metrics; the held-out ceiling rests on 4 and 8 lines only.
+  against 0.183 / 0.193). Two DepMap screens of one line agree at 0.246 on the 124 training lines with two screens
+  (0.265 / 0.367 on 4 and 8 held-out lines). This number is the agreement of two noisy screens, not the top for a
+  reader. If the noise of the two screens is independent, a prediction of the true dependency agrees with one screen
+  at about the square root of it, about 0.5. The reader (0.18–0.19) is thus far below what the data permit.
 - **Decision (spec §4).** The conditional score is equal to its context-ablated score on the partner pairs, so the
   next module is the context editor (PIE's profile after A's loss).

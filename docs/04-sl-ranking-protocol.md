@@ -454,5 +454,7 @@ dependency reader. The line encoder, the context editor, the pair scorer and the
   and −0.004 on test; on all pairs −0.006 / −0.003. The partner block changes the scores of partner pairs (Spearman
   0.59 against the default reader; 0.9995 elsewhere), but not by line. The head on the new terms is the best model
   (0.383 / 0.328) and is not above its ablation. The stage-one metrics do not change (per-line residual Spearman
-  0.183 / 0.194); two DepMap screens of one line give 0.265 / 0.367 (4 and 8 lines). By the decision rule, the next
+  0.183 / 0.194); two DepMap screens of one line agree at
+  0.265 / 0.367 (4 and 8 lines; 0.246 on 124 training lines), so a reader of the true dependency can reach about the
+  square root of that, about 0.5. On the partner rows that the reader can edit (19.5%), the difference is also null. By the decision rule, the next
   module is the context editor (PIE's profile after A's loss).
