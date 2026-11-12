@@ -125,10 +125,14 @@ def base_on(
     split: FixedSplit,
     extra: ExtraLines,
     space_lines: Sequence[str],
+    *,
+    other_split: bool = False,
 ) -> RunBase:
     """``load_base`` on a given split and bulk-only lines; the space is the bulk
     genes every line of ``space_lines`` measures in pseudo-bulk (the production fit
-    passes its scored lines and a split without validation or test)."""
+    passes its scored lines and a split without validation or test). With
+    ``other_split`` (not the final split), the reference's line tables, pinned for
+    the final split, leave out the split's held-out and excluded lines."""
     from src.data.prepared import read_manifest
     from src.data.pseudobulk import read_pseudobulk
     from src.experiments.prepare import prepare_pseudobulk
@@ -201,6 +205,7 @@ def base_on(
         reference=load_reference(
             Path(paths["reference"]),
             blocked={*split.val, *split.test, *extra.excluded},
+            drop=other_split,
         ),
         bridge=bridge,
         filled_lines=int((filled > 0).sum()),

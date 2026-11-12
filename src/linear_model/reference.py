@@ -30,8 +30,11 @@ class Reference:
     msi: pd.Series
 
 
-def load_reference(directory: Path, *, blocked: Collection[str]) -> Reference:
-    """Load the tables; raise if a line table holds any ``blocked`` line."""
+def load_reference(
+    directory: Path, *, blocked: Collection[str], drop: bool = False
+) -> Reference:
+    """Load the tables; raise if a line table holds any ``blocked`` line, or with
+    ``drop`` (tables pinned for another split) leave those lines out."""
     directory = Path(directory)
 
     def read(name: str) -> pd.DataFrame:
@@ -40,7 +43,12 @@ def load_reference(directory: Path, *, blocked: Collection[str]) -> Reference:
     drivers = read("drivers.tsv").astype({"model_id": str}).set_index("model_id")
     msi = read("msi.tsv").astype({"model_id": str}).set_index("model_id")["msi_score"]
     leaked = sorted((set(drivers.index) | set(msi.index)) & set(blocked))
-    if leaked:
+    if drop:
+        drivers, msi = (
+            drivers.drop(index=leaked, errors="ignore"),
+            msi.drop(index=leaked, errors="ignore"),
+        )
+    elif leaked:
         raise ValueError(
             f"reference tables hold held-out or patient-sharing lines: {leaked[:10]}"
         )

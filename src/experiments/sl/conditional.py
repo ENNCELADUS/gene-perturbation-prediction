@@ -416,6 +416,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         split,
         load_bulk_lines(split_path, split),
         [*split.val, *split.test],
+        other_split=True,
     )
     leaked = set(base.labelled) & {*split.val, *split.test}
     if leaked:
