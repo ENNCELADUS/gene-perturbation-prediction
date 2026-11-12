@@ -146,3 +146,6 @@ def test_loader_refuses_blocked_lines(tmp_path):
     assert load_reference(tmp_path, blocked=set()).drivers.shape == (2, 1)
     with pytest.raises(ValueError, match="held-out"):
         load_reference(tmp_path, blocked={"V1"})
+    # tables pinned for another split leave the blocked lines out instead
+    kept = load_reference(tmp_path, blocked={"V1"}, drop=True)
+    assert list(kept.drivers.index) == ["L1"]

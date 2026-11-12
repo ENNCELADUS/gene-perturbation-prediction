@@ -195,7 +195,8 @@ def test_run_base_drops_test_excluded_and_dropped_lineage_lines(monkeypatch):
         lambda path: (bulk if str(path) == "bulk" else gene_effect).copy(),
     )
 
-    def reference(path, *, blocked):
+    def reference(path, *, blocked, drop):
+        assert not drop
         seen.extend(blocked)
 
     monkeypatch.setattr(linear_model_base, "load_reference", reference)
