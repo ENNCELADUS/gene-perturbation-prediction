@@ -24,7 +24,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.data.io import write_json, write_parquet
+from src.data.io import read_json, write_json, write_parquet
 from src.experiments.config import read_yaml, require_keys
 from src.experiments.run_dir import bind
 from src.experiments.sl.slidr import FIT_SIDES, HELD_SIDES
@@ -371,13 +371,45 @@ def inputs(config: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
     return units[genes], mean_channel(ladder).loc[lines]
 
 
-def run(config: Mapping[str, Any], run_id: str, genes: int | None = None) -> Path:
+def write_scores(
+    run_dir: Path,
+    config: Mapping[str, Any],
+    pairs: pd.DataFrame,
+    dependency: pd.DataFrame,
+    expression: pd.DataFrame,
+) -> None:
+    """The benchmark's held-out pair scores (``benchmark_scores``)."""
+    labels = pd.read_parquet(
+        config["benchmark"], columns=["model_id", "gene_a", "gene_b", "label"]
+    )
+    scores = benchmark_scores(
+        pairs,
+        held_pairs(labels, sl_split_lines(config["sl_split"])[1]),
+        set(dependency.columns),
+        set(expression.columns),
+    )
+    write_parquet(run_dir / "scores.parquet", scores)
+
+
+def run(
+    config: Mapping[str, Any],
+    run_id: str,
+    genes: int | None = None,
+    shard: tuple[int, int] | None = None,
+) -> Path:
+    """One PARIS run; ``shard`` (i, n) fits the dependency genes i, i + n, ... only,
+    and its pairs wait for ``merge``."""
     run_dir = Path(config["output_root"]) / config["task"] / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    bind(run_dir, {**config, "genes": genes})
+    bound = {**config, "genes": genes}
+    if shard is not None:
+        bound["shard"] = f"{shard[0]}/{shard[1]}"
+    bind(run_dir, bound)
     dependency, expression = inputs(config)
     if genes is not None:
         dependency = dependency.iloc[:, :genes]
+    if shard is not None:
+        dependency = dependency.iloc[:, shard[0] :: shard[1]]
     start = time.perf_counter()
     parts, seconds = [], []
     results = iter_paris(
@@ -393,20 +425,12 @@ def run(config: Mapping[str, Any], run_id: str, genes: int | None = None) -> Pat
     wall = time.perf_counter() - start
     pairs = stack(parts)
     write_parquet(run_dir / "pairs.parquet", pairs)
-    if "sl_split" in config:
-        labels = pd.read_parquet(
-            config["benchmark"], columns=["model_id", "gene_a", "gene_b", "label"]
-        )
-        scores = benchmark_scores(
-            pairs,
-            held_pairs(labels, sl_split_lines(config["sl_split"])[1]),
-            set(dependency.columns),
-            set(expression.columns),
-        )
-        write_parquet(run_dir / "scores.parquet", scores)
+    if "sl_split" in config and shard is None:
+        write_scores(run_dir, config, pairs, dependency, expression)
     write_json(
         run_dir / "run.json",
         {
+            "shard": bound.get("shard"),
             "mode": config["mode"],
             "n_jobs": config["n_jobs"],
             "lines": len(dependency),
@@ -423,6 +447,31 @@ def run(config: Mapping[str, Any], run_id: str, genes: int | None = None) -> Pat
     return run_dir
 
 
+def merge(config: Mapping[str, Any], run_id: str, shards: Sequence[str]) -> Path:
+    """The pairs of shard runs i/n for every i < n, stacked, and their benchmark
+    scores, in the run ``run_id``."""
+    root = Path(config["output_root"]) / config["task"]
+    labels = [read_json(root / s / "run.json")["shard"] for s in shards]
+    counts = {label.split("/")[1] for label in labels}
+    expected = [f"{i}/{n}" for n in counts for i in range(int(n))]
+    if len(counts) != 1 or sorted(labels) != sorted(expected):
+        raise ValueError(f"shards {labels} are not every shard i/n of one n")
+    run_dir = root / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    bind(run_dir, {**config, "merged": sorted(shards)})
+    pairs = stack([pd.read_parquet(root / s / "pairs.parquet") for s in shards])
+    write_parquet(run_dir / "pairs.parquet", pairs)
+    dependency, expression = inputs(config)
+    write_scores(run_dir, config, pairs, dependency, expression)
+    write_json(
+        run_dir / "run.json",
+        {"shards": sorted(shards), "selected_pairs": len(pairs),
+         "dependency_genes": dependency.shape[1]},
+    )  # fmt: skip
+    print(f"{run_dir}: done", flush=True)
+    return run_dir
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -432,8 +481,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--genes", type=int, help="the first N dependency genes (pilot)"
     )
+    parser.add_argument(
+        "--shard", help="I/N: the dependency genes I, I + N, ... (merge them after)"
+    )
+    parser.add_argument(
+        "--merge", nargs="+", metavar="RUN_ID", help="stack these shard runs"
+    )
     args = parser.parse_args(argv)
-    run(load_config(args.config), args.run_id, args.genes)
+    config = load_config(args.config)
+    if args.merge:
+        merge(config, args.run_id, args.merge)
+        return 0
+    shard = None if args.shard is None else tuple(map(int, args.shard.split("/")))
+    run(config, args.run_id, args.genes, shard)
     return 0
 
 

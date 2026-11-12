@@ -86,3 +86,33 @@ def test_benchmark_scores_read_either_orientation_with_a_positive_r():
     # never tested (X is neither a dependency nor a feature gene)
     assert scores["score"].tolist() == [0.3, 0.0, 0.5, 0.0, 0.0]
     assert scores["covered"].tolist() == [True, True, True, True, False]
+
+
+def test_shards_merge_into_the_full_run(tmp_path, monkeypatch):
+    dependency, expression = world(p=300)
+    dependency["dep2"] = -expression["f5"]
+    monkeypatch.setattr(paris_module, "inputs", lambda config: (dependency, expression))
+    pd.DataFrame(
+        {"model_id": "V0", "gene_a": ["f0", "f5", "f9"], "gene_b": ["dep", "dep2", "x"],
+         "label": 1}
+    ).to_parquet(tmp_path / "labels.parquet")  # fmt: skip
+    (tmp_path / "split.json").write_text(
+        '{"train": [], "bulk_labelled": [], "val": ["V0"], "test": []}'
+    )
+    config = {
+        "benchmark": str(tmp_path / "labels.parquet"),
+        "sl_split": str(tmp_path / "split.json"),
+        "gene_effect": "-", "expression": "-", "output_root": str(tmp_path),
+        "task": "paris", "mode": "Ginicorrected", "seed": 43, "n_jobs": 1,
+    }  # fmt: skip
+    for i in range(2):
+        paris_module.run(config, f"s{i}", shard=(i, 2))
+    with pytest.raises(ValueError, match="every shard"):
+        paris_module.merge(config, "bad", ["s0"])
+    out = paris_module.merge(config, "all", ["s1", "s0"])
+    pairs = pd.read_parquet(out / "pairs.parquet")
+    assert set(pairs["dependency_gene"]) == {"dep", "dep2"}
+    scores = pd.read_parquet(out / "scores.parquet")
+    # f0 drives dep with r > 0; f5 drives dep2 with r < 0; x is no gene of the run
+    assert scores["score"].gt(0).tolist() == [True, False, False]
+    assert scores["covered"].tolist() == [True, True, False]
