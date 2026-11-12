@@ -26,6 +26,7 @@ import torch
 import torch.optim as optim
 from sklearn.metrics import roc_auc_score
 
+import model as official_model
 import torch_geometric.typing
 from config_loader import load_cfg_from_paths
 from model import MiT4SL
@@ -35,6 +36,18 @@ from util import Construct_loader, init_graph_data, set_seed
 # torch-scatter is built for the CPU only (no nvcc on the H20); PyG then uses torch's
 # own scatter on the GPU. torch-sparse (HGTLoader's sampler) still runs on the CPU.
 torch_geometric.typing.WITH_TORCH_SCATTER = False
+_HGTConv = official_model.HGTConv
+
+
+def _hgt_conv(*args, group: str = "sum", **kwargs):
+    """The official HGTConv(..., group='sum'): PyG >= 2.3 dropped the argument and
+    always sums over edge types."""
+    if group != "sum":
+        raise ValueError(f"HGTConv group {group!r}")
+    return _HGTConv(*args, **kwargs)
+
+
+official_model.HGTConv = _hgt_conv
 
 ROOT = Path(__file__).resolve().parents[2]
 OFFICIAL_CODE = ROOT / "third_party/mit4sl"
