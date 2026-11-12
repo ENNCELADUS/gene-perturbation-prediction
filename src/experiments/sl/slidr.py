@@ -26,7 +26,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.data.depmap import read_depmap_matrix
+from src.data.depmap import depmap_symbol, read_depmap_matrix
 from src.data.io import write_json, write_parquet
 from src.experiments.config import read_yaml, require_keys
 from src.experiments.run_dir import bind
@@ -55,6 +55,16 @@ def irwin_hall_cdf(x: np.ndarray, n: int) -> np.ndarray:
         on = k <= np.floor(x)
         total += np.where(on, (-1.0) ** k * comb(n, k) * np.maximum(x - k, 0) ** n, 0)
     return np.clip(total / factorial(n), 0.0, 1.0)
+
+
+def read_copy_number(path: Path) -> pd.DataFrame:
+    """DepMap's gene copy number, lines x symbols; its columns named by an Ensembl ID
+    only (no symbol, 531 in 26Q1) are dropped, so is a repeated symbol."""
+    frame = pd.read_csv(path, index_col=0)
+    frame = frame.loc[:, ~frame.columns.str.startswith("ENSG")]
+    frame.index = frame.index.astype(str)
+    frame.columns = [depmap_symbol(column) for column in frame.columns]
+    return frame.loc[:, ~frame.columns.duplicated()]
 
 
 def mutation_matrix(
@@ -178,7 +188,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         lines,
         genes,
         mutated,
-        read_depmap_matrix(Path(config["copy_number"])),
+        read_copy_number(Path(config["copy_number"])),
         int(config["min_mutated"]),
     )
     orientations = pd.concat(

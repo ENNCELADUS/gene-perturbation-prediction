@@ -44,7 +44,8 @@ def test_a_planted_pair_gets_the_best_score_and_untestable_pairs_tie(tmp_path):
     copy_number.loc["F0", "G2"] = 0.0
     depmap(effect, False).to_csv(tmp_path / "ge.csv", index=True)
     depmap(mutated, True).to_csv(tmp_path / "mut.csv", index=False)
-    depmap(copy_number, True).to_csv(tmp_path / "cn.csv", index=False)
+    # DepMap's copy number: lines in the index, and columns with an Ensembl ID only
+    depmap(copy_number, False).assign(ENSG00000100101=1.0).to_csv(tmp_path / "cn.csv")
     pairs = [("DRV", "SLP"), ("SLP", "DRV"), ("DRV", "G5"), ("G0", "G5"), ("G1", "G2")]
     pd.DataFrame(
         [{"model_id": m, "gene_a": a, "gene_b": b, "label": 1}
