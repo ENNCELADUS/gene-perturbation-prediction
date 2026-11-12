@@ -25,5 +25,17 @@ extra_scores:
   conditional_ablated: outputs/sl/conditional/conditional_seed0/scores/conditional_ablated.parquet
   head: outputs/sl/conditional/conditional_seed0/scores/head.parquet
   head_ablated: outputs/sl/conditional/conditional_seed0/scores/head_ablated.parquet
+  # the backbone with the buffer-aware reader (configs/sl/conditional_buffer.yaml); its tables
+  # carry the partner column of the partner-pair subset
+  buffer_conditional: outputs/sl/conditional/conditional_buffer_seed0/scores/conditional.parquet
+  buffer_conditional_ablated: outputs/sl/conditional/conditional_buffer_seed0/scores/conditional_ablated.parquet
+  buffer_head: outputs/sl/conditional/conditional_buffer_seed0/scores/head.parquet
+  buffer_head_ablated: outputs/sl/conditional/conditional_buffer_seed0/scores/head_ablated.parquet
 top_k: 20
 bootstrap: 1000
+# (scorer, control): the per-line difference in recall in the top 10% with the line bootstrap
+paired_differences:
+  - [buffer_conditional, buffer_conditional_ablated]
+  - [buffer_head, buffer_head_ablated]
+  - [conditional, conditional_ablated]
+  - [head, head_ablated]

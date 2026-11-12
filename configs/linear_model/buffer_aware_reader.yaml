@@ -1,0 +1,25 @@
+# The buffer-aware reader of the SL backbone (SL protocol §12): the default linear expression
+# model (the affine bridge, 128 expression components at penalty 1, 50 data-selected genes at
+# gene penalty 10) with the partner block (paralog and complex-partner expression, low-partner
+# fraction) between them, at the same gene penalty. Read by configs/sl/conditional_buffer.yaml.
+seed: 0
+joint_config: configs/revision/frozen_huber.yaml
+output_root: outputs/linear_model
+paths:
+  reference: configs/linear_model/reference
+  model: data/sl_dependency_v0/raw/depmap/Model.csv
+  bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
+training_side:
+  exclude_lineages: [Lymphoid, Myeloid]
+linear_model: {components: 128, folds: 5, bootstrap_repeats: 1000, selected_genes: 50}
+penalties:
+  components: [1.0]
+  gene: [10.0]
+block_sets:
+  partners_and_selected: [expression_components, partners, data_selected]
+reference: {experiment: affine, block_set: partners_and_selected, components_penalty: 1.0, gene_penalty: 10.0}
+experiments:
+  affine:
+    kind: affine
+    settings: [{}]
+    block_sets: [partners_and_selected]

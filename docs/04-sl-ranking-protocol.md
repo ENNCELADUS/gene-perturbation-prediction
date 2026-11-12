@@ -389,9 +389,10 @@ test lines). The backbone has four slots. A later round changes one slot only, s
   fit replaces the production fit for stage two, which read the GeneEffect of most SL held-out lines.
 - **Conditional score** of a pair (A, B) in line c, in residual-SD units:
   `s(c, A, B) = −[ŷ(c with A lost, B) − ŷ(c, B)] − [ŷ(c with B lost, A) − ŷ(c, A)]`. An anchor list reads the first
-  term only. The reader is affine in expression, so each term is A's fall in the line times the reader's response
-  of B to A; the run checks this for each fit and stops if it is not true. Thus in round zero the line enters only
-  through how far A falls: the ranking of an anchor list changes with the line only when A is already low.
+  term only. The round-zero reader is affine in expression, so each term is A's fall in the line times the reader's
+  response of B to A. Thus in round zero the line enters only through how far A falls: the ranking of an anchor
+  list changes with the line only when A is already low. Since §12 the run reads each term from the reader's
+  predictions of the line's edited row, which gives the same terms for an affine reader.
   A gene outside the expression space (or a drug anchor) cannot be edited: its term is 0, a tie. Such rows are
   not covered; the harness's Table 4 ranks the covered rows alone.
 - **Context-ablated score.** The same score with the training-side mean profile in place of the line's profile.
@@ -407,7 +408,7 @@ test lines). The backbone has four slots. A later round changes one slot only, s
   selective genes with per-gene Spearman of at least 0.3, and the whole-line Pearson as a sanity row.
 - **Ceilings.** Stage two: the agreement of two labels of one pair within a line across lists, and within a study
   across lines (the harness's `label_agreement`). Stage one: the agreement of two independent DepMap screens of one
-  line, from DepMap's per-screen GeneEffect (on the H20; not measured in round zero).
+  line, from DepMap's per-screen GeneEffect (on the H20; not measured in round zero, measured since §12).
 - **Reading.** If the conditional score is above its context-ablated score on new pairs or on seen pairs whose
   label differs, the SL rule works in linear form. If it is at random, the reader does not see single genes, and
   pair-aware terms come first. If stage one is near its ceiling, the next rounds change the editor and the scorer,
@@ -419,3 +420,32 @@ test lines). The backbone has four slots. A later round changes one slot only, s
   ablation is by construction for an affine reader, so it does not put the reader first. Next: the buffer-aware reader
   ([spec](specs/2026-11-12-sl-buffer-aware-reader-design.md)): the reader gets each gene's buffer in the line (its
   paralogs and complex members), so that the response of B to the loss of A differs between lines.
+
+## 12. The buffer-aware reader (2026-11-12)
+
+`configs/sl/conditional_buffer.yaml` (reader: `configs/linear_model/buffer_aware_reader.yaml`), `hpc/run.sh
+sl-conditional`; [spec](specs/2026-11-12-sl-buffer-aware-reader-design.md). This module changes one slot of §11, the
+dependency reader. The line encoder, the context editor, the pair scorer and the head's inputs do not change.
+
+- **Reader.** The default linear expression model with the partner block between the expression components and the
+  data-selected genes (block set `partners_and_selected`, the same penalties). For gene B in a line the block reads
+  the lowest expression among B's paralogs, their sum, the closest paralog's expression, the mean expression of B's
+  complex members, and the fraction of B's partners that are low. The weights are fitted on GeneEffect of the
+  training side. No SL label is read. The reader is not affine in expression.
+- **Terms.** Each term is the reader's prediction of B on the line's row with A at `min(x_A, low_A)`, minus its
+  prediction on the row as it is. An edit that does not change the row gives exactly 0. Each line and each lost
+  gene is queried once. For an affine reader, the terms are equal to those of §11 (a test checks this). The
+  context-ablated score reads the training-side mean profile, so it has one value per pair and design.
+- **Partner pairs.** A score table marks a row `partner` when A is a paralog or a complex member of B in the
+  reference tables of the partner block (for a combinatorial pair, also B of A). The harness reports every row on
+  this subset, and on the rows where no gene is a dependency alone (measured GeneEffect of B, and of A for a pair,
+  at or above −0.5; lines with GeneEffect only).
+- **Paired differences.** The harness config names (scorer, control) pairs. For each pair the harness gives the mean
+  per-line difference in recall in the top 10% with the line bootstrap of the difference from the training SL
+  fraction, on all rows and on each stratum and subset.
+- **Stage-one ceiling.** One DepMap screen's residual as the prediction of another screen's residual of the same line
+  (the first two screens in ScreenID order), on the SL lines with two or more screens, with the reader's stage-one
+  metrics.
+- **Decision rule** (spec §4). If the conditional score is above its context-ablated score on the partner pairs (the
+  interval above zero on validation, the same sign on test), the next module is the line encoder in each line's own
+  genes. If not, the next module is the context editor (PIE's profile after A's loss).

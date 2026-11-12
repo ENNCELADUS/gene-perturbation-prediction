@@ -16,6 +16,7 @@ from src.experiments.sl.benchmark_baselines import (
     line_values,
     list_records,
     load_config,
+    no_dependency_alone,
     pair_identity,
     positive_ranks,
     run,
@@ -81,6 +82,12 @@ def test_a_drug_anchor_list_is_ranked_by_gene_b():
     assert len(kept) == 2 and dropped["rows_gene_without_score"] == 0
     effects = pd.DataFrame({"G0": [-1.0], "G1": [0.2]}, index=["E0"])
     assert line_values(effects, kept).tolist() == pytest.approx([-1.0, 0.2])
+    # only gene B can be a dependency alone in an anchor list
+    assert no_dependency_alone(effects, kept).tolist() == [False, True]
+    pair = kept.assign(design="combinatorial", gene_a=["G1", "G0"], gene_b="G1")
+    no_line = effects.rename(index={"E0": "X"})  # a line without GeneEffect
+    assert no_dependency_alone(no_line, pair).tolist() == [False] * 2
+    assert no_dependency_alone(effects, pair).tolist() == [True, False]
 
 
 def test_recall_in_the_top_tenth_and_percentiles_of_a_known_list():
@@ -152,10 +159,11 @@ def test_run_scores_every_list(tmp_path):
         {"gene_a": ["G0", "G0", "G1", "G2"], "gene_b": ["G1", "G2", "G3", "G3"],
          "score": [0.2, 0.9, 0.1, 0.3], "covered": [True, True, True, False]}
     ).to_parquet(tmp_path / "kg4sl.parquet")  # fmt: skip
-    # a per-line score: E0's SL pair (G0, G2) last
+    # a per-line score: E0's SL pair (G0, G2) last; G0-G2 is a partner pair
     pd.DataFrame(
         {"model_id": "E0", "gene_a": ["G0", "G0", "G1", "G2"],
-         "gene_b": ["G1", "G2", "G3", "G3"], "score": [0.9, 0.1, 0.8, 0.7]}
+         "gene_b": ["G1", "G2", "G3", "G3"], "score": [0.9, 0.1, 0.8, 0.7],
+         "partner": [False, True, False, False]}
     ).pipe(lambda f: pd.concat([f, f.assign(model_id="V0")]))\
         .to_parquet(tmp_path / "cilantro.parquet")  # fmt: skip
     (tmp_path / "config.yaml").write_text(
@@ -164,7 +172,7 @@ def test_run_scores_every_list(tmp_path):
         f"gene_effect: {tmp_path}/ge.csv\nmodel: {tmp_path}/Model.csv\n"
         f"stage_one: null\nextra_scores:\n  kg4sl: {tmp_path}/kg4sl.parquet\n"
         f"  cilantro_sl: {tmp_path}/cilantro.parquet\n"
-        "top_k: 2\nbootstrap: 10\n"
+        "top_k: 2\nbootstrap: 10\npaired_differences: [[cilantro_sl, kg4sl]]\n"
     )
     out = run(load_config(tmp_path / "config.yaml"), "r0")
     scores = pd.read_parquet(out / "scores.parquet")
@@ -228,3 +236,16 @@ def test_run_scores_every_list(tmp_path):
     assert test_kg4sl["auroc"] == pytest.approx(1.0)
     assert "Table 4" in report and "cilantro_sl" not in metrics["covered"]
     assert "row" not in scores.columns
+    # the subsets: G0-G2 in V0 and E0; only V0's G1-G3 has no gene below -0.5
+    assert metrics["subsets"] == {
+        "partner": {"rows": 2, "share": pytest.approx(2 / 7)},
+        "no_dependency_alone": {"rows": 1, "share": pytest.approx(1 / 7)},
+    }
+    # the paired difference on E0: Cilantro-SL 0.0 minus KG4SL 0.4
+    gap = next(
+        r for r in metrics["paired_differences"]
+        if (r["split"], r["group"], r["stratum"]) == ("test", "all", "all")
+    )  # fmt: skip
+    assert (gap["scorer"], gap["control"], gap["lines"]) == ("cilantro_sl", "kg4sl", 1)
+    assert gap["difference"] == pytest.approx(-0.4)
+    assert "Table 5" in report and "partner pairs 2 (28.6%)" in report
