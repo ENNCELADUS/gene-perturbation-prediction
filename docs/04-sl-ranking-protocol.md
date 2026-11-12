@@ -407,7 +407,7 @@ test lines). The backbone has four slots. A later round changes one slot only, s
   selective genes with per-gene Spearman of at least 0.3, and the whole-line Pearson as a sanity row.
 - **Ceilings.** Stage two: the agreement of two labels of one pair within a line across lists, and within a study
   across lines (the harness's `label_agreement`). Stage one: the agreement of two independent DepMap screens of one
-  line. This needs DepMap's per-screen GeneEffect, which is not on the H20 yet.
+  line, from DepMap's per-screen GeneEffect (on the H20; not measured in round zero).
 - **Reading.** If the conditional score is above its context-ablated score on new pairs or on seen pairs whose
   label differs, the SL rule works in linear form. If it is at random, the reader does not see single genes, and
   pair-aware terms come first. If stage one is near its ceiling, the next rounds change the editor and the scorer,
@@ -415,4 +415,7 @@ test lines). The backbone has four slots. A later round changes one slot only, s
 - **Result** ([record](../results/sl_backbone_round_zero_seed0/README.md)): the conditional score equals its
   context-ablated score (0.295 / 0.288 against 0.296 / 0.295, validation / test). The head (0.374 / 0.322) is the
   best model after the training SL fraction (0.524 / 0.495), but its gain over its ablation is small and
-  gene-level. No model ranks the label-differs pairs above random. Next: pair-aware terms in the reader.
+  gene-level. No model ranks the label-differs pairs above random. The equality of the conditional score and its
+  ablation is by construction for an affine reader, so it does not put the reader first. Next: the buffer-aware reader
+  ([spec](specs/2026-11-12-sl-buffer-aware-reader-design.md)): the reader gets each gene's buffer in the line (its
+  paralogs and complex members), so that the response of B to the loss of A differs between lines.
