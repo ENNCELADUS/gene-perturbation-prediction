@@ -453,10 +453,13 @@ OMP_NUM_THREADS=32 .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/
 MiT4SL (`hpc/mit4sl/`, `.venv-mit4sl`: torch 2.6 on CUDA 12.4, PyG 2.6.1, torch-sparse built from source; the released
 torch 1.12 has no Hopper kernels) needs the released `data.zip` (1,030,474,683 bytes, SHA-256 `d06124f2…`) from the
 authors' Google Drive, which the H20 cannot reach: download it on the laptop, check the SHA-256, copy it to
-`data/mit4sl/official/` and unzip. `prepare.py` builds each line's contextualised PPI graph from DepMap TPM (the
-tutorial's threshold 400 and 32 neighbours) and the train, validation and test rows, and removes every PrimeKG and PPI
-edge inside a benchmark pair. `train.py` runs the official model and training step (cross-cell-line protocol, 20 epochs)
-for one run and keeps the epoch with the best validation AUROC.
+`data/mit4sl/official/` and unzip it (Python `zipfile`; the H20 has no `unzip`). `prepare.py` builds each line's
+contextualised PPI graph from DepMap TPM (the tutorial's threshold 400 and 32 neighbours; 106 lines) and the train,
+validation and test rows, and removes every PrimeKG and PPI edge inside a benchmark pair (about 5 min). `train.py` runs
+the official model and training step (cross-cell-line protocol, 20 epochs of one full-batch step each, as released) for
+one run and keeps the epoch with the best validation AUROC (about 35 min on one GPU). Two changes let the released code
+run: the official `HGTConv(..., group='sum')` drops the argument (PyG 2.3+ always sums), and each line's 64-layer graph
+encoder is checkpointed (the same outputs and gradients; 106 graphs do not fit on one GPU otherwise).
 
 ```bash
 hpc/mit4sl/setup.sh
