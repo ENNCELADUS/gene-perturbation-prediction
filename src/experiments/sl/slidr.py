@@ -12,7 +12,8 @@ A benchmark pair is tested in both orientations (each gene as the driver). Its s
 -log10 of the smaller mutated-lines p-value among the orientations that pass the
 wild-type filter, 0 (p = 1) when every tested orientation fails it, and -log10 0.5
 (``covered`` false) when neither gene has enough mutated and wild-type lines, the
-partner has no viability, or the lineage has fewer than ``min_lines`` lines. The score
+partner has no viability, or the line's lineage is unknown or has fewer than
+``min_lines`` lines. The score
 reads only the held-out line's lineage. Deviations from R are in
 ``third_party/slidr/PROVENANCE.md``."""
 
@@ -40,6 +41,8 @@ HELD_SIDES = ("val", "test")
 EXACT_MAX = 20
 #: Score of a pair that no orientation tests: p = 0.5, no evidence either way.
 UNTESTED = -np.log10(0.5)
+#: The group of held-out lines without a lineage.
+NO_LINEAGE = "(no lineage)"
 #: Smallest p-value kept, so that -log10 stays finite.
 TINY = 1e-300
 
@@ -221,10 +224,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     )
     held = labels[labels["label"].notna() & labels["model_id"].isin(held_lines)]
     held = held[["model_id", "gene_a", "gene_b"]].drop_duplicates()
-    held = held.assign(lineage=held["model_id"].map(lineage))
-    if held["lineage"].isna().any():
-        missing = sorted(held.loc[held["lineage"].isna(), "model_id"].unique())
-        raise ValueError(f"held-out lines without a lineage: {missing}")
+    # a line without a lineage (HEK-293 in DepMap 26Q1) has no fitted lines: untested
+    held = held.assign(lineage=held["model_id"].map(lineage).fillna(NO_LINEAGE))
     effect = read_depmap_matrix(Path(config["gene_effect"]))
     mutated = [read_depmap_matrix(Path(p)) for p in config["mutations"]]
     copy_number = read_copy_number(Path(config["copy_number"]))
@@ -248,7 +249,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
                 float((tests["wt_pvalue"] < config["wt_pvalue"]).mean())
                 if len(tests) else None),
         }  # fmt: skip
-    tests = pd.concat(all_tests, ignore_index=True)
+    tests = pd.concat([t for t in all_tests if len(t)] or all_tests, ignore_index=True)
     scores = pd.concat(all_scores, ignore_index=True).drop(columns="lineage")
     write_parquet(run_dir / "tests.parquet", tests)
     write_parquet(run_dir / "scores.parquet", scores)
