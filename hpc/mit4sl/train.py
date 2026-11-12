@@ -23,8 +23,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 import torch.optim as optim
 from sklearn.metrics import roc_auc_score
+from torch.utils.checkpoint import checkpoint
 
 import model as official_model
 import torch_geometric.typing
@@ -48,6 +50,41 @@ def _hgt_conv(*args, group: str = "sum", **kwargs):
 
 
 official_model.HGTConv = _hgt_conv
+
+
+def _cell_graph(self, x, edge_index, edge_attr):
+    """The official CellLineGraphEncoder.forward for one line's graph."""
+    x = self.node_encoder(x)
+    edge_attr = self.edge_encoder(edge_attr)
+    x = self.layers[0].conv(x, edge_index, edge_attr)
+    for layer in self.layers[1:]:
+        x = layer(x, edge_index, edge_attr)
+    x = self.layers[0].act(self.layers[0].norm(x))
+    x = F.dropout(x, p=0.1, training=self.training)
+    pooled = torch.cat(
+        (F.adaptive_avg_pool2d(x.unsqueeze(0), (1, 32)).squeeze(0),
+         F.adaptive_max_pool2d(x.unsqueeze(0), (1, 32)).squeeze(0)),
+        dim=1,
+    )  # fmt: skip
+    return self.lin(pooled)
+
+
+def _cell_graphs(self, data, device):
+    """CellLineGraphEncoder.forward with each graph checkpointed: the same outputs and
+    gradients, but the 64-layer encoder over ~100 line graphs fits on one GPU (the
+    official run had 6 graphs)."""
+    out = []
+    for graph in data:
+        args = (graph.x.to(device), graph.edge_index.to(device),
+                graph.edge_attr.to(device))  # fmt: skip
+        if torch.is_grad_enabled():
+            out.append(checkpoint(_cell_graph, self, *args, use_reentrant=False))
+        else:
+            out.append(_cell_graph(self, *args))
+    return out
+
+
+official_model.CellLineGraphEncoder.forward = _cell_graphs
 
 ROOT = Path(__file__).resolve().parents[2]
 OFFICIAL_CODE = ROOT / "third_party/mit4sl"
@@ -126,6 +163,7 @@ def main() -> None:
     kgdata, cell_ppidata = init_graph_data(
         str(cli.data / "kgdata.pkl"), str(cli.data / "cell_line_subgraphs.pkl")
     )
+    cell_ppidata = [graph.to(device) for graph in cell_ppidata]  # moved once
     sequence_data, cell_proteins = sequences(cli.data, task)
     parts = {n: split_data(task, n, node_type) for n in ("train", "val", "test")}
     train_data, train_mask, num_train, ori_train = parts["train"]
