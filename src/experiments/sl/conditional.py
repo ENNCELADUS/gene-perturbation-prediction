@@ -1,9 +1,12 @@
-"""Round zero of the modular SL backbone (SL protocol §11). Four slots: the line
-encoder (bridged pseudo-bulk), the dependency reader (the default linear expression
-model), the context editor (gene A's expression set to the training side's low level)
-and the pair scorer. The reader is fitted on the training side of the SL split, so no
-SL validation or test line's GeneEffect enters it: training lines are predicted out of
-fold, validation and test lines by the full fit.
+"""The modular SL backbone (SL protocol §11, §12). Four slots: the line encoder
+(bridged pseudo-bulk), the dependency reader (the linear model config's reference
+row: the default linear expression model, or the buffer-aware reader with the
+partner block), the context editor (gene A's expression set to the training side's
+low level) and the pair scorer. The reader is fitted on the training side of the SL
+split, so no SL validation or test line's GeneEffect enters it: training lines are
+predicted out of fold, validation and test lines by the full fit. A term is read
+from the reader's predictions of the line's edited row and of its row as it is, so
+it holds for a reader that is not affine in expression.
 
 The conditional score of a pair (A, B) in line c, in residual-SD units, is
 
@@ -15,8 +18,11 @@ when it is already lower. The context-ablated score reads the training-side mean
 profile in place of the line's. A logistic head on the training lines' SL labels reads
 both terms, the predicted GeneEffect and the expression of both genes and the design;
 its penalty is chosen on validation recall in the top 10%. Each score goes to
-``scores/<name>.parquet`` for the benchmark harness (``extra_scores``), and the
-reader's GeneEffect table to ``predictions.parquet`` (its ``stage_one``)."""
+``scores/<name>.parquet`` for the benchmark harness (``extra_scores``) with
+``covered`` (the reader can edit the row) and ``partner`` (A is a paralog or complex
+co-member of B, or for a pair B of A), and the reader's GeneEffect table to
+``predictions.parquet`` (its ``stage_one``). ``metrics.json`` also holds the
+stage-one ceiling: one DepMap screen of a line as the prediction of another."""
 
 from __future__ import annotations
 
@@ -49,6 +55,7 @@ from src.experiments.sl.benchmark_baselines import (
     benchmark_rows,
     line_records,
     list_records,
+    read_gene_effect,
 )
 from src.linear_model.bridge import fit_bridge, oof_bridged
 from src.linear_model.folds import training_side_folds
@@ -59,6 +66,8 @@ from src.linear_model.linear_model import (
     fit_linear_model,
     total,
 )
+from src.linear_model.reference import Reference
+from src.linear_model.targets import residual_frame
 
 #: A score table's key (one score per line, design and ordered pair).
 KEYS = ["model_id", "design", "gene_a", "gene_b"]
@@ -85,58 +94,12 @@ def load_config(path: Path) -> dict[str, Any]:
     require_keys(
         config,
         {"kind", "seed", "output_root", "task", "linear_model", "labels", "split",
-         "head_penalties", "top_k"},
+         "head_penalties", "top_k", "screen_gene_effect", "screen_map"},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_conditional":
         raise ValueError(f"{path} is a {config['kind']} config")
     return config
-
-
-def drop(expression: pd.DataFrame, low: pd.Series) -> pd.DataFrame:
-    """How far each gene falls when lost: ``min(low - x, 0)``."""
-    return (low.loc[expression.columns] - expression).clip(upper=0.0)
-
-
-def pair_responses(
-    reader: FittedLinearModel, origin: pd.Series, a: np.ndarray, b: np.ndarray
-) -> np.ndarray:
-    """Per pair, the change of the reader's prediction of gene ``b`` (residual SD)
-    when gene ``a``'s expression rises by one from ``origin``; NaN where ``a`` is not
-    an expression gene or ``b`` is not a predicted gene. Exact for an affine reader
-    only (``check_affine``)."""
-    space, genes = pd.Index(origin.index), pd.Index(reader.genes)
-    column = genes.get_indexer(b)
-    ok = (space.get_indexer(a) >= 0) & (column >= 0)
-    out = np.full(len(a), np.nan)
-    edited = pd.unique(a[ok])
-    base = total(reader.predict(origin.to_frame().T)).to_numpy()[0]
-    for start in range(0, len(edited), CHUNK):
-        chunk = pd.Index(edited[start : start + CHUNK])
-        values = np.tile(origin.to_numpy(dtype=np.float64), (len(chunk), 1))
-        values[np.arange(len(chunk)), space.get_indexer(chunk)] += 1.0
-        change = total(reader.predict(pd.DataFrame(values, columns=space))).to_numpy()
-        row = chunk.get_indexer(a)
-        hit = ok & (row >= 0)
-        out[hit] = change[row[hit], column[hit]] - base[column[hit]]
-    return out
-
-
-def check_affine(
-    reader: FittedLinearModel, origin: pd.Series, row: pd.Series, gene: str
-) -> None:
-    """Raise unless editing ``gene`` in ``row`` moves every prediction as
-    ``pair_responses`` says from ``origin``: the responses hold for every line only
-    while the reader is affine in expression."""
-    edited = row.copy()
-    edited[gene] -= 1.0
-    both = total(reader.predict(pd.DataFrame([edited, row]))).to_numpy()
-    genes = np.asarray(reader.genes)
-    via = -pair_responses(reader, origin, np.full(len(genes), gene), genes)
-    if not np.allclose(both[0] - both[1], via, rtol=1e-5, atol=1e-8):
-        raise ValueError(
-            "the reader is not affine in expression: query edited rows per line"
-        )
 
 
 def terms(
@@ -145,36 +108,82 @@ def terms(
     low: pd.Series,
     assignment: Mapping[str, int],
     readers: Mapping[int, FittedLinearModel],
-    origin: pd.Series,
 ) -> np.ndarray:
     """Rows x 2: the change of B's predicted GeneEffect when A is lost in the row's
     line (``term_ab``) and of A's when B is lost (``term_ba``, 0 for an anchor list),
-    each from the reader ``assignment`` gives the line."""
-    fall = drop(expression, low)
-    line = fall.index.get_indexer(rows["model_id"])
-    values = fall.to_numpy(dtype=np.float64)
-
-    def falls(gene: str) -> np.ndarray:
-        column = fall.columns.get_indexer(rows[gene])
-        ok = (line >= 0) & (column >= 0)
-        out = np.full(len(rows), np.nan)
-        out[ok] = values[line[ok], column[ok]]
-        return out
-
-    fa, fb = falls("gene_a"), falls("gene_b")
-    key = rows["model_id"].map(assignment).to_numpy()
+    each from the reader ``assignment`` gives the line: its prediction of the line's
+    row with the lost gene at ``min(x, low)`` minus its prediction of the row as it
+    is. NaN where the lost gene has no expression column or the other gene no
+    prediction; exactly 0 where the lost gene is already at or below ``low``."""
+    space, genes = expression.columns, pd.Index(readers[FULL].genes)
+    values = expression.to_numpy(dtype=np.float64)
+    floor = low.loc[space].to_numpy(dtype=np.float64)
     pair = (rows["design"] != "anchor").to_numpy()
+    line = expression.index.get_indexer(rows["model_id"])
+    key = rows["model_id"].map(assignment).to_numpy()
+    # each query: (row, term, line, lost gene's column, predicted gene's column)
     a, b = rows["gene_a"].to_numpy(dtype=object), rows["gene_b"].to_numpy(dtype=object)
+    both = np.flatnonzero(pair)
+    row = np.concatenate([np.arange(len(rows)), both])
+    term = np.repeat([0, 1], [len(rows), len(both)])
+    lost = space.get_indexer(np.concatenate([a, b[both]]))
+    read = genes.get_indexer(np.concatenate([b, a[both]]))
+    line, key = line[row], key[row]
     out = np.full((len(rows), 2), np.nan)
     out[~pair, 1] = 0.0
+    ok = (line >= 0) & (lost >= 0) & (read >= 0)
+    out[row[ok], term[ok]] = 0.0
+    moves = ok & (values[np.maximum(line, 0), np.maximum(lost, 0)] > floor[lost])
     for k, reader in readers.items():
-        chosen = key == k
-        out[chosen, 0] = fa[chosen] * pair_responses(
-            reader, origin, a[chosen], b[chosen]
+        mine = moves & (key == k)
+        if not mine.any():
+            continue
+        # each (line, lost gene) is predicted once, CHUNK edited rows at a time
+        edits, edit_of = np.unique(
+            np.stack([line[mine], lost[mine]], axis=1), axis=0, return_inverse=True
         )
-        both = chosen & pair
-        out[both, 1] = fb[both] * pair_responses(reader, origin, b[both], a[both])
+        edit_of = edit_of.ravel()
+        lines, line_of = np.unique(line[mine], return_inverse=True)
+        base = total(reader.predict(expression.iloc[lines])).to_numpy()
+        change, read_mine = np.empty(int(mine.sum())), read[mine]
+        for start in range(0, len(edits), CHUNK):
+            chunk = edits[start : start + CHUNK]
+            edited = values[chunk[:, 0]].copy()
+            edited[np.arange(len(chunk)), chunk[:, 1]] = floor[chunk[:, 1]]
+            predicted = total(
+                reader.predict(pd.DataFrame(edited, columns=space))
+            ).to_numpy()
+            at = np.flatnonzero((edit_of >= start) & (edit_of < start + len(chunk)))
+            columns = read_mine[at]
+            change[at] = (
+                predicted[edit_of[at] - start, columns] - base[line_of[at], columns]
+            )
+        out[row[mine], term[mine]] = change
     return out
+
+
+def partners(reference: Reference) -> dict[str, set[str]]:
+    """Each gene's paralogs and complex co-members, as the partner block reads them
+    (``partner_index``), over the whole tables."""
+    out: dict[str, set[str]] = {}
+    for gene, paralog in zip(reference.paralogs["gene"], reference.paralogs["paralog"]):
+        out.setdefault(gene, set()).add(paralog)
+    for _, members in reference.complexes.groupby("complex_id")["gene"]:
+        group = set(members)
+        for gene in group:
+            out.setdefault(gene, set()).update(group - {gene})
+    return out
+
+
+def partner_rows(rows: pd.DataFrame, reference: Reference) -> np.ndarray:
+    """Per row: A is a partner of B, or (a combinatorial pair) B of A."""
+    table = partners(reference)
+    pair = (rows["design"] != "anchor").to_numpy()
+    return np.array(
+        [a in table.get(b, ()) or (both and b in table.get(a, ()))
+         for a, b, both in zip(rows["gene_a"], rows["gene_b"], pair)],
+        dtype=bool,
+    )  # fmt: skip
 
 
 def gather(table: pd.DataFrame, rows: pd.DataFrame, gene: str) -> np.ndarray:
@@ -389,6 +398,42 @@ def stage_one_metrics(
     return out
 
 
+def two_screens(
+    screens: pd.DataFrame, screen_map: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Lines x genes: the GeneEffect of the first and of the second screen (in
+    ScreenID order) of each line with two or more screens."""
+    owner = screen_map.set_index("ScreenID")["ModelID"].astype(str)
+    ids = sorted(s for s in screens.index if s in owner.index)
+    by_line = pd.Series(ids).groupby(owner.loc[ids].to_numpy()).agg(list)
+    by_line = by_line[by_line.str.len() >= 2]
+    return tuple(
+        screens.loc[[v[i] for v in by_line]].set_axis(by_line.index) for i in (0, 1)
+    )
+
+
+def stage_one_ceiling(
+    base: RunBase, first: pd.DataFrame, second: pd.DataFrame
+) -> dict[str, Any]:
+    """Per SL side: the stage-one metrics (``wide_accuracy``) of one screen's
+    residual as the prediction of another screen's residual of the same line, on
+    the side's lines with two screens."""
+    definitions, split = base.definitions, base.split
+    scale = definitions.residual_scale
+    out = {}
+    for name, lines in (("train", split.supervised_train), ("val", split.val),
+                        ("test", split.test)):  # fmt: skip
+        lines = [m for m in lines if m in first.index]
+        if not lines:
+            out[name] = {"lines": 0}
+            continue
+        guess = residual_frame(first, lines, definitions).div(scale, axis=1)
+        truth = residual_frame(second, lines, definitions).div(scale, axis=1)
+        truth = truth.where(guess.notna())
+        out[name] = {"lines": len(lines)} | wide_accuracy(guess, truth, definitions)
+    return out
+
+
 def named_pairs(rows: pd.DataFrame, score: np.ndarray) -> list[dict[str, Any]]:
     """Each held-out row of a NAMED pair: its label, conditional score and percentile
     in its list (1: ranked first)."""
@@ -430,8 +475,6 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         np.percentile(encoders.to_numpy(dtype=np.float64), LOW_PERCENTILE, axis=0),
         index=encoders.columns,
     )
-    for reader in readers.values():
-        check_affine(reader, origin, line_rows.iloc[0], str(encoders.columns[0]))
     residual = predictions(readers, assignment, line_rows)
     definitions = base.definitions
     genes = list(definitions.genes)
@@ -449,16 +492,18 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         index=line_rows.index,
         columns=ablated_effect.index,
     )
-    held_reader = {m: FULL for m in line_rows.index}
+    # every line reads the same mean profile: its terms are queried once
+    mean = origin.to_frame("mean").T
     reading = {
-        "line": (terms(rows, line_rows, low, assignment, readers, origin), residual,
+        "line": (terms(rows, line_rows, low, assignment, readers), residual,
                  line_rows),
-        "ablated": (terms(rows, ablated_rows, low, held_reader, readers, origin),
-                    ablated_effects, ablated_rows),
+        "ablated": (terms(rows.assign(model_id="mean"), mean, low, {"mean": FULL},
+                          readers), ablated_effects, ablated_rows),
     }  # fmt: skip
     # a gene outside the expression space cannot be edited: its term is 0 (a tie),
     # and the row is not covered (the harness's Table 4 ranks the covered rows)
     covered = np.isfinite(reading["line"][0]).all(axis=1)
+    partner = partner_rows(rows, base.reference)
     for values in reading.values():
         np.nan_to_num(values[0], copy=False, nan=0.0)
     x = {name: features(rows, *values) for name, values in reading.items()}
@@ -481,7 +526,11 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     out = run_dir / "scores"
     out.mkdir(exist_ok=True)
     for name, values in scores.items():
-        frame = rows[KEYS].assign(score=values, covered=covered).drop_duplicates(KEYS)
+        frame = (
+            rows[KEYS]
+            .assign(score=values, covered=covered, partner=partner)
+            .drop_duplicates(KEYS)
+        )
         staging = out / f".{name}.parquet.tmp"
         frame.to_parquet(staging, index=False)
         os.replace(staging, out / f"{name}.parquet")
@@ -499,6 +548,13 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "head": {"features": list(FEATURES), "selection": selection,
                  "coefficients": head[-1].coef_[0].tolist()},
         "stage_one": stage_one_metrics(base, residual, int(config["seed"])),
+        "stage_one_ceiling": stage_one_ceiling(
+            base,
+            *two_screens(
+                read_gene_effect(Path(config["screen_gene_effect"])),
+                pd.read_csv(config["screen_map"], dtype=str),
+            ),
+        ),
         "named_pairs": named_pairs(rows, scores["conditional"]),
     }  # fmt: skip
     write_json(run_dir / "metrics.json", jsonable(metrics))
@@ -516,7 +572,13 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
             ("top_recall", "top-20 recall of a line's strongest dependencies"),
             ("predictable_genes", "genes with per-gene Spearman at or above 0.3"),
             ("absolute_pearson", "whole-line Pearson (sanity)")]  # fmt: skip
-    stage_one = metrics["stage_one"]
+    stage_one, ceiling = metrics["stage_one"], metrics["stage_one_ceiling"]
+    sides = ("train", "val", "test")
+
+    def value(side: str, column: str, key: str) -> Any:
+        if column == "ceiling":
+            return ceiling[side].get(key)
+        return stage_one[side][column].get(key)
 
     def cell(value: Any) -> str:
         if value is None:
@@ -524,18 +586,22 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         return f"{value:,}" if isinstance(value, int) else f"{value:.4f}"
 
     lines = [
-        f"# SL backbone, round zero: {metrics['run_id']}",
+        f"# SL backbone: {metrics['run_id']}",
         "",
         "**Table 1.** Stage-one metrics of the linear expression model fitted on the "
         "SL split's training side, on the SL lines with GeneEffect (training lines "
-        "out of fold), beside the same prediction with its lines permuted.",
+        "out of fold), beside the same prediction with its lines permuted and the "
+        "ceiling: one DepMap screen's residual as the prediction of another screen's "
+        "residual of the same line, on the lines with two screens ("
+        + " / ".join(str(ceiling[s]["lines"]) for s in sides)
+        + " lines, train / val / test).",
         "",
-        "| Metric | Train | Train, permuted | Validation | Validation, permuted | "
-        "Test | Test, permuted |",
-        "| --- |" + " ---: |" * 6,
+        "| Metric |" + "".join(f" {s}, {c} |" for s in ("Train", "Validation", "Test")
+                              for c in ("reader", "permuted", "two screens")),
+        "| --- |" + " ---: |" * 9,
         *(f"| {name} | " + " | ".join(
-            cell(stage_one[s][row].get(key))
-            for s in ("train", "val", "test") for row in ("reader", "line_permuted"))
+            cell(value(s, column, key))
+            for s in sides for column in ("reader", "line_permuted", "ceiling"))
           + " |" for key, name in keys),
         "",
         "**Table 2.** The head's validation recall in the top 10% at each penalty.",

@@ -1,0 +1,18 @@
+# The SL backbone with the buffer-aware reader (SL protocol §12): the backbone of
+# conditional.yaml whose dependency reader is configs/linear_model/buffer_aware_reader.yaml (the
+# default linear expression model plus the partner block). Terms come from each line's edited rows.
+# `hpc/run.sh sl-conditional configs/sl/conditional_buffer.yaml --run-id conditional_buffer_seed0`
+# (CPU); then `hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id ID`.
+kind: sl_conditional
+seed: 0
+output_root: outputs/sl
+task: conditional
+linear_model: configs/linear_model/buffer_aware_reader.yaml
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+head_penalties: [0.01, 0.1, 1.0, 10.0, 100.0]
+top_k: 20
+# DepMap's per-screen GeneEffect and its screen-to-line map: the stage-one ceiling (one screen of
+# a line as the prediction of another)
+screen_gene_effect: data/sl_dependency_v0/raw/depmap/ScreenGeneEffect.csv
+screen_map: data/sl_dependency_v0/raw/depmap/CRISPRScreenMap.csv

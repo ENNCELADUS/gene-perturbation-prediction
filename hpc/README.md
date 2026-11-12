@@ -19,7 +19,7 @@ prints every command's arguments.
 | `cell-states`, `pie-precompute --steps states` | the cell-state telemetry and the frozen PIE on its states | CPU; scVI and PIE on GPUs | [Cell states](#the-cell-states) |
 | `sl-paris`, `sl-stage-two` | PARIS (`sl.paris`) and SL stage two on stage one's GeneEffect (`sl.stage_two`) | CPU, `.venv-pie` | [SL stage two](#sl-stage-two) |
 | `sl-baselines` | baselines on the multi-study SL benchmark (`sl.benchmark_baselines`) | CPU, `.venv-pie` | [SL benchmark baselines](#sl-benchmark-baselines) |
-| `sl-conditional` | the modular SL backbone, round zero (`sl.conditional`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-conditional` | the modular SL backbone: round zero, the buffer-aware reader (`sl.conditional`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 
 GPU use, measured on 30838 in October 2026 (one H20 per job unless noted; SM is `nvidia-smi dmon`'s busy share):
@@ -356,10 +356,14 @@ Stage one and stage two are separate (decision 2026-11-04). The stage-one benchm
 `linear-model-production` (one fit on every labelled line) is kept for reference only: it reads the GeneEffect of
 most SL held-out lines.
 
-`sl-conditional` (`src.experiments.sl.conditional`, SL protocol §11) is round zero of the modular SL backbone. It
-fits the default linear expression model on the SL split's training side (training lines out of fold) and writes
-`predictions.parquet` (GeneEffect of every SL line), `scores/{conditional,conditional_ablated,head,head_ablated}.parquet`,
-`metrics.json` and `results.md` (stage-one metrics, the head's penalties) to `outputs/sl/conditional/<run id>/`.
+`sl-conditional` (`src.experiments.sl.conditional`, SL protocol §11 and §12) is the modular SL backbone. It fits
+the reader of its linear model config on the SL split's training side (training lines out of fold) and writes
+`predictions.parquet` (GeneEffect of every SL line), `scores/{conditional,conditional_ablated,head,head_ablated}.parquet`
+(with the columns `covered` and `partner`), `metrics.json` and `results.md` (stage-one metrics beside the ceiling of
+two DepMap screens of one line, the head's penalties) to `outputs/sl/conditional/<run id>/`.
+`configs/sl/conditional.yaml` reads the default linear expression model (round zero); `configs/sl/conditional_buffer.yaml`
+reads the buffer-aware reader (the partner block added). The terms come from each line's edited rows; a full run
+queries each line and each lost gene once.
 
 `sl-baselines` (`src.experiments.sl.benchmark_baselines`) reads the multi-study SL benchmark's labels, the SL split
 and the backbone's GeneEffect table ([data card](../docs/data/sl-benchmark.html)). It scores each validation and test
@@ -371,13 +375,21 @@ the positive rate follow. Each row is given for all lines, the lines with and wi
 non-cancer lines. An anchor list is ranked by gene B, so drug anchors keep their lists. Table 3 repeats the headline for each stratum of held-out pairs, ranked inside the
 stratum of each screen: a seen pair (the same study labelled it in a training line) whose label agrees with the
 majority of those labels, a seen pair whose label differs, and a new pair whose genes the training rows have. The
-labels as the score (the ceiling) and a seeded random score (about 0.10) check the code.
+labels as the score (the ceiling) and a seeded random score (about 0.10) check the code. Table 3 also gives two
+subsets: the partner pairs (the `partner` column of a score table) and the rows where no gene of the pair is a
+dependency alone (measured GeneEffect at or above −0.5). Table 5 gives the per-line difference of each (scorer,
+control) pair in the config's `paired_differences`, with the same line bootstrap.
 
 ```bash
 OMP_NUM_THREADS=32 MKL_NUM_THREADS=32 nohup bash -c "hpc/run.sh sl-conditional configs/sl/conditional.yaml \
   --run-id conditional_seed0 \
   && hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id benchmark_backbone_seed0" \
   > outputs/launches/sl_backbone_chain.log 2>&1 &
+# the buffer-aware reader (SL protocol §12), then the harness with both backbone runs
+OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 nohup hpc/run.sh sl-conditional configs/sl/conditional_buffer.yaml \
+  --run-id conditional_buffer_seed0 > outputs/launches/conditional_buffer_seed0.log 2>&1 &
+OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 nohup hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml \
+  --run-id benchmark_buffer_seed0 > outputs/launches/benchmark_buffer_seed0.log 2>&1 &
 ```
 
 The config's `extra_scores` adds scores from other harnesses, per (gene A, gene B), with the line and the design

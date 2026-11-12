@@ -173,8 +173,8 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 
 ### `experiments/sl/`
 
-- `benchmark_baselines`: Baselines on the multi-study SL benchmark: pair identity, pan-essentiality, stage one's predicted GeneEffect, the measured GeneEffect (lines with GeneEffect only) and other harnesses' scores; headline recall in the top 10% of each list, reported for all lines, each GeneEffect group, cancer and non-cancer lines, with the label-agreement ceiling.
-- `conditional`: The modular SL backbone, round zero (SL protocol §11): the linear expression model fitted on the SL split's training side, the conditional score (B's predicted change when A is lost), its context-ablated version and a logistic head.
+- `benchmark_baselines`: Baselines on the multi-study SL benchmark: pair identity, pan-essentiality, stage one's predicted GeneEffect, the measured GeneEffect (lines with GeneEffect only) and other harnesses' scores; headline recall in the top 10% of each list, reported for all lines, each GeneEffect group, cancer and non-cancer lines, each stratum and subset (partner pairs, no gene a dependency alone), with the paired differences named in the config and the label-agreement ceiling.
+- `conditional`: The modular SL backbone (SL protocol §11, §12): the reader of a linear model config (the default linear expression model, or the buffer-aware reader with the partner block) fitted on the SL split's training side, the conditional score (B's predicted change when A is lost, read from each line's edited rows), its context-ablated version, a logistic head, the partner flag and the stage-one ceiling of two DepMap screens.
 - `stage_two`: Stage two, first run (SL protocol §10): a PARIS head and a viability-embedding head, scored per held-out line and screen of the SL screen benchmark against their controls.
 
 ### `experiments/states/`

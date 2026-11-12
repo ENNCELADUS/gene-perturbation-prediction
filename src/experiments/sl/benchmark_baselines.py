@@ -14,7 +14,9 @@ reference, never a bar (only lines with GeneEffect have it). Two checks of the
 benchmark code: the labels as the score (the ceiling, min(1, 0.1 n / positives) per
 screen) and a seeded random score (about 0.10). Every split is reported for all
 lines, the lines with and without GeneEffect, and the cancer and non-cancer lines,
-and for each stratum of held-out pairs (STRATA), ranked inside it in each screen."""
+and for each stratum and subset of held-out pairs (STRATA, SUBSETS), ranked inside
+it in each screen. Each (scorer, control) pair of the config's ``paired_differences``
+gets its per-line difference with the same line bootstrap."""
 
 from __future__ import annotations
 
@@ -45,6 +47,12 @@ NAMES = {
     "conditional_ablated": "Conditional score, context-ablated (training mean profile)",
     "head": "Backbone head (logistic, on the conditional terms)",
     "head_ablated": "Backbone head, context-ablated (training mean profile)",
+    "buffer_conditional": "Conditional score, buffer-aware reader",
+    "buffer_conditional_ablated": "Conditional score, buffer-aware reader, "
+    "context-ablated (training mean profile)",
+    "buffer_head": "Backbone head on the buffer-aware reader's terms",
+    "buffer_head_ablated": "Backbone head on the buffer-aware reader's terms, "
+    "context-ablated (training mean profile)",
     "pair_identity": "Pair identity (hit rate in the study's training lines)",
     "pan_essentiality": "Pan-essentiality (gene mean GeneEffect)",
     "measured_geneeffect": "Measured GeneEffect (reference, lines with GeneEffect)",
@@ -72,6 +80,15 @@ STRATA = {
     "seen_flip": "Seen pair, label differs from the training lines",
     "new_pair": "New pair, both genes seen",
 }
+#: Subsets of held-out rows, reported as the strata are. A partner pair: A is a
+#: paralog or complex co-member of B (or, for a pair, B of A), from the ``partner``
+#: column of a score table. No dependency alone: the measured GeneEffect of gene B
+#: (and of gene A for a pair) is at or above ``DEPENDENCY`` (lines with GeneEffect).
+SUBSETS = {
+    "partner": "Partner pairs",
+    "no_dependency_alone": "No gene a dependency alone",
+}
+DEPENDENCY = -0.5
 #: The headline's top fraction of each list.
 TOP = 0.10
 
@@ -81,11 +98,15 @@ def load_config(path: Path) -> dict[str, Any]:
     require_keys(
         config,
         {"kind", "seed", "output_root", "task", "labels", "split", "gene_effect",
-         "model", "stage_one", "extra_scores", "top_k", "bootstrap"},
+         "model", "stage_one", "extra_scores", "top_k", "bootstrap",
+         "paired_differences"},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_benchmark_baselines":
         raise ValueError(f"{path} is a {config['kind']} config")
+    unknown = {n for pair in config["paired_differences"] for n in pair} - set(NAMES)
+    if unknown:
+        raise ValueError(f"paired_differences names unknown scorers: {sorted(unknown)}")
     return config
 
 
@@ -191,20 +212,29 @@ def pair_sum(rows: pd.DataFrame, value: Callable[[str], np.ndarray]) -> np.ndarr
     return a + value("gene_b")
 
 
+def line_value(effects: pd.DataFrame, rows: pd.DataFrame, gene: str) -> np.ndarray:
+    """effects[row's line, row's ``gene``]; NaN where either is missing."""
+    lines = effects.index.get_indexer(rows["model_id"])
+    column = effects.columns.get_indexer(rows[gene])
+    ok = (lines >= 0) & (column >= 0)
+    out = np.full(len(rows), np.nan)
+    out[ok] = effects.to_numpy(dtype=np.float64)[lines[ok], column[ok]]
+    return out
+
+
 def line_values(effects: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
     """effects[line, gene_a] + effects[line, gene_b] (pair_sum); NaN where a needed
     value is missing."""
-    lines = effects.index.get_indexer(rows["model_id"])
-    values = effects.to_numpy(dtype=np.float64)
+    return pair_sum(rows, lambda gene: line_value(effects, rows, gene))
 
-    def value(gene: str) -> np.ndarray:
-        column = effects.columns.get_indexer(rows[gene])
-        ok = (lines >= 0) & (column >= 0)
-        out = np.full(len(rows), np.nan)
-        out[ok] = values[lines[ok], column[ok]]
-        return out
 
-    return pair_sum(rows, value)
+def no_dependency_alone(effects: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
+    """Per row: the measured GeneEffect of gene B, and of gene A for a pair, is at or
+    above ``DEPENDENCY``; False where a needed value is missing."""
+    with np.errstate(invalid="ignore"):
+        b = line_value(effects, rows, "gene_b") >= DEPENDENCY
+        a = line_value(effects, rows, "gene_a") >= DEPENDENCY
+    return b & (a | (rows["design"] == "anchor").to_numpy())
 
 
 def positive_ranks(label: np.ndarray, score: np.ndarray) -> tuple[np.ndarray, ...]:
@@ -307,10 +337,7 @@ def summary(
                 rows = rows.set_index("model_id")
                 gap = (rows["recall_top10"] - control["recall_top10"]).dropna()
                 values = gap.to_numpy()
-                draws = [rng.choice(values, len(values)).mean() for _ in range(reps)]
-                low, high = (
-                    np.quantile(draws, [0.025, 0.975]) if len(values) else (np.nan,) * 2
-                )
+                low, high = interval(values, reps, rng)
                 out.append(
                     {"split": split, "group": name, "scorer": scorer,
                      "lines": len(rows), "positives": int(rows["positives"].sum()),
@@ -320,6 +347,45 @@ def summary(
                      "interval": [float(low), float(high)],
                      "auroc": float(rows["auroc"].mean()),
                      "auprc_lift": float(rows["auprc_lift"].mean())}
+                )  # fmt: skip
+    return out
+
+
+def interval(values: np.ndarray, reps: int, rng: np.random.Generator) -> np.ndarray:
+    """The 95% interval of the mean of ``values`` from resampling them (lines)."""
+    if not len(values):
+        return np.array([np.nan, np.nan])
+    draws = [rng.choice(values, len(values)).mean() for _ in range(reps)]
+    return np.quantile(draws, [0.025, 0.975])
+
+
+def paired_differences(
+    lines: pd.DataFrame,
+    pairs: Sequence[Sequence[str]],
+    groups: Mapping[str, set[str]],
+    reps: int,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Per split, group of lines and (scorer, control) pair: the mean per-line
+    difference in recall in the top 10% with a 95% interval from resampling lines."""
+    rng = np.random.default_rng(seed)
+    out = []
+    for split in ("val", "test"):
+        recall = lines[lines["split"] == split].pivot(
+            index="model_id", columns="scorer", values="recall_top10"
+        )
+        for name, members in groups.items():
+            chosen = recall[recall.index.isin(members)]
+            for scorer, control in pairs:
+                if scorer not in chosen or control not in chosen:
+                    continue
+                values = (chosen[scorer] - chosen[control]).dropna().to_numpy()
+                low, high = interval(values, reps, rng)
+                out.append(
+                    {"split": split, "group": name, "scorer": scorer,
+                     "control": control, "lines": len(values),
+                     "difference": float(values.mean()) if len(values) else None,
+                     "interval": [float(low), float(high)]}
                 )  # fmt: skip
     return out
 
@@ -371,7 +437,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     # one per (gene_a, gene_b), with model_id and design when the table has them; a
     # held row the table lacks raises, a NaN score leaves the row unranked by that
     # scorer; an optional ``covered`` column marks the rows the model really scores
-    covered = {}
+    covered, partner = {}, None
     for name, path in config["extra_scores"].items():
         table = pd.read_parquet(path)
         keys = [k for k in ("model_id", "design", "gene_a", "gene_b") if k in table]
@@ -383,7 +449,18 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         scorers[name] = values["score"].to_numpy(dtype=np.float64)
         if "covered" in values and not values["covered"].all():
             covered[name] = values["covered"].to_numpy(dtype=bool)
+        if "partner" in values:
+            flag = values["partner"].to_numpy(dtype=bool)
+            if partner is not None and not np.array_equal(partner, flag):
+                raise ValueError(f"{path} disagrees on the partner pairs")
+            partner = flag
     held["stratum"] = strata(training, held)
+    # every row set reported: all rows, each stratum, each subset
+    masks = {"all": np.ones(len(held), dtype=bool)}
+    masks |= {k: (held["stratum"] == k).to_numpy() for k in STRATA if k != "all"}
+    if partner is not None:
+        masks["partner"] = partner
+    masks["no_dependency_alone"] = no_dependency_alone(effects, held)
     base = held[[*LIST_KEYS, "gene_a", "gene_b", "label", "stratum"]].assign(
         row=np.arange(len(held))
     )
@@ -398,17 +475,22 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     scores = scores[~without].reset_index(drop=True)
     split_table = pd.read_csv(Path(config["split"]).with_suffix(".csv"), dtype=str)
     groups = line_groups(split_table, non_cancer_lines(Path(config["model"])))
-    by_stratum, results = [], []
-    for stratum in STRATA:
-        chosen = scores if stratum == "all" else scores[scores["stratum"] == stratum]
+    by_stratum, results, differences = [], [], []
+    reps, seed = int(config["bootstrap"]), int(config["seed"])
+    for stratum, mask in masks.items():
+        chosen = scores[mask[scores["row"].to_numpy()]]
         if chosen.empty:
             continue
         stratum_lists = list_records(chosen, int(config["top_k"]))
         stratum_lines = line_records(stratum_lists).assign(stratum=stratum)
         results += [
             row | {"stratum": stratum}
-            for row in summary(
-                stratum_lines, groups, int(config["bootstrap"]), int(config["seed"])
+            for row in summary(stratum_lines, groups, reps, seed)
+        ]
+        differences += [
+            row | {"stratum": stratum}
+            for row in paired_differences(
+                stratum_lines, config["paired_differences"], groups, reps, seed
             )
         ]
         if not stratum_lines.empty:
@@ -441,7 +523,10 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
                  "measured_rows_without_geneeffect": int(without.sum())},
         "screens": screen_counts(lists),
         "strata": {k: int(v) for k, v in held["stratum"].value_counts().items()},
+        "subsets": {k: {"rows": int(masks[k].sum()), "share": float(masks[k].mean())}
+                    for k in SUBSETS if k in masks},
         "summary": results,
+        "paired_differences": differences,
         "covered": on_covered,
         "label_agreement": label_agreement(rows),
     }  # fmt: skip
@@ -455,9 +540,10 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
 
 def results_markdown(metrics: Mapping[str, Any]) -> str:
     """Table 1, recall in the top 10% per scorer on validation and test (all lines);
-    Table 2, the difference from pair identity; Table 3, each stratum; Table 4, each
-    partial scorer on the rows it covers. The other line groups, AUROC, AUPRC
-    and each screen are in metrics.json, lines.csv and lists.csv."""
+    Table 2, the difference from pair identity; Table 3, each stratum and subset;
+    Table 4, each partial scorer on the rows it covers; Table 5, the paired
+    differences named in the config. The other line groups, AUROC, AUPRC and each
+    screen are in metrics.json, lines.csv and lists.csv."""
     rows = {
         (r["split"], r["scorer"]): r
         for r in metrics["summary"]
@@ -469,6 +555,8 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         if r["group"] == "all"
     }
     scorers = [s for s in NAMES if (("test", s) in rows)]
+    sets = {k: v for k, v in (STRATA | SUBSETS).items()
+            if k != "all" and any(key[0] == k for key in strata)}  # fmt: skip
     best = {
         split: max(
             rows[(split, s)]["recall_top10"]
@@ -513,20 +601,23 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         *(f"| {NAMES[s]} | {gap('val', s)} | {gap('test', s)} |"
           for s in scorers if s not in {"pair_identity", "labels", "random"}),
         "",
-        "**Table 3.** Recall in the top 10% for each stratum of held-out pairs, "
-        "ranked inside the stratum of each screen, mean over lines (validation / "
-        "test). Higher is better.",
+        "**Table 3.** Recall in the top 10% for each stratum and subset of held-out "
+        "pairs, ranked inside it in each screen, mean over lines (validation / "
+        "test). Higher is better. Held-out rows per subset: "
+        + "; ".join(f"{SUBSETS[k].lower()} {v['rows']:,} ({v['share']:.1%})"
+                    for k, v in metrics["subsets"].items()) + ".",
         "",
-        "| Model | " + " | ".join(STRATA[k] for k in STRATA if k != "all") + " |",
-        "| --- |" + " ---: |" * (len(STRATA) - 1),
+        "| Model | " + " | ".join(sets[k] for k in sets) + " |",
+        "| --- |" + " ---: |" * len(sets),
         *("| " + NAMES[s] + " | " + " | ".join(
             " / ".join(
                 f"{strata[(k, split, s)]:.3f}" if (k, split, s) in strata else "—"
                 for split in ("val", "test"))
-            for k in STRATA if k != "all") + " |"
+            for k in sets) + " |"
           for s in scorers),
         "",
         *covered_table(metrics["covered"]),
+        *paired_table(metrics["paired_differences"]),
         *agreement_lines(metrics["label_agreement"]),
         "Other line groups, AUROC and AUPRC are in `metrics.json`; each line in "
         "`lines.csv`; each screen, the non-genetic ones included, in `lists.csv`.",
@@ -552,6 +643,39 @@ def agreement_lines(agreement: Mapping[str, Any]) -> list[str]:
         f"{text(agreement['same_study'])}.",
         "",
     ]
+
+
+def paired_table(differences: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Table 5: each named (scorer, control) pair's per-line difference in recall in
+    the top 10%, on all rows and on each stratum and subset (all lines)."""
+    rows = {
+        (r["scorer"], r["control"], r["stratum"], r["split"]): r
+        for r in differences
+        if r["group"] == "all"
+    }
+    if not rows:
+        return []
+    names = {"all": "All pairs"} | STRATA | SUBSETS
+
+    def cell(key: tuple[str, ...]) -> str:
+        row = rows.get(key)
+        if row is None or row["difference"] is None:
+            return "—"
+        low, high = row["interval"]
+        return f"{row['difference']:+.3f} [{low:+.3f}, {high:+.3f}] ({row['lines']})"
+
+    keys = list(dict.fromkeys(k[:3] for k in rows))
+    return [
+        "**Table 5.** Paired difference in recall in the top 10% (model minus "
+        "control), mean over lines, with a 95% bootstrap interval over lines and the "
+        "line count. Higher is better.",
+        "",
+        "| Model − control | Pairs | Validation | Test |",
+        "| --- | --- | ---: | ---: |",
+        *(f"| {NAMES[a]} − {NAMES[b]} | {names[k]} | {cell((a, b, k, 'val'))} | "
+          f"{cell((a, b, k, 'test'))} |" for a, b, k in keys),
+        "",
+    ]  # fmt: skip
 
 
 def covered_table(covered: Mapping[str, Any]) -> list[str]:
