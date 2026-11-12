@@ -30,7 +30,8 @@ def entrez_symbols(path: Path) -> dict[str, str]:
 
 
 def table_s8(path: Path, symbols: dict[str, str]) -> pd.DataFrame:
-    """Columns gene_1, gene_2 (sorted) and the released score."""
+    """Columns gene_1, gene_2 (sorted), the released score and the pair's minimum
+    sequence identity (a feature of the Kebabci 2026 classifier)."""
     import hashlib
 
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -44,6 +45,7 @@ def table_s8(path: Path, symbols: dict[str, str]) -> pd.DataFrame:
             "gene_1": np.minimum(a, b),
             "gene_2": np.maximum(a, b),
             "score": table["prediction_score"],
+            "min_sequence_identity": table["min_sequence_identity"],
         }
     )
     return out.drop_duplicates(["gene_1", "gene_2"])
