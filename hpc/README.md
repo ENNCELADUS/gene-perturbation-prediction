@@ -398,10 +398,11 @@ ratio; with all tested pairs, which are 1% SL, the score became one constant). I
 validation AUROC. A pair with a gene outside the graph (5% of the held-out rows) gets 0.5, so these pairs tie.
 
 `sl-slidr` (`src.experiments.sl.slidr`, a Python port of the official R code, `third_party/slidr/PROVENANCE.md`) runs
-SLIdR's rank test pan-cancer on the training-side lines of the SL split. Each gene of a held-out pair with at least two
+SLIdR's rank test per lineage (R runs per cancer type) on the training-side lines of the SL split in the held-out line's
+lineage (at least five). Each gene of a held-out pair with at least two
 mutated (damaging or hotspot call, or 0 copies) and two wild-type lines is a driver. A pair scores -log10 of the
 smaller mutated-lines p-value of its two orientations, 0 when the wild-type test rejects it (p < 0.1), and -log10 0.5
-when no orientation can be tested (`covered` false). The hotspot matrix came from the laptop (SHA-256 `a86cd8c9…`).
+when no orientation can be tested (`covered` false); the scores are per (line, pair). The hotspot matrix came from the laptop (SHA-256 `a86cd8c9…`).
 
 ```bash
 hpc/run.sh sl-slidr configs/sl/slidr.yaml --run-id seed0   # outputs/sl/slidr/seed0/scores.parquet

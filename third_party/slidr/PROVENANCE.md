@@ -15,8 +15,11 @@ Deviations from R:
 
 - `fp_thresh = Inf`: R stops testing a driver's partners when the Bonferroni-scaled p-value exceeds the allowed false
   positives; the port tests every benchmark pair, so each keeps its p-values.
-- Pan-cancer: one data object over all training-side lines of the SL split (train and bulk_labelled), not one per
-  primary site. Drivers are the genes of the held-out pairs, not MutSig drivers; both genes of a pair are tested as the driver.
+- One data object per lineage (DepMap's OncotreeLineage; the SL split table's lineage for its lines), not per primary
+  site with subtype filters: the training-side lines of the SL split (train and bulk_labelled) in the held-out line's
+  lineage, at least `minNrcelllines = 5`. A pan-cancer run (2026-11-12) lost 97% of its tests to the two-sided wild-type
+  filter on ~1,100 lines. Drivers are the genes of the held-out pairs, not MutSig drivers; both genes of a pair are
+  tested as the driver.
 - No essential-gene filter (`essential_genes = NULL`, the default of `prepareDataObjects`).
 - Inputs are DepMap 26Q1: viabilities `CRISPRGeneEffect.csv`; mutations `OmicsSomaticMutationsMatrixDamaging.csv`
   and `OmicsSomaticMutationsMatrixHotspot.csv` (count > 0); copy number `PortalOmicsCNGeneLog2.csv`, read as
