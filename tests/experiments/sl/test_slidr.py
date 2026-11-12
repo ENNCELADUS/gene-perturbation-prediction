@@ -50,15 +50,16 @@ def test_a_planted_pair_gets_the_best_score_and_untestable_pairs_tie(tmp_path):
     pairs = [("DRV", "SLP"), ("SLP", "DRV"), ("DRV", "G5"), ("G0", "G5"), ("G1", "G2")]
     pd.DataFrame(
         [{"model_id": m, "gene_a": a, "gene_b": b, "label": 1}
-         for m in ("V0", "E0", "B0") for a, b in pairs]
+         for m in ("V0", "E0", "B0", "N0") for a, b in pairs]
     ).to_parquet(tmp_path / "labels.parquet")  # fmt: skip
-    # lineage A: the 40 fitted lines, V0 and E0; lineage B: B0 and one fitted line
+    # lineage A: the 40 fitted lines, V0 and E0; lineage B: B0 and one fitted line;
+    # N0 has no lineage
     split = {"train": fit[:30] + ["B1"], "bulk_labelled": fit[30:], "val": ["V0"],
-             "test": ["E0", "B0"]}  # fmt: skip
+             "test": ["E0", "B0", "N0"]}  # fmt: skip
     (tmp_path / "split.json").write_text(json.dumps(split))
-    pd.DataFrame({"model_id": ["V0", "E0", "B0"], "lineage": ["A", "A", "B"]}).to_csv(
-        tmp_path / "split.csv", index=False
-    )
+    pd.DataFrame(
+        {"model_id": ["V0", "E0", "B0", "N0"], "lineage": ["A", "A", "B", None]}
+    ).to_csv(tmp_path / "split.csv", index=False)
     pd.DataFrame(
         {"ModelID": fit + ["B1"], "OncotreeLineage": ["A"] * 40 + ["B"]}
     ).to_csv(tmp_path / "Model.csv", index=False)
@@ -78,9 +79,10 @@ def test_a_planted_pair_gets_the_best_score_and_untestable_pairs_tie(tmp_path):
     assert scores.loc[("DRV", "SLP"), "score"] > 3 * scores.loc[("DRV", "G5"), "score"]
     assert scores["covered"].tolist() == [True, True, True, True, False]
     assert scores.loc[("G1", "G2"), "score"] == pytest.approx(UNTESTED)
-    # lineage B has one fitted line, fewer than min_lines: nothing is tested there
-    assert not table.loc[table["model_id"] == "B0", "covered"].any()
-    assert len(table) == 15
+    # lineage B has one fitted line, fewer than min_lines, and N0 has no lineage:
+    # nothing is tested there
+    assert not table.loc[table["model_id"].isin(["B0", "N0"]), "covered"].any()
+    assert len(table) == 20
     metrics = json.loads((out / "metrics.json").read_text())
     assert metrics["lineages"]["A"]["fit_lines"] == 40
     assert metrics["lineages"]["B"]["tests"] == 0
