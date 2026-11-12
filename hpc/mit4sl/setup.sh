@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the MiT4SL harness on the H20: the pinned released code (third_party/mit4sl, cloned over HTTPS) and
 # .venv-mit4sl. torch-sparse has no wheel for torch 2.6 on PyPI and data.pyg.org is unreachable, so it is built
-# from source, CPU only: HGTLoader samples on the CPU.
+# from source with torch-scatter, CPU only: HGTLoader samples on the CPU.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -16,7 +16,9 @@ actual=$(git -C third_party/mit4sl rev-parse HEAD)
 [[ -x .venv-mit4sl/bin/python ]] || "$UV" venv --python 3.10 .venv-mit4sl
 "$UV" pip install --python .venv-mit4sl/bin/python -r hpc/mit4sl/requirements.txt
 "$UV" pip install --python .venv-mit4sl/bin/python setuptools wheel
-FORCE_ONLY_CPU=1 MAX_JOBS=32 "$UV" pip install --python .venv-mit4sl/bin/python --no-build-isolation torch-sparse==0.6.18
+# no nvcc on the H20: CPU builds; train.py keeps PyG off torch-scatter on the GPU
+FORCE_ONLY_CPU=1 MAX_JOBS=32 "$UV" pip install --python .venv-mit4sl/bin/python --no-build-isolation \
+  torch-scatter==2.1.2 torch-sparse==0.6.18
 PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python -c "
 import torch, torch_geometric, torch_sparse
 from model import MiT4SL
