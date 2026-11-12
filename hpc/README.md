@@ -412,6 +412,47 @@ when no orientation can be tested (`covered` false); the scores are per (line, p
 hpc/run.sh sl-slidr configs/sl/slidr.yaml --run-id seed0   # outputs/sl/slidr/seed0/scores.parquet
 ```
 
+PARIS on the benchmark (`configs/sl/paris_benchmark.yaml`) fits each gene of a held-out pair on DepMap 26Q1
+GeneEffect against the bulk expression of every protein-coding gene, on the SL split's training-side lines. A pair
+scores the larger importance of a selected pair with r > 0, in either orientation, else 0. A gene takes about 290 s
+on one thread, so the 18,435 genes run as four shards (two on each container, `n_jobs` 60) and a merge:
+
+```bash
+for i in 0 1; do OMP_NUM_THREADS=1 hpc/run.sh sl-paris configs/sl/paris_benchmark.yaml --run-id seed0_shard${i}of4 --shard $i/4; done   # 30757
+for i in 2 3; do OMP_NUM_THREADS=1 hpc/run.sh sl-paris configs/sl/paris_benchmark.yaml --run-id seed0_shard${i}of4 --shard $i/4; done   # 30838
+hpc/run.sh sl-paris configs/sl/paris_benchmark.yaml --run-id seed0 --merge seed0_shard{0,1,2,3}of4
+```
+
+The two paralog classifiers run in `.venv-tx1` (scikit-learn 1.7). `hpc/paralog/dekegel_scores.py` looks up De Kegel
+2021's released score of each held-out pair in Table S8 (`data/sl_baselines/dekegel/`, from
+cancergd.org/static/paralogs, SHA-256 checked); a pair outside the 36,648 paralog pairs gets the table's median score.
+`hpc/paralog/kebabci.py` refits Kebabci 2026's contextualised random forest (the official 16 features and settings,
+commit `f966551`) on the training-side lines' paralog rows. Its inputs: DepMap 26Q1 (GeneEffect ranks, expression, copy
+number); mutations and common essentials of DepMap 24Q4 (`data/sl_baselines/depmap24q4/`, from figshare through the
+laptop: the H20 reaches neither figshare nor DepMap's bucket, and 26Q1's links need a browser); STRING v11.5
+(`data/sl_baselines/string/`); GOA human release 218 (`data/sl_baselines/go/`). Its features read the held-out line's
+GeneEffect, so it is a reference row.
+
+```bash
+.venv-tx1/bin/python hpc/paralog/dekegel_scores.py --out outputs/sl/dekegel   # seconds
+OMP_NUM_THREADS=32 .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/seed0
+```
+
+MiT4SL (`hpc/mit4sl/`, `.venv-mit4sl`: torch 2.6 on CUDA 12.4, PyG 2.6.1, torch-sparse built from source; the released
+torch 1.12 has no Hopper kernels) needs the released `data.zip` (1,030,474,683 bytes, SHA-256 `d06124f2…`) from the
+authors' Google Drive, which the H20 cannot reach: download it on the laptop, check the SHA-256, copy it to
+`data/mit4sl/official/` and unzip. `prepare.py` builds each line's contextualised PPI graph from DepMap TPM (the
+tutorial's threshold 400 and 32 neighbours) and the train, validation and test rows, and removes every PrimeKG and PPI
+edge inside a benchmark pair. `train.py` runs the official model and training step (cross-cell-line protocol, 20 epochs)
+for one run and keeps the epoch with the best validation AUROC.
+
+```bash
+hpc/mit4sl/setup.sh
+PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/prepare.py --out data/mit4sl/benchmark
+PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/train.py --data data/mit4sl/benchmark \
+  --out outputs/sl/mit4sl/seed0 --device 0
+```
+
 ## The `linear-model` command
 
 `hpc/run.sh linear-model CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear model
