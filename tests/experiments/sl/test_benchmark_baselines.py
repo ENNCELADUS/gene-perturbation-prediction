@@ -146,10 +146,11 @@ def test_run_scores_every_list(tmp_path):
          "OncotreePrimaryDisease": ["Lung", "Lung", "Lung", "Non-Cancerous"]}
     ).to_csv(tmp_path / "Model.csv", index=False)  # fmt: skip
     labels().to_parquet(tmp_path / "labels.parquet")
-    # a line-blind score per pair from another harness: G0-G2 first
+    # a line-blind score per pair from another harness: G0-G2 first; it does not
+    # cover G2-G3 (E0's fourth row)
     pd.DataFrame(
         {"gene_a": ["G0", "G0", "G1", "G2"], "gene_b": ["G1", "G2", "G3", "G3"],
-         "score": [0.2, 0.9, 0.1, 0.3]}
+         "score": [0.2, 0.9, 0.1, 0.3], "covered": [True, True, True, False]}
     ).to_parquet(tmp_path / "kg4sl.parquet")  # fmt: skip
     # a per-line score: E0's SL pair (G0, G2) last
     pd.DataFrame(
@@ -213,3 +214,17 @@ def test_run_scores_every_list(tmp_path):
     # counts as an SL majority)
     assert metrics["strata"]["seen_flip"] == 2
     assert "Table 3" in report
+    # Table 4: KG4SL beside the training SL fraction on its 6 of 7 held rows
+    entry = metrics["covered"]["kg4sl"]
+    assert (entry["rows"], entry["share"]) == (6, pytest.approx(6 / 7))
+    assert {(r["split"], r["scorer"]) for r in entry["summary"]} == {
+        (s, c) for s in ("val", "test") for c in ("kg4sl", "pair_identity", "labels",
+                                                  "random")
+    }  # fmt: skip
+    # on E0's three covered rows, KG4SL ranks the SL pair (G0, G2) first
+    test_kg4sl = next(
+        r for r in entry["summary"] if (r["split"], r["scorer"]) == ("test", "kg4sl")
+    )
+    assert test_kg4sl["auroc"] == pytest.approx(1.0)
+    assert "Table 4" in report and "cilantro_sl" not in metrics["covered"]
+    assert "row" not in scores.columns
