@@ -28,7 +28,7 @@ Replace this section on every update; history lives in `results/` and the protoc
   (0.199–0.203) but not all, and ΔE beside the linear model adds nothing that line-permuted ΔE does not
   ([record](results/stage_one_linear_model_input/README.md)). The next build makes all current checkpoints unusable.
 - **Stage two**: modular SL backbone, round zero (SL protocol §11, [record](results/sl_backbone_round_zero_seed0/README.md)):
-  conditional score = its context-ablated score; head 0.374 / 0.322 beats KG4SL but not the training SL fraction. Next: pair-aware reader.
+  head 0.374 / 0.322 beats KG4SL, not the training SL fraction. Next: [buffer-aware reader](docs/specs/2026-11-12-sl-buffer-aware-reader-design.md) (unbuilt).
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels in `data/sl_studies/benchmark_v2` (H20);
   headline = recall in the top 10% of genetic two-class screens, averaged over screens, studies, then lines (77 lines,
   44/17/16, placed by hand). 2026-11-05, val / test: pair identity 0.524 / 0.495 leads; KG4SL (official code,

@@ -73,8 +73,11 @@ within a study across lines, but a second label is SL when the first is SL only 
 
 - **The line adds nothing in linear form.** The conditional score equals its context-ablated score on every stratum
   and on the covered rows. In this reader, the response of B to A is the same in every line; the line enters only
-  through how far A falls, and that does not move the ranking. This is the "at random on context" result of the
-  plan: pair-aware terms (round two) come first.
+  through how far A falls, and that does not move the ranking. This equality is by construction (in an anchor list
+  the fall of A is one number for the whole list), so it is not evidence about the reader. The next module is the
+  buffer-aware reader ([spec](../../docs/specs/2026-11-12-sl-buffer-aware-reader-design.md)).
+- **Coverage.** The reader's gene space is the genes that every held-out line measures in pseudo-bulk (6,523). Each
+  held-out line measures 8,295 to 18,768 genes; read in its own genes, 75% of the held-out rows have both genes.
 - **The head has the best mean among these models** on all pairs (0.374 / 0.322) and on new pairs (0.400 / 0.322).
   Its gain over pan-essentiality is inside the interval on both splits; on new pairs it beats KG4SL on both splits.
 - **The line context in the head is not shown to help.** The head minus its context-ablated version is +0.016 /
@@ -86,5 +89,6 @@ within a study across lines, but a second label is SL when the first is SL only 
   paralog pairs, not which line needs them. In two lines (ACH-000510, ACH-000757) SMARCA2–SMARCA4 ties at 0 (no fall).
 - **Stage one is under-dispersed** (calibration slope 1.6–1.7) and finds 6–8% of a line's 20 strongest
   dependencies. The predictable-gene count is noisy on 13–15 lines (892 genes pass with permuted lines).
-- **Not measured:** the stage-one ceiling (two DepMap screens of one line); it needs DepMap's per-screen GeneEffect,
-  which is not on the H20.
+- **Not measured:** the stage-one ceiling (two DepMap screens of one line). The per-screen GeneEffect is on the H20
+  (`ScreenGeneEffect.csv`, `CRISPRScreenMap.csv`; 136 lines of the SL split have two or more screens); the command
+  comes with the buffer-aware reader.
