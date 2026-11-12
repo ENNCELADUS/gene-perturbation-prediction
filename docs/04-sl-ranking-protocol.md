@@ -327,6 +327,9 @@ its integrity checks pass.
 
 ## 10. Stage two, first run (2026-10-23)
 
+Superseded by §11: it used the three-screen split, and its heads read the sum of two single-gene
+dependencies. No number from it is carried forward.
+
 `src/experiments/sl/stage_two.py`, `configs/sl/stage_two.yaml`, `hpc/run.sh sl-stage-two`. It follows the
 2026-10-09 decisions above and blueprint §3.7 on the screen benchmark, and replaces §5–§6's backbone and features
 with the stage-one backbone (GeneEffect protocol §16). Two heads, chosen 2026-10-23, share one MLP
@@ -366,3 +369,44 @@ batches of 1,024, at most 50 epochs, the epoch kept with the highest mean AUPRC 
 - **Result** ([record](../results/sl_stage_two_seed0/README.md)): pair identity wins everywhere. No arm's PARIS
   head beats its gene-mean ablation, measured GeneEffect included. The V head falls below its own ablation.
 - **Not yet:** the bulk-stratum complementary model, MiT4SL's A549 test, and per-gene shares of the positives.
+
+## 11. The modular SL backbone, round zero (2026-11-12)
+
+`src/experiments/sl/conditional.py`, `configs/sl/conditional.yaml`, `hpc/run.sh sl-conditional`; the benchmark
+harness (`hpc/run.sh sl-baselines`) scores its tables on the latest SL split (`benchmark_v2`, 17 validation and 16
+test lines). The backbone has four slots. A later round changes one slot only, so each gain has one cause.
+
+| Slot | Round zero | Later modules |
+| --- | --- | --- |
+| Line encoder | bridged pseudo-bulk expression | copy number and mutation; single-cell features |
+| Dependency reader | the default linear expression model | pair-aware terms; a nonlinear encoder with per-gene weights |
+| Context editor | "A lost": A's expression at the training side's 10th percentile, unchanged when lower | PIE's profile after A's loss |
+| Pair scorer | the conditional score, then a logistic head | the training SL fraction as an input; a continuous target |
+
+- **Reader.** The default linear expression model, fitted on the training side of the SL split. No SL validation or
+  test line's GeneEffect enters the fit, and the run stops if one does. The labelled single-cell training lines are
+  read out of fold (bridge and model fitted without their fold); every other line is read by the full fit. This
+  fit replaces the production fit for stage two, which read the GeneEffect of most SL held-out lines.
+- **Conditional score** of a pair (A, B) in line c, in residual-SD units:
+  `s(c, A, B) = −[ŷ(c with A lost, B) − ŷ(c, B)] − [ŷ(c with B lost, A) − ŷ(c, A)]`. An anchor list reads the first
+  term only. The reader is affine in expression, so each term is A's fall in the line times the reader's response
+  of B to A; the run checks this for each fit and stops if it is not true. Thus in round zero the line enters only
+  through how far A falls: the ranking of an anchor list changes with the line only when A is already low.
+- **Context-ablated score.** The same score with the training-side mean profile in place of the line's profile.
+  It has one value per pair in every held-out line.
+- **Head.** Logistic regression on the training lines' genetic screens with both classes. Inputs: the two terms, the
+  predicted GeneEffect and the expression of A and B in the line (0 for an anchor's A), and the design. Weights
+  as the headline: each line equal, then its studies, then a study's screens, then the two classes of a screen.
+  The penalty is chosen on validation recall in the top 10%; test is scored once. The context-ablated head reads
+  the training-side mean profile.
+- **Stage-one metrics** of the reader on the SL lines with GeneEffect, beside the same prediction with its lines
+  permuted: per-line residual Spearman (the selector), per-gene residual Spearman, the residual skill score
+  (within-gene R²) and calibration slope, the top-20 recall of each line's strongest dependencies, the count of
+  selective genes with per-gene Spearman of at least 0.3, and the whole-line Pearson as a sanity row.
+- **Ceilings.** Stage two: the agreement of two labels of one pair within a line across lists, and within a study
+  across lines (the harness's `label_agreement`). Stage one: the agreement of two independent DepMap screens of one
+  line. This needs DepMap's per-screen GeneEffect, which is not on the H20 yet.
+- **Reading.** If the conditional score is above its context-ablated score on new pairs or on seen pairs whose
+  label differs, the SL rule works in linear form. If it is at random, the reader does not see single genes, and
+  pair-aware terms come first. If stage one is near its ceiling, the next rounds change the editor and the scorer,
+  not the reader.

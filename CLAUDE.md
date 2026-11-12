@@ -18,7 +18,7 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-11-05)
+## Current state (2026-11-12)
 
 Replace this section on every update; history lives in `results/` and the protocol.
 
@@ -27,13 +27,13 @@ Replace this section on every update; history lives in `results/` and the protoc
   [record](results/stage_one_architecture/README.md)). FiLM reading the linear model's prediction recovers most of it
   (0.199–0.203) but not all, and ΔE beside the linear model adds nothing that line-permuted ΔE does not
   ([record](results/stage_one_linear_model_input/README.md)). The next build makes all current checkpoints unusable.
-- **Stage two** (SL protocol §10): pair identity wins ([record](results/sl_stage_two_seed0/README.md), [status](results/status.html)).
+- **Stage two**: modular SL backbone (SL protocol §11, `hpc/run.sh sl-conditional`): linear expression model fitted without
+  SL held-out lines, conditional score "B needed more when A is lost", ablation, logistic head. Not run on the H20 yet.
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels in `data/sl_studies/benchmark_v2` (H20);
   headline = recall in the top 10% of genetic two-class screens, averaged over screens, studies, then lines (77 lines,
   44/17/16, placed by hand). 2026-11-05, val / test: pair identity 0.524 / 0.495 leads; KG4SL (official code,
   `hpc/kg4sl`) 0.352 / 0.306 learns the training pairs (label-flip AUROC 0.37 / 0.34); GeneEffect scorers 0.27–0.41, at
-  random on label flips; labels 0.96 / 0.92, random 0.09 / 0.11. Cilantro-SL (`hpc/cilantro/run.sh --benchmark`) scores
-  1.5% of held-out rows (both genes in the line's top 2,048 tokens): 0.113 / 0.115; on those 0.357 / 0.289 (limits: card §4).
+  random on label flips; labels 0.96 / 0.92, random 0.09 / 0.11. Cilantro-SL scores 1.5% of rows: 0.113 / 0.115 (card §4).
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands

@@ -467,6 +467,26 @@ def line_spearman_gain(
     }
 
 
+#: A line's strongest dependencies that ``top_recall`` looks for.
+TOP_DEPENDENCIES = 20
+#: The per-gene Spearman at which ``wide_accuracy`` counts a gene as predictable.
+PREDICTABLE = 0.3
+
+
+def top_recall(predicted: np.ndarray, measured: np.ndarray, k: int) -> float | None:
+    """Mean over lines (with at least ``k`` finite labels) of the share of the line's
+    ``k`` lowest measured residuals that are among its ``k`` lowest predicted ones."""
+    shares = []
+    for p, m in zip(predicted, measured):
+        finite = np.isfinite(m)
+        if finite.sum() < k:
+            continue
+        p, m = p[finite], m[finite]
+        top = set(np.argsort(m, kind="stable")[:k])
+        shares.append(len(top & set(np.argsort(p, kind="stable")[:k])) / k)
+    return float(np.mean(shares)) if shares else None
+
+
 def wide_accuracy(
     prediction: pd.DataFrame,
     truth: pd.DataFrame,
@@ -480,8 +500,11 @@ def wide_accuracy(
     selective Spearman; within-gene R² pooled over the selective
     genes (``1 - SSE / sum truth^2``, the truth centred on the training gene mean,
     which scores 0); selective AUPR lift; residual Pearson; per-line absolute
-    Pearson; RMSE; the calibration slope over the selective genes. With ``panel``,
-    also the selective Spearman over the selective genes in it."""
+    Pearson; RMSE; the calibration slope over the selective genes; the recall of each
+    line's ``TOP_DEPENDENCIES`` strongest measured dependencies (lowest residual) among
+    its as many lowest predicted ones, averaged over lines; and the count of selective
+    genes whose per-gene Spearman is at least ``PREDICTABLE``. With ``panel``, also
+    the selective Spearman over the selective genes in it."""
     lines, genes = list(prediction.index), list(definitions.genes)
     prediction, truth = prediction.loc[lines, genes], truth.loc[lines, genes]
     metrics, _, per_gene = aggregate_geneeffect(
@@ -513,6 +536,10 @@ def wide_accuracy(
         "absolute_pearson": metrics["geneeffect_pearson_macro_per_line"],
         "rmse": metrics["geneeffect_rmse"],
         "calibration_slope": calibration_slope(predicted, measured),
+        "top_recall": top_recall(predicted, measured, TOP_DEPENDENCIES),
+        "predictable_genes": int(
+            (per_gene.loc[per_gene["selective"], "spearman"] >= PREDICTABLE).sum()
+        ),
     }
     if panel is not None:
         inside = per_gene.loc[
@@ -554,6 +581,7 @@ WITHIN_FOLD_METRICS = (
     "aupr_lift",
     "residual_pearson",
     "calibration_slope",
+    "predictable_genes",
 )
 
 

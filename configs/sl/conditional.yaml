@@ -1,0 +1,16 @@
+# Round zero of the modular SL backbone (SL protocol §11): the default linear expression
+# model fitted on the SL split's training side (training lines out of fold), the edit
+# "A lost" (A's expression at the training side's 10th percentile), the conditional score,
+# its context-ablated version and a logistic head on the training lines' SL labels.
+# `hpc/run.sh sl-conditional configs/sl/conditional.yaml --run-id ID` (CPU); then
+# `hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml --run-id ID` reads its
+# predictions.parquet (stage_one) and scores/ (extra_scores).
+kind: sl_conditional
+seed: 0
+output_root: outputs/sl
+task: conditional
+linear_model: configs/linear_model/default_linear_model.yaml
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+head_penalties: [0.01, 0.1, 1.0, 10.0, 100.0]
+top_k: 20
