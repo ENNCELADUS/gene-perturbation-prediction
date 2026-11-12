@@ -31,9 +31,10 @@ def depmap(frame: pd.DataFrame, omics: bool) -> pd.DataFrame:
 def test_a_planted_pair_gets_the_best_score_and_untestable_pairs_tie(tmp_path):
     rng = np.random.default_rng(0)
     fit = [f"F{i}" for i in range(40)]
+    lines = fit + ["V0", "E0", "B0", "B1"]
     genes = ["DRV", "SLP"] + [f"G{i}" for i in range(30)]
     effect = pd.DataFrame(
-        rng.normal(size=(42, len(genes))), index=fit + ["V0", "E0"], columns=genes
+        rng.normal(size=(len(lines), len(genes))), index=lines, columns=genes
     )
     mutated = pd.DataFrame(0, index=effect.index, columns=["DRV", "G0", "G1"])
     mutated.loc[fit[:10], "DRV"] = 1
@@ -49,23 +50,37 @@ def test_a_planted_pair_gets_the_best_score_and_untestable_pairs_tie(tmp_path):
     pairs = [("DRV", "SLP"), ("SLP", "DRV"), ("DRV", "G5"), ("G0", "G5"), ("G1", "G2")]
     pd.DataFrame(
         [{"model_id": m, "gene_a": a, "gene_b": b, "label": 1}
-         for m in ("V0", "E0") for a, b in pairs]
+         for m in ("V0", "E0", "B0") for a, b in pairs]
     ).to_parquet(tmp_path / "labels.parquet")  # fmt: skip
-    split = {"train": fit[:30], "bulk_labelled": fit[30:], "val": ["V0"],
-             "test": ["E0"]}  # fmt: skip
+    # lineage A: the 40 fitted lines, V0 and E0; lineage B: B0 and one fitted line
+    split = {"train": fit[:30] + ["B1"], "bulk_labelled": fit[30:], "val": ["V0"],
+             "test": ["E0", "B0"]}  # fmt: skip
     (tmp_path / "split.json").write_text(json.dumps(split))
+    pd.DataFrame({"model_id": ["V0", "E0", "B0"], "lineage": ["A", "A", "B"]}).to_csv(
+        tmp_path / "split.csv", index=False
+    )
+    pd.DataFrame(
+        {"ModelID": fit + ["B1"], "OncotreeLineage": ["A"] * 40 + ["B"]}
+    ).to_csv(tmp_path / "Model.csv", index=False)
     (tmp_path / "config.yaml").write_text(
         f"kind: sl_slidr\nlabels: {tmp_path}/labels.parquet\n"
-        f"split: {tmp_path}/split.json\ngene_effect: {tmp_path}/ge.csv\n"
+        f"split: {tmp_path}/split.json\nmodel: {tmp_path}/Model.csv\n"
+        f"gene_effect: {tmp_path}/ge.csv\n"
         f"mutations: [{tmp_path}/mut.csv]\ncopy_number: {tmp_path}/cn.csv\n"
-        f"output_root: {tmp_path}\ntask: slidr\nmin_mutated: 2\nwt_pvalue: 0.1\n"
+        f"output_root: {tmp_path}\ntask: slidr\nmin_lines: 5\nmin_mutated: 2\n"
+        "wt_pvalue: 0.1\n"
     )
     out = run(load_config(tmp_path / "config.yaml"), "r0")
-    scores = pd.read_parquet(out / "scores.parquet").set_index(["gene_a", "gene_b"])
+    table = pd.read_parquet(out / "scores.parquet")
+    scores = table[table["model_id"] == "E0"].set_index(["gene_a", "gene_b"])
     # both orientations of the planted pair read DRV as the driver
     assert scores.loc[("DRV", "SLP"), "score"] == scores.loc[("SLP", "DRV"), "score"]
     assert scores.loc[("DRV", "SLP"), "score"] > 3 * scores.loc[("DRV", "G5"), "score"]
     assert scores["covered"].tolist() == [True, True, True, True, False]
     assert scores.loc[("G1", "G2"), "score"] == pytest.approx(UNTESTED)
+    # lineage B has one fitted line, fewer than min_lines: nothing is tested there
+    assert not table.loc[table["model_id"] == "B0", "covered"].any()
+    assert len(table) == 15
     metrics = json.loads((out / "metrics.json").read_text())
-    assert metrics["fit_lines"] == 40 and metrics["drivers"] == 2  # DRV and G0
+    assert metrics["lineages"]["A"]["fit_lines"] == 40
+    assert metrics["lineages"]["B"]["tests"] == 0

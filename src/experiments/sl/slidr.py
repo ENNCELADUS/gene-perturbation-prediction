@@ -1,6 +1,7 @@
 """SLIdR (Srivatsa et al. 2022, Nature Communications), ported from the official R
-code (``third_party/slidr/R``, ``identifySLHits`` and ``prepareDataObjects``) and run
-pan-cancer on the SL split's training-side lines. For a mutated (driver) gene, each
+code (``third_party/slidr/R``, ``identifySLHits`` and ``prepareDataObjects``). As R
+runs one cancer type at a time, the port runs one lineage at a time: the training-side
+lines of the SL split in the held-out line's lineage. For a mutated (driver) gene, each
 line's viabilities are ranked over all genes; a partner's ranks are summed over the
 mutated lines and divided by the gene count, and the Irwin-Hall CDF of that sum is the
 mutated-lines p-value (small: the partner is more essential where the driver is
@@ -10,8 +11,9 @@ essential everywhere (R's ``WT_pval_thresh`` 0.1).
 A benchmark pair is tested in both orientations (each gene as the driver). Its score is
 -log10 of the smaller mutated-lines p-value among the orientations that pass the
 wild-type filter, 0 (p = 1) when every tested orientation fails it, and -log10 0.5
-(``covered`` false) when neither gene has enough mutated and wild-type lines or the
-partner has no viability. The score reads no held-out line. Deviations from R are in
+(``covered`` false) when neither gene has enough mutated and wild-type lines, the
+partner has no viability, or the lineage has fewer than ``min_lines`` lines. The score
+reads only the held-out line's lineage. Deviations from R are in
 ``third_party/slidr/PROVENANCE.md``."""
 
 from __future__ import annotations
@@ -157,13 +159,51 @@ def load_config(path: Path) -> dict[str, Any]:
     config = read_yaml(path)
     require_keys(
         config,
-        {"kind", "labels", "split", "gene_effect", "mutations", "copy_number",
-         "output_root", "task", "min_mutated", "wt_pvalue"},
+        {"kind", "labels", "split", "model", "gene_effect", "mutations",
+         "copy_number", "output_root", "task", "min_lines", "min_mutated",
+         "wt_pvalue"},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_slidr":
         raise ValueError(f"{path} is a {config['kind']} config")
     return config
+
+
+def lineages(model: Path, split_table: Path) -> pd.Series:
+    """ModelID -> lineage: DepMap's OncotreeLineage, and the SL split table's lineage
+    for its lines (the lines without a DepMap model among them)."""
+    depmap = pd.read_csv(model, usecols=["ModelID", "OncotreeLineage"], dtype=str)
+    table = pd.read_csv(split_table, usecols=["model_id", "lineage"], dtype=str)
+    out = depmap.set_index("ModelID")["OncotreeLineage"]
+    return table.set_index("model_id")["lineage"].combine_first(out)
+
+
+def lineage_scores(
+    pairs: pd.DataFrame,
+    lines: Sequence[str],
+    effect: pd.DataFrame,
+    mutated: Sequence[pd.DataFrame],
+    copy_number: pd.DataFrame,
+    config: Mapping[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """One lineage's data object, its tests and the scores of its held-out pairs."""
+    if len(lines) < int(config["min_lines"]):
+        none = pd.DataFrame(columns=["driver", "partner", "mutated_lines",
+                                     "mut_pvalue", "wt_pvalue"])  # fmt: skip
+        return none, pairs.assign(score=UNTESTED, covered=False)
+    genes = sorted((set(pairs["gene_a"]) | set(pairs["gene_b"])) & set(effect.columns))
+    altered = mutation_matrix(
+        lines, genes, mutated, copy_number, int(config["min_mutated"])
+    )
+    orientations = pd.concat(
+        [
+            pairs.rename(columns={"gene_a": "driver", "gene_b": "partner"}),
+            pairs.rename(columns={"gene_b": "driver", "gene_a": "partner"}),
+        ],
+        ignore_index=True,
+    ).drop_duplicates()
+    tests = pair_pvalues(effect, altered, orientations)
+    return tests, pair_scores(pairs, tests, float(config["wt_pvalue"]))
 
 
 def run(config: Mapping[str, Any], run_id: str) -> Path:
@@ -175,46 +215,50 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     fit_lines = [m for s in FIT_SIDES for m in split[s]]
     if held_lines & set(fit_lines):
         raise ValueError("a validation or test line is among the fit lines")
+    lineage = lineages(Path(config["model"]), Path(config["split"]).with_suffix(".csv"))
     labels = pd.read_parquet(
         config["labels"], columns=["model_id", "gene_a", "gene_b", "label"]
     )
     held = labels[labels["label"].notna() & labels["model_id"].isin(held_lines)]
-    pairs = held[["gene_a", "gene_b"]].drop_duplicates().reset_index(drop=True)
+    held = held[["model_id", "gene_a", "gene_b"]].drop_duplicates()
+    held = held.assign(lineage=held["model_id"].map(lineage))
+    if held["lineage"].isna().any():
+        missing = sorted(held.loc[held["lineage"].isna(), "model_id"].unique())
+        raise ValueError(f"held-out lines without a lineage: {missing}")
     effect = read_depmap_matrix(Path(config["gene_effect"]))
     mutated = [read_depmap_matrix(Path(p)) for p in config["mutations"]]
-    lines = [m for m in fit_lines if m in effect.index and m in mutated[0].index]
-    genes = sorted((set(pairs["gene_a"]) | set(pairs["gene_b"])) & set(effect.columns))
-    altered = mutation_matrix(
-        lines,
-        genes,
-        mutated,
-        read_copy_number(Path(config["copy_number"])),
-        int(config["min_mutated"]),
-    )
-    orientations = pd.concat(
-        [
-            pairs.rename(columns={"gene_a": "driver", "gene_b": "partner"}),
-            pairs.rename(columns={"gene_b": "driver", "gene_a": "partner"}),
-        ],
-        ignore_index=True,
-    ).drop_duplicates()
-    tests = pair_pvalues(effect, altered, orientations)
-    scores = pair_scores(pairs, tests, float(config["wt_pvalue"]))
+    copy_number = read_copy_number(Path(config["copy_number"]))
+    profiled = [m for m in fit_lines if m in effect.index and m in mutated[0].index]
+    all_tests, all_scores, per_lineage = [], [], {}
+    for name, group in held.groupby("lineage", sort=True):
+        lines = [m for m in profiled if lineage.get(m) == name]
+        pairs = group[["gene_a", "gene_b"]].drop_duplicates().reset_index(drop=True)
+        tests, scores = lineage_scores(
+            pairs, lines, effect, mutated, copy_number, config
+        )
+        all_tests.append(tests.assign(lineage=name))
+        all_scores.append(group.merge(scores, on=["gene_a", "gene_b"]))
+        per_lineage[name] = {
+            "fit_lines": len(lines),
+            "held_lines": int(group["model_id"].nunique()),
+            "held_pairs": len(pairs),
+            "tests": len(tests),
+            "covered_share": float(scores["covered"].mean()),
+            "wt_filtered_share": (
+                float((tests["wt_pvalue"] < config["wt_pvalue"]).mean())
+                if len(tests) else None),
+        }  # fmt: skip
+    tests = pd.concat(all_tests, ignore_index=True)
+    scores = pd.concat(all_scores, ignore_index=True).drop(columns="lineage")
     write_parquet(run_dir / "tests.parquet", tests)
     write_parquet(run_dir / "scores.parquet", scores)
     write_json(
         run_dir / "metrics.json",
         {
             "run_id": run_id,
-            "fit_lines": len(lines),
-            "lines_with_an_alteration": len(altered),
-            "drivers": altered.shape[1],
-            "held_pairs": len(pairs),
-            "tests": len(tests),
-            "held_pairs_covered_share": float(scores["covered"].mean()),
-            "wt_filtered_share": float(
-                (tests["wt_pvalue"] < config["wt_pvalue"]).mean()
-            ),
+            "held_rows": len(scores),
+            "held_rows_covered_share": float(scores["covered"].mean()),
+            "lineages": per_lineage,
         },
     )
     print(f"{run_dir}: done", flush=True)
