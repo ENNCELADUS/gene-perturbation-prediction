@@ -1,0 +1,19 @@
+Package: slidr
+Title: Discovery of mutation-specific synthetic lethal partners from large pan-cancer perturbation screens
+Version: 0.1.0
+Authors@R: c(person("Sumana", "Srivatsa", email = "sumana.srivatsa@bsse.ethz.ch", role = c("aut", "cre")),
+             person("Hesam", "Montazeri", email = "hesam.montazeri@gmail.com", role = "ctb"))
+Description: The package is built to identify synthetic lethal hits given mutation profile and perturbation screen data.
+Depends: R (>= 3.2.3)
+License: GPL-3
+Imports: biclust (>= 2.0.1),
+         ggplot2 (>= 2.2.1),
+         rDGIdb (>= 1.16.0),
+         RColorBrewer (>= 1.1-2),
+         reshape2 (>= 1.4.3),
+         tidyr (>= 0.8.1)
+biocViews: 
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.1.0
+Suggests: testthat

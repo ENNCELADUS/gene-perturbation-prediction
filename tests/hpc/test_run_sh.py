@@ -71,6 +71,10 @@ with open(os.environ["ARG_LOG"], "a") as handle:
             ],
         ),
         (
+            ["sl-slidr", "a b.yaml", "--run-id", "r"],
+            ["-m", "src.experiments.sl.slidr", "a b.yaml", "--run-id", "r"],
+        ),
+        (
             ["test", "checkpoint x.pt"],
             [
                 "-m",
