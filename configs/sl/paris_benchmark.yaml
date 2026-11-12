@@ -1,11 +1,12 @@
 # PARIS (Benfatto et al. 2021, Python port, third_party/paris/PROVENANCE.md) on the multi-study SL benchmark:
-# per dependency gene of a held-out pair, a random forest of its GeneEffect on the stage-one mean channel of the
-# stage-one frame's lines on the SL split's training side; writes pairs.parquet and scores.parquet (one score per
-# held-out pair) for `sl-baselines`.
+# per dependency gene of a held-out pair, a random forest of its DepMap 26Q1 GeneEffect on the bulk expression of
+# every protein-coding gene (log2 TPM + 1), in the SL split's training-side lines (train and bulk_labelled), as
+# the R code reads DepMap and CCLE; writes pairs.parquet and scores.parquet (one score per held-out pair).
 # `OMP_NUM_THREADS=1 hpc/run.sh sl-paris configs/sl/paris_benchmark.yaml --run-id seed0 [--genes 20]` (CPU, .venv-pie).
-ladder_config: configs/stage_one/ladder_inputs.yaml
 benchmark: data/sl_studies/benchmark_v2/labels.parquet
 sl_split: configs/benchmarks/cell_line_sl_split.json
+gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
+expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
 output_root: outputs/sl
 task: paris_benchmark
 mode: Ginicorrected  # raw (Boruta) or Ginicorrected (ranger impurity_corrected); see configs/sl/paris.yaml

@@ -29,3 +29,6 @@ Unavoidable deviations (R/ranger/Boruta vs the port; sklearn trees, numpy RNG):
 - Inputs are not DepMap's 2020 tables: dependency is stage one's measured GeneEffect, expression the stage-one mean channel,
   on the reference lines only (no benchmark line); a gene's own expression column is dropped when it is fitted.
   The forests run one thread each and genes run on `n_jobs` joblib processes.
+- On the multi-study SL benchmark (`configs/sl/paris_benchmark.yaml`): dependency is DepMap 26Q1 `CRISPRGeneEffect.csv`
+  for the genes of the held-out pairs, expression `OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv` (every
+  protein-coding gene), on the SL split's training-side lines (train and bulk_labelled) with both.

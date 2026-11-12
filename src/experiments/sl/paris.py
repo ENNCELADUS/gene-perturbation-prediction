@@ -3,8 +3,9 @@
 predicts B's GeneEffect across cell lines from the expression of the other genes; the
 features A the forest finds important are reported with the Pearson r between B's
 dependency and A's expression. Stage two reads these pairs as SL evidence. With an
-``sl_split``, PARIS fits on the SL split's training-side lines and also scores each
-held-out pair of the multi-study SL benchmark (``benchmark_scores``).
+``sl_split``, PARIS fits DepMap's GeneEffect on its bulk expression in the SL split's
+training-side lines and also scores each held-out pair of the multi-study SL benchmark
+(``benchmark_scores``).
 
 ``raw``: Boruta (Kursa & Rudnicki) with ranger's raw out-of-bag permutation importance.
 ``Ginicorrected``: ranger ``importance = "impurity_corrected"`` (Nembrini et al. 2018)
@@ -270,11 +271,15 @@ def paris(
 
 
 def load_config(path: Path) -> dict[str, Any]:
-    """The stage-two config, or with ``sl_split`` the benchmark config."""
+    """The stage-two config (``ladder_config``), or with ``sl_split`` the benchmark
+    config, which reads DepMap's tables."""
     config = read_yaml(path)
-    keys = {"ladder_config", "benchmark", "output_root", "task", "mode", "seed",
-            "n_jobs"}  # fmt: skip
-    require_keys(config, keys | ({"sl_split"} & config.keys()), "config")
+    keys = {"benchmark", "output_root", "task", "mode", "seed", "n_jobs"} | (
+        {"sl_split", "gene_effect", "expression"}
+        if "sl_split" in config
+        else {"ladder_config"}
+    )
+    require_keys(config, keys, "config")
     if config["mode"] not in MODES:
         raise ValueError(f"{path}: mode {config['mode']!r} is not one of {MODES}")
     return config
@@ -327,29 +332,39 @@ def benchmark_scores(
     return pairs.assign(score=np.nan_to_num(value, nan=0.0), covered=covered)
 
 
+def benchmark_inputs(config: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """DepMap's GeneEffect (the genes of the benchmark's held-out pairs) and bulk
+    expression (log2 TPM + 1, every protein-coding gene) on the SL split's
+    training-side lines that have both. No validation or test line enters."""
+    from src.data.depmap import read_depmap_matrix
+
+    fit, held = sl_split_lines(config["sl_split"])
+    effect = read_depmap_matrix(Path(config["gene_effect"]))
+    expression = read_depmap_matrix(Path(config["expression"]))
+    lines = sorted(fit & set(effect.index) & set(expression.index))
+    if set(lines) & held:
+        raise ValueError("an SL validation or test line is among the fit lines")
+    pairs = held_pairs(pd.read_parquet(config["benchmark"]), held)
+    genes = sorted((set(pairs["gene_a"]) | set(pairs["gene_b"])) & set(effect.columns))
+    return effect.loc[lines, genes], expression.loc[lines]
+
+
 def inputs(config: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Dependency (GeneEffect units) and expression on the fit lines. Without
-    ``sl_split``: the reference lines, the stage-one frame minus every line of the SL
-    screen benchmark, and its labelled genes. With it: the frame's lines on the SL
-    split's training side, and the genes of the benchmark's held-out pairs. No
-    validation or test line enters."""
+    """Dependency (GeneEffect units) and expression on the reference lines: the
+    stage-one frame minus every line of the SL screen benchmark, so no validation or
+    test line, and no line an SL row is scored on, enters."""
     from src.data.ladder_reader import mean_channel
     from src.experiments.stage_one.setup import load_setup
 
+    if "sl_split" in config:
+        return benchmark_inputs(config)
     setup = load_setup(config["ladder_config"])
     ladder = setup.ladder
     pairs = pd.read_parquet(config["benchmark"])
-    if "sl_split" in config:
-        fit, held = sl_split_lines(config["sl_split"])
-        lines = [m for m in ladder.frame if m in fit]
-        if set(lines) & held:
-            raise ValueError("an SL validation or test line is among the fit lines")
-        labelled = held_pairs(pairs, held)
-    else:
-        lines = reference_lines(ladder, pairs)
-        if set(lines) & set(ladder.role_lines("val", "test")):
-            raise ValueError("a validation or test line is among the reference lines")
-        labelled = pairs[pairs["label"].notna()]
+    lines = reference_lines(ladder, pairs)
+    if set(lines) & set(ladder.role_lines("val", "test")):
+        raise ValueError("a validation or test line is among the reference lines")
+    labelled = pairs[pairs["label"].notna()]
     genes = sorted(set(labelled["gene_a"]) | set(labelled["gene_b"]))
     genes = [g for g in genes if g in ladder.genes.index]
     units = setup.truth(lines) * ladder.genes["sigma_g"] + ladder.genes["mu_g"]
