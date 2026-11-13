@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.data.noise_inputs import program_scores
 from src.linear_model.bridge import fit_bridge
 from src.experiments.stage_one import ladder_inputs as ladder
 from tests.fixtures.ladder import (
@@ -18,6 +19,7 @@ from tests.fixtures.ladder import (
     CELLS,
     HVG,
     PROGRAMS,
+    TARGET_SUM,
     TEST,
     TRAIN,
     UNLABELLED,
@@ -69,8 +71,19 @@ def test_cells_read_every_cell_with_case_blind_symbols(world):
     assert record["hvg"].shape == (CELLS, len(HVG))
     assert record["qc"].shape == (CELLS, len(ladder.QC_COLUMNS))
     assert np.isnan(record["qc"][:, -1]).all()  # too few cells for Scrublet
-    with np.load(root / "prepared" / "noise" / "programs" / "ACH-V0.npz") as payload:
-        assert np.allclose(record["qc"][:, 4:6], payload["scores"][:, :2])
+    # The cycle scores are the noise diagnosis's program scores of Tirosh's phases.
+    phases = pd.read_csv("configs/linear_model/reference/cell_cycle.tsv", sep="\t")
+    scoring = json.loads(
+        (root / "prepared" / "pseudobulk" / "manifest.json").read_text()
+    )["genes"]
+    expected, _ = program_scores(
+        source.X,
+        list(source.var["gene_symbol"]),
+        scoring,
+        {p: list(phases.loc[phases["phase"] == p, "gene"]) for p in ("S", "G2M")},
+        TARGET_SUM,
+    )
+    assert np.allclose(record["qc"][:, 4:6], expected, atol=1e-6)
 
 
 def test_mean_channel_reads_cells_out_of_fold_and_bulk_for_bulk_only(world):

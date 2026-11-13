@@ -120,6 +120,10 @@ def build_world(root: Path) -> dict:
             q_sc_values=np.zeros((len(EFFECT_GENES), 3), dtype=np.float32),
             q_sc_available=np.ones(len(EFFECT_GENES), dtype=bool),
         )
+    (root / "prepared" / "pseudobulk").mkdir()
+    (root / "prepared" / "pseudobulk" / "manifest.json").write_text(
+        json.dumps({"genes": [g.upper() for g in SOURCE if g != "MT-CO1"]})
+    )
     (root / "prepared" / "prepared_inputs.json").write_text(
         json.dumps(
             {
