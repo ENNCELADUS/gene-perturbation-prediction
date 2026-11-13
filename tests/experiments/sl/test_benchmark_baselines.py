@@ -211,12 +211,13 @@ def test_run_scores_every_list(tmp_path):
     by = {(s, c): row for (s, c, g), row in by.items() if g == "all"}
     # On E0 the measured GeneEffect ranks the one SL pair (G0, G2) first.
     assert by[("test", "measured_geneeffect")]["auprc_lift"] == pytest.approx(4.0)
-    # A list of 4 pairs: its top 10% is 0.4 of a pair, all of it the first pair.
-    assert by[("test", "measured_geneeffect")]["recall_top10"] == pytest.approx(0.4)
-    # The labels reach the ceiling min(1, 0.1 * 4 / 1); the random score stays below it.
-    assert by[("test", "labels")]["recall_top10"] == pytest.approx(0.4)
-    assert 0.0 <= by[("test", "random")]["recall_top10"] <= 0.4
-    assert by[("test", "kg4sl")]["recall_top10"] == pytest.approx(0.4)
+    # A list of 4 pairs: its top 10% is 0.4 of a place, all of it the first pair, and
+    # one SL pair is more than 0.4 places, so the recall is 0.4 / 0.4.
+    assert by[("test", "measured_geneeffect")]["recall_top10"] == pytest.approx(1.0)
+    # The labels reach the ceiling 1; the random score stays at or below it.
+    assert by[("test", "labels")]["recall_top10"] == pytest.approx(1.0)
+    assert 0.0 <= by[("test", "random")]["recall_top10"] <= 1.0
+    assert by[("test", "kg4sl")]["recall_top10"] == pytest.approx(1.0)
     assert by[("test", "cilantro_sl")]["recall_top10"] == pytest.approx(0.0)
     # flips: G0-G1 in E0 (SL in both training lines) and G0-G2 in V0 (a 0.5 rate
     # counts as an SL majority)
@@ -241,11 +242,11 @@ def test_run_scores_every_list(tmp_path):
         "partner": {"rows": 2, "share": pytest.approx(2 / 7)},
         "no_dependency_alone": {"rows": 1, "share": pytest.approx(1 / 7)},
     }
-    # the paired difference on E0: Cilantro-SL 0.0 minus KG4SL 0.4
+    # the paired difference on E0: Cilantro-SL 0.0 minus KG4SL 1.0
     gap = next(
         r for r in metrics["paired_differences"]
         if (r["split"], r["group"], r["stratum"]) == ("test", "all", "all")
     )  # fmt: skip
     assert (gap["scorer"], gap["control"], gap["lines"]) == ("cilantro_sl", "kg4sl", 1)
-    assert gap["difference"] == pytest.approx(-0.4)
+    assert gap["difference"] == pytest.approx(-1.0)
     assert "Table 5" in report and "partner pairs 2 (28.6%)" in report

@@ -1,7 +1,9 @@
 """Baselines on the multi-study SL benchmark (docs/specs/2026-10-29-multi-study-sl-
 benchmark-design.md). A list's negatives are tested and not called, not true negatives,
 so the metrics are positive-unlabelled ones. Headline: recall in the top 10% of each
-genetic screen with both classes (a random ranking gives 0.10), then the mean over a
+genetic screen with both classes, over min(positives, top 10% of the list), so a
+perfect ranking gives 1 (a random ranking gives 0.10, or the positive rate where it
+is above 0.10), then the mean over a
 study's screens, over a line's studies and over a split's lines, and the per-line
 difference from pair identity. AUROC (the mean percentile of the known positives) and
 AUPRC over the positive rate are averaged the same way. Screens under a treatment, an
@@ -11,8 +13,8 @@ gene's mean GeneEffect over the training lines (pan-essentiality), stage one's
 prediction of GeneEffect in the line (the SL backbone's reader, fitted without the
 SL held-out lines, ``hpc/run.sh sl-conditional``), and the measured GeneEffect as a
 reference, never a bar (only lines with GeneEffect have it). Two checks of the
-benchmark code: the labels as the score (the ceiling, min(1, 0.1 n / positives) per
-screen) and a seeded random score (about 0.10). Every split is reported for all
+benchmark code: the labels as the score (the ceiling, 1 per screen) and a seeded
+random score (about 0.10). Every split is reported for all
 lines, the lines with and without GeneEffect, and the cancer and non-cancer lines,
 and for each stratum and subset of held-out pairs (STRATA, SUBSETS), ranked inside
 it in each screen. Each (scorer, control) pair of the config's ``paired_differences``
@@ -309,6 +311,7 @@ def list_records(scores: pd.DataFrame, k: int) -> pd.DataFrame:
             dict(zip([*LIST_KEYS, "scorer"], keys))
             | ranking_metrics(label, score, k)
             | {"top_credit": float(credit.sum()), "ranked_positives": len(credit),
+               "top_places": TOP * int(np.isfinite(score).sum()),
                "percentile_sum": float(defined.sum()), "percentiles": len(defined)}
         )  # fmt: skip
     return pd.DataFrame(records)
@@ -325,7 +328,11 @@ def line_records(lists: pd.DataFrame) -> pd.DataFrame:
     if not (two_class & (lists["condition"] == HEADLINE)).any():
         return pd.DataFrame(columns=columns)  # e.g. a stratum with one class per screen
     screens = lists[two_class & (lists["condition"] == HEADLINE)].assign(
-        recall_top10=lambda x: x["top_credit"] / x["ranked_positives"],
+        # a screen with more positives than top places is scored on its top places,
+        # so a perfect ranking gives 1 in every screen
+        recall_top10=lambda x: (
+            x["top_credit"] / np.minimum(x["ranked_positives"], x["top_places"])
+        ),
         auroc=lambda x: x["percentile_sum"] / x["percentiles"],
     )
     studies = screens.groupby([*keys, "study_id"]).agg(
