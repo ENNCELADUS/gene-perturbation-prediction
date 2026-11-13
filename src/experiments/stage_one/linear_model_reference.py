@@ -75,18 +75,40 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     held = ladder.role_lines("val", "test")
     predictions = total(fitted.predict(expression.loc[held]))
     count = int(linear_model["linear_model"]["components"])
-    fold_components, parts = {}, []
-    for k in sorted(set(folds.values())):
-        kept = [m for m in frame if folds[m] != k]
-        fold_components[k] = fit_expression_components(expression.loc[kept], count)
-        fitted_k = fit_linear_model(
+
+    def fitted_without(*left_out: int):
+        kept = [m for m in frame if folds[m] not in left_out]
+        components = fit_expression_components(expression.loc[kept], count)
+        fitted = fit_linear_model(
             spec,
-            dataclasses.replace(inputs, components=fold_components[k]),
+            dataclasses.replace(inputs, components=components),
             fit_lines=kept,
             encoder_lines=kept,
         )
+        return components, fitted
+
+    fold_components, parts = {}, []
+    every = sorted(set(folds.values()))
+    for k in every:
+        fold_components[k], fitted_k = fitted_without(k)
         held_k = [m for m in frame if folds[m] == k]
         parts.append(total(fitted_k.predict(expression.loc[held_k])))
+        # A fold run's inputs: fold K and the held-out lines from the fit without
+        # fold K, every other frame line out of fold within it (without K and its
+        # own fold), so no prediction a fold run reads saw fold K's labels.
+        own = [total(fitted_k.predict(expression.loc[[*held_k, *held]]))]
+        for j in every:
+            if j != k:
+                inner = [m for m in frame if folds[m] == j]
+                own.append(
+                    total(fitted_without(k, j)[1].predict(expression.loc[inner]))
+                )
+        write_parquet(
+            run_dir / f"predictions_fold{k}.parquet",
+            pd.concat(own, verify_integrity=True)
+            .loc[ladder.line_ids]
+            .astype(np.float32),
+        )
     oof = pd.concat(parts, verify_integrity=True).loc[frame]
     split = {
         "val": predictions.loc[ladder.role_lines("val")],
