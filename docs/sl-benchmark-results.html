@@ -66,10 +66,9 @@ a { color: var(--accent); }
 
 <div class="wrap">
 <table>
-<caption><strong>Table 2.</strong> Recall in the top 10% and AUROC (random 0.5) on the multi-study SL benchmark (validation 15 lines, test 13 lines). Higher is better. Rows are ranked by test recall. Best value below the ceiling in bold.</caption>
-<thead><tr><th>Model</th><th>What it reads</th><th class="n">Recall, validation</th><th class="n">Recall, test</th><th class="n">AUROC, validation</th><th class="n">AUROC, test</th></tr></thead>
+<caption><strong>Table 2.</strong> Recall in the top 10% and AUROC (random 0.5) on the multi-study SL benchmark (validation 15 lines, test 13 lines). Higher is better. Rows are ranked by test recall. Best value in bold; a perfect ranking gives 1.</caption>
+<thead><tr><th>Model</th><th>What it reads</th><th class="n">Recall, validation ↑</th><th class="n">Recall, test ↑</th><th class="n">AUROC, validation ↑</th><th class="n">AUROC, test ↑</th></tr></thead>
 <tbody>
-<tr><td>Ceiling: labels as the score</td><td class="what">The screen labels themselves</td><td class="n">1.000</td><td class="n">1.000</td><td class="n">1.00</td><td class="n">1.00</td></tr>
 <tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralog features with stage one's predicted GeneEffect</td><td class="n">0.355</td><td class="n"><b>0.395</b></td><td class="n">0.66</td><td class="n">0.66</td></tr>
 <tr class="ours"><td>Ours: logistic regression on predicted GeneEffect after a gene's loss</td><td class="what">For each gene, the change in its predicted GeneEffect when the other gene's expression is set low; both genes' predicted GeneEffect and expression</td><td class="n">0.394</td><td class="n">0.361</td><td class="n"><b>0.74</b></td><td class="n"><b>0.72</b></td></tr>
 <tr><td>KG4SL</td><td class="what">Knowledge graph, trained on the training lines</td><td class="n">0.367</td><td class="n">0.338</td><td class="n">0.69</td><td class="n">0.65</td></tr>
