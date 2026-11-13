@@ -4,6 +4,7 @@ and a ladder config over training, held-out and bulk-only lines."""
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import anndata as ad
@@ -95,6 +96,9 @@ def build_world(root: Path) -> dict:
         )
         counts = line_rng.poisson(4.0, size=(CELLS, len(genes))).astype(np.float32)
         counts[:, : len(EFFECT_GENES)] *= 1 + index % 3
+        # Cycling cells: a third in S (G0, G1 high), a third in G2/M (G2, G3 high).
+        counts[: CELLS // 3, :2] *= 6
+        counts[CELLS // 3 : 2 * CELLS // 3, 2:4] *= 6
         ad.AnnData(
             X=csr_matrix(counts),
             obs=pd.DataFrame(
@@ -153,8 +157,15 @@ def build_world(root: Path) -> dict:
         Path("configs/linear_model/default_linear_model.yaml").read_text()
     )
     linear_model["joint_config"] = str(root / "joint.yaml")
+    # The pinned tables, with cell-cycle phases on this world's genes.
+    shutil.copytree(linear_model["paths"]["reference"], root / "reference")
+    pd.DataFrame(
+        {"phase": ["S", "S", "G2M", "G2M"], "gene": ["G0", "G1", "G2", "G3"]}
+    ).to_csv(root / "reference" / "cell_cycle.tsv", sep="\t", index=False)
     linear_model["paths"].update(
-        model=str(root / "Model.csv"), bulk_expression=str(root / "bulk.csv")
+        model=str(root / "Model.csv"),
+        bulk_expression=str(root / "bulk.csv"),
+        reference=str(root / "reference"),
     )
     (root / "linear_model.yaml").write_text(yaml.safe_dump(linear_model))
     noise = yaml.safe_load(

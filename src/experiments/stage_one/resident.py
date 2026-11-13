@@ -14,6 +14,7 @@ import torch
 
 from src.data import ladder_reader as reader
 from src.data.io import read_json
+from src.experiments.stage_one.config import STAGE_ONE_LINE_INPUTS
 from src.experiments.stage_one.setup import Setup
 
 log = logging.getLogger(__name__)
@@ -46,7 +47,12 @@ class Resident:
         panel = ladder.panel
         n_lines, n_genes = len(ladder.line_ids), len(panel)
         at = {g: i for i, g in enumerate(panel)}
-        self.panel_index = torch.tensor([at[g] for g in genes], device=device)
+        reader_arm = arm == "gene_reader"
+        self.n_genes = len(genes)
+        # The per-gene reader reads nothing on the panel: its genes index themselves.
+        self.panel_index = (
+            None if reader_arm else torch.tensor([at[g] for g in genes], device=device)
+        )
         self.full = None
         self.full_record: dict[str, Any] | None = None
         position = {g: i for i, g in enumerate(str(g) for g in ladder.genes.index)}
@@ -133,22 +139,34 @@ class Resident:
             self.own_width = sum(widths)
             if kind == "own_x":
                 self.width, self.own_width = self.own_width, 0
-        if data["permuted"]:
-            generator = torch.Generator().manual_seed(int(config["seed"]))
+        generator = torch.Generator().manual_seed(int(config["seed"]))
+        line_level = kind in STAGE_ONE_LINE_INPUTS
+        if data["permuted"] and not line_level:
             self.permutation = torch.stack(
                 [torch.randperm(n_lines, generator=generator) for _ in range(n_genes)]
             ).to(device)
-        if kind in ("components", "lineage", "text"):
+        if line_level:
             line = self._line_input(setup, data, kind, fold, targets)
-            self.line = torch.tensor(line, device=device)
+            if reader_arm:
+                trained = [ladder.line_ids.index(m) for m in targets.lines]
+                mean = line[trained].mean(axis=0)
+                scale = line[trained].std(axis=0)
+                line = (line - mean) / np.where(scale > 0, scale, 1.0)
+            if data["permuted"]:
+                # The control: each line reads another line's input; nothing else moves.
+                line = line[torch.randperm(n_lines, generator=generator).numpy()]
+            self.line = torch.tensor(line, dtype=torch.float32, device=device)
             self.width = line.shape[1]
-        if data["linear_model_run"] is not None and kind != "components":
+        if data["linear_model_run"] is not None and (
+            kind != "components" or reader_arm
+        ):
             self.linear_model = torch.from_numpy(
-                linear_model_feature(setup, data, targets.m_g)
+                linear_model_feature(setup, data, targets.m_g, genes, fold)
             ).to(device)
-        text, text_present = reader.context_text(ladder)
-        self.text_dim = text.shape[1]
-        if arm != "film":
+        self.text_dim = 0
+        if arm not in ("film", "gene_reader"):
+            text, text_present = reader.context_text(ladder)
+            self.text_dim = text.shape[1]
             tokens = reader.line_tokens(ladder)
             self.tokens = (
                 torch.from_numpy(tokens.values).to(device),
@@ -182,6 +200,8 @@ class Resident:
                     f"components/{name}.parquet is not on the ladder's lines"
                 )
             return frame.to_numpy(np.float32)
+        if kind == "expression":
+            return reader.mean_channel(ladder).to_numpy(np.float32)
         if kind == "lineage":
             lineage = ladder.lines["lineage"].astype(str)
             self.line_classes = sorted(set(lineage.loc[list(targets.lines)]))
@@ -216,12 +236,15 @@ class Resident:
             delta=self.width,
             own=self.own_width,
             text=self.text_dim,
+            genes=self.n_genes,
         )
 
     def batch(self, genes: torch.Tensor, lines: torch.Tensor):
         from src.model.stage_one import PairBatch
 
-        run_genes, genes = genes, self.panel_index[genes]
+        run_genes = genes
+        if self.panel_index is not None:
+            genes = self.panel_index[genes]
         rows = lines.unsqueeze(0).expand(len(genes), -1)
         if self.permutation is not None:
             rows = self.permutation[genes][:, lines]
@@ -229,6 +252,7 @@ class Resident:
         batch = PairBatch(
             gene_vectors={k: v[genes] for k, v in self.gene_vectors.items()},
             gene_present={k: v[genes] for k, v in self.gene_present.items()},
+            gene_index=run_genes,
         )
         if self.delta is not None:
             batch.delta = self.delta[pick]
@@ -259,36 +283,38 @@ class Resident:
             batch.evidence_have = self.evidence[1][genes][:, lines]
         if self.linear_model is not None:
             # Never permuted: the permuted control keeps the line's own linear model.
-            batch.linear_model = self.linear_model[genes][:, lines]
+            batch.linear_model = self.linear_model[run_genes][:, lines]
         return batch
 
 
 def linear_model_feature(
-    setup: Setup, data: Mapping[str, Any], m_g: pd.Series
+    setup: Setup,
+    data: Mapping[str, Any],
+    m_g: pd.Series,
+    genes: Sequence[str],
+    fold: int | None,
 ) -> np.ndarray:
-    """The linear model reference's prediction minus the run's base, in z units (panel
-    genes x ladder lines): frame lines out of fold, validation and test lines from
-    the fit on the whole frame. A fold run's training lines read predictions whose
-    fits saw the held-out fold's labels, so its out-of-fold telemetry is slightly
-    optimistic; validation and test are unaffected."""
+    """The linear model reference's prediction minus the run's base ``m_g``, in z
+    units (``genes`` x ladder lines). The main run reads the frame lines out of fold
+    and validation and test from the fit on the whole frame; a fold run reads the
+    fold's own predictions (``predictions_fold<K>.parquet``: fit without fold K, its
+    other frame lines out of fold within that fit), so no input saw fold K's labels."""
     ladder = setup.ladder
     run_dir = finished_linear_model(data["linear_model_run"], data["ladder_config"])
     if run_dir is None:
         raise FileNotFoundError(f"{data['linear_model_run']} has no row.json")
+    names = ("oof", "val", "test") if fold is None else (f"fold{fold}",)
     predictions = pd.concat(
-        [
-            pd.read_parquet(run_dir / f"predictions_{name}.parquet")
-            for name in ("oof", "val", "test")
-        ],
+        [pd.read_parquet(run_dir / f"predictions_{name}.parquet") for name in names],
         verify_integrity=True,
     )
     predictions.index = [str(m) for m in predictions.index]
     missing = sorted(set(ladder.line_ids) - set(predictions.index))
     if missing:
         raise ValueError(f"the linear model predicts no {missing[:5]}")
-    panel = list(ladder.panel)
-    base = reader.base_prediction(ladder, m_g, ladder.line_ids).loc[:, panel]
-    values = predictions.loc[ladder.line_ids, panel] - base
+    genes = list(genes)
+    base = reader.base_prediction(ladder, m_g, ladder.line_ids).loc[:, genes]
+    values = predictions.loc[ladder.line_ids, genes] - base
     return values.to_numpy(np.float32).T.copy()
 
 
