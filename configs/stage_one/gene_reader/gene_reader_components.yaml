@@ -1,4 +1,4 @@
-# The per-gene reader (protocol §17; docs/specs/2026-11-12-pie-and-single-cell-plan.md, round B): the default linear
+# The per-gene reader (protocol §18; docs/specs/2026-11-12-pie-and-single-cell-plan.md, round B): the default linear
 # model's prediction (refitted on the frame; frame lines out of fold, a fold run reads its fold's own fit) plus u_g · h(line),
 # with h one shared MLP over the line's 128 expression components (fold-wise in a fold run, standardised on the run's
 # training lines) and u_g a weight vector for each selective gene, zero at the start (epoch 0 is the linear model).

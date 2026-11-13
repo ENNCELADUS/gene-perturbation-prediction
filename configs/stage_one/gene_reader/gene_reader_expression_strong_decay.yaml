@@ -1,4 +1,4 @@
-# The per-gene reader on expression (protocol §17), as gene_reader_expression.yaml. With weight decay 1.0 (a strong pull of u_g toward zero, the linear model).
+# The per-gene reader on expression (protocol §18), as gene_reader_expression.yaml. With weight decay 1.0 (a strong pull of u_g toward zero, the linear model).
 kind: train
 task: gene_reader
 seed: 0

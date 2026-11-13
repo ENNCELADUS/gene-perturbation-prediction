@@ -1,4 +1,4 @@
-# The per-gene reader on expression (protocol §17): as gene_reader_components.yaml, with h reading the mean channel
+# The per-gene reader on expression (protocol §18): as gene_reader_components.yaml, with h reading the mean channel
 # (mean/mean_channel.parquet) standardised on the run's training lines instead of the 128 components.
 kind: train
 task: gene_reader

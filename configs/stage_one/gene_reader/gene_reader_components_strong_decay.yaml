@@ -1,4 +1,4 @@
-# The per-gene reader on components (protocol §17), as gene_reader_components.yaml. With weight decay 1.0 (a strong pull of u_g toward zero, the linear model).
+# The per-gene reader on components (protocol §18), as gene_reader_components.yaml. With weight decay 1.0 (a strong pull of u_g toward zero, the linear model).
 kind: train
 task: gene_reader
 seed: 0
