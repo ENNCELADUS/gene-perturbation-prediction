@@ -88,23 +88,21 @@ a { color: var(--accent); }
 </ul>
 
 <h2>Stage one: GeneEffect in the SL held-out lines</h2>
-<p>The stage-one metrics of SL protocol §11. A residual is GeneEffect minus the training gene mean, divided by the gene's residual SD. Per-line residual Spearman: correlation over the selective genes in each line, mean over lines (the selector). Per-gene residual Spearman: correlation over lines for each gene. Residual skill score: within-gene R². Calibration slope: measured residual on predicted (1 is ideal). Top-20 recall: share of a line's 20 strongest dependencies in the predicted top 20. Whole-line Pearson: a sanity check that the gene mean alone passes.</p>
+<p>Whole-line Pearson: predicted against measured GeneEffect over all genes of a line, mean over lines. MSE: mean squared GeneEffect error over all lines and genes. Per-line residual Spearman: the line-specific metric, over the selective genes of each line, after the training gene mean is removed (the selector).</p>
 
 <div class="wrap">
 <table>
-<caption><strong>Table 2.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect. Each reader is fitted on the SL split's training side. Higher is better, except calibration slope (1 is ideal). Best reader in bold.</caption>
-<thead><tr><th>Model</th><th class="n">Per-line Spearman</th><th class="n">Per-gene Spearman</th><th class="n">Skill score</th><th class="n">Calibration slope</th><th class="n">Top-20 recall</th><th class="n">Genes with per-gene ρ ≥ 0.3</th><th class="n">Whole-line Pearson</th></tr></thead>
+<caption><strong>Table 2.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect; each reader is fitted on the SL split's training side. Pearson and Spearman: higher is better. MSE: lower is better.</caption>
+<thead><tr><th>Model</th><th class="n">Whole-line Pearson ↑</th><th class="n">MSE ↓</th><th class="n">Per-line residual Spearman ↑</th></tr></thead>
 <tbody>
-<tr class="ours"><td>Buffer-aware reader</td><td class="n"><b>0.194</b></td><td class="n"><b>0.157</b></td><td class="n"><b>0.027</b></td><td class="n">1.70</td><td class="n"><b>0.055</b></td><td class="n">—</td><td class="n">—</td></tr>
-<tr class="ours"><td>Default linear expression model</td><td class="n">0.193</td><td class="n"><b>0.157</b></td><td class="n"><b>0.027</b></td><td class="n">1.70</td><td class="n"><b>0.055</b></td><td class="n">1,649</td><td class="n">0.919</td></tr>
-<tr><td>Default linear expression model, lines permuted (control)</td><td class="n">0.038</td><td class="n">0.017</td><td class="n">−0.005</td><td class="n">0.05</td><td class="n">0.005</td><td class="n">876</td><td class="n">0.917</td></tr>
-<tr><td>Two DepMap screens of one line (reference, 8 test lines)</td><td class="n">0.367</td><td class="n">0.345</td><td class="n">0.028</td><td class="n">0.52</td><td class="n">0.163</td><td class="n">—</td><td class="n">—</td></tr>
+<tr class="ours"><td>Our best: linear expression model, wider gene space (SL protocol §13)</td><td class="n">0.9197</td><td class="n">0.0301</td><td class="n">0.1965</td></tr>
+<tr><td>Ceiling: two DepMap screens of one line (8 test lines)</td><td class="n">0.8618</td><td class="n">0.0553</td><td class="n">0.3665</td></tr>
 </tbody>
 </table>
 </div>
-<p class="muted">On the final split's 28 test lines, the best stage-one model (per-gene reader on components, weight decay 1.0) gives per-line residual Spearman 0.231 against 0.227 for the default linear model; the difference interval includes zero.</p>
+<p class="muted">The ceiling scores one screen as the prediction of the other. Each screen carries its own noise, so its Pearson and MSE are worse than a model's; the ceiling applies to the line-specific Spearman. MSE is the square of the recorded RMSE.</p>
 
-<p class="muted">Sources: <a href="../results/sl_study_benchmark/summary.html">benchmark run</a> (host report <code>results/sl_study_benchmark/host/results.md</code>), <a href="../results/sl_pie_editor_seed0/README.md">PIE editor run</a>, stage one: <a href="../results/sl_backbone_round_zero_seed0/README.md">backbone record</a>, <a href="../results/sl_buffer_aware_reader_seed0/README.md">buffer-aware reader record</a>, <a href="../results/stage_one_gene_reader/README.md">per-gene reader record</a>. Benchmark card: <a href="data/sl-benchmark.html">docs/data/sl-benchmark.html</a>. H20 container, seed 0, 2026-11-13.</p>
+<p class="muted">Sources: <a href="../results/sl_study_benchmark/summary.html">benchmark run</a> (host report <code>results/sl_study_benchmark/host/results.md</code>), <a href="../results/sl_pie_editor_seed0/README.md">PIE editor run</a>, stage one: <code>outputs/sl/conditional/*/metrics.json</code> on the H20, <a href="../results/sl_backbone_round_zero_seed0/README.md">backbone record</a>, <a href="../results/sl_buffer_aware_reader_seed0/README.md">buffer-aware reader record</a>, <a href="../results/stage_one_gene_reader/README.md">per-gene reader record</a>. Benchmark card: <a href="data/sl-benchmark.html">docs/data/sl-benchmark.html</a>. H20 container, seed 0, 2026-11-13.</p>
 </main>
 </body>
 </html>
