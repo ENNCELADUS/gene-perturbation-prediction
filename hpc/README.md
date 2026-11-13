@@ -392,6 +392,27 @@ OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 nohup hpc/run.sh sl-baselines configs/sl/b
   --run-id benchmark_buffer_seed0 > outputs/launches/benchmark_buffer_seed0.log 2>&1 &
 ```
 
+Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw
+cells of each SL split line with labelled rows and writes, per line, the co-detection of each of its pairs (real and
+after each gene's counts are permuted across the cells) to `<prepared_root>/codetection/<ModelID>.parquet` (CPU,
+16 processes, about 5 minutes for 86 lines). `configs/sl/conditional_wide.yaml` reads each line in its own genes;
+`conditional_codetection.yaml` and `conditional_codetection_shuffled.yaml` add the two co-detection inputs to the head;
+`configs/sl/benchmark_single_cell_inputs.yaml` puts them beside the backbone rerun in the narrow space.
+
+```bash
+OMP_NUM_THREADS=2 setsid nohup hpc/run.sh sl-codetection configs/revision/frozen_huber.yaml \
+  data/sl_studies/benchmark_v2/labels.parquet configs/benchmarks/cell_line_sl_split.json \
+  > outputs/launches/sl_codetection_cache.log 2>&1 < /dev/null &
+export OMP_NUM_THREADS=16 MKL_NUM_THREADS=16
+for run in conditional:single_cell_narrow_seed0 conditional_wide:conditional_wide_seed0 \
+  conditional_codetection:conditional_codetection_seed0 \
+  conditional_codetection_shuffled:conditional_codetection_shuffled_seed0; do
+  setsid nohup hpc/run.sh sl-conditional configs/sl/${run%%:*}.yaml --run-id ${run#*:} \
+    > outputs/launches/${run#*:}.log 2>&1 < /dev/null &
+done   # the co-detection runs after the cache
+hpc/run.sh sl-baselines configs/sl/benchmark_single_cell_inputs.yaml --run-id benchmark_single_cell_inputs_seed0
+```
+
 The config's `extra_scores` adds scores from other harnesses, per (gene A, gene B), with the line and the design
 when the table has `model_id` and `design`; the run stops if a held-out row is missing from a table, and a NaN score
 leaves the row unranked by that scorer. KG4SL makes one (`hpc/kg4sl/`, its own environment `.venv-kg4sl`, Python 3.11 and

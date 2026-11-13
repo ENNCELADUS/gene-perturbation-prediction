@@ -458,3 +458,39 @@ dependency reader. The line encoder, the context editor, the pair scorer and the
   0.265 / 0.367 (4 and 8 lines; 0.246 on 124 training lines), so a reader of the true dependency can reach about the
   square root of that, about 0.5. On the partner rows that the reader can edit (19.5%), the difference is also null. By the decision rule, the next
   module is the context editor (PIE's profile after A's loss).
+
+## 13. Two single-cell inputs (2026-11-13)
+
+`hpc/run.sh sl-codetection`, `hpc/run.sh sl-conditional` with `configs/sl/conditional_wide.yaml`,
+`conditional_codetection.yaml` and `conditional_codetection_shuffled.yaml`, then `hpc/run.sh sl-baselines
+configs/sl/benchmark_single_cell_inputs.yaml`; [plan](specs/2026-11-12-pie-and-single-cell-plan.md), round C parts 1
+and 3. Each part changes one thing of the §11 backbone and is its own run.
+
+- **Each line read in the genes it measures.** The config key `space_measured_share` (null: the §11 space, the genes
+  that every held-out line measures in pseudo-bulk, 6,523) sets the reader's space to the bulk genes that at least
+  this share of the labelled single-cell training lines measure. `conditional_wide.yaml` uses 0.5 (18,294 genes): the
+  count falls between half and three quarters of the lines (18,302 at half, 17,142 at 75%), and at half or more a
+  gene's bridge slope is fitted mostly on measured values. A held-out line's unmeasured value takes the training mean,
+  as a training line's does. A row is covered only when its own line measures each gene it loses (the pseudo-bulk's
+  mask before the fill). Known side effects: a filled value takes a rank slot in the per-line quantile normalisation,
+  a rarely measured gene's bridge slope is fitted partly on filled values, and the expression components are fitted
+  on rows with filled values.
+- **A and B detected in the same cells.** Preparation (`prepare.py --codetection`) writes, for each SL split line with
+  labelled rows and each of its pairs, the share of the line's cells with a count above 0 for both genes, the share
+  expected under independence, `mean_i (1 − exp(−r_A L_i / T)) (1 − exp(−r_B L_i / T))` with `L_i` the cell's library
+  and `T` = 10^4, both genes' detection shares, and the same after `shuffle_counts` (seed 0) permuted each gene's
+  counts across the cells ([card](data/sl-codetection.md)). The cache holds the rate `r` from the line's mean profile
+  and the rate matched to each gene's detection share; the head reads the matched version. The config key
+  `codetection` (null, `real` or `shuffled`) adds two head inputs: the share and `log((k + 0.5) / (e + 0.5))`, with `k`
+  and `e` the observed and expected counts of cells. A value that the source cannot give (a drug anchor, an unlisted
+  gene) reads 0. The context-ablated head reads the training rows' mean of both inputs. This part uses the narrow
+  space.
+- **Rows** in the harness: the backbone in the narrow space (rerun), in each line's own genes, and its head with real
+  and with shuffled co-detection, each with its context-ablated version; paired differences of each against the
+  narrow backbone, against its ablation, and of the real against the shuffled co-detection.
+- **Result** ([record](../results/sl_single_cell_inputs_seed0/README.md)): the narrow rerun reproduces §11. Read in
+  its own genes, the reader covers 79.0% of the held-out rows (43.8% before) and its stage-one per-line residual
+  Spearman rises to 0.207 / 0.197 (0.183 / 0.193), but the SL ranking does not: head −0.017 on test (+0.007 on
+  validation), intervals across zero. Co-detection adds nothing beyond each gene's expression: the head with it minus
+  the head with shuffled cells is +0.004 / +0.001, and the real log ratio hardly agrees with the shuffled one (0.047)
+  at a median of 292 cells per line. By the plan's decision table, neither part joins the backbone.
