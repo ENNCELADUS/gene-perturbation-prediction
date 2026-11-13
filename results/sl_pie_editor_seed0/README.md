@@ -1,6 +1,6 @@
 # SL backbone, PIE editor (seed 0)
 
-SL protocol §13 (plan [round A](../../docs/specs/2026-11-12-pie-and-single-cell-plan.md)). Run on the H20 container on
+SL protocol §14 (plan [round A](../../docs/specs/2026-11-12-pie-and-single-cell-plan.md)). Run on the H20 container on
 port 30838 on 2026-11-13. PIE's side in `.venv-pie`, code at `a58946b` (pass) and `1bb062b` (own-task scores):
 `hpc/run.sh sl-pie-pass configs/sl/pie_editor.yaml --steps tables`, then `--steps pass --shard I/4` on four H20 GPUs
 (22 min, 0.35 s per lost gene for 86 lines per process), then `--steps measured,rescore,own_task` (one GPU, 13 min).

@@ -1,4 +1,4 @@
-"""The PIE editor of the SL backbone (SL protocol §13): the context editor is PIE's
+"""The PIE editor of the SL backbone (SL protocol §14): the context editor is PIE's
 predicted profile after A's loss in place of A's expression set low; the reader (the
 default linear expression model of the backbone run), the line encoder and the
 conditional score do not change.

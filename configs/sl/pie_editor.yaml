@@ -1,4 +1,4 @@
-# The PIE editor of the SL backbone (SL protocol §13): PIE's predicted profile after A's loss in place of the
+# The PIE editor of the SL backbone (SL protocol §14): PIE's predicted profile after A's loss in place of the
 # simple edit, with the backbone run's reader (configs/sl/conditional.yaml). PIE's side in .venv-pie, on GPUs:
 # `hpc/run.sh sl-pie-pass configs/sl/pie_editor.yaml --steps tables`, then `--steps pass --shard I/4` (one
 # process per GPU), `--steps measured,rescore,own_task`; then on the CPU

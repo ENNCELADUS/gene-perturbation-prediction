@@ -1,4 +1,4 @@
-"""PIE's side of the PIE editor (SL protocol §13), in ``.venv-pie``: the PIE root's
+"""PIE's side of the PIE editor (SL protocol §14), in ``.venv-pie``: the PIE root's
 tables for the screened SL lines, the frozen cross-dataset PIE's predicted profile
 change after each lost gene in every screened line (DepMap source masked), the
 measured Perturb-seq changes of the reference lines, and two measurements of PIE on

@@ -1,4 +1,4 @@
-# The benchmark harness with the PIE editor's rows (configs/sl/pie_editor.yaml, SL protocol §13) beside the
+# The benchmark harness with the PIE editor's rows (configs/sl/pie_editor.yaml, SL protocol §14) beside the
 # simple edit's: a copy of benchmark_baselines.yaml with the PIE editor's scores and paired differences.
 # `hpc/run.sh sl-baselines configs/sl/benchmark_pie_editor.yaml --run-id ID` (CPU), after
 # `hpc/run.sh sl-pie-editor configs/sl/pie_editor.yaml --run-id pie_editor_seed0`.
