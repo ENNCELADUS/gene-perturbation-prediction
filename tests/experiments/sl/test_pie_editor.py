@@ -98,6 +98,7 @@ def test_the_unit_slope_maps_pies_input_to_the_raw_row():
 def test_the_raw_row_moves_by_the_slope_times_the_change():
     _, raw, normalize, bridges, _ = world()
     panel = ["E1", "E2"]
+
     def change(models, genes):
         return np.array([[1.0, np.nan]] * len(models))
 
@@ -182,5 +183,6 @@ def test_pie_against_the_other_lines_mean_response():
     assert row["pie_pearson"] == pytest.approx(1.0)
     assert row["pie_deviation_pearson"] == pytest.approx(1.0)
     assert row["other_lines_mean_pearson"] < 0.9
-    flat = response_scores(np.ones(50), shared, shared)
+    assert row["one_other_line_deviation_pearson"] < 1.0
+    flat = response_scores(np.ones(50), shared, shared, shared)
     assert np.isnan(flat["pie_pearson"])  # a constant prediction has no correlation
