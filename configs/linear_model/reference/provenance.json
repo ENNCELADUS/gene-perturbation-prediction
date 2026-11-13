@@ -25,11 +25,11 @@
     },
     "drivers.tsv": {
       "source": "data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv",
-      "rows": 1904
+      "rows": 1908
     },
     "msi.tsv": {
       "source": "https://ndownloader.figshare.com/files/51065726",
-      "rows": 1865
+      "rows": 1869
     },
     "cell_cycle.tsv": {
       "source": "https://raw.githubusercontent.com/satijalab/seurat/00e55c9b54c8b12b5ae85ffafc1c18d683c73a9f/data/cc.genes.rda",
@@ -44,7 +44,7 @@
       "rows": 41
     }
   },
-  "line_tables_rebuilt": "2026-10-11",
+  "line_tables_rebuilt": "2026-11-13",
   "state_programs_retrieved": "2026-10-12",
   "checks": {
     "meta_program_cell_lines": "meta_program_sources.tsv counts each program's cell-line studies (Kinker et al. 2020's CCLE pools and other cell-line sets). Kinker's pools hold the cells of validation and test lines, the exposure ruled out for Kinker's own programs on 2026-10-04, so a config reads only programs with no cell-line study (21 of 41; decided 2026-10-12).",
