@@ -18,3 +18,8 @@ top_k: 20
 # a line as the prediction of another)
 screen_gene_effect: data/sl_dependency_v0/raw/depmap/ScreenGeneEffect.csv
 screen_map: data/sl_dependency_v0/raw/depmap/CRISPRScreenMap.csv
+# the reader's expression space: null, the genes every held-out line measures; a share, the genes
+# at least that share of the labelled single-cell training lines measure (SL protocol §13)
+space_measured_share: null
+# the head's co-detection inputs: null, real or shuffled (SL protocol §13)
+codetection: null

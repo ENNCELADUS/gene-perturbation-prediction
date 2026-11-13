@@ -32,12 +32,16 @@ def quantile_normalize(expression: pd.DataFrame, reference: np.ndarray) -> pd.Da
 
 
 def measured_genes(
-    pseudobulk: pd.DataFrame, genes: Sequence[str], lines: Sequence[str]
+    pseudobulk: pd.DataFrame,
+    genes: Sequence[str],
+    lines: Sequence[str],
+    share: float = 1.0,
 ) -> list[str]:
-    """The genes of ``genes`` with a finite pseudo-bulk value in every one of
-    ``lines`` (the scored validation and test lines)."""
+    """The genes of ``genes`` with a finite pseudo-bulk value in at least ``share``
+    of ``lines`` (default: every one of them, the scored validation and test
+    lines)."""
     values = pseudobulk.loc[list(lines), list(genes)].to_numpy(dtype=np.float64)
-    finite = np.isfinite(values).all(axis=0)
+    finite = np.isfinite(values).mean(axis=0) >= share
     return [gene for gene, ok in zip(genes, finite, strict=True) if ok]
 
 

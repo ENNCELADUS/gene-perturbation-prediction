@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.eval.accuracy import top_recall
 from src.experiments.sl.benchmark_baselines import label_agreement
@@ -232,3 +233,59 @@ def test_the_head_learns_a_planted_term_and_is_chosen_on_validation():
     assert [r["penalty"] for r in records] == [0.1, 10.0]
     assert max(r["val_recall_top10"] for r in records) > 0.5
     assert np.isnan(decision(head, x_train[:1]))[0]
+
+
+def test_the_wide_space_keeps_a_gene_one_held_out_line_lacks_and_does_not_cover_it():
+    from src.experiments.sl.conditional import own_line_measures
+    from src.linear_model.space import measured_genes
+
+    pseudo = pd.DataFrame(
+        {"A": [1.0, 2.0, 3.0, np.nan], "B": [1.0, np.nan, 2.0, 2.0],
+         "C": [1.0, 2.0, 3.0, 4.0]},
+        index=["T0", "T1", "V0", "V1"],
+    )  # fmt: skip
+    genes = ["A", "B", "C"]
+    assert measured_genes(pseudo, genes, ["V0", "V1"]) == ["B", "C"]  # the narrow one
+    assert measured_genes(pseudo, genes, ["T0", "T1"], 0.5) == genes  # the wide one
+    rows = pd.DataFrame(
+        {"model_id": ["V0", "V1", "V1", "V1"],
+         "design": ["combinatorial", "combinatorial", "anchor", "anchor"],
+         "gene_a": ["A", "C", "A", "C"], "gene_b": ["B", "A", "C", "A"]}
+    )  # fmt: skip
+    # V1 does not measure A: a row that loses A there is not covered
+    assert own_line_measures(rows, pseudo.notna()).tolist() == [
+        True, False, False, True
+    ]  # fmt: skip
+
+
+def test_the_head_inputs_are_unchanged_without_codetection(tmp_path):
+    from src.experiments.sl.conditional import codetection_inputs, features
+
+    rows = pd.DataFrame(
+        {"model_id": ["L0", "L0", "L1"],
+         "design": ["combinatorial", "anchor", "anchor"],
+         "gene_a": ["A", "A", "DRUG"], "gene_b": ["B", "C", "B"], "split": "train"}
+    )  # fmt: skip
+    table = pd.DataFrame({"A": [1.0, 2.0], "B": [3.0, 4.0], "C": [5.0, 6.0]},
+                         index=["L0", "L1"])  # fmt: skip
+    pair_terms = np.array([[0.1, 0.2], [0.3, 0.0], [np.nan, 0.0]])
+    before = features(rows, pair_terms, table, table)
+    assert before.shape == (3, 7)
+    for model_id, gene_a, gene_b, share in (
+        ("L0", ["A", "A"], ["B", "C"], [0.4, 0.1]),
+        ("L1", ["DRUG"], ["B"], [np.nan]),
+    ):
+        pd.DataFrame(
+            {"gene_a": gene_a, "gene_b": gene_b, "cells": 10, "codetected": share,
+             "expected_matched": 0.2, "shuffled_codetected": 0.2,
+             "shuffled_expected_matched": 0.2}
+        ).to_parquet(tmp_path / f"{model_id}.parquet")  # fmt: skip
+    pair = codetection_inputs(rows, tmp_path, shuffled=False)
+    assert np.allclose(pair[:2, 0], [0.4, 0.1])
+    assert np.isclose(pair[0, 1], np.log(4.5 / 2.5))
+    assert np.allclose(codetection_inputs(rows, tmp_path, shuffled=True)[:2, 1], 0.0)
+    after = features(rows, pair_terms, table, table, pair)
+    assert np.array_equal(after[:, :7], before)
+    assert after[2, 7:].tolist() == [0.0, 0.0]  # a drug anchor reads 0
+    with pytest.raises(ValueError, match="no co-detection value"):
+        codetection_inputs(rows.assign(gene_b="Z"), tmp_path, shuffled=False)

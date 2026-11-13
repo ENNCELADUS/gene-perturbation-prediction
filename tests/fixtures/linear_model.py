@@ -122,4 +122,5 @@ def synthetic_base(config) -> linear_model_base.RunBase:
         filled_lines=0,
         profile=quantile_reference(bridge.bulk),
         pseudobulk_fill=bridge.pseudobulk.loc[list(bridge.single_cell_train)].mean(),
+        measured=bridge.pseudobulk.notna(),
     )

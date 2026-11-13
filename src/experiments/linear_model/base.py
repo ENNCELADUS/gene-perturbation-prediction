@@ -62,6 +62,8 @@ class RunBase:
             pseudo-bulk are quantile-normalised to.
         pseudobulk_fill: Each space gene's pseudo-bulk mean over the training
             lines measuring it: what an unmeasured value takes.
+        measured: Lines x space genes: the line's own pseudo-bulk measures the
+            gene (before an unmeasured value takes the training mean).
     """
 
     config: Mapping[str, Any]
@@ -75,6 +77,7 @@ class RunBase:
     filled_lines: int
     profile: np.ndarray
     pseudobulk_fill: pd.Series
+    measured: pd.DataFrame
 
     def truth(self, lines: Sequence[str]) -> pd.DataFrame:
         """Lines x genes ``(y - mu_hat) / sigma``; NaN where a label is missing.
@@ -127,10 +130,12 @@ def base_on(
     space_lines: Sequence[str],
     *,
     other_split: bool = False,
+    space_share: float = 1.0,
 ) -> RunBase:
     """``load_base`` on a given split and bulk-only lines; the space is the bulk
-    genes every line of ``space_lines`` measures in pseudo-bulk (the production fit
-    passes its scored lines and a split without validation or test). With
+    genes that at least ``space_share`` of ``space_lines`` measure in pseudo-bulk
+    (default every one: the production fit passes its scored lines and a split
+    without validation or test). With
     ``other_split`` (not the final split), the reference's line tables, pinned for
     the final split, leave out the split's held-out and excluded lines."""
     from src.data.prepared import read_manifest
@@ -167,8 +172,9 @@ def base_on(
     panel = list(read_manifest(prepared)["common_gene_panel"])
     prepare_pseudobulk(joint, list(bulk.columns))
     pseudo = read_pseudobulk(prepared).loc[list(split.all_model_ids)]
-    space = measured_genes(pseudo, list(bulk.columns), space_lines)
+    space = measured_genes(pseudo, list(bulk.columns), space_lines, space_share)
     pseudo = pseudo.loc[:, space]
+    measured = pseudo.notna()
     fill = pseudo.loc[list(split.train)].mean(axis=0, skipna=True)
     pseudo, filled = fill_unmeasured(pseudo, split.train)
     definitions = fit_definitions(gene_effect, split, panel, joint["features"])
@@ -211,6 +217,7 @@ def base_on(
         filled_lines=int((filled > 0).sum()),
         profile=profile,
         pseudobulk_fill=fill,
+        measured=measured,
     )
 
 

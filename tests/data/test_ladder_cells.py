@@ -143,3 +143,73 @@ def test_doublet_scores(n_cells):
         assert np.isnan(scores).all()
     else:
         assert np.isfinite(scores).all()
+
+
+def test_codetection_counts_cells_that_detect_both_genes():
+    counts = np.array(
+        [[1, 2, 0, 7], [0, 3, 1, 6], [4, 0, 0, 6], [2, 5, 0, 3]], dtype=float
+    )
+    out = cells.codetection(
+        sparse.csr_matrix(counts),
+        ["a", "B", "C", "F"],
+        ["A", "A", "C"],
+        ["B", "C", "DRUG"],
+    )
+    columns = list(cells.CODETECTION_COLUMNS)
+    observed = out[:, columns.index("codetected")]
+    assert observed[:2].tolist() == [2 / 4, 0.0]  # A and B in cells 0 and 3
+    assert out[0, columns.index("detected_a")] == 0.75
+    assert out[0, columns.index("detected_b")] == 0.75
+    assert np.isnan(out[2]).all()  # a drug anchor is not a gene of the source
+
+
+def test_expected_codetection_is_the_product_at_each_cells_depth():
+    # every cell has library 10^4 (depth 1): the expected share is the product of
+    # (1 - exp(-mu)) of both genes, mu the mean CP10K
+    counts = np.array([[1, 3, 9996], [3, 1, 9996]], dtype=float)
+    out = cells.codetection(sparse.csr_matrix(counts), ["A", "B", "F"], ["A"], ["B"])
+    expected = out[0, list(cells.CODETECTION_COLUMNS).index("expected")]
+    assert np.isclose(expected, (1 - np.exp(-2.0)) ** 2, rtol=1e-5)
+
+
+def test_matched_rates_give_each_gene_its_detection_share():
+    rng = np.random.default_rng(0)
+    depth = rng.uniform(0.2, 3.0, size=500)
+    detected = np.array([0.0, 0.05, 0.5, 0.95])
+    rate = cells.matched_rates(depth, detected)
+    share = (1 - np.exp(-np.outer(depth, rate))).mean(axis=0)
+    assert np.allclose(share, detected, atol=1e-6)
+    assert rate[0] == 0.0
+
+
+def test_shuffled_cells_keep_detection_and_remove_planted_codetection():
+    rng = np.random.default_rng(0)
+    n = 3000
+    # A and B are expressed in the same half of the cells; C is independent
+    on = rng.random(n) < 0.5
+    a = rng.poisson(np.where(on, 3.0, 0.0))
+    b = rng.poisson(np.where(on, 3.0, 0.0))
+    c = rng.poisson(1.0, size=n)
+    filler = rng.integers(3000, 6000, size=n)
+    counts = sparse.csr_matrix(np.column_stack([a, b, c, filler]).astype(float))
+    symbols = ["A", "B", "C", "F"]
+    columns = list(cells.CODETECTION_COLUMNS)
+
+    def log_ratio(out):
+        return np.log(
+            out[:, columns.index("codetected")]
+            / out[:, columns.index("expected_matched")]
+        )
+
+    real = cells.codetection(counts, symbols, ["A", "A"], ["B", "C"])
+    shuffled = cells.codetection(
+        cells.shuffle_counts(counts, np.random.default_rng(1)),
+        symbols,
+        ["A", "A"],
+        ["B", "C"],
+    )
+    detection = [columns.index("detected_a"), columns.index("detected_b")]
+    assert np.allclose(real[:, detection], shuffled[:, detection])
+    assert log_ratio(real)[0] > 0.5  # planted: about log 2
+    assert abs(log_ratio(shuffled)[0]) < 0.1
+    assert abs(log_ratio(real)[1]) < 0.1  # A and C are independent

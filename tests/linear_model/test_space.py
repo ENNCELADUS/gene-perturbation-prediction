@@ -45,6 +45,13 @@ def test_space_keeps_genes_every_scored_line_measures():
     )
     assert measured_genes(frame, ["A", "B", "C"], ["V1", "S1"]) == ["C"]
     assert measured_genes(frame, ["A", "B", "C"], ["V1"]) == ["A", "C"]
+    # the wide space: genes that at least half of the lines measure
+    assert measured_genes(frame, ["A", "B", "C"], ["T1", "V1", "S1"], 0.5) == [
+        "A",
+        "B",
+        "C",
+    ]
+    assert measured_genes(frame, ["A", "B", "C"], ["T1", "V1", "S1"], 0.8) == ["C"]
 
 
 def test_unmeasured_values_take_the_reference_lines_mean():
