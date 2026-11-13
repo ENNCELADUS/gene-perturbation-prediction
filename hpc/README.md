@@ -442,12 +442,16 @@ cancergd.org/static/paralogs, SHA-256 checked); a pair outside the 36,648 paralo
 commit `f966551`) on the training-side lines' paralog rows. Its inputs: DepMap 26Q1 (GeneEffect ranks, expression, copy
 number); mutations and common essentials of DepMap 24Q4 (`data/sl_baselines/depmap24q4/`, from figshare through the
 laptop: the H20 reaches neither figshare nor DepMap's bucket, and 26Q1's links need a browser); STRING v11.5
-(`data/sl_baselines/string/`); GOA human release 218 (`data/sl_baselines/go/`). Its features read the held-out line's
-GeneEffect, so it is a reference row.
+(`data/sl_baselines/string/`); GOA human release 218 (`data/sl_baselines/go/`). By default its features read the
+held-out line's measured GeneEffect, so that run is a reference row. With `--held-gene-effect`, the held-out lines read
+stage one's predicted GeneEffect (the SL backbone's `predictions.parquet`), and the fit keeps the training-side lines'
+measured GeneEffect, both on the predicted genes: that run is a baseline row.
 
 ```bash
 .venv-tx1/bin/python hpc/paralog/dekegel_scores.py --out outputs/sl/dekegel   # seconds
 OMP_NUM_THREADS=32 .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/seed0
+OMP_NUM_THREADS=32 .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/predicted_seed0 \
+  --held-gene-effect outputs/sl/conditional/conditional_seed0/predictions.parquet
 ```
 
 MiT4SL (`hpc/mit4sl/`, `.venv-mit4sl`: torch 2.6 on CUDA 12.4, PyG 2.6.1, torch-sparse built from source; the released

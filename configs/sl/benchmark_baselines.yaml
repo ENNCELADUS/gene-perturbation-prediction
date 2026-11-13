@@ -33,11 +33,12 @@ extra_scores:
   buffer_head_ablated: outputs/sl/conditional/conditional_buffer_seed0/scores/head_ablated.parquet
   # PARIS hpc/run.sh sl-paris configs/sl/paris_benchmark.yaml (--shard, then --merge);
   # SLIdR hpc/run.sh sl-slidr configs/sl/slidr.yaml; De Kegel hpc/paralog/dekegel_scores.py;
-  # Kebabci hpc/paralog/kebabci.py; MiT4SL hpc/mit4sl/train.py
+  # Kebabci hpc/paralog/kebabci.py (measured, and --held-gene-effect); MiT4SL hpc/mit4sl/train.py
   paris: outputs/sl/paris_benchmark/seed0/scores.parquet
   slidr: outputs/sl/slidr/seed0/scores.parquet
   dekegel_paralog: outputs/sl/dekegel/scores.parquet
   kebabci_paralog: outputs/sl/kebabci/seed0/scores.parquet
+  kebabci_paralog_predicted: outputs/sl/kebabci/predicted_seed0/scores.parquet
   mit4sl: outputs/sl/mit4sl/seed0/scores.parquet
 top_k: 20
 bootstrap: 1000

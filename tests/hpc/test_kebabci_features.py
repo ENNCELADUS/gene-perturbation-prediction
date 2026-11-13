@@ -1,5 +1,6 @@
-"""The Kebabci harness's network features (hpc/paralog/kebabci.py) follow the official
-notebooks: weighted shared-interactor means and the smallest shared GO term."""
+"""The Kebabci harness (hpc/paralog/kebabci.py): network features follow the official
+notebooks (weighted shared-interactor means, the smallest shared GO term), and held-out
+lines can read predicted GeneEffect."""
 
 from __future__ import annotations
 
@@ -49,3 +50,20 @@ def test_smallest_go_term_takes_the_smallest_shared_term_and_ties_by_pick():
     assert high[0] == pytest.approx([5 / 3, 5 / 3])
     assert low[0] == pytest.approx([1 / 3, 2 / 3])
     assert np.isnan(high[1]).all()
+
+
+def test_gene_effect_gives_held_lines_the_prediction_on_its_genes():
+    measured = pd.DataFrame(
+        {"A": [1.0, 2.0, 3.0], "B": [4.0, 5.0, 6.0], "C": [7.0, 8.0, 9.0]},
+        index=["FIT", "HELD", "HELD_NO_PRED"],
+    )
+    predicted = pd.DataFrame(
+        {"A": [-1.0, -2.0], "B": [-3.0, -4.0]}, index=["HELD", "X"]
+    )
+    out = kebabci.gene_effect(measured, predicted, ["HELD", "HELD_NO_PRED"])
+    # fit lines keep measured values, held lines read the prediction, genes are cut
+    assert list(out.columns) == ["A", "B"]
+    assert out.loc["FIT"].tolist() == [1.0, 4.0]
+    assert out.loc["HELD"].tolist() == [-1.0, -3.0]
+    # a held line without a prediction is absent: its rows are not covered
+    assert set(out.index) == {"FIT", "HELD"}
