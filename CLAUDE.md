@@ -31,9 +31,9 @@ Replace this section on every update; history lives in `results/` and the protoc
   null; on partner pairs conditional − ablated −0.004 / −0.004; head 0.383 / 0.328 < training SL fraction. Next: [PIE as the counterfactual predictor, the per-gene reader, single cells](docs/specs/2026-11-12-pie-and-single-cell-plan.md).
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels in `data/sl_studies/benchmark_v2` (H20);
   headline = recall in the top 10% of genetic two-class screens, averaged over screens, studies, then lines (77 lines,
-  44/17/16, placed by hand). 2026-11-05, val / test: pair identity 0.524 / 0.495 leads; KG4SL (official code,
-  `hpc/kg4sl`) 0.352 / 0.306 learns the training pairs (label-flip AUROC 0.37 / 0.34); GeneEffect scorers 0.27–0.41, at
-  random on label flips; labels 0.96 / 0.92, random 0.09 / 0.11. Cilantro-SL scores 1.5% of rows: 0.113 / 0.115 (card §4).
+  44/17/16, placed by hand). 2026-11-13, val / test: the training SL fraction 0.524 / 0.495 leads; Kebabci on predicted
+  GeneEffect 0.343 / 0.359, KG4SL 0.352 / 0.306, De Kegel 0.270 / 0.267, PARIS 0.208 / 0.189, MiT4SL 0.144 / 0.120,
+  Cilantro-SL 0.113 / 0.115, SLIdR 0.086 / 0.097; none follows context; labels 0.96 / 0.92, random 0.09 / 0.11 (card §4).
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands

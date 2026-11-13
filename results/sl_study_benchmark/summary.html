@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Multi-Study SL Benchmark</title>
+<title>SL Benchmark Baselines</title>
 <style>
 /* Layout: one reading column, a verdict ledger up top, then one section per stage with paper-style tables. */
 :root {
@@ -101,129 +101,150 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 
 .nl { font-weight: 400; color: var(--muted); font-size: 0.72rem; }
 thead th { white-space: normal; min-width: 4.2rem; }
+
+/* report tables */
+.wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+caption { caption-side: top; text-align: left; padding: 10px 10px 8px; font-size: 0.88rem; color: var(--muted); max-width: 90ch; }
+code { overflow-wrap: anywhere; }
+main > * { min-width: 0; }
+ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; max-width: 80ch; }
 </style>
 </head>
 <body>
 <main>
 <header>
+<p class="eyebrow">Stage two · SL benchmark</p>
 <h1>Multi-Study SL Benchmark: Baselines</h1>
-<p class="meta">Run <code>benchmark_baselines_20261104</code> on the H20 (port 30838), code <code>9d9f117</code>, seed 0.
-Data card: <a href="../../docs/data/sl-benchmark.html">SL benchmark</a>.</p>
+<p class="meta">Run <code>benchmark_baselines_all_seed0_v2</code> on the H20 (port 30838), code <code>aee1417</code>, seed 0,
+2026-11-13. Data card: <a href="../../docs/data/sl-benchmark.html">SL benchmark</a> (§4 describes each baseline).</p>
 </header>
-
 <section>
 <h2>Question</h2>
-<p>Stage two ranks the SL partners of a gene in a held-out cell line. Before a stage-two head is trained, this run
-asks how far simple scorers go on the multi-study benchmark, and whether stage one's predicted GeneEffect adds
-anything to a gene's mean.</p>
+<p class="prose">How well do published SL prediction methods rank SL pairs in held-out cell lines of the multi-study
+benchmark? The control is the training SL fraction: the share of the same study's training lines that called the
+pair SL. A model that reads the line must beat this control before it can show context.</p>
 </section>
-
 <section>
 <h2>Benchmark</h2>
-<ul>
-<li>58 studies, 310 lists (a list is the pairs one study tested in one line), 135 lines. 82 lines have prepared basal
-scRNA, a side in the SL split and a list with both classes: 50 train, 16 validation, 16 test.</li>
-<li>The SL split (stage two only) draws lines with and without GeneEffect. Validation: 14 lines with GeneEffect and 2
-without; test: 13 and 3. A screened line that shares a patient with a drawn line goes to the same side.</li>
-<li>A list's negatives are tested and not called; they are not true negatives. A row is scored only where every
-scorer can read both genes, so the positive counts below are smaller than the lists' counts.</li>
+<ul class="plain">
+<li>Labels: <code>data/sl_studies/benchmark_v2</code> on the H20; the SL split
+(<code>configs/benchmarks/cell_line_sl_split.json</code>) places 77 lines by hand, 44 train, 17 validation and 16 test.</li>
+<li>A screen is the set of pairs that one study tested in one line with one method. The headline uses the genetic
+screens with both classes: recall in the top 10% of each screen, averaged over screens, then studies, then lines.</li>
+<li>Negatives are tested and not called; they are not true negatives.</li>
 </ul>
 </section>
-
 <section>
 <h2>Rows</h2>
-<ul>
-<li><b>Stage one, production fit</b>: the default linear model (the row the stage-one benchmark chose), fitted
-once on all 1001 labelled lines with no validation set. It predicts GeneEffect for every single-cell line:
-in sample for the lines with GeneEffect, out of sample for the 17 lines without. It leaves out
-HAP1, because HAP1 shares a patient with eHAP (an SL test line without GeneEffect). The score of a pair is minus the sum
-of the two genes' predicted GeneEffect.</li>
-<li><b>Pan-essentiality</b>: the same sum with each gene's mean GeneEffect over the SL training lines.</li>
-<li><b>Pair identity</b> (control): the pair's hit rate in the same study's training lines.</li>
-<li><b>Measured GeneEffect</b> (reference, not a model): the line's own DepMap GeneEffect; only lines with GeneEffect
-have it.</li>
+<ul class="plain">
+<li><b>KG4SL</b> (official code): a graph neural network on the SynLethKG knowledge graph, trained on the training lines' pairs.</li>
+<li><b>Cilantro-SL</b> (official code, refitted): Geneformer deletion embeddings and an MLP; it scores a pair only when both genes are in the line's top 2,048 tokens.</li>
+<li><b>PARIS</b> (Python port of the R code): random forests of each gene's GeneEffect on bulk expression in the training-side lines.</li>
+<li><b>SLIdR</b> (Python port of the R code): a rank test of the partner's GeneEffect in lines where the other gene is mutated, inside the lineage.</li>
+<li><b>De Kegel 2021 paralog classifier</b>: the released scores (Table S8).</li>
+<li><b>Kebabci 2026 paralog classifier</b> (official code, refitted on measured GeneEffect). The baseline row reads stage one's predicted GeneEffect (the linear expression model) in the held-out lines; the reference row reads measured GeneEffect.</li>
+<li><b>MiT4SL</b> (official code and protocol, refitted): a graph model on PrimeKG with a PPI graph of each line.</li>
+<li>Controls and references: the training SL fraction, pan-essentiality (gene mean GeneEffect), stage one's predicted
+GeneEffect, measured GeneEffect, the labels (the ceiling) and a random score. Rows that score only part of the
+held-out pairs give the other pairs one fill score (see the card).</li>
 </ul>
 </section>
-
 <section>
 <h2>What ran</h2>
-<div class="wrap"><table><thead><tr><th>Step</th><th>Finished (UTC)</th></tr></thead><tbody>
-<tr><td>Extra sources, waves 1 and 2 again (emtab13204, gse311521)</td><td>15:12</td></tr>
-<tr><td>Extra sources, wave 3 (15 sources, 20 new lines)</td><td>15:13</td></tr>
-<tr><td>Membership and final split</td><td>15:23</td></tr>
-<tr><td><code>prepare</code> (20 lines encoded with Tx1, pseudo-bulk)</td><td>15:31</td></tr>
-<tr><td>SL benchmark labels</td><td>15:38</td></tr>
-<tr><td>SL split (after the sibling fix)</td><td>15:42</td></tr>
-<tr><td>Stage one, production fit</td><td>15:44</td></tr>
-<tr><td>SL baselines</td><td>15:57</td></tr>
+<p class="prose">Each baseline wrote <code>scores.parquet</code> under <code>outputs/sl/</code> (Cilantro-SL under
+<code>outputs/cilantro_reproduction/benchmark_gc95M</code>); the scorer read them all through
+<code>configs/sl/benchmark_baselines.yaml</code>. Output: <code>outputs/sl/benchmark_baselines/benchmark_baselines_all_seed0_v2/</code>;
+copied report: <a href="host/results.md">results.md</a>, <a href="host/run_config.json">run_config.json</a>. The
+per-line and per-screen tables (<code>lines.csv</code>, <code>lists.csv</code>, <code>metrics.json</code>) stay on the H20.</p>
+<div class="wrap"><table><caption>Steps and finish times (UTC).</caption>
+<thead><tr><th>Step</th><th>Finished (UTC)</th></tr></thead><tbody>
+<tr><td>KG4SL training and scores</td><td>2026-11-05 19:08</td></tr>
+<tr><td>Cilantro-SL scores (gc95M dictionary, as released)</td><td>2026-11-05 22:13</td></tr>
+<tr><td>De Kegel released scores</td><td>2026-11-12 16:19</td></tr>
+<tr><td>SLIdR</td><td>2026-11-12 16:26</td></tr>
+<tr><td>Kebabci, measured GeneEffect (reference)</td><td>2026-11-12 17:53</td></tr>
+<tr><td>MiT4SL (20 epochs, one GPU)</td><td>2026-11-12 19:58</td></tr>
+<tr><td>Kebabci, stage one's predicted GeneEffect</td><td>2026-11-13 01:16</td></tr>
+<tr><td>PARIS, four shards on ports 30838 and 30757</td><td>2026-11-13 06:49</td></tr>
+<tr><td>PARIS merge</td><td>2026-11-13 06:50</td></tr>
+<tr><td>Scorer (<code>hpc/run.sh sl-baselines</code>)</td><td>2026-11-13 06:52</td></tr>
 </tbody></table></div>
-<p class="small">Host report: <a href="host/baselines_results.md">results.md</a>,
-<a href="host/baselines_metrics.json">metrics.json</a>, <a href="host/baselines_lines.csv">lines.csv</a>,
-<a href="host/production.json">production.json</a>.</p>
 </section>
-
 <section>
 <h2>Results</h2>
-<p>Recall in the top 10%: the fraction of a line's known positives (pooled over its lists) that the scorer ranks in
-the top 10% of their own list; a random ranking gives 0.10. The value is the mean over lines.</p>
-<div class="wrap"><table><caption>Validation: recall in the top 10% (higher is better). Best non-reference row in bold.</caption><thead><tr><th>Row</th><th class="num">All lines</th><th class="num">With GeneEffect</th><th class="num">Without GeneEffect</th><th class="num">Cancer</th><th class="num">Non-cancer</th></tr></thead><tbody>
-<tr><td>Stage one, production fit (linear model)</td><td class="num">0.319<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">0.331<br><span class="small">14 lines, 2,148 pos.</span></td><td class="num">0.235<br><span class="small">2 lines, 233 pos.</span></td><td class="num">0.319<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Pan-essentiality (gene mean)</td><td class="num">0.322<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">0.333<br><span class="small">14 lines, 2,148 pos.</span></td><td class="num">0.240<br><span class="small">2 lines, 233 pos.</span></td><td class="num">0.322<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Pair identity (control)</td><td class="num"><b>0.588</b><br><span class="small">15 lines, 2,084 pos.</span></td><td class="num"><b>0.632</b><br><span class="small">13 lines, 1,878 pos.</span></td><td class="num"><b>0.301</b><br><span class="small">2 lines, 206 pos.</span></td><td class="num"><b>0.588</b><br><span class="small">15 lines, 2,084 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Measured GeneEffect (reference)</td><td class="num">0.331<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">0.331<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">—</td><td class="num">0.331<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">—</td></tr>
+<p class="prose">Recall in the top 10% is the share of a screen's SL pairs that rank in its top 10% (the ceiling is lower
+when SL pairs are more than 10% of the screen). The stage-two backbone rows of the same report are left out here;
+they are in the copied report and their own records.</p>
+<div class="wrap"><table><caption>Table 1. Recall in the top 10% on the multi-study SL benchmark, mean over held-out lines (each line: the mean over its studies of the mean over their genetic screens with both classes). Higher is better; a random ranking gives 0.10. Best in bold.</caption><thead><tr><th>Model</th><th class='num'>Validation (15 lines)</th><th class='num'>Test (13 lines)</th></tr></thead><tbody>
+<tr><td>Stage one's predicted GeneEffect (linear expression model)</td><td class='num'>0.371</td><td class='num'>0.276</td></tr>
+<tr><td>Training SL fraction (share of the study's training lines that called the pair SL)</td><td class='num'><b>0.524</b></td><td class='num'><b>0.495</b></td></tr>
+<tr><td>Pan-essentiality (gene mean GeneEffect)</td><td class='num'>0.369</td><td class='num'>0.276</td></tr>
+<tr><td>Measured GeneEffect (reference, lines with GeneEffect)</td><td class='num'>0.412</td><td class='num'>0.269</td></tr>
+<tr><td>Labels as the score (check: the ceiling)</td><td class='num'>0.964</td><td class='num'>0.920</td></tr>
+<tr><td>Random score (check: about 0.10)</td><td class='num'>0.093</td><td class='num'>0.106</td></tr>
+<tr><td>KG4SL (knowledge graph, official code, trained on the training lines)</td><td class='num'>0.352</td><td class='num'>0.306</td></tr>
+<tr><td>Cilantro-SL (Geneformer deletions, official code, refitted)</td><td class='num'>0.113</td><td class='num'>0.115</td></tr>
+<tr><td>PARIS (random-forest dependency pairs, Python port of the R code)</td><td class='num'>0.208</td><td class='num'>0.189</td></tr>
+<tr><td>SLIdR (mutation-dependency test, Python port of the R code)</td><td class='num'>0.086</td><td class='num'>0.097</td></tr>
+<tr><td>De Kegel 2021 paralog classifier (released scores)</td><td class='num'>0.270</td><td class='num'>0.267</td></tr>
+<tr><td>Kebabci 2026 paralog classifier (reads measured GeneEffect, reference, official code, refitted)</td><td class='num'>0.283</td><td class='num'>0.270</td></tr>
+<tr><td>Kebabci 2026 paralog classifier (stage one's predicted GeneEffect in the held-out lines, official code, refitted)</td><td class='num'>0.343</td><td class='num'>0.359</td></tr>
+<tr><td>MiT4SL (cell-line-specific graph model, official code, refitted)</td><td class='num'>0.144</td><td class='num'>0.120</td></tr>
 </tbody></table></div>
-<div class="wrap"><table><caption>Test: recall in the top 10% (higher is better). Best non-reference row in bold.</caption><thead><tr><th>Row</th><th class="num">All lines</th><th class="num">With GeneEffect</th><th class="num">Without GeneEffect</th><th class="num">Cancer</th><th class="num">Non-cancer</th></tr></thead><tbody>
-<tr><td>Stage one, production fit (linear model)</td><td class="num">0.268<br><span class="small">16 lines, 7,644 pos.</span></td><td class="num">0.283<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num"><b>0.203</b><br><span class="small">3 lines, 446 pos.</span></td><td class="num">0.263<br><span class="small">14 lines, 7,199 pos.</span></td><td class="num"><b>0.305</b><br><span class="small">2 lines, 445 pos.</span></td></tr>
-<tr><td>Pan-essentiality (gene mean)</td><td class="num">0.259<br><span class="small">16 lines, 7,644 pos.</span></td><td class="num">0.275<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">0.192<br><span class="small">3 lines, 446 pos.</span></td><td class="num">0.255<br><span class="small">14 lines, 7,199 pos.</span></td><td class="num">0.289<br><span class="small">2 lines, 445 pos.</span></td></tr>
-<tr><td>Pair identity (control)</td><td class="num"><b>0.465</b><br><span class="small">14 lines, 5,643 pos.</span></td><td class="num"><b>0.521</b><br><span class="small">12 lines, 5,587 pos.</span></td><td class="num">0.129<br><span class="small">2 lines, 56 pos.</span></td><td class="num"><b>0.489</b><br><span class="small">13 lines, 5,588 pos.</span></td><td class="num">0.158<br><span class="small">1 line, 55 pos.</span></td></tr>
-<tr><td>Measured GeneEffect (reference)</td><td class="num">0.266<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">0.266<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">—</td><td class="num">0.266<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">—</td></tr>
+<div class="wrap"><table><caption>Table 2. Difference from the training SL fraction in recall in the top 10%, mean over lines, with a 95% bootstrap interval over lines. Higher is better.</caption><thead><tr><th>Model − training SL fraction</th><th class='num'>Validation</th><th class='num'>Test</th></tr></thead><tbody>
+<tr><td>Stage one's predicted GeneEffect (linear expression model)</td><td class='num'>-0.162 [-0.289, -0.045]</td><td class='num'>-0.219 [-0.337, -0.095]</td></tr>
+<tr><td>Pan-essentiality (gene mean GeneEffect)</td><td class='num'>-0.164 [-0.298, -0.060]</td><td class='num'>-0.220 [-0.344, -0.092]</td></tr>
+<tr><td>Measured GeneEffect (reference, lines with GeneEffect)</td><td class='num'>-0.194 [-0.340, -0.062]</td><td class='num'>-0.258 [-0.393, -0.114]</td></tr>
+<tr><td>KG4SL (knowledge graph, official code, trained on the training lines)</td><td class='num'>-0.165 [-0.253, -0.068]</td><td class='num'>-0.166 [-0.252, -0.083]</td></tr>
+<tr><td>Cilantro-SL (Geneformer deletions, official code, refitted)</td><td class='num'>-0.410 [-0.546, -0.261]</td><td class='num'>-0.379 [-0.495, -0.258]</td></tr>
+<tr><td>PARIS (random-forest dependency pairs, Python port of the R code)</td><td class='num'>-0.322 [-0.434, -0.203]</td><td class='num'>-0.302 [-0.398, -0.210]</td></tr>
+<tr><td>SLIdR (mutation-dependency test, Python port of the R code)</td><td class='num'>-0.437 [-0.590, -0.292]</td><td class='num'>-0.399 [-0.525, -0.265]</td></tr>
+<tr><td>De Kegel 2021 paralog classifier (released scores)</td><td class='num'>-0.249 [-0.331, -0.169]</td><td class='num'>-0.212 [-0.276, -0.134]</td></tr>
+<tr><td>Kebabci 2026 paralog classifier (reads measured GeneEffect, reference, official code, refitted)</td><td class='num'>-0.217 [-0.308, -0.134]</td><td class='num'>-0.186 [-0.276, -0.099]</td></tr>
+<tr><td>Kebabci 2026 paralog classifier (stage one's predicted GeneEffect in the held-out lines, official code, refitted)</td><td class='num'>-0.181 [-0.254, -0.109]</td><td class='num'>-0.121 [-0.177, -0.065]</td></tr>
+<tr><td>MiT4SL (cell-line-specific graph model, official code, refitted)</td><td class='num'>-0.384 [-0.502, -0.251]</td><td class='num'>-0.373 [-0.493, -0.241]</td></tr>
 </tbody></table></div>
-<div class="wrap"><table><caption>Validation: recall in the top 10% minus pair identity, mean over lines that both rows score, with a 95% interval from resampling lines. Higher is better; 0 is the control.</caption><thead><tr><th>Row</th><th class="num">All lines</th><th class="num">With GeneEffect</th><th class="num">Without GeneEffect</th><th class="num">Cancer</th><th class="num">Non-cancer</th></tr></thead><tbody>
-<tr><td>Stage one, production fit (linear model)</td><td class="num">-0.270<br><span class="small">[-0.430, -0.135]</span></td><td class="num">-0.301<br><span class="small">[-0.478, -0.131]</span></td><td class="num">-0.065<br><span class="small">[-0.111, -0.019]</span></td><td class="num">-0.270<br><span class="small">[-0.412, -0.122]</span></td><td class="num">—</td></tr>
-<tr><td>Pan-essentiality (gene mean)</td><td class="num">-0.267<br><span class="small">[-0.420, -0.128]</span></td><td class="num">-0.299<br><span class="small">[-0.475, -0.149]</span></td><td class="num">-0.060<br><span class="small">[-0.102, -0.019]</span></td><td class="num">-0.267<br><span class="small">[-0.422, -0.139]</span></td><td class="num">—</td></tr>
-<tr><td>Measured GeneEffect (reference)</td><td class="num">-0.275<br><span class="small">[-0.400, -0.146]</span></td><td class="num">-0.275<br><span class="small">[-0.406, -0.159]</span></td><td class="num">—</td><td class="num">-0.275<br><span class="small">[-0.394, -0.158]</span></td><td class="num">—</td></tr>
+<div class="wrap"><table><caption>Table 3. Recall in the top 10% for each stratum and subset of held-out pairs, ranked inside it in each screen, mean over lines (validation / test). Higher is better. Held-out rows per subset: partner pairs 81,657 (15.0%); no gene a dependency alone 286,650 (52.7%).</caption><thead><tr><th>Model</th><th class='num'>Seen pair, label agrees with the training lines</th><th class='num'>Seen pair, label differs from the training lines</th><th class='num'>New pair, both genes seen</th><th class='num'>Partner pairs</th><th class='num'>No gene a dependency alone</th></tr></thead><tbody>
+<tr><td>Stage one's predicted GeneEffect (linear expression model)</td><td class='num'>0.402 / 0.314</td><td class='num'>0.100 / 0.122</td><td class='num'>0.309 / 0.231</td><td class='num'>0.280 / 0.288</td><td class='num'>0.373 / 0.249</td></tr>
+<tr><td>Training SL fraction (share of the study's training lines that called the pair SL)</td><td class='num'>0.962 / 0.926</td><td class='num'>0.001 / 0.002</td><td class='num'>0.100 / 0.100</td><td class='num'>0.548 / 0.478</td><td class='num'>0.587 / 0.511</td></tr>
+<tr><td>Pan-essentiality (gene mean GeneEffect)</td><td class='num'>0.403 / 0.317</td><td class='num'>0.100 / 0.125</td><td class='num'>0.311 / 0.250</td><td class='num'>0.273 / 0.267</td><td class='num'>0.359 / 0.254</td></tr>
+<tr><td>Measured GeneEffect (reference, lines with GeneEffect)</td><td class='num'>0.464 / 0.273</td><td class='num'>0.096 / 0.104</td><td class='num'>0.253 / 0.298</td><td class='num'>0.356 / 0.221</td><td class='num'>0.366 / 0.203</td></tr>
+<tr><td>Labels as the score (check: the ceiling)</td><td class='num'>0.962 / 0.926</td><td class='num'>0.278 / 0.243</td><td class='num'>0.842 / 0.718</td><td class='num'>0.923 / 0.864</td><td class='num'>0.953 / 0.890</td></tr>
+<tr><td>Random score (check: about 0.10)</td><td class='num'>0.119 / 0.103</td><td class='num'>0.081 / 0.087</td><td class='num'>0.103 / 0.106</td><td class='num'>0.167 / 0.073</td><td class='num'>0.094 / 0.094</td></tr>
+<tr><td>KG4SL (knowledge graph, official code, trained on the training lines)</td><td class='num'>0.521 / 0.542</td><td class='num'>0.079 / 0.081</td><td class='num'>0.278 / 0.228</td><td class='num'>0.346 / 0.297</td><td class='num'>0.359 / 0.325</td></tr>
+<tr><td>Cilantro-SL (Geneformer deletions, official code, refitted)</td><td class='num'>0.118 / 0.117</td><td class='num'>0.102 / 0.097</td><td class='num'>0.105 / 0.111</td><td class='num'>0.108 / 0.112</td><td class='num'>0.119 / 0.118</td></tr>
+<tr><td>PARIS (random-forest dependency pairs, Python port of the R code)</td><td class='num'>0.241 / 0.255</td><td class='num'>0.082 / 0.072</td><td class='num'>0.253 / 0.229</td><td class='num'>0.231 / 0.217</td><td class='num'>0.192 / 0.201</td></tr>
+<tr><td>SLIdR (mutation-dependency test, Python port of the R code)</td><td class='num'>0.094 / 0.087</td><td class='num'>0.105 / 0.111</td><td class='num'>0.092 / 0.109</td><td class='num'>0.074 / 0.109</td><td class='num'>0.095 / 0.094</td></tr>
+<tr><td>De Kegel 2021 paralog classifier (released scores)</td><td class='num'>0.350 / 0.439</td><td class='num'>0.092 / 0.084</td><td class='num'>0.223 / 0.240</td><td class='num'>0.302 / 0.268</td><td class='num'>0.317 / 0.283</td></tr>
+<tr><td>Kebabci 2026 paralog classifier (reads measured GeneEffect, reference, official code, refitted)</td><td class='num'>0.334 / 0.421</td><td class='num'>0.087 / 0.099</td><td class='num'>0.146 / 0.225</td><td class='num'>0.345 / 0.313</td><td class='num'>0.438 / 0.354</td></tr>
+<tr><td>Kebabci 2026 paralog classifier (stage one's predicted GeneEffect in the held-out lines, official code, refitted)</td><td class='num'>0.389 / 0.528</td><td class='num'>0.071 / 0.083</td><td class='num'>0.260 / 0.292</td><td class='num'>0.431 / 0.402</td><td class='num'>0.424 / 0.368</td></tr>
+<tr><td>MiT4SL (cell-line-specific graph model, official code, refitted)</td><td class='num'>0.124 / 0.181</td><td class='num'>0.101 / 0.092</td><td class='num'>0.130 / 0.171</td><td class='num'>0.123 / 0.121</td><td class='num'>0.168 / 0.125</td></tr>
 </tbody></table></div>
-<div class="wrap"><table><caption>Test: recall in the top 10% minus pair identity, mean over lines that both rows score, with a 95% interval from resampling lines. Higher is better; 0 is the control.</caption><thead><tr><th>Row</th><th class="num">All lines</th><th class="num">With GeneEffect</th><th class="num">Without GeneEffect</th><th class="num">Cancer</th><th class="num">Non-cancer</th></tr></thead><tbody>
-<tr><td>Stage one, production fit (linear model)</td><td class="num">-0.209<br><span class="small">[-0.339, -0.071]</span></td><td class="num">-0.256<br><span class="small">[-0.398, -0.129]</span></td><td class="num">+0.069<br><span class="small">[-0.100, +0.239]</span></td><td class="num">-0.244<br><span class="small">[-0.375, -0.119]</span></td><td class="num">+0.239<br><span class="small">[+0.239, +0.239]</span></td></tr>
-<tr><td>Pan-essentiality (gene mean)</td><td class="num">-0.217<br><span class="small">[-0.347, -0.078]</span></td><td class="num">-0.265<br><span class="small">[-0.407, -0.142]</span></td><td class="num">+0.071<br><span class="small">[-0.100, +0.241]</span></td><td class="num">-0.252<br><span class="small">[-0.381, -0.130]</span></td><td class="num">+0.241<br><span class="small">[+0.241, +0.241]</span></td></tr>
-<tr><td>Measured GeneEffect (reference)</td><td class="num">-0.268<br><span class="small">[-0.423, -0.132]</span></td><td class="num">-0.268<br><span class="small">[-0.432, -0.123]</span></td><td class="num">—</td><td class="num">-0.268<br><span class="small">[-0.417, -0.133]</span></td><td class="num">—</td></tr>
+<div class="wrap"><table><caption>Table 4. Recall in the top 10% (AUROC) of each model that scores only part of the held-out rows, on those rows only, beside the training SL fraction and the labels (the ceiling) on the same rows; mean over lines. Higher is better.</caption><thead><tr><th>Model</th><th class='num'>Rows covered</th><th class='num'>Validation, model</th><th class='num'>Validation, training SL fraction</th><th class='num'>Validation, labels</th><th class='num'>Test, model</th><th class='num'>Test, training SL fraction</th><th class='num'>Test, labels</th></tr></thead><tbody>
+<tr><td>KG4SL (knowledge graph, official code, trained on the training lines)</td><td class='num'>523,075 (96.2%)</td><td class='num'>0.354 (0.69)</td><td class='num'>0.523 (0.77)</td><td class='num'>0.964 (1.00)</td><td class='num'>0.306 (0.65)</td><td class='num'>0.494 (0.77)</td><td class='num'>0.919 (1.00)</td></tr>
+<tr><td>Cilantro-SL (Geneformer deletions, official code, refitted)</td><td class='num'>6,804 (1.3%)</td><td class='num'>0.357 (0.70)</td><td class='num'>0.324 (0.74)</td><td class='num'>0.764 (1.00)</td><td class='num'>0.289 (0.75)</td><td class='num'>0.394 (0.80)</td><td class='num'>0.759 (1.00)</td></tr>
+<tr><td>PARIS (random-forest dependency pairs, Python port of the R code)</td><td class='num'>511,485 (94.1%)</td><td class='num'>0.208 (0.57)</td><td class='num'>0.524 (0.77)</td><td class='num'>0.964 (1.00)</td><td class='num'>0.195 (0.58)</td><td class='num'>0.495 (0.77)</td><td class='num'>0.914 (1.00)</td></tr>
+<tr><td>SLIdR (mutation-dependency test, Python port of the R code)</td><td class='num'>94,794 (17.4%)</td><td class='num'>0.098 (0.49)</td><td class='num'>0.506 (0.75)</td><td class='num'>0.885 (1.00)</td><td class='num'>0.102 (0.51)</td><td class='num'>0.374 (0.71)</td><td class='num'>0.823 (1.00)</td></tr>
+<tr><td>De Kegel 2021 paralog classifier (released scores)</td><td class='num'>112,567 (20.7%)</td><td class='num'>0.372 (0.79)</td><td class='num'>0.686 (0.89)</td><td class='num'>0.899 (1.00)</td><td class='num'>0.372 (0.79)</td><td class='num'>0.595 (0.89)</td><td class='num'>0.865 (1.00)</td></tr>
+<tr><td>Kebabci 2026 paralog classifier (reads measured GeneEffect, reference, official code, refitted)</td><td class='num'>100,966 (18.6%)</td><td class='num'>0.661 (0.83)</td><td class='num'>0.651 (0.87)</td><td class='num'>0.888 (1.00)</td><td class='num'>0.539 (0.88)</td><td class='num'>0.601 (0.88)</td><td class='num'>0.829 (1.00)</td></tr>
+<tr><td>Kebabci 2026 paralog classifier (stage one's predicted GeneEffect in the held-out lines, official code, refitted)</td><td class='num'>108,052 (19.9%)</td><td class='num'>0.639 (0.92)</td><td class='num'>0.691 (0.89)</td><td class='num'>0.912 (1.00)</td><td class='num'>0.599 (0.90)</td><td class='num'>0.615 (0.88)</td><td class='num'>0.876 (1.00)</td></tr>
+<tr><td>MiT4SL (cell-line-specific graph model, official code, refitted)</td><td class='num'>472,797 (87.0%)</td><td class='num'>0.149 (0.60)</td><td class='num'>0.582 (0.80)</td><td class='num'>0.959 (1.00)</td><td class='num'>0.122 (0.56)</td><td class='num'>0.527 (0.79)</td><td class='num'>0.907 (1.00)</td></tr>
 </tbody></table></div>
-<div class="wrap"><table><caption>Validation: AUROC, the mean percentile of the known positives among their list's negatives (higher is better).</caption><thead><tr><th>Row</th><th class="num">All lines</th><th class="num">With GeneEffect</th><th class="num">Without GeneEffect</th><th class="num">Cancer</th><th class="num">Non-cancer</th></tr></thead><tbody>
-<tr><td>Stage one, production fit (linear model)</td><td class="num">0.683<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">0.693<br><span class="small">14 lines, 2,148 pos.</span></td><td class="num">0.614<br><span class="small">2 lines, 233 pos.</span></td><td class="num">0.683<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Pan-essentiality (gene mean)</td><td class="num">0.684<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">0.694<br><span class="small">14 lines, 2,148 pos.</span></td><td class="num"><b>0.616</b><br><span class="small">2 lines, 233 pos.</span></td><td class="num">0.684<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Pair identity (control)</td><td class="num"><b>0.808</b><br><span class="small">15 lines, 2,084 pos.</span></td><td class="num"><b>0.838</b><br><span class="small">13 lines, 1,878 pos.</span></td><td class="num">0.613<br><span class="small">2 lines, 206 pos.</span></td><td class="num"><b>0.808</b><br><span class="small">15 lines, 2,084 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Measured GeneEffect (reference)</td><td class="num">0.677<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">0.677<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">—</td><td class="num">0.677<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">—</td></tr>
-</tbody></table></div>
-<div class="wrap"><table><caption>Test: AUROC (higher is better).</caption><thead><tr><th>Row</th><th class="num">All lines</th><th class="num">With GeneEffect</th><th class="num">Without GeneEffect</th><th class="num">Cancer</th><th class="num">Non-cancer</th></tr></thead><tbody>
-<tr><td>Stage one, production fit (linear model)</td><td class="num">0.652<br><span class="small">16 lines, 7,644 pos.</span></td><td class="num">0.690<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">0.489<br><span class="small">3 lines, 446 pos.</span></td><td class="num">0.640<br><span class="small">14 lines, 7,199 pos.</span></td><td class="num"><b>0.733</b><br><span class="small">2 lines, 445 pos.</span></td></tr>
-<tr><td>Pan-essentiality (gene mean)</td><td class="num">0.650<br><span class="small">16 lines, 7,644 pos.</span></td><td class="num">0.688<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">0.486<br><span class="small">3 lines, 446 pos.</span></td><td class="num">0.638<br><span class="small">14 lines, 7,199 pos.</span></td><td class="num">0.729<br><span class="small">2 lines, 445 pos.</span></td></tr>
-<tr><td>Pair identity (control)</td><td class="num"><b>0.754</b><br><span class="small">14 lines, 5,643 pos.</span></td><td class="num"><b>0.793</b><br><span class="small">12 lines, 5,587 pos.</span></td><td class="num"><b>0.516</b><br><span class="small">2 lines, 56 pos.</span></td><td class="num"><b>0.771</b><br><span class="small">13 lines, 5,588 pos.</span></td><td class="num">0.532<br><span class="small">1 line, 55 pos.</span></td></tr>
-<tr><td>Measured GeneEffect (reference)</td><td class="num">0.661<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">0.661<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">—</td><td class="num">0.661<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">—</td></tr>
-</tbody></table></div>
-<div class="wrap"><table><caption>Validation: AUPRC divided by the positive rate, mean over lines (higher is better; 1 is random).</caption><thead><tr><th>Row</th><th class="num">All lines</th><th class="num">With GeneEffect</th><th class="num">Without GeneEffect</th><th class="num">Cancer</th><th class="num">Non-cancer</th></tr></thead><tbody>
-<tr><td>Stage one, production fit (linear model)</td><td class="num">4.15<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">4.42<br><span class="small">14 lines, 2,148 pos.</span></td><td class="num">2.25<br><span class="small">2 lines, 233 pos.</span></td><td class="num">4.15<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Pan-essentiality (gene mean)</td><td class="num">4.07<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">4.33<br><span class="small">14 lines, 2,148 pos.</span></td><td class="num">2.30<br><span class="small">2 lines, 233 pos.</span></td><td class="num">4.07<br><span class="small">16 lines, 2,381 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Pair identity (control)</td><td class="num"><b>244.00</b><br><span class="small">15 lines, 2,084 pos.</span></td><td class="num"><b>279.59</b><br><span class="small">13 lines, 1,878 pos.</span></td><td class="num"><b>12.69</b><br><span class="small">2 lines, 206 pos.</span></td><td class="num"><b>244.00</b><br><span class="small">15 lines, 2,084 pos.</span></td><td class="num">—</td></tr>
-<tr><td>Measured GeneEffect (reference)</td><td class="num">6.05<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">6.05<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">—</td><td class="num">6.05<br><span class="small">14 lines, 2,137 pos.</span></td><td class="num">—</td></tr>
-</tbody></table></div>
-<div class="wrap"><table><caption>Test: AUPRC divided by the positive rate (higher is better; 1 is random).</caption><thead><tr><th>Row</th><th class="num">All lines</th><th class="num">With GeneEffect</th><th class="num">Without GeneEffect</th><th class="num">Cancer</th><th class="num">Non-cancer</th></tr></thead><tbody>
-<tr><td>Stage one, production fit (linear model)</td><td class="num">3.66<br><span class="small">16 lines, 7,644 pos.</span></td><td class="num">3.47<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">4.45<br><span class="small">3 lines, 446 pos.</span></td><td class="num">3.30<br><span class="small">14 lines, 7,199 pos.</span></td><td class="num">6.18<br><span class="small">2 lines, 445 pos.</span></td></tr>
-<tr><td>Pan-essentiality (gene mean)</td><td class="num">3.57<br><span class="small">16 lines, 7,644 pos.</span></td><td class="num">3.36<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num"><b>4.49</b><br><span class="small">3 lines, 446 pos.</span></td><td class="num">3.19<br><span class="small">14 lines, 7,199 pos.</span></td><td class="num"><b>6.24</b><br><span class="small">2 lines, 445 pos.</span></td></tr>
-<tr><td>Pair identity (control)</td><td class="num"><b>96.61</b><br><span class="small">14 lines, 5,643 pos.</span></td><td class="num"><b>112.49</b><br><span class="small">12 lines, 5,587 pos.</span></td><td class="num">1.29<br><span class="small">2 lines, 56 pos.</span></td><td class="num"><b>103.92</b><br><span class="small">13 lines, 5,588 pos.</span></td><td class="num">1.59<br><span class="small">1 line, 55 pos.</span></td></tr>
-<tr><td>Measured GeneEffect (reference)</td><td class="num">3.83<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">3.83<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">—</td><td class="num">3.83<br><span class="small">13 lines, 7,198 pos.</span></td><td class="num">—</td></tr>
-</tbody></table></div>
-</section>
 
+</section>
 <section>
 <h2>Reading</h2>
-<ul>
-<li><b>Pair identity wins on every group with enough lines.</b> On test, all lines: 0.465 against 0.268 for stage one;
-the gap is −0.209 [−0.339, −0.071]. Most of the benchmark's signal is the same pairs called again in other lines.</li>
-<li><b>Stage one's prediction adds nothing over the gene mean.</b> Its recall is within 0.02 of pan-essentiality on
-every group, and the measured GeneEffect does no better.</li>
-<li><b>The lines without GeneEffect give no conclusion.</b> They are 2 validation and 3 test lines (446 test
-positives). Stage two trains mostly on in-sample stage-one inputs, so the number for this group is a low estimate; the
-group is small and mostly non-cancer.</li>
+<ul class="reading">
+<li><b>No baseline reaches the training SL fraction.</b> Every interval in Table 2 is below zero on both splits.</li>
+<li><b>The best baseline is the Kebabci paralog classifier on stage one's predicted GeneEffect</b> (0.343 / 0.359,
+Table 1). On its own rows it comes near the training SL fraction (0.599 against 0.615 on test) with a higher AUROC
+(0.90 against 0.88, Table 4).</li>
+<li><b>Predicted GeneEffect does not lose to measured GeneEffect in Kebabci.</b> The predicted version also scores
+held-out lines without measured GeneEffect, so it is higher overall (0.343 / 0.359 against 0.283 / 0.270).</li>
+<li><b>No baseline follows context.</b> On seen pairs whose label differs from the training lines, every baseline is
+near random (0.07–0.11; the random score gives 0.08 / 0.09, Table 3).</li>
+<li><b>PARIS, MiT4SL, Cilantro-SL and SLIdR are near random on all rows</b> (0.09–0.21, Table 1). On its own rows SLIdR
+is at random (AUROC 0.49 / 0.51) and PARIS only a little above it (0.57 / 0.58, Table 4).</li>
 </ul>
 </section>
 </main>
