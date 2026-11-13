@@ -286,7 +286,8 @@ validation, report both, experiment code reports and people decide). The SL-spec
   "Non-Cancerous", or `non_cancer` in the identity table) separately.
 - (2026-11-04) The multi-study benchmark's negatives are tested and not called, so its headline is recall in the
   top 10% of each list (positives pooled per line, mean over lines, minus pair identity per line); AUROC and AUPRC
-  over the positive rate follow.
+  over the positive rate follow. (2026-11-13) A screen's recall divides by min(SL pairs, top 10% of the screen), so
+  a perfect ranking gives 1 in every screen; before, a screen with more than 10% SL pairs capped it below 1.
 - Fit the standardiser, any calibrator and any threshold on the training side only.
   **Per-context z-scoring of $\hat y$ is forbidden**: it consumes the test context's own
   distribution and erases the quantity under test.
