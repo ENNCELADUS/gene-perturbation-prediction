@@ -494,3 +494,39 @@ and 3. Each part changes one thing of the §11 backbone and is its own run.
   validation), intervals across zero. Co-detection adds nothing beyond each gene's expression: the head with it minus
   the head with shuffled cells is +0.004 / +0.001, and the real log ratio hardly agrees with the shuffled one (0.047)
   at a median of 292 cells per line. By the plan's decision table, neither part joins the backbone.
+
+## 14. The PIE editor (2026-11-13)
+
+`src/experiments/sl/pie_pass.py` (`hpc/run.sh sl-pie-pass`, `.venv-pie`), `src/experiments/sl/pie_editor.py`
+(`hpc/run.sh sl-pie-editor`), `configs/sl/pie_editor.yaml`, `configs/sl/benchmark_pie_editor.yaml`; plan
+[round A](specs/2026-11-12-pie-and-single-cell-plan.md). This module changes one slot of §11, the context editor. The
+reader (the default linear expression model of the backbone run), the line encoder, the conditional score and the
+head's inputs do not change.
+
+- **PIE's input.** The 86 screened SL lines (the lines of the backbone run's rows) in a PIE root of their own
+  (`data/sl_pie/v1`). PIE's input is the mean over a line's cells of log1p CP10K, from the ladder's cell files. The
+  decoded genes are the reader's 6,523 expression genes. The context text of a line is PIE's released Cellosaurus
+  text where PIE has one; a line without text takes PIE's no-source path.
+- **PIE's change.** The frozen cross-dataset checkpoint, DepMap source masked, predicts each line's profile change
+  after each lost gene (gene A of a row, gene B of a combinatorial row; 13,950 genes with a PIE key) in every
+  screened line: the expectation of its delta-p bins, a change of the mean over cells of log1p CP10K.
+- **Units.** The reader's raw row is log1p CPM of the summed UMI. Each gene's change is multiplied by the slope of the
+  least-squares line from PIE's input to the raw pseudo-bulk over the SL training lines with cells.
+- **The row after the loss.** Raw pseudo-bulk plus the scaled change, then the reader's quantile normalisation, the
+  line's bridge (its fold's for a labelled single-cell training line) and the reader. A term is B's prediction after
+  minus before. With a zero change the row and the terms are the line's own (a test and a check on the run).
+- **Rows.** PIE's profile of the line, and PIE's profile of another line (one seeded permutation of the screened
+  lines, no line keeps its own), each as the conditional score and through the logistic head (the head fitted on the
+  line's own terms, applied to the other line's). Each is reported on the rows the simple edit covers (0 elsewhere,
+  as the simple edit, for the paired differences with it) and on every row PIE can edit.
+- **Reference rows.** On the test lines Jurkat, HCT116 and HEK293T: the editor with the line's own measured
+  Perturb-seq change (PIE's `delta_p`; Replogle for Jurkat, X-Atlas/Orion for HCT116 and HEK293T) against the change
+  of another line (K562 for Jurkat; HEK293T and HCT116 for each other), on the rows whose lost genes both lines
+  perturbed. These rows are references, not models.
+- **PIE's own task.** On PIE's four Replogle folds (one line held out each): PIE's predicted response of the held-out
+  line against the mean measured response to the same perturbation in the other lines, as Pearson and Spearman over
+  genes of each (line, perturbation), on the measured response and on its deviation from that mean.
+- **Decision** (plan, after round A). PIE's profile above the simple edit and above its permuted version: PIE keeps
+  the editor job. PIE equal to its permuted version and the measured own-line profile above another line's: a
+  line-specific PIE. The measured own-line profile equal to another line's: the profile after A's loss does not
+  carry the line effect through this reader; repeat with the per-gene reader.

@@ -21,6 +21,7 @@ prints every command's arguments.
 | `sl-baselines` | baselines on the multi-study SL benchmark (`sl.benchmark_baselines`) | CPU, `.venv-pie` | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-conditional` | the modular SL backbone: round zero, the buffer-aware reader (`sl.conditional`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-pie-pass`, `sl-pie-editor` | the PIE editor of the SL backbone: PIE's profile changes, then the scores (`sl.pie_pass`, `sl.pie_editor`) | PIE on GPUs (`.venv-pie`); the editor on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 
 GPU use, measured on 30838 in October 2026 (one H20 per job unless noted; SM is `nvidia-smi dmon`'s busy share):
 
@@ -364,6 +365,30 @@ two DepMap screens of one line, the head's penalties) to `outputs/sl/conditional
 `configs/sl/conditional.yaml` reads the default linear expression model (round zero); `configs/sl/conditional_buffer.yaml`
 reads the buffer-aware reader (the partner block added). The terms come from each line's edited rows; a full run
 queries each line and each lost gene once.
+
+`sl-pie-pass` (`src.experiments.sl.pie_pass`, `.venv-pie`, SL protocol §13) and `sl-pie-editor`
+(`src.experiments.sl.pie_editor`, CPU) are the PIE editor. `configs/sl/pie_editor.yaml` names the PIE root
+(`data/sl_pie/v1`, not the ladder root). The pass's steps: `tables` writes `lines.parquet`, `genes.parquet` and
+`mean/pie_input.parquet` for the 86 screened SL lines from the ladder's cell files (the panel is the reader's 6,523
+expression genes); `pass` writes PIE's predicted change of every screened line after each lost gene,
+`pie/change/<gene>.npy` (lines x panel, float16), one process per GPU with `--shard I/4`; `measured` writes the
+measured Perturb-seq changes of the reference contexts (`measured/`); `rescore` scores PIE's cross-dataset checkpoint on
+Replogle with the DepMap source masked; `own_task` scores PIE's four Replogle folds against the mean response of the
+other lines (`pie/own_task/pairs.csv`). Each step records into `pie/run.json`. The context text of the SL split's lines
+is built on the Mac (`src.data.builders.cellosaurus_context --split configs/benchmarks/cell_line_sl_split.json`, with
+`--cellosaurus-release` set to the release the API serves) and copied to `data/sl_pie/v1/context_text/` with a SHA-256
+check. `sl-pie-editor` writes `scores/<row>.parquet`, `metrics.json` (the zero-change check, coverage, how far the
+change moves a row after normalisation) and `results.md` to `outputs/sl/pie_editor/<run id>/`;
+`configs/sl/benchmark_pie_editor.yaml` is the harness with its rows.
+
+```bash
+hpc/run.sh sl-pie-pass configs/sl/pie_editor.yaml --steps tables
+for i in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$i OMP_NUM_THREADS=8 setsid nohup hpc/run.sh sl-pie-pass \
+  configs/sl/pie_editor.yaml --steps pass --shard $i/4 > outputs/launches/sl_pie_pass_$i.log 2>&1 < /dev/null & done
+hpc/run.sh sl-pie-pass configs/sl/pie_editor.yaml --steps measured,rescore,own_task
+OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 hpc/run.sh sl-pie-editor configs/sl/pie_editor.yaml --run-id pie_editor_seed0
+hpc/run.sh sl-baselines configs/sl/benchmark_pie_editor.yaml --run-id benchmark_pie_editor_seed0
+```
 
 `sl-baselines` (`src.experiments.sl.benchmark_baselines`) reads the multi-study SL benchmark's labels, the SL split
 and the backbone's GeneEffect table ([data card](../docs/data/sl-benchmark.html)). It scores each validation and test
