@@ -1,4 +1,5 @@
-# The control of gene_reader_expression_strong_decay.yaml (protocol §17). The control: the encoder's line input permuted across lines (a seeded permutation); the linear model's
+# The control of gene_reader_expression_strong_decay.yaml (protocol §18): the encoder's line input permuted across lines
+# (a seeded permutation); the linear model's
 # prediction, the targets and the genes stay each line's own.
 kind: train
 task: gene_reader
