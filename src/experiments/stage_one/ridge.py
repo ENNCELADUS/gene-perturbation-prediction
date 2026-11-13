@@ -123,6 +123,8 @@ def cached_ridge(
     computed and written with the fingerprint."""
     from src.data.io import jsonable
 
+    if not penalties:  # a report without a ridge row reads no frozen-PIE delta
+        return {}
     folder = out / "dh_ridge"
     fingerprint = jsonable(ridge_fingerprint(setup, ladder_config))
     record = folder / "fingerprint.json"
