@@ -93,6 +93,8 @@ def _write_pie(root: Path, rng: np.random.Generator) -> np.ndarray:
 def world(tmp_path_factory):
     root = tmp_path_factory.mktemp("stage_one")
     config = build_world(root)
+    # Three folds: a fold's own linear model predicts its other folds out of fold.
+    config["frame"] = {"folds": 3}
     rng = np.random.default_rng(3)
     text_dir = Path(config["paths"]["gene_text"])
     keys = json.loads((text_dir / "meta.json").read_text())["keys"]
@@ -384,7 +386,7 @@ def test_linear_model_reference_components_reader_and_report(world):
         root, "components_reader", linear_model_run=str(linear_model_dir)
     )
     torch.manual_seed(0)
-    for fold in (None, 0, 1):
+    for fold in (None, 0, 1, 2):
         stage_one.run(reader_path, None, fold, "cpu")
     report = {
         "kind": "report",
@@ -502,7 +504,7 @@ def _check_reads_are_bound(
     run_dir = root / "outputs" / "architecture" / "components_reader"
     bound = run_dir / "run_config.json"
     original = bound.read_text()
-    assert stage_one.queue([reader_path], ["0"], ["main", "0", "1"]) == 0  # all done
+    assert stage_one.queue([reader_path], ["0"], ["main", "0", "1", "2"]) == 0  # done
     changed = json.loads(original)
     changed["config"]["run"]["train"]["learning_rate"] = 0.5
     bound.write_text(json.dumps(changed))
@@ -655,7 +657,9 @@ def test_film_reads_the_linear_models_prediction_as_a_pair_feature(world):
         "linear_model_run": linear_model_dir,
         "ladder_config": str(root / "ladder.yaml"),
     }
-    feature = device_inputs.linear_model_feature(setup, data, targets.m_g)
+    feature = device_inputs.linear_model_feature(
+        setup, data, targets.m_g, ladder.panel, None
+    )
     val = ladder.role_lines("val")[0]
     written = pd.read_parquet(Path(linear_model_dir) / "predictions_val.parquet").loc[
         val
@@ -705,7 +709,7 @@ def test_film_reads_the_linear_models_prediction_as_a_pair_feature(world):
         ),
         (
             {"input": "lineage", "linear_model_run": "somewhere"},
-            "for components, linear_model",
+            "for components, expression, linear_model",
         ),
     ],
 )
@@ -716,3 +720,96 @@ def test_the_linear_model_run_is_required_or_refused_by_input(tmp_path, edit, me
     path.write_text(yaml.safe_dump(config))
     with pytest.raises(ValueError, match=message):
         load_stage_one_config(path)
+
+
+def test_the_per_gene_reader_starts_at_the_linear_model(world):
+    """At epoch 0 the per-gene reader is the linear model on every selective gene
+    (also outside the panel); it reads no gene source and no context text; its
+    control permutes the line input only; a fold run reads its fold's own fit."""
+    from src.eval.accuracy import wide_accuracy
+    from src.experiments.stage_one.linear_model_reference import run as linear_model_run
+    from src.training.stage_one_trainer import predict
+
+    root, ladder_root = world[0], world[1]
+    config = yaml.safe_load(
+        (CONFIGS.parent / "gene_reader" / "linear_model_reference.yaml").read_text()
+    )
+    config.update(
+        output_root=str(root / "outputs"), ladder_config=str(root / "ladder.yaml")
+    )
+    linear_model_dir = linear_model_run(config, "gene_reader_seed0")
+    setup = _setup(world)
+    ladder = setup.ladder
+    selective = [g for g, s in zip(ladder.genes.index, ladder.genes["selective"]) if s]
+    assert set(selective) - set(ladder.panel)  # the world has one outside the panel
+    paths = {
+        name: _config(
+            root, f"../gene_reader/{name}", linear_model_run=str(linear_model_dir)
+        )
+        for name in ("gene_reader_components", "permuted_gene_reader_expression")
+    }
+    val = list(VAL)
+    written = pd.read_parquet(linear_model_dir / "predictions_val.parquet").loc[val]
+    expected = wide_accuracy(written, setup.truth(val), setup.definitions)
+    aside = [ladder_root / "gene_sources", ladder_root / "context_text"]
+    for path in aside:
+        path.rename(path.with_name(path.name + ".aside"))
+    try:
+        torch.manual_seed(0)
+        run_dir = stage_one.run(paths["gene_reader_components"], None, None, "cpu")
+        targets = setup.targets(None)
+        config = load_stage_one_config(paths["gene_reader_components"])
+        resident = device_inputs.Resident(
+            setup, config, None, targets, torch.device("cpu"), selective
+        )
+        untrained = stage_one.make_model(config, resident)
+        lines = torch.tensor([ladder.line_ids.index(m) for m in val])
+        z = predict(untrained, resident.batch, lines, len(selective), config)
+        frame = stage_one.predictions_frame(setup, targets.m_g, z, val, selective)
+        assert np.allclose(frame[selective], written[selective], atol=1e-5)
+        permuted = device_inputs.Resident(
+            setup,
+            load_stage_one_config(paths["permuted_gene_reader_expression"]),
+            None,
+            targets,
+            torch.device("cpu"),
+            selective,
+        )
+        plain = yaml.safe_load(paths["permuted_gene_reader_expression"].read_text())
+        plain["data"]["permuted"] = False
+        same = device_inputs.Resident(
+            setup, plain, None, targets, torch.device("cpu"), selective
+        )
+        assert not torch.equal(permuted.line, same.line)
+        assert sorted(map(tuple, permuted.line.tolist())) == sorted(
+            map(tuple, same.line.tolist())
+        )
+        assert torch.equal(permuted.linear_model, same.linear_model)
+        # A fold run reads the fit without its fold, with its own base.
+        fold_targets = setup.targets(0)
+        fold = device_inputs.Resident(
+            setup, config, 0, fold_targets, torch.device("cpu"), selective
+        )
+        own = pd.read_parquet(linear_model_dir / "predictions_fold0.parquet")
+        base = reader.base_prediction(ladder, fold_targets.m_g, ladder.line_ids)
+        assert np.allclose(
+            fold.linear_model.numpy(),
+            (own - base).loc[ladder.line_ids, selective].to_numpy().T,
+            atol=1e-5,
+        )
+        other = [m for m in ladder.frame if ladder.folds[m] == 1]
+        oof = pd.read_parquet(linear_model_dir / "predictions_oof.parquet")
+        assert not np.allclose(own.loc[other, selective], oof.loc[other, selective])
+    finally:
+        for path in aside:
+            path.with_name(path.name + ".aside").rename(path)
+    row = json.loads((run_dir / "row.json").read_text())
+    first = row["history"][0]
+    assert first["epoch"] == 0 and row["genes"]["count"] == len(selective)
+    for key in ("line_spearman", "within_gene_r2"):
+        assert first[f"val_{key}"] == pytest.approx(expected[key], abs=1e-5)
+    shape = (len(ladder.line_ids), len(selective), 32)
+    assert np.load(run_dir / "V.npy").shape == shape
+    for directory in ("architecture", "linear_model_input", "gene_reader"):
+        for path in (CONFIGS.parent / directory).glob("*.yaml"):
+            load_stage_one_config(path)

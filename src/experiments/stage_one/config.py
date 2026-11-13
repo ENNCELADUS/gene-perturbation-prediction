@@ -37,7 +37,7 @@ def load_ladder_config(path: Path) -> dict[str, Any]:
 # --- the stage-one model (PIE stage-one design §3.3, §4; protocol §16) -------------
 
 STAGE_ONE_KINDS = ("train", "linear_model_reference", "report")
-STAGE_ONE_ARMS = ("film", "multi_encoder", "direct_readout", "hybrid")
+STAGE_ONE_ARMS = ("film", "multi_encoder", "direct_readout", "hybrid", "gene_reader")
 STAGE_ONE_TRUNK_ARMS = ("direct_readout", "hybrid")
 #: The pair input before the FiLM layer: a frozen-PIE delta, a learned constant
 #: (``none``), a line-level reference input, or the linear model's prediction alone
@@ -46,13 +46,20 @@ STAGE_ONE_TRUNK_ARMS = ("direct_readout", "hybrid")
 #: for the selective genes only.
 STAGE_ONE_DELTAS = ("dH", "dE", "dL", "dE_full")
 STAGE_ONE_PROFILES = ("dE", "dE_full")
-#: The genes a run trains on and predicts: the decode panel, or the selective
-#: genes in it with a full-panel profile delta (the matched profile rows).
-STAGE_ONE_GENE_SETS = ("panel", "selective_full")
+#: The genes a run trains on and predicts: the decode panel, the selective
+#: genes in it with a full-panel profile delta (the matched profile rows), or every
+#: selective gene of the gene axis (the per-gene reader).
+STAGE_ONE_GENE_SETS = ("panel", "selective_full", "selective")
+#: Line-level inputs (lines x width), the same for every gene; ``expression`` is the
+#: mean channel, standardised on the run's training lines (the per-gene reader's).
+STAGE_ONE_LINE_INPUTS = ("components", "expression", "lineage", "text")
+#: The width of V that a run writes (``src.model.stage_one.VIABILITY_WIDTH``).
+VIABILITY_WIDTH = 32
 STAGE_ONE_INPUTS = (
     *STAGE_ONE_DELTAS,
     "none",
     "components",
+    "expression",
     "lineage",
     "text",
     "own_x",
@@ -108,11 +115,7 @@ def _share(value: Any, name: str) -> None:
 
 def _validate_stage_one_data(data: Mapping[str, Any]) -> None:
     sources = data["gene_sources"]
-    if (
-        not sources
-        or set(sources) - set(STAGE_ONE_GENE_SOURCES)
-        or len(set(sources)) != len(sources)
-    ):
+    if set(sources) - set(STAGE_ONE_GENE_SOURCES) or len(set(sources)) != len(sources):
         raise ValueError(
             f"data.gene_sources: distinct names from {STAGE_ONE_GENE_SOURCES}"
         )
@@ -126,8 +129,14 @@ def _validate_stage_one_data(data: Mapping[str, Any]) -> None:
     delta = data["input"] in STAGE_ONE_DELTAS
     if slots and not delta:
         raise ValueError("data.own_slots go beside a frozen-PIE delta only")
-    if data["permuted"] not in (True, False) or (data["permuted"] and not delta):
-        raise ValueError("data.permuted: a boolean, true only with a frozen-PIE delta")
+    line = data["input"] in STAGE_ONE_LINE_INPUTS
+    if data["permuted"] not in (True, False) or (
+        data["permuted"] and not (delta or line)
+    ):
+        raise ValueError(
+            "data.permuted: a boolean, true only with a frozen-PIE delta "
+            "or a line-level input"
+        )
     if data["genes"] not in STAGE_ONE_GENE_SETS:
         raise ValueError(f"data.genes must be one of {STAGE_ONE_GENE_SETS}")
     if data["input"] == "dE_full" and data["genes"] != "selective_full":
@@ -135,17 +144,18 @@ def _validate_stage_one_data(data: Mapping[str, Any]) -> None:
     # linear_model_run: the components input reads its component scores; every other
     # input reads its prediction as a pair feature (``linear_model`` alone, or beside a
     # delta).
-    if data["input"] in ("components", "linear_model") and not isinstance(
+    if data["input"] in ("components", "expression", "linear_model") and not isinstance(
         data["linear_model_run"], str
     ):
         raise ValueError(f"data.linear_model_run: required for input {data['input']}")
     if data["linear_model_run"] is not None and data["input"] not in (
         "components",
+        "expression",
         "linear_model",
         *STAGE_ONE_DELTAS,
     ):
         raise ValueError(
-            "data.linear_model_run: for components, linear_model "
+            "data.linear_model_run: for components, expression, linear_model "
             "or a frozen-PIE delta, else null"
         )
 
@@ -156,6 +166,27 @@ def _validate_stage_one_model(
     arm = model["arm"]
     if arm not in STAGE_ONE_ARMS:
         raise ValueError(f"model.arm must be one of {STAGE_ONE_ARMS}")
+    reader = arm == "gene_reader"
+    if reader == bool(data["gene_sources"]):
+        raise ValueError(
+            "data.gene_sources: none for the per-gene reader, one or more otherwise"
+        )
+    if reader != (data["genes"] == "selective"):
+        raise ValueError("data.genes selective is the per-gene reader's gene set")
+    if reader and data["input"] not in ("components", "expression"):
+        raise ValueError("the per-gene reader reads components or expression")
+    if not reader and data["input"] == "expression":
+        raise ValueError("data.input expression is the per-gene reader's")
+    if reader and (
+        data["own_slots"]
+        or model["context"] is not None
+        or model["trunk"] is not None
+        or model["gene_width"] != VIABILITY_WIDTH
+    ):
+        raise ValueError(
+            "the per-gene reader: no own slots, context or trunk, and "
+            f"model.gene_width {VIABILITY_WIDTH} (the width of V)"
+        )
     if (data["input"] in STAGE_ONE_PROFILES) != (model["state_width"] is not None):
         raise ValueError(
             "model.state_width: the profile delta's state encoder width, else null"

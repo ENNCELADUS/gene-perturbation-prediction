@@ -72,7 +72,7 @@ def test_cells_read_every_cell_with_case_blind_symbols(world):
     assert record["qc"].shape == (CELLS, len(ladder.QC_COLUMNS))
     assert np.isnan(record["qc"][:, -1]).all()  # too few cells for Scrublet
     # The cycle scores are the noise diagnosis's program scores of Tirosh's phases.
-    phases = pd.read_csv("configs/linear_model/reference/cell_cycle.tsv", sep="\t")
+    phases = pd.read_csv(root / "reference" / "cell_cycle.tsv", sep="\t")
     scoring = json.loads(
         (root / "prepared" / "pseudobulk" / "manifest.json").read_text()
     )["genes"]

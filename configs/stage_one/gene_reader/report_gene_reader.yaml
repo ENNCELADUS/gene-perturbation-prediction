@@ -1,0 +1,28 @@
+# The per-gene reader's report (protocol §17): each arm against the default linear model refitted on the frame and against
+# its control (the same arm on lines permuted). `hpc/run.sh stage-one-report CONFIG`
+# -> outputs/stage_one/gene_reader/report_gene_reader/. People read it; nothing is chosen in code.
+kind: report
+task: gene_reader
+output_root: outputs/stage_one
+ladder_config: configs/stage_one/ladder_inputs.yaml
+bootstrap_repeats: 1000
+rows:
+  - {name: base, kind: base}
+  - {name: linear model, kind: linear_model, run: outputs/stage_one/gene_reader/linear_model_reference_20261113}
+  - {name: reader on components, kind: run, config: configs/stage_one/gene_reader/gene_reader_components.yaml}
+  - {name: permuted reader on components, kind: run, config: configs/stage_one/gene_reader/permuted_gene_reader_components.yaml}
+  - {name: reader on expression, kind: run, config: configs/stage_one/gene_reader/gene_reader_expression.yaml}
+  - {name: permuted reader on expression, kind: run, config: configs/stage_one/gene_reader/permuted_gene_reader_expression.yaml}
+  - {name: reader on components with strong decay, kind: run, config: configs/stage_one/gene_reader/gene_reader_components_strong_decay.yaml}
+  - {name: permuted reader on components with strong decay, kind: run, config: configs/stage_one/gene_reader/permuted_gene_reader_components_strong_decay.yaml}
+  - {name: reader on expression with strong decay, kind: run, config: configs/stage_one/gene_reader/gene_reader_expression_strong_decay.yaml}
+  - {name: permuted reader on expression with strong decay, kind: run, config: configs/stage_one/gene_reader/permuted_gene_reader_expression_strong_decay.yaml}
+contrasts:
+  - [reader on components, linear model]
+  - [reader on components, permuted reader on components]
+  - [reader on expression, linear model]
+  - [reader on expression, permuted reader on expression]
+  - [reader on components with strong decay, linear model]
+  - [reader on components with strong decay, permuted reader on components with strong decay]
+  - [reader on expression with strong decay, linear model]
+  - [reader on expression with strong decay, permuted reader on expression with strong decay]

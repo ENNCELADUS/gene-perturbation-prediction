@@ -1,0 +1,37 @@
+# The control of gene_reader_expression.yaml (protocol §17). The control: the encoder's line input permuted across lines (a seeded permutation); the linear model's
+# prediction, the targets and the genes stay each line's own.
+kind: train
+task: gene_reader
+seed: 0
+output_root: outputs/stage_one
+data:
+  ladder_config: configs/stage_one/ladder_inputs.yaml
+  gene_sources: []
+  centre_gene_sources: false
+  input: expression
+  own_slots: []
+  permuted: true
+  linear_model_run: outputs/stage_one/gene_reader/linear_model_reference_20261113
+  genes: selective
+model:
+  arm: gene_reader
+  gene_width: 32
+  hidden: 256
+  state_width: null
+  context: null
+  trunk: null
+train:
+  max_epochs: 30
+  patience: 5
+  warmup_epochs: 1
+  learning_rate: 1.0e-3
+  weight_decay: 0.01
+  ema_decay: null
+  dependency_weight: 1.0
+  lines_per_step: 64
+  genes_per_step: 256
+  token_dropout: 0.0
+  evidence_dropout: 0.0
+eval:
+  lines_per_chunk: 64
+  genes_per_chunk: 2048

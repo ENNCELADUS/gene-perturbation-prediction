@@ -1,0 +1,9 @@
+# The per-gene reader's linear model: the default linear model (the ladder config's linear_model_config, its reference
+# row) refitted on the frame's mean channel and labels, with each fold's own predictions (predictions_fold<K>.parquet)
+# and the 128 component scores. `hpc/run.sh stage-one-linear-model CONFIG --run-id linear_model_reference_20261113`
+# (project environment, CPU).
+kind: linear_model_reference
+task: gene_reader
+seed: 0
+output_root: outputs/stage_one
+ladder_config: configs/stage_one/ladder_inputs.yaml
