@@ -67,7 +67,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `perturbation`: Fixed per-gene ESM2 vectors mapped to STATE perturbation vectors by an adapter.
 - `response`: Response prediction over STATE sentences and the response losses.
 - `response_mlp`: STATE-free response model.
-- `stage_one`: Stage-one architecture arms (PIE stage-one design §3.3; protocol §16).
+- `stage_one`: Stage-one architecture arms (PIE stage-one design §3.3; protocol §16) and the per-gene reader (protocol §18).
 - `state`: STATE driven by ESM2 perturbation tokens on log-space basal HVG cells (2000 genes in STATE's own order, through its released 2000->328 basal encoder); Tx1 embeddings never reach STATE, only the GeneEffect head's context.
 - `tx1`: Tx1-3B (Tahoe-x1) loaded from its released safetensors without flash-attn, and its basal-cell ``EncoderFn``.
 
@@ -164,7 +164,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `pie_precompute`: The frozen PIE's deltas for every line x panel gene, and on the cell-state pseudo-contexts (PIE stage-one design §3.2, §3.5; protocol §15), in ``.venv-pie``, with PIE's ``depmap_gene_effect`` token never served.
 - `pie_reproduction`: PIE reproduction (PIE stage-one design Task 1).
 - `pie_states`: The frozen PIE on cell-state pseudo-contexts (design §3.5, Task 8).
-- `linear_model_reference`: The default linear model's reference row refitted on the stage-one frame's mean channel, the like-for-like linear reference (PIE stage-one design Task 3; protocol §16), with its out-of-fold predictions and the expression components the components reader reads.
+- `linear_model_reference`: The default linear model's reference row refitted on the stage-one frame's mean channel, the like-for-like linear reference (PIE stage-one design Task 3; protocol §16), with its out-of-fold predictions, each fold's own predictions (the fold runs' input) and the expression components the components reader reads.
 - `report`: A stage-one report.
 - `resident`: What a stage-one run keeps on the device.
 - `ridge`: The per-gene ridge on the decoder-feature delta (a report row).
