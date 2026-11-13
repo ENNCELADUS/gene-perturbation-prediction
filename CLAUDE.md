@@ -18,17 +18,17 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-11-12)
+## Current state (2026-11-13)
 
 Replace this section on every update; history lives in `results/` and the protocol.
 
-- **Stage one** (PIE design, [plan](docs/specs/2026-10-17-pie-stage-one-plan.md), protocol §16): no architecture arm
-  reaches the default linear model refitted on the frame (per-line residual Spearman 0.215 validation / 0.228 test;
-  [record](results/stage_one_architecture/README.md)). FiLM reading the linear model's prediction recovers most of it
-  (0.199–0.203) but not all, and ΔE beside the linear model adds nothing that line-permuted ΔE does not
-  ([record](results/stage_one_linear_model_input/README.md)). The next build makes all current checkpoints unusable.
-- **Stage two**: modular SL backbone; buffer-aware reader (SL protocol §12, [record](results/sl_buffer_aware_reader_seed0/README.md)):
-  null; on partner pairs conditional − ablated −0.004 / −0.004; head 0.383 / 0.328 < training SL fraction. Next: [PIE as the counterfactual predictor, the per-gene reader, single cells](docs/specs/2026-11-12-pie-and-single-cell-plan.md).
+- **Stage one** (protocol §16, §18): no arm beats the default linear model refitted on the frame (per-line residual
+  Spearman 0.226 validation / 0.227 test on the frame rebuilt 2026-11-13; two screens of one line agree at 0.246). The
+  per-gene reader (linear model + `u_g · h(line)`) is null: 7 of 8 runs select epoch 0, the best gains +0.002 / +0.005
+  ([record](results/stage_one_gene_reader/README.md)); older arms: [architecture](results/stage_one_architecture/README.md),
+  [linear-model input](results/stage_one_linear_model_input/README.md). Outputs before 2026-11-13 are gone from the host.
+- **Stage two**: modular SL backbone, head 0.374 / 0.322 < training SL fraction. Three modules of the [plan](docs/specs/2026-11-12-pie-and-single-cell-plan.md) ran, all null: PIE's profile as the editor (SL protocol §14, [record](results/sl_pie_editor_seed0/README.md); below the simple edit, equal to another line's profile; 66 of 86 lines had no context text),
+  own-gene space and co-detection (§13, [record](results/sl_single_cell_inputs_seed0/README.md)). Next: test if the measured profile after A's loss holds SL signal under a fitted reader.
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels in `data/sl_studies/benchmark_v2` (H20);
   headline = recall in the top 10% of genetic two-class screens, averaged over screens, studies, then lines (77 lines,
   44/17/16, placed by hand). 2026-11-13, val / test: the training SL fraction 0.524 / 0.495 leads; Kebabci on predicted
