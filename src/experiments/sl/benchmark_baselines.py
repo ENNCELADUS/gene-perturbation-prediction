@@ -83,9 +83,30 @@ NAMES = {
     "kebabci_paralog_predicted": "Kebabci 2026 paralog classifier (stage one's "
     "predicted GeneEffect in the held-out lines, official code, refitted)",
     "mit4sl": "MiT4SL (cell-line-specific graph model, official code, refitted)",
+    # the PIE editor (configs/sl/pie_editor.yaml): PIE's predicted profile after A's
+    # loss in place of the simple edit; 0 outside the rows the simple edit covers,
+    # or (pie_all) outside the rows PIE can edit
+    "pie_conditional": "Conditional score, PIE's predicted profile after A's loss",
+    "pie_conditional_permuted": "Conditional score, PIE's predicted profile of "
+    "another line",
+    "pie_head": "Backbone head on the terms of PIE's predicted profile",
+    "pie_head_permuted": "Backbone head on the terms of PIE's predicted profile of "
+    "another line",
+    "pie_all_conditional": "Conditional score, PIE's predicted profile, every row "
+    "PIE can edit",
+    "pie_all_conditional_permuted": "Conditional score, PIE's predicted profile of "
+    "another line, every row PIE can edit",
+    "pie_all_head": "Backbone head on PIE's terms, every row PIE can edit",
+    "pie_all_head_permuted": "Backbone head on PIE's terms of another line, every "
+    "row PIE can edit",
+    "measured_own": "Conditional score, measured Perturb-seq profile of the line "
+    "(reference)",
+    "measured_other": "Conditional score, measured Perturb-seq profile of another "
+    "line (reference)",
 }
 #: Scorers that check the code or give a reference; never the best row.
-NOT_MODELS = {"measured_geneeffect", "kebabci_paralog", "labels", "random"}
+NOT_MODELS = {"measured_geneeffect", "kebabci_paralog", "labels", "random",
+              "measured_own", "measured_other"}  # fmt: skip
 #: Scorers ranked beside each partial scorer on the rows it covers (Table 4).
 COVERED_WITH = ("pair_identity", "labels", "random")
 #: Strata of held-out pairs. A pair is seen when the same study labelled it in a

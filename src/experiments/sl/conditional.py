@@ -69,7 +69,7 @@ from src.experiments.sl.benchmark_baselines import (
     list_records,
     read_gene_effect,
 )
-from src.linear_model.bridge import fit_bridge, oof_bridged
+from src.linear_model.bridge import Bridge, fit_bridge
 from src.linear_model.folds import training_side_folds
 from src.linear_model.linear_model import (
     LOW_PERCENTILE,
@@ -120,38 +120,61 @@ def load_config(path: Path) -> dict[str, Any]:
     return config
 
 
+class SimpleEdit:
+    """The simple edit: the lost gene's expression set to ``min(x, low)`` in the
+    line's row, nothing else changed (a row whose gene is already at or below
+    ``low`` does not move)."""
+
+    def __init__(self, expression: pd.DataFrame, low: pd.Series) -> None:
+        self.genes = expression.columns
+        self.values = expression.to_numpy(dtype=np.float64)
+        self.floor = low.loc[self.genes].to_numpy(dtype=np.float64)
+
+    def moves(self, line: np.ndarray, lost: np.ndarray) -> np.ndarray:
+        return self.values[line, lost] > self.floor[lost]
+
+    def __call__(self, line: np.ndarray, lost: np.ndarray, key: int) -> np.ndarray:
+        edited = self.values[line].copy()
+        edited[np.arange(len(line)), lost] = self.floor[lost]
+        return edited
+
+
 def terms(
     rows: pd.DataFrame,
     expression: pd.DataFrame,
-    low: pd.Series,
+    low: pd.Series | None,
     assignment: Mapping[str, int],
     readers: Mapping[int, FittedLinearModel],
+    edit: Any = None,
 ) -> np.ndarray:
     """Rows x 2: the change of B's predicted GeneEffect when A is lost in the row's
     line (``term_ab``) and of A's when B is lost (``term_ba``, 0 for an anchor list),
     each from the reader ``assignment`` gives the line: its prediction of the line's
-    row with the lost gene at ``min(x, low)`` minus its prediction of the row as it
-    is. NaN where the lost gene has no expression column or the other gene no
-    prediction; exactly 0 where the lost gene is already at or below ``low``."""
+    edited row minus its prediction of the row as it is. ``edit`` (default the
+    simple edit at ``low``) names the lost genes it can edit (``genes``), which
+    queries move a row (``moves``; the others are exactly 0) and the edited rows of
+    (line, lost gene) indices under a reader key (call, in ``expression``'s
+    columns). NaN where the edit cannot remove the lost gene or the other gene has
+    no prediction."""
+    edit = SimpleEdit(expression, low) if edit is None else edit
     space, genes = expression.columns, pd.Index(readers[FULL].genes)
-    values = expression.to_numpy(dtype=np.float64)
-    floor = low.loc[space].to_numpy(dtype=np.float64)
     pair = (rows["design"] != "anchor").to_numpy()
     line = expression.index.get_indexer(rows["model_id"])
     key = rows["model_id"].map(assignment).to_numpy()
-    # each query: (row, term, line, lost gene's column, predicted gene's column)
+    # each query: (row, term, line, lost gene's index, predicted gene's column)
     a, b = rows["gene_a"].to_numpy(dtype=object), rows["gene_b"].to_numpy(dtype=object)
     both = np.flatnonzero(pair)
     row = np.concatenate([np.arange(len(rows)), both])
     term = np.repeat([0, 1], [len(rows), len(both)])
-    lost = space.get_indexer(np.concatenate([a, b[both]]))
+    lost = edit.genes.get_indexer(np.concatenate([a, b[both]]))
     read = genes.get_indexer(np.concatenate([b, a[both]]))
     line, key = line[row], key[row]
     out = np.full((len(rows), 2), np.nan)
     out[~pair, 1] = 0.0
     ok = (line >= 0) & (lost >= 0) & (read >= 0)
     out[row[ok], term[ok]] = 0.0
-    moves = ok & (values[np.maximum(line, 0), np.maximum(lost, 0)] > floor[lost])
+    moves = ok.copy()
+    moves[ok] = edit.moves(line[ok], lost[ok])
     for k, reader in readers.items():
         mine = moves & (key == k)
         if not mine.any():
@@ -166,8 +189,7 @@ def terms(
         change, read_mine = np.empty(int(mine.sum())), read[mine]
         for start in range(0, len(edits), CHUNK):
             chunk = edits[start : start + CHUNK]
-            edited = values[chunk[:, 0]].copy()
-            edited[np.arange(len(chunk)), chunk[:, 1]] = floor[chunk[:, 1]]
+            edited = edit(chunk[:, 0], chunk[:, 1], k)
             predicted = total(
                 reader.predict(pd.DataFrame(edited, columns=space))
             ).to_numpy()
@@ -353,11 +375,14 @@ def fit_head(
 
 def readers_and_rows(
     base: RunBase,
-) -> tuple[dict[int, FittedLinearModel], dict[str, int], pd.DataFrame, Any]:
+) -> tuple[
+    dict[int, FittedLinearModel], dict[str, int], pd.DataFrame, Any, dict[int, Bridge]
+]:
     """The full fit and one fit per fold, the reader of each SL line (a labelled
     single-cell training line: its fold's; any other: the full fit), every line's
-    input row (bridged pseudo-bulk; out of fold for the labelled training lines) and
-    the linear model's inputs."""
+    input row (bridged pseudo-bulk; out of fold for the labelled training lines),
+    the linear model's inputs and the bridges keyed as the readers (a fold's: fitted
+    on the paired lines outside it)."""
     config = base.config
     reference = config["reference"]
     experiment = config["experiments"][reference["experiment"]]
@@ -397,18 +422,25 @@ def readers_and_rows(
     train = list(bridge.single_cell_train)
     paired = list(bridge.paired)
     others = [m for m in base.split.all_model_ids if m not in set(train)]
+    bridges = {
+        k: fit_bridge(bridge.pseudobulk.loc[fit], bridge.bulk.loc[fit])
+        for k, fit in [(FULL, paired)]
+        + [
+            (fold, [m for m in paired if bridge.folds[m] != fold])
+            for fold in sorted({bridge.folds[m] for m in train})
+        ]
+    }
+    order = [*train, *others]
+    assignment = {m: bridge.folds.get(m, FULL) for m in order}
     rows = pd.concat(
         [
-            oof_bridged(bridge.pseudobulk, bridge.bulk, paired, train, bridge.folds),
-            fit_bridge(bridge.pseudobulk.loc[paired], bridge.bulk.loc[paired]).apply(
-                bridge.pseudobulk.loc[others]
-            ),
+            fitted.apply(
+                bridge.pseudobulk.loc[[m for m in order if assignment[m] == k]]
+            )
+            for k, fitted in bridges.items()
         ]
-    )
-    assignment = {
-        m: (bridge.folds[m] if m in bridge.folds else FULL) for m in rows.index
-    }
-    return readers, assignment, rows, linear_model
+    ).loc[order]
+    return readers, assignment, rows, linear_model, bridges
 
 
 def predictions(
@@ -531,7 +563,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     leaked = set(base.labelled) & {*split.val, *split.test}
     if leaked:
         raise ValueError(f"SL held-out lines among the fit lines: {sorted(leaked)}")
-    readers, assignment, line_rows, linear_model = readers_and_rows(base)
+    readers, assignment, line_rows, linear_model, _ = readers_and_rows(base)
     encoders = linear_model.expression
     origin = encoders.mean(axis=0)
     low = pd.Series(

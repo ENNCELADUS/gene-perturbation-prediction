@@ -1,0 +1,38 @@
+# The PIE editor of the SL backbone (SL protocol §13): PIE's predicted profile after A's loss in place of the
+# simple edit, with the backbone run's reader (configs/sl/conditional.yaml). PIE's side in .venv-pie, on GPUs:
+# `hpc/run.sh sl-pie-pass configs/sl/pie_editor.yaml --steps tables`, then `--steps pass --shard I/4` (one
+# process per GPU), `--steps measured,rescore,own_task`; then on the CPU
+# `hpc/run.sh sl-pie-editor configs/sl/pie_editor.yaml --run-id ID` and
+# `hpc/run.sh sl-baselines configs/sl/benchmark_pie_editor.yaml --run-id ID`.
+kind: sl_pie_editor
+seed: 0
+output_root: outputs/sl
+task: pie_editor
+# PIE's tables, changes and measured changes (not the ladder root: it holds the final split's lines)
+pie_root: data/sl_pie/v1
+# the cell files (cells/<ModelID>.npz, cells/genes.json) PIE's input is read from
+ladder_root: data/geneeffect_joint/v2/ladder
+linear_model: configs/linear_model/default_linear_model.yaml
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+# the backbone run with the simple edit: its rows, lines and covered rows
+simple_scores: outputs/sl/conditional/conditional_seed0/scores
+head_penalties: [0.01, 0.1, 1.0, 10.0, 100.0]
+top_k: 20
+paths:
+  gene_text: data/pie/hf/datasets/arcinstitute/pie_sources/cb1aaa4e7655605bdc70a9bd77bbd62016b8c7d7/gene_text
+  pie_checkpoint: data/pie/released/PIE_replogle_xdataset@f6da9607226139a1040b6992736118c9b5c7c313/best_auprc.ckpt
+  # the Cellosaurus text of the SL split's lines (src.data.builders.cellosaurus_context --split, on the Mac)
+  context_text: data/sl_pie/v1/context_text
+  # PIE's Replogle folds (one line held out each): PIE's own-task measurement
+  wdataset: data/pie/released/PIE_replogle_wdataset@055c7a2cabdaff5659121c64fa2b609c231fc5be
+pie: {lines_per_batch: 86}
+# PIE's preprocessed Perturb-seq datasets of the reference lines
+measured:
+  replogle: data/pie/hf/datasets/arcinstitute/pie_replogle_nadig_essential/20c9faef76fc96fdc809871340bd93499413dfe7/preprocessed
+  orion: data/pie/hf/datasets/arcinstitute/pie_x_atlas_orion/0950c8aa5ce5b33dc9d6f0c5eade3ae445ca0ffb/preprocessed
+# test line: [its own measured change, another line's], as dataset/context
+references:
+  ACH-000995: [replogle/jurkat, replogle/k562]  # Jurkat
+  ACH-000971: [orion/hct116, orion/hek293t]  # HCT116
+  CVCL_0063: [orion/hek293t, orion/hct116]  # HEK293T

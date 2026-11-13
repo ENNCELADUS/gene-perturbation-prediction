@@ -38,6 +38,8 @@ AGREEMENT_TOLERANCE: Final[float] = 1e-3
 #: Our (compiled) bf16 decode may be at most this many times as far from PIE's
 #: float32 logits as PIE's own bf16 forward is, plus the tolerance.
 BF16_ERROR_RATIO: Final[float] = 2.0
+#: The ladder root's line roles the agreement check picks a line of.
+ROLES: Final[tuple[str, ...]] = ("train_cells", "train_bulk", "test")
 
 
 def _norm(norm: Any, x: Any) -> Any:
@@ -409,9 +411,12 @@ def float_tokens(batch: Any) -> Any:
     )
 
 
-def agreement(pie: Pie, tables: Tables, genes: Sequence[str]) -> dict[str, float]:
-    """Largest absolute differences of the delta-p logits on a training line with
-    cells, a bulk-only line and a test line, for two genes, against PIE's own
+def agreement(
+    pie: Pie, tables: Tables, genes: Sequence[str], roles: Sequence[str] = ROLES
+) -> dict[str, float]:
+    """Largest absolute differences of the delta-p logits on the first line of each
+    of ``roles`` (default: a training line with cells, a bulk-only line and a test
+    line), for two genes, against PIE's own
     dataset, collate and forward (DepMap masked) in float32: ``float32`` for our
     batches and decode in float32; under bf16 also ``pie_bf16`` for PIE's own bf16
     forward and ``ours_bf16`` for our (compiled) bf16 decode."""
@@ -419,12 +424,9 @@ def agreement(pie: Pie, tables: Tables, genes: Sequence[str]) -> dict[str, float
     from pie.data.dataset import RowRef, collate
     from pie.predict import _batch_to
 
-    roles = tables.lines["role"]
+    role_of = tables.lines["role"]
     lines = list(tables.lines.index)
-    picks = [
-        next(m for m in lines if roles[m] == role)
-        for role in ("train_cells", "train_bulk", "test")
-    ]
+    picks = [next(m for m in lines if role_of[m] == role) for role in roles]
     position = [lines.index(m) for m in picks]
     mixed = is_mixed(pie, False)
     worst: dict[str, float] = {"float32": 0.0}
@@ -464,10 +466,10 @@ def agreement(pie: Pie, tables: Tables, genes: Sequence[str]) -> dict[str, float
 
 
 def checked_agreement(
-    pie: Pie, tables: Tables, genes: Sequence[str]
+    pie: Pie, tables: Tables, genes: Sequence[str], roles: Sequence[str] = ROLES
 ) -> dict[str, float]:
     """``agreement``, failing closed beyond its tolerances."""
-    difference = agreement(pie, tables, genes)
+    difference = agreement(pie, tables, genes, roles)
     if not difference["float32"] <= AGREEMENT_TOLERANCE:
         raise ValueError(
             f"our batches differ from PIE's own data path by "

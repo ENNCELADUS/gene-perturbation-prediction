@@ -138,7 +138,7 @@ def _record(
         return client.get(accession), None
     except requests.HTTPError as error:
         if error.response is not None and error.response.status_code == 404:
-            return None, f"Cellosaurus {CELLOSAURUS_RELEASE} has no record (404)"
+            return None, f"Cellosaurus {client.release} has no record (404)"
         raise
 
 
@@ -232,10 +232,12 @@ def build_context_text(
     models_path: Path,
     released_dir: Path,
     client: contexts.CellosaurusClient | None = None,
+    release: str = CELLOSAURUS_RELEASE,
 ) -> Path:
     """Write ``<out>/context_text`` (reused and embedded rows) and its provenance.
 
-    ``client`` defaults to the online client caching under ``<out>/cellosaurus``.
+    ``client`` defaults to the online client of Cellosaurus ``release`` caching under
+    ``<out>/cellosaurus``.
     """
     out = Path(out)
     source_dir = out / SOURCE_NAME
@@ -252,9 +254,7 @@ def build_context_text(
         openai_embed.require_openai_key()
     cache_dir = out / "cellosaurus"
     if client is None:
-        client = contexts.CellosaurusClient(
-            cache_dir, CELLOSAURUS_RELEASE, offline=False
-        )
+        client = contexts.CellosaurusClient(cache_dir, release, offline=False)
     plans = plan_lines(accessions, released, released_texts, client)
 
     embedded = [line for line, plan in plans.items() if plan["status"] == "embedded"]
@@ -317,7 +317,7 @@ def build_context_text(
             "linear_model": provenance_path(released_dir),
             "on_conflict": None,
             "params": {
-                "cellosaurus_release": CELLOSAURUS_RELEASE,
+                "cellosaurus_release": client.release,
                 "context_name": "cellosaurus accession",
                 "split_keys": list(SPLIT_KEYS),
                 "reused": len(keys) - len(embedded),
@@ -376,9 +376,18 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=PIE_CONTEXT_TEXT,
         help="PIE's released context_text source dir",
     )
+    parser.add_argument(
+        "--cellosaurus-release",
+        default=CELLOSAURUS_RELEASE,
+        help="the release the Cellosaurus API serves now",
+    )
     args = parser.parse_args(argv)
     source_dir = build_context_text(
-        args.out, args.split, args.models, args.pie_context_text
+        args.out,
+        args.split,
+        args.models,
+        args.pie_context_text,
+        release=args.cellosaurus_release,
     )
     print(f"wrote {source_dir}")
 
