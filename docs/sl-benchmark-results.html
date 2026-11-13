@@ -24,6 +24,7 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--
   padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 main { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
 h1 { font-size: 1.5rem; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.15rem; margin: 16px 0 0; }
 p { margin: 0; max-width: 68ch; }
 .muted { color: var(--muted); font-size: 0.875rem; }
 .wrap { overflow-x: auto; }
@@ -32,6 +33,8 @@ caption { text-align: left; padding-bottom: 8px; }
 th, td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
 th { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 td.n, th.n { text-align: right; white-space: nowrap; }
+th.n { white-space: normal; }
+td:first-child { min-width: 18ch; }
 td.what { color: var(--muted); font-size: 0.875rem; }
 tr.group td { font-weight: 600; padding-top: 14px; border-bottom: 2px solid var(--rule); }
 tr.ours td { background: var(--ours); }
@@ -43,6 +46,7 @@ a { color: var(--accent); }
 <body>
 <main>
 <h1>SL benchmark: our models against the baselines</h1>
+<h2>Stage two: SL ranking</h2>
 <p>Recall in the top 10%: the share of a screen's SL pairs that a model ranks in that screen's top 10%. It is averaged over screens, then studies, then held-out lines. Random gives 0.10. Seed 0, one run per model; validation selects, test is scored once.</p>
 
 <div class="wrap">
@@ -83,7 +87,24 @@ a { color: var(--accent); }
 <li><strong>PIE as the editor lowers the head</strong> from 0.322 to 0.248 on test, and equals another line's PIE profile (0.244).</li>
 </ul>
 
-<p class="muted">Sources: <a href="../results/sl_study_benchmark/summary.html">benchmark run</a> (host report <code>results/sl_study_benchmark/host/results.md</code>), <a href="../results/sl_pie_editor_seed0/README.md">PIE editor run</a>. Benchmark card: <a href="data/sl-benchmark.html">docs/data/sl-benchmark.html</a>. H20 container, seed 0, 2026-11-13.</p>
+<h2>Stage one: GeneEffect in the SL held-out lines</h2>
+<p>The stage-one metrics of SL protocol §11. A residual is GeneEffect minus the training gene mean, divided by the gene's residual SD. Per-line residual Spearman: correlation over the selective genes in each line, mean over lines (the selector). Per-gene residual Spearman: correlation over lines for each gene. Residual skill score: within-gene R². Calibration slope: measured residual on predicted (1 is ideal). Top-20 recall: share of a line's 20 strongest dependencies in the predicted top 20. Whole-line Pearson: a sanity check that the gene mean alone passes.</p>
+
+<div class="wrap">
+<table>
+<caption><strong>Table 2.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect. Each reader is fitted on the SL split's training side. Higher is better, except calibration slope (1 is ideal). Best reader in bold.</caption>
+<thead><tr><th>Model</th><th class="n">Per-line Spearman</th><th class="n">Per-gene Spearman</th><th class="n">Skill score</th><th class="n">Calibration slope</th><th class="n">Top-20 recall</th><th class="n">Genes with per-gene ρ ≥ 0.3</th><th class="n">Whole-line Pearson</th></tr></thead>
+<tbody>
+<tr class="ours"><td>Buffer-aware reader</td><td class="n"><b>0.194</b></td><td class="n"><b>0.157</b></td><td class="n"><b>0.027</b></td><td class="n">1.70</td><td class="n"><b>0.055</b></td><td class="n">—</td><td class="n">—</td></tr>
+<tr class="ours"><td>Default linear expression model</td><td class="n">0.193</td><td class="n"><b>0.157</b></td><td class="n"><b>0.027</b></td><td class="n">1.70</td><td class="n"><b>0.055</b></td><td class="n">1,649</td><td class="n">0.919</td></tr>
+<tr><td>Default linear expression model, lines permuted (control)</td><td class="n">0.038</td><td class="n">0.017</td><td class="n">−0.005</td><td class="n">0.05</td><td class="n">0.005</td><td class="n">876</td><td class="n">0.917</td></tr>
+<tr><td>Two DepMap screens of one line (reference, 8 test lines)</td><td class="n">0.367</td><td class="n">0.345</td><td class="n">0.028</td><td class="n">0.52</td><td class="n">0.163</td><td class="n">—</td><td class="n">—</td></tr>
+</tbody>
+</table>
+</div>
+<p class="muted">On the final split's 28 test lines, the best stage-one model (per-gene reader on components, weight decay 1.0) gives per-line residual Spearman 0.231 against 0.227 for the default linear model; the difference interval includes zero.</p>
+
+<p class="muted">Sources: <a href="../results/sl_study_benchmark/summary.html">benchmark run</a> (host report <code>results/sl_study_benchmark/host/results.md</code>), <a href="../results/sl_pie_editor_seed0/README.md">PIE editor run</a>, stage one: <a href="../results/sl_backbone_round_zero_seed0/README.md">backbone record</a>, <a href="../results/sl_buffer_aware_reader_seed0/README.md">buffer-aware reader record</a>, <a href="../results/stage_one_gene_reader/README.md">per-gene reader record</a>. Benchmark card: <a href="data/sl-benchmark.html">docs/data/sl-benchmark.html</a>. H20 container, seed 0, 2026-11-13.</p>
 </main>
 </body>
 </html>
