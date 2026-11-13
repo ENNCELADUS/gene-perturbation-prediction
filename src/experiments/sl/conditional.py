@@ -22,7 +22,17 @@ its penalty is chosen on validation recall in the top 10%. Each score goes to
 ``covered`` (the reader can edit the row) and ``partner`` (A is a paralog or complex
 co-member of B, or for a pair B of A), and the reader's GeneEffect table to
 ``predictions.parquet`` (its ``stage_one``). ``metrics.json`` also holds the
-stage-one ceiling: one DepMap screen of a line as the prediction of another."""
+stage-one ceiling: one DepMap screen of a line as the prediction of another.
+
+Two single-cell options (SL protocol §13). ``space_measured_share`` widens the
+reader's expression space from the genes every held-out line measures to the genes
+that at least that share of the labelled single-cell training lines measure; an
+unmeasured value takes the training mean, and a row is covered only where its own
+line measures each gene it loses. ``codetection`` (``real`` or ``shuffled``) adds
+two head inputs per row from the co-detection cache (``prepare.py
+--codetection``): the share of the line's cells that detect both genes and the log
+ratio of that share to the share expected under independence; the context-ablated
+head reads their mean over the training rows."""
 
 from __future__ import annotations
 
@@ -37,6 +47,7 @@ import pandas as pd
 
 from src.data.extra_lines import load_bulk_lines
 from src.data.io import jsonable, write_json, write_text
+from src.experiments.joint.config import load_config as load_joint_config
 from src.data.splits import load_geneeffect_split
 from src.eval.accuracy import fold_accuracy, wide_accuracy
 from src.experiments.config import read_yaml, require_keys
@@ -48,6 +59,7 @@ from src.experiments.linear_model.base import (
     stages,
 )
 from src.experiments.linear_model.config import load_linear_model_config
+from src.experiments.prepare import CODETECTION_DIR
 from src.experiments.run_dir import bind
 from src.experiments.sl.benchmark_baselines import (
     HEADLINE,
@@ -81,6 +93,9 @@ FEATURES = (
     "expression_b",
     "combinatorial",
 )
+#: The head's co-detection inputs (the ``codetection`` option).
+CODETECTION_FEATURES = ("codetection", "codetection_log_ratio")
+CODETECTION_MODES = (None, "real", "shuffled")
 #: Pairs reported by name where a held-out line screened them.
 NAMED = (("SMARCA4", "SMARCA2"), ("ARID1A", "ARID1B"))
 #: The full fit's key among the readers (folds are 0..k-1).
@@ -94,11 +109,14 @@ def load_config(path: Path) -> dict[str, Any]:
     require_keys(
         config,
         {"kind", "seed", "output_root", "task", "linear_model", "labels", "split",
-         "head_penalties", "top_k", "screen_gene_effect", "screen_map"},
+         "head_penalties", "top_k", "screen_gene_effect", "screen_map",
+         "space_measured_share", "codetection"},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_conditional":
         raise ValueError(f"{path} is a {config['kind']} config")
+    if config["codetection"] not in CODETECTION_MODES:
+        raise ValueError(f"codetection must be one of {CODETECTION_MODES}")
     return config
 
 
@@ -196,15 +214,55 @@ def gather(table: pd.DataFrame, rows: pd.DataFrame, gene: str) -> np.ndarray:
     return out
 
 
+def own_line_measures(rows: pd.DataFrame, measured: pd.DataFrame) -> np.ndarray:
+    """Per row: the row's own line measures (in its pseudo-bulk, before any fill)
+    each gene the row loses: A, and B for a pair."""
+    flags = measured.astype(np.float64)
+    a = gather(flags, rows, "gene_a") == 1.0
+    b = gather(flags, rows, "gene_b") == 1.0
+    return a & (b | (rows["design"] == "anchor").to_numpy())
+
+
+def codetection_inputs(rows: pd.DataFrame, root: Path, shuffled: bool) -> np.ndarray:
+    """Rows x CODETECTION_FEATURES from the cache: the share of the line's cells that
+    detect both genes, and ``log((k + 0.5) / (e + 0.5))`` with ``k`` and ``e`` the
+    observed and the expected counts of such cells (each gene's rate matched to its
+    detection share). With ``shuffled``, the same after each gene's counts were
+    permuted across the cells. NaN where the source does not list a gene (a drug
+    anchor included). Raises when a row's line or pair is not in the cache."""
+    prefix = "shuffled_" if shuffled else ""
+    keys = ["model_id", "gene_a", "gene_b"]
+    tables = []
+    for model_id in rows["model_id"].unique():
+        path = root / f"{model_id}.parquet"
+        if not path.is_file():
+            raise FileNotFoundError(f"no co-detection table for {model_id} in {root}")
+        tables.append(pd.read_parquet(path).assign(model_id=model_id))
+    table = pd.concat(tables).set_index(keys)
+    index = pd.MultiIndex.from_frame(rows[keys])
+    missing = int((~index.isin(table.index)).sum())
+    if missing:
+        raise ValueError(f"{root} has no co-detection value for {missing} rows")
+    chosen = table.reindex(index)
+    cells = chosen["cells"].to_numpy(dtype=np.float64)
+    observed = chosen[f"{prefix}codetected"].to_numpy(dtype=np.float64)
+    expected = chosen[f"{prefix}expected_matched"].to_numpy(dtype=np.float64)
+    ratio = np.log((observed * cells + 0.5) / (expected * cells + 0.5))
+    return np.column_stack([observed, ratio])
+
+
 def features(
     rows: pd.DataFrame,
     pair_terms: np.ndarray,
     effects: pd.DataFrame,
     expression: pd.DataFrame,
+    codetection: np.ndarray | None = None,
 ) -> np.ndarray:
-    """The head's inputs (FEATURES). Gene A of an anchor list is one gene or drug
-    for the whole list, so its own values read 0; so does a value the reader cannot
-    give (a gene outside the expression space)."""
+    """The head's inputs (FEATURES, then CODETECTION_FEATURES when ``codetection``
+    is given). Gene A of an anchor list is one gene or drug for the whole list, so
+    its own values read 0; so does a value the reader cannot give (a gene outside
+    the expression space). A pair's co-detection is kept for an anchor that is a
+    gene the line's source lists, and reads 0 otherwise."""
     anchor = (rows["design"] == "anchor").to_numpy()
     own_a = np.stack(
         [gather(effects, rows, "gene_a"), gather(expression, rows, "gene_a")]
@@ -218,6 +276,7 @@ def features(
             own_a[1],
             gather(expression, rows, "gene_b"),
             (~anchor).astype(np.float64),
+            *([] if codetection is None else [codetection]),
         ]
     )
     return np.nan_to_num(values, nan=0.0)
@@ -458,12 +517,16 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     bind(run_dir, config)
     split_path = Path(config["split"])
     split = load_geneeffect_split(split_path)
+    linear_model_config = load_linear_model_config(Path(config["linear_model"]))
+    share = config["space_measured_share"]
+    held = [*split.val, *split.test]
     base = base_on(
-        load_linear_model_config(Path(config["linear_model"])),
+        linear_model_config,
         split,
         load_bulk_lines(split_path, split),
-        [*split.val, *split.test],
+        held if share is None else list(split.supervised_train),
         other_split=True,
+        space_share=1.0 if share is None else float(share),
     )
     leaked = set(base.labelled) & {*split.val, *split.test}
     if leaked:
@@ -501,12 +564,27 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
                           readers), ablated_effects, ablated_rows),
     }  # fmt: skip
     # a gene outside the expression space cannot be edited: its term is 0 (a tie),
-    # and the row is not covered (the harness's Table 4 ranks the covered rows)
-    covered = np.isfinite(reading["line"][0]).all(axis=1)
+    # and the row is not covered (the harness's Table 4 ranks the covered rows);
+    # nor is a row whose own line does not measure a lost gene (its value is a fill)
+    covered = np.isfinite(reading["line"][0]).all(axis=1) & own_line_measures(
+        rows, base.measured
+    )
     partner = partner_rows(rows, base.reference)
     for values in reading.values():
         np.nan_to_num(values[0], copy=False, nan=0.0)
-    x = {name: features(rows, *values) for name, values in reading.items()}
+    extra, names = {"line": None, "ablated": None}, list(FEATURES)
+    if config["codetection"] is not None:
+        joint = load_joint_config(Path(linear_model_config["joint_config"]))
+        pair = codetection_inputs(
+            rows,
+            Path(joint["prepared_root"]) / CODETECTION_DIR,
+            config["codetection"] == "shuffled",
+        )
+        # the context-ablated head reads the training rows' mean co-detection
+        train_mean = np.nanmean(pair[(rows["split"] == "train").to_numpy()], axis=0)
+        extra = {"line": pair, "ablated": np.tile(train_mean, (len(rows), 1))}
+        names += CODETECTION_FEATURES
+    x = {name: features(rows, *values, extra[name]) for name, values in reading.items()}
     train = (rows["split"] == "train").to_numpy()
     val = (rows["split"] == "val").to_numpy()
     head, selection = fit_head(
@@ -539,13 +617,23 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         side: float(covered[(rows["split"] == side).to_numpy()].mean())
         for side in ("train", "val", "test")
     }
+    unmeasured = (~base.measured.loc[held]).sum(axis=1)
     metrics = {
         "run_id": run_id,
         "fit_lines": len(base.labelled),
         "rows": {side: int((rows["split"] == side).sum()) for side in ("train", "val",
                  "test")} | dropped,
         "coverage": coverage,
-        "head": {"features": list(FEATURES), "selection": selection,
+        "coverage_by_design": {
+            side: {d: float(covered[(rows["split"] == side).to_numpy()
+                                    & (rows["design"] == d).to_numpy()].mean())
+                   for d in sorted(rows["design"].unique())}
+            for side in ("train", "val", "test")},
+        "space": {"measured_share": share, "genes": int(base.measured.shape[1]),
+                  "held_out_unmeasured": {"min": int(unmeasured.min()),
+                                          "median": float(unmeasured.median()),
+                                          "max": int(unmeasured.max())}},
+        "head": {"features": names, "selection": selection,
                  "coefficients": head[-1].coef_[0].tolist()},
         "stage_one": stage_one_metrics(base, residual, int(config["seed"])),
         "stage_one_ceiling": stage_one_ceiling(

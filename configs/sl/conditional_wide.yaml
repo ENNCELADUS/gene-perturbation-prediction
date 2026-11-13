@@ -1,0 +1,18 @@
+# The SL backbone (conditional.yaml) with each line read in the genes it measures (SL protocol §13):
+# the reader's expression space is the bulk genes that at least half of the labelled single-cell
+# training lines measure, not the genes that every held-out line measures. An unmeasured value takes
+# the training mean; a row is covered only where its own line measures each gene it loses.
+# `hpc/run.sh sl-conditional configs/sl/conditional_wide.yaml --run-id conditional_wide_seed0` (CPU)
+kind: sl_conditional
+seed: 0
+output_root: outputs/sl
+task: conditional
+linear_model: configs/linear_model/default_linear_model.yaml
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+head_penalties: [0.01, 0.1, 1.0, 10.0, 100.0]
+top_k: 20
+screen_gene_effect: data/sl_dependency_v0/raw/depmap/ScreenGeneEffect.csv
+screen_map: data/sl_dependency_v0/raw/depmap/CRISPRScreenMap.csv
+space_measured_share: 0.5
+codetection: null

@@ -643,6 +643,108 @@ def prepare_second_source(
     return manifest_path
 
 
+CODETECTION_DIR: Final[str] = "codetection"
+#: The seed of the shuffled cells (``shuffle_counts``).
+CODETECTION_SEED: Final[int] = 0
+
+
+def _codetection_line(
+    model_id: str,
+    source_path: Path,
+    output_path: Path,
+    *,
+    var_ensembl_col: str,
+    gene_a: tuple[str, ...],
+    gene_b: tuple[str, ...],
+) -> None:
+    """Write one line's co-detection table: each pair's statistics over the
+    line's cells, then over its cells after ``shuffle_counts``."""
+    import numpy as np
+    import pandas as pd
+
+    from src.data.basal import symbol_column
+    from src.data.ladder_cells import (
+        CODETECTION_COLUMNS,
+        codetection,
+        line_rng,
+        shuffle_counts,
+    )
+    from src.data.tx1_cache import read_basal_source
+
+    source = read_basal_source(
+        source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
+    )
+    symbols = source.var[symbol_column(source.var)].astype(str).tolist()
+    real = codetection(source.X, symbols, gene_a, gene_b)
+    rng = line_rng(model_id, CODETECTION_SEED, "codetection")
+    shuffled = codetection(shuffle_counts(source.X, rng), symbols, gene_a, gene_b)
+    frame = pd.DataFrame(
+        np.hstack([real, shuffled]),
+        columns=[*CODETECTION_COLUMNS, *(f"shuffled_{c}" for c in CODETECTION_COLUMNS)],
+    )
+    frame.insert(0, "cells", int(source.n_obs))
+    frame.insert(0, "gene_b", list(gene_b))
+    frame.insert(0, "gene_a", list(gene_a))
+    temporary = output_path.with_name(f".{output_path.name}.tmp")
+    frame.to_parquet(temporary, index=False)
+    os.replace(temporary, output_path)
+
+
+def prepare_codetection(
+    config: Mapping[str, Any], labels_path: Path, split_path: Path
+) -> Path:
+    """Write ``<prepared_root>/codetection/<ModelID>.parquet`` for every line of the
+    SL split ``split_path`` with labelled rows in ``labels_path`` that lacks one:
+    for each (gene_a, gene_b) of its rows, co-detection of the two genes in the
+    line's cells (``codetection``), and the same after each gene's counts are
+    permuted across the cells (``shuffle_counts``, seed ``CODETECTION_SEED``). Then
+    ``manifest.json``. A root written from other labels or another split is
+    refused; existing line files stay as written. Reads raw data (preparation is
+    its only reader)."""
+    import pandas as pd
+
+    from src.data.splits import load_geneeffect_split
+
+    root = Path(config["prepared_root"]) / CODETECTION_DIR
+    manifest_path = root / "manifest.json"
+    settings = {
+        "labels": str(labels_path),
+        "split": str(split_path),
+        "seed": CODETECTION_SEED,
+    }
+    if manifest_path.is_file():
+        if json.loads(manifest_path.read_text())["settings"] != settings:
+            raise ValueError(f"{root} was written from other labels or split")
+    split = load_geneeffect_split(split_path)
+    labels = pd.read_parquet(
+        labels_path, columns=["model_id", "gene_a", "gene_b", "label"]
+    )
+    labels = labels[
+        labels["label"].notna() & labels["model_id"].isin(split.all_model_ids)
+    ]
+    pairs = labels.drop_duplicates(["model_id", "gene_a", "gene_b"])
+    directory = Path(config["paths"]["basal_raw_umi"])
+    root.mkdir(parents=True, exist_ok=True)
+    lines = sorted(pairs["model_id"].unique())
+    calls = [
+        partial(
+            _codetection_line,
+            model_id,
+            directory / f"{model_id}.h5ad",
+            root / f"{model_id}.parquet",
+            var_ensembl_col=config["preparation"]["var_ensembl_col"],
+            gene_a=tuple(group["gene_a"]),
+            gene_b=tuple(group["gene_b"]),
+        )
+        for model_id, group in pairs.groupby("model_id", sort=True)
+        if not (root / f"{model_id}.parquet").is_file()
+    ]
+    for done, _ in enumerate(in_processes(calls, LINE_PROCESSES), start=1):
+        _LOGGER.info("codetection: line %d of %d", done, len(calls))
+    write_json(manifest_path, {"settings": settings, "lines": lines})
+    return manifest_path
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
@@ -651,6 +753,13 @@ def main(argv=None):
         type=Path,
         help="a DepMap bulk matrix; also grow the pseudo-bulk over its genes",
     )
+    parser.add_argument(
+        "--codetection",
+        nargs=2,
+        type=Path,
+        metavar=("LABELS", "SL_SPLIT"),
+        help="write only the co-detection cache of the SL split's screened lines",
+    )
     args = parser.parse_args(argv)
     from src.experiments.joint.config import load_config
 
@@ -658,6 +767,9 @@ def main(argv=None):
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
     config = load_config(args.config)
+    if args.codetection is not None:
+        print(prepare_codetection(config, *args.codetection))
+        return 0
     print(prepare_inputs(config))
     if args.pseudobulk_genes is not None:
         from src.data.depmap import read_depmap_matrix

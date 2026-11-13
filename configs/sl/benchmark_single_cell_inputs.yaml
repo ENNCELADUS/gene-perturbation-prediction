@@ -1,0 +1,41 @@
+# The two single-cell parts of the SL backbone on the multi-study SL benchmark (SL protocol §13): the
+# backbone in the narrow space (configs/sl/conditional.yaml, rerun), in each line's own genes
+# (conditional_wide.yaml), and its head with co-detection of A and B in the line's cells, real
+# (conditional_codetection.yaml) and shuffled (conditional_codetection_shuffled.yaml).
+# `hpc/run.sh sl-baselines configs/sl/benchmark_single_cell_inputs.yaml --run-id
+# benchmark_single_cell_inputs_seed0` (CPU), after the four sl-conditional runs.
+kind: sl_benchmark_baselines
+seed: 0
+output_root: outputs/sl
+task: benchmark_baselines
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
+model: data/sl_dependency_v0/raw/depmap/Model.csv
+stage_one: outputs/sl/conditional/single_cell_narrow_seed0/predictions.parquet
+extra_scores:
+  conditional: outputs/sl/conditional/single_cell_narrow_seed0/scores/conditional.parquet
+  conditional_ablated: outputs/sl/conditional/single_cell_narrow_seed0/scores/conditional_ablated.parquet
+  head: outputs/sl/conditional/single_cell_narrow_seed0/scores/head.parquet
+  head_ablated: outputs/sl/conditional/single_cell_narrow_seed0/scores/head_ablated.parquet
+  wide_conditional: outputs/sl/conditional/conditional_wide_seed0/scores/conditional.parquet
+  wide_conditional_ablated: outputs/sl/conditional/conditional_wide_seed0/scores/conditional_ablated.parquet
+  wide_head: outputs/sl/conditional/conditional_wide_seed0/scores/head.parquet
+  wide_head_ablated: outputs/sl/conditional/conditional_wide_seed0/scores/head_ablated.parquet
+  codetection_head: outputs/sl/conditional/conditional_codetection_seed0/scores/head.parquet
+  codetection_head_ablated: outputs/sl/conditional/conditional_codetection_seed0/scores/head_ablated.parquet
+  shuffled_codetection_head: outputs/sl/conditional/conditional_codetection_shuffled_seed0/scores/head.parquet
+  shuffled_codetection_head_ablated: outputs/sl/conditional/conditional_codetection_shuffled_seed0/scores/head_ablated.parquet
+top_k: 20
+bootstrap: 1000
+# (scorer, control): the per-line difference in recall in the top 10% with the line bootstrap
+paired_differences:
+  - [conditional, conditional_ablated]
+  - [head, head_ablated]
+  - [wide_conditional, wide_conditional_ablated]
+  - [wide_head, wide_head_ablated]
+  - [wide_conditional, conditional]
+  - [wide_head, head]
+  - [codetection_head, head]
+  - [codetection_head, shuffled_codetection_head]
+  - [codetection_head, codetection_head_ablated]

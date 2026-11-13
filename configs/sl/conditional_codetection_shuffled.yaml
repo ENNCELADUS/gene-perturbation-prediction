@@ -1,0 +1,17 @@
+# The control of conditional_codetection.yaml (SL protocol §13): the same head inputs, from the line's
+# cells after each gene's counts were permuted across the cells (co-expression in a cell destroyed,
+# each gene's detection share kept). `hpc/run.sh sl-conditional
+# configs/sl/conditional_codetection_shuffled.yaml --run-id conditional_codetection_shuffled_seed0` (CPU)
+kind: sl_conditional
+seed: 0
+output_root: outputs/sl
+task: conditional
+linear_model: configs/linear_model/default_linear_model.yaml
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+head_penalties: [0.01, 0.1, 1.0, 10.0, 100.0]
+top_k: 20
+screen_gene_effect: data/sl_dependency_v0/raw/depmap/ScreenGeneEffect.csv
+screen_map: data/sl_dependency_v0/raw/depmap/CRISPRScreenMap.csv
+space_measured_share: null
+codetection: shuffled

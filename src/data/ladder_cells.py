@@ -156,6 +156,86 @@ def shuffle_counts(counts: object, rng: np.random.Generator) -> sparse.csr_matri
     return shuffled.tocsr()
 
 
+#: Columns of ``codetection``, per pair of genes (A, B) of one line.
+CODETECTION_COLUMNS = (
+    "codetected",
+    "expected",
+    "expected_matched",
+    "detected_a",
+    "detected_b",
+)
+#: Cells, and pairs, per block of the co-detection sums.
+_CELL_CHUNK = 2048
+_PAIR_CHUNK = 8192
+
+
+def matched_rates(depth: np.ndarray, detected: np.ndarray) -> np.ndarray:
+    """Per gene, the rate ``r`` with ``mean_i(1 - exp(-r * depth_i)) = detected``:
+    the Poisson rate that gives the gene its observed detection share at each
+    cell's depth. Newton's method from 0: the share is concave and increasing in
+    ``r``, so each step stays below the root."""
+    values, weight = np.unique(depth, return_counts=True)
+    weight = weight / weight.sum()
+    reach = float(weight[values > 0].sum())  # a cell without UMI detects nothing
+    target = np.minimum(np.asarray(detected, dtype=np.float64), reach * (1 - 1e-6))
+    rate = np.zeros(len(target))
+    for start in range(0, len(target), _POISSON_CHUNK):
+        part = slice(start, start + _POISSON_CHUNK)
+        r = rate[part]
+        for _ in range(100):
+            miss = np.exp(-np.outer(values, r))
+            gap = target[part] - (1.0 - miss).T @ weight
+            r = r + gap / ((values[:, None] * miss).T @ weight)
+            if (gap <= 1e-9 * np.maximum(target[part], 1e-12)).all():
+                break
+        rate[part] = r
+    return rate
+
+
+def codetection(
+    counts: object,
+    symbols: Sequence[str],
+    gene_a: Sequence[str],
+    gene_b: Sequence[str],
+) -> np.ndarray:
+    """Pairs x ``CODETECTION_COLUMNS`` over every cell of one line: the share of
+    cells that detect both genes (count > 0); the share expected under independence
+    at each cell's depth, ``mean_i (1 - exp(-mu_A L_i / T)) (1 - exp(-mu_B L_i / T))``
+    with ``mu`` the line's mean CP10K (``T`` = 10^4, as ``detected_expected``) and
+    again with each gene's rate matched to its detection share (``matched_rates``);
+    the two single-gene detection shares. NaN where the source does not list a
+    gene (a drug anchor included)."""
+    matrix = sparse.csr_matrix(counts, dtype=np.float64)
+    library = library_sizes(matrix)
+    genes = sorted(set(upper_symbols(gene_a)) | set(upper_symbols(gene_b)))
+    aligned, listed = align_columns(matrix, upper_symbols(symbols), genes)
+    aligned.eliminate_zeros()
+    n_cells = aligned.shape[0]
+    rate = np.asarray(scale_to_total(aligned, library, PIE_TARGET_SUM).sum(axis=0))
+    rate = rate.ravel() / n_cells
+    detected = np.diff(aligned.tocsc().indptr) / n_cells
+    depth = library / PIE_TARGET_SUM
+    matched = matched_rates(depth, detected)
+    position = {g: i for i, g in enumerate(genes)}
+    ia = np.array([position[g] for g in upper_symbols(gene_a)], dtype=np.int64)
+    ib = np.array([position[g] for g in upper_symbols(gene_b)], dtype=np.int64)
+    sums = np.zeros((len(ia), 3))
+    for start in range(0, n_cells, _CELL_CHUNK):
+        cells = slice(start, min(start + _CELL_CHUNK, n_cells))
+        hit = (aligned[cells].toarray() > 0).astype(np.float32)
+        chunk_depth = depth[cells]
+        expected = (1.0 - np.exp(-np.outer(chunk_depth, rate))).astype(np.float32)
+        fitted = (1.0 - np.exp(-np.outer(chunk_depth, matched))).astype(np.float32)
+        for first in range(0, len(ia), _PAIR_CHUNK):
+            pairs = slice(first, first + _PAIR_CHUNK)
+            a, b = ia[pairs], ib[pairs]
+            for k, values in enumerate((hit, expected, fitted)):
+                sums[pairs, k] += np.einsum("ij,ij->j", values[:, a], values[:, b])
+    out = np.column_stack([sums / n_cells, detected[ia], detected[ib]])
+    out[~(listed[ia] & listed[ib])] = np.nan
+    return out
+
+
 @dataclass(frozen=True)
 class HvgCells:
     """A line's cells over STATE's HVGs in the prepared space, their shuffle and

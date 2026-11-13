@@ -53,6 +53,21 @@ NAMES = {
     "buffer_head": "Backbone head on the buffer-aware reader's terms",
     "buffer_head_ablated": "Backbone head on the buffer-aware reader's terms, "
     "context-ablated (training mean profile)",
+    # the single-cell parts of the backbone (SL protocol §13)
+    "wide_conditional": "Conditional score, each line read in its own genes",
+    "wide_conditional_ablated": "Conditional score, each line read in its own genes, "
+    "context-ablated (training mean profile)",
+    "wide_head": "Backbone head, each line read in its own genes",
+    "wide_head_ablated": "Backbone head, each line read in its own genes, "
+    "context-ablated (training mean profile)",
+    "codetection_head": "Backbone head with co-detection of A and B in the line's "
+    "cells",
+    "codetection_head_ablated": "Backbone head with co-detection, context-ablated "
+    "(training mean profile and mean co-detection)",
+    "shuffled_codetection_head": "Backbone head with co-detection in shuffled cells "
+    "(control)",
+    "shuffled_codetection_head_ablated": "Backbone head with co-detection in shuffled "
+    "cells, context-ablated",
     "pair_identity": "Pair identity (hit rate in the study's training lines)",
     "pan_essentiality": "Pan-essentiality (gene mean GeneEffect)",
     "measured_geneeffect": "Measured GeneEffect (reference, lines with GeneEffect)",
