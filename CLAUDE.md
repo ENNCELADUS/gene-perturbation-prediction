@@ -29,7 +29,7 @@ Replace this section on every update; history lives in `results/` and the protoc
   [linear-model input](results/stage_one_linear_model_input/README.md). Outputs before 2026-11-13 are gone from the host.
 - **Stage two**: modular SL backbone, head 0.374 / 0.322 < training SL fraction. Three modules of the [plan](docs/specs/2026-11-12-pie-and-single-cell-plan.md) ran, all null: PIE's profile as the editor (SL protocol §14, [record](results/sl_pie_editor_seed0/README.md); below the simple edit, equal to another line's profile; 66 of 86 lines had no context text),
   own-gene space and co-detection (§13, [record](results/sl_single_cell_inputs_seed0/README.md)). Next: test if the measured profile after A's loss holds SL signal under a fitted reader.
-- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html)): labels in `data/sl_studies/benchmark_v2` (H20);
+- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html), [scoreboard](docs/sl-benchmark-results.html)): labels in `data/sl_studies/benchmark_v2` (H20);
   headline = recall in the top 10% of genetic two-class screens, averaged over screens, studies, then lines (77 lines,
   44/17/16, placed by hand). 2026-11-13, val / test: the training SL fraction 0.524 / 0.495 leads; Kebabci on predicted
   GeneEffect 0.343 / 0.359, KG4SL 0.352 / 0.306, De Kegel 0.270 / 0.267, PARIS 0.208 / 0.189, MiT4SL 0.144 / 0.120,
