@@ -51,11 +51,12 @@ a { color: var(--accent); }
 
 <div class="wrap">
 <table>
-<caption><strong>Table 1.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect; each reader is fitted on the SL split's training side. Pearson and Spearman: higher is better. MSE: lower is better.</caption>
+<caption><strong>Table 1.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect; each reader is fitted on the SL split's training side. Pearson and Spearman: higher is better. MSE: lower is better. Ceiling from the two-screen row, with independent noise of equal size in each screen: Pearson and Spearman √r, MSE half the two-screen MSE.</caption>
 <thead><tr><th>Model</th><th class="n">Whole-line Pearson ↑</th><th class="n">MSE ↓</th><th class="n">Per-line residual Spearman ↑</th></tr></thead>
 <tbody>
 <tr class="ours"><td>Our best: linear expression model, wider gene space (SL protocol §13)</td><td class="n">0.9197</td><td class="n">0.0301</td><td class="n">0.1965</td></tr>
-<tr><td>Ceiling: two DepMap screens of one line (8 test lines)</td><td class="n">0.8618</td><td class="n">0.0553</td><td class="n">0.3665</td></tr>
+<tr><td>Ceiling: a perfect model against one measured screen (estimate)</td><td class="n">0.9283</td><td class="n">0.0277</td><td class="n">0.6054</td></tr>
+<tr><td>Two DepMap screens of one line (8 test lines)</td><td class="n">0.8618</td><td class="n">0.0553</td><td class="n">0.3665</td></tr>
 </tbody>
 </table>
 </div>
