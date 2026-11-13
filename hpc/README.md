@@ -366,7 +366,7 @@ two DepMap screens of one line, the head's penalties) to `outputs/sl/conditional
 reads the buffer-aware reader (the partner block added). The terms come from each line's edited rows; a full run
 queries each line and each lost gene once.
 
-`sl-pie-pass` (`src.experiments.sl.pie_pass`, `.venv-pie`, SL protocol §13) and `sl-pie-editor`
+`sl-pie-pass` (`src.experiments.sl.pie_pass`, `.venv-pie`, SL protocol §14) and `sl-pie-editor`
 (`src.experiments.sl.pie_editor`, CPU) are the PIE editor. `configs/sl/pie_editor.yaml` names the PIE root
 (`data/sl_pie/v1`, not the ladder root). The pass's steps: `tables` writes `lines.parquet`, `genes.parquet` and
 `mean/pie_input.parquet` for the 86 screened SL lines from the ladder's cell files (the panel is the reader's 6,523
