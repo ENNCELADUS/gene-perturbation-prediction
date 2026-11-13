@@ -66,28 +66,28 @@ a { color: var(--accent); }
 
 <div class="wrap">
 <table>
-<caption><strong>Table 2.</strong> Recall in the top 10% on the multi-study SL benchmark (validation 15 lines, test 13 lines). Higher is better. Rows are ranked by test. Best value below the ceiling in bold.</caption>
-<thead><tr><th>Model</th><th>What it reads</th><th class="n">Validation</th><th class="n">Test</th></tr></thead>
+<caption><strong>Table 2.</strong> Recall in the top 10% and AUROC (random 0.5) on the multi-study SL benchmark (validation 15 lines, test 13 lines). Higher is better. Rows are ranked by test recall. Best value below the ceiling in bold.</caption>
+<thead><tr><th>Model</th><th>What it reads</th><th class="n">Recall, validation</th><th class="n">Recall, test</th><th class="n">AUROC, validation</th><th class="n">AUROC, test</th></tr></thead>
 <tbody>
-<tr><td>Ceiling: labels as the score</td><td class="what">The screen labels themselves</td><td class="n">0.964</td><td class="n">0.920</td></tr>
-<tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralog features with stage one's predicted GeneEffect</td><td class="n">0.343</td><td class="n"><b>0.359</b></td></tr>
-<tr class="ours"><td>Ours: logistic regression on predicted GeneEffect after a gene's loss</td><td class="what">For each gene, the change in its predicted GeneEffect when the other gene's expression is set low; both genes' predicted GeneEffect and expression</td><td class="n">0.383</td><td class="n">0.328</td></tr>
-<tr><td>KG4SL</td><td class="what">Knowledge graph, trained on the training lines</td><td class="n">0.352</td><td class="n">0.306</td></tr>
-<tr><td>Control: stage one's predicted GeneEffect</td><td class="what">The two genes' GeneEffect from the linear expression model</td><td class="n">0.371</td><td class="n">0.276</td></tr>
-<tr><td>Kebabci 2026, measured GeneEffect (reference)</td><td class="what">Same classifier on DepMap's measured GeneEffect</td><td class="n">0.283</td><td class="n">0.270</td></tr>
-<tr><td>Control: measured GeneEffect</td><td class="what">DepMap, lines with GeneEffect</td><td class="n"><b>0.412</b></td><td class="n">0.269</td></tr>
-<tr><td>De Kegel 2021 paralog classifier</td><td class="what">Released scores</td><td class="n">0.270</td><td class="n">0.267</td></tr>
-<tr><td>PARIS</td><td class="what">Random-forest dependency pairs (Python port)</td><td class="n">0.208</td><td class="n">0.189</td></tr>
-<tr><td>MiT4SL</td><td class="what">Cell-line-specific graph model</td><td class="n">0.144</td><td class="n">0.120</td></tr>
-<tr><td>Cilantro-SL</td><td class="what">Geneformer deletion embeddings</td><td class="n">0.113</td><td class="n">0.115</td></tr>
-<tr><td>Random score</td><td class="what">About 0.10</td><td class="n">0.093</td><td class="n">0.106</td></tr>
-<tr><td>SLIdR</td><td class="what">Mutation-dependency test (Python port)</td><td class="n">0.086</td><td class="n">0.097</td></tr>
+<tr><td>Ceiling: labels as the score</td><td class="what">The screen labels themselves</td><td class="n">0.964</td><td class="n">0.920</td><td class="n">1.00</td><td class="n">1.00</td></tr>
+<tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralog features with stage one's predicted GeneEffect</td><td class="n">0.343</td><td class="n"><b>0.359</b></td><td class="n">0.66</td><td class="n">0.66</td></tr>
+<tr class="ours"><td>Ours: logistic regression on predicted GeneEffect after a gene's loss</td><td class="what">For each gene, the change in its predicted GeneEffect when the other gene's expression is set low; both genes' predicted GeneEffect and expression</td><td class="n">0.383</td><td class="n">0.328</td><td class="n"><b>0.74</b></td><td class="n"><b>0.72</b></td></tr>
+<tr><td>KG4SL</td><td class="what">Knowledge graph, trained on the training lines</td><td class="n">0.352</td><td class="n">0.306</td><td class="n">0.69</td><td class="n">0.65</td></tr>
+<tr><td>Control: stage one's predicted GeneEffect</td><td class="what">The two genes' GeneEffect from the linear expression model</td><td class="n">0.371</td><td class="n">0.276</td><td class="n">0.73</td><td class="n">0.68</td></tr>
+<tr><td>Kebabci 2026, measured GeneEffect (reference)</td><td class="what">Same classifier on DepMap's measured GeneEffect</td><td class="n">0.283</td><td class="n">0.270</td><td class="n">0.62</td><td class="n">0.62</td></tr>
+<tr><td>Control: measured GeneEffect</td><td class="what">DepMap, lines with GeneEffect</td><td class="n"><b>0.412</b></td><td class="n">0.269</td><td class="n"><b>0.74</b></td><td class="n">0.64</td></tr>
+<tr><td>De Kegel 2021 paralog classifier</td><td class="what">Released scores</td><td class="n">0.270</td><td class="n">0.267</td><td class="n">0.66</td><td class="n">0.66</td></tr>
+<tr><td>PARIS</td><td class="what">Random-forest dependency pairs (Python port)</td><td class="n">0.208</td><td class="n">0.189</td><td class="n">0.57</td><td class="n">0.57</td></tr>
+<tr><td>MiT4SL</td><td class="what">Cell-line-specific graph model</td><td class="n">0.144</td><td class="n">0.120</td><td class="n">0.59</td><td class="n">0.56</td></tr>
+<tr><td>Cilantro-SL</td><td class="what">Geneformer deletion embeddings</td><td class="n">0.113</td><td class="n">0.115</td><td class="n">0.51</td><td class="n">0.51</td></tr>
+<tr><td>Random score</td><td class="what">About 0.10</td><td class="n">0.093</td><td class="n">0.106</td><td class="n">—</td><td class="n">—</td></tr>
+<tr><td>SLIdR</td><td class="what">Mutation-dependency test (Python port)</td><td class="n">0.086</td><td class="n">0.097</td><td class="n">0.48</td><td class="n">0.50</td></tr>
 </tbody>
 </table>
 </div>
 
 <ul>
-<li><strong>On test, our best model (0.328) is second to the Kebabci classifier on stage one's predicted GeneEffect (0.359), and above all other published baselines.</strong></li>
+<li><strong>On test, our best model (0.328) is second to the Kebabci classifier on stage one's predicted GeneEffect (0.359), and above all other published baselines. On test AUROC it is first (0.72).</strong></li>
 </ul>
 </main>
 </body>
