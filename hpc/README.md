@@ -299,6 +299,11 @@ P=configs/stage_one/linear_model_input   # protocol §16's linear model input
 setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3,0,1,2,3 --folds main,0,1,2,3,4 $P/*.yaml \
   > outputs/launches/stage_one_linear_model_input.log 2>&1 < /dev/null &
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one-report $P/report_linear_model_input.yaml
+G=configs/stage_one/gene_reader   # protocol §18's per-gene reader
+OMP_NUM_THREADS=32 hpc/run.sh stage-one-linear-model $G/linear_model_reference.yaml --run-id linear_model_reference_20261113
+setsid nohup hpc/run.sh stage-one-queue --gpus 0,1,2,3,0,1,2,3 --folds main,0,1,2,3,4 $G/*gene_reader*.yaml \
+  > outputs/launches/stage_one_gene_reader.log 2>&1 < /dev/null &
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh stage-one-report $G/report_gene_reader.yaml
 ```
 
 Each run holds its delta on the GPU in bf16 (ΔH is 28 GB, ΔE 19 GB), copied by gene chunk from the memory-mapped

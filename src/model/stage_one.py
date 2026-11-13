@@ -410,7 +410,7 @@ class Hybrid(nn.Module):
 
 
 class GeneReader(nn.Module):
-    """The per-gene reader (protocol §17): ``z(g, c) = linear model(g, c) +
+    """The per-gene reader (protocol §18): ``z(g, c) = linear model(g, c) +
     u_g · h(c)``, with ``h`` one shared MLP (Linear ``hidden`` -> GELU -> Linear
     ``VIABILITY_WIDTH``) over the line's input and ``u_g`` a weight vector for each
     of the run's genes. The only module with a per-gene parameter: ``u_g`` starts at

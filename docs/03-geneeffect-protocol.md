@@ -1077,8 +1077,10 @@ reports them with `hpc/run.sh stage-one-report CONFIG` (a `kind: report` config)
 - **Linear model input** (decided 2026-10-22, `configs/stage_one/linear_model_input/`). `data.linear_model_run` with any input but
   `components` appends that linear model reference's prediction minus the run's base (z units; frame lines out of fold,
   validation and test from the whole-frame fit) to FiLM's pair input, never permuted; `input: linear_model` reads it alone.
-  Rows: FiLM on the linear model, on linear model + ΔE, on linear model + line-permuted ΔE (`report_linear_model_input`). A fold run's training
-  lines read predictions fitted with the held-out fold's labels, so its out-of-fold telemetry is slightly optimistic.
+  Rows: FiLM on the linear model, on linear model + ΔE, on linear model + line-permuted ΔE (`report_linear_model_input`). From
+  2026-11-13 a fold run reads its fold's own predictions (`predictions_fold<k>.parquet`, §18), so no input of a fold run
+  saw fold k's labels; the rows above were trained before, when a fold run's training lines read predictions fitted with
+  fold k's labels.
 - **Training** (`src/training/stage_one_trainer.py`, one GPU, no accelerate). An update is a block of genes by a block
   of training lines; AdamW (fused on CUDA), linear warmup then cosine (`src/training/schedule.py`). Without a PIE
   trunk the step (model and loss on a block gathered before it) runs as CUDA graphs through `torch.compile`; rows
@@ -1204,3 +1206,36 @@ moving `states/` aside moves the frozen PIE's state outputs with it.
 - **Reading.** People choose which vocabularies Task 9 precomputes. A gap no larger than the permuted control's is not
   by itself a reason to stop (design §5, Task 8). The per-state scores Task 9 produces are model-implied, never measured
   per-state GeneEffects (design §3.5).
+
+## 18. Per-gene reader
+
+Round B of the [PIE and single-cell plan](specs/2026-11-12-pie-and-single-cell-plan.md) (2026-11-12). The question:
+does a reader with a weight vector for each gene, on a shared nonlinear encoder of the line, do better than the
+default linear model refitted on the frame? Configs `configs/stage_one/gene_reader/`, the §16 run, queue and report
+commands; the record is [results/stage_one_gene_reader/](../results/stage_one_gene_reader/README.md).
+
+- **Model** (`model.arm: gene_reader`, `src/model/stage_one.py` `GeneReader`). `z(g, c) = z_lin(g, c) + u_g · h(c)`.
+  `z_lin` is the linear model reference's prediction minus the run's base `m_g` in z units (§16, the same feature
+  as the linear model input). `h` is one MLP shared by all genes (Linear `model.hidden` → GELU → Linear 32) over the
+  line's input; `u_g` is a 32-wide weight vector for each of the run's genes. `u_g` starts at zero, so the untrained
+  reader is the linear model row, and AdamW's weight decay pulls `u_g` back toward it. The product and the sum run in
+  fp32 outside autocast. `V` is `u_g * h(c)` (its sum is the deviation from the linear model). This is the only stage-one
+  module with a per-gene parameter: it reads no gene source (`data.gene_sources: []`) and no context text.
+- **Genes** (`data.genes: selective`). Every selective gene of the gene axis (4,344 on the 2026-11-13 frame), also the
+  54 outside the decode panel, which the linear model predicts. So epoch 0 equals the linear model row on every gene
+  the selector and within-gene R² read. The loss (§16: MSE plus the dependency term) covers these genes; every other
+  gene predicts the base.
+- **Line input.** `input: components`: the linear model's 128 expression components (fitted on the frame, or outside
+  fold k in a fold run); `input: expression`: the mean channel (`mean/mean_channel.parquet`, 9,929 genes). Each column
+  is standardised on the run's training lines.
+- **Fold runs.** `stage-one-linear-model` also writes `predictions_fold<k>.parquet` for every ladder line: fold k,
+  validation and test from the fit without fold k, every other frame line out of fold within that fit (fit without
+  folds k and j). A fold run reads these with its own base `m_g`, so no input it reads saw fold k's labels.
+- **Control** (`data.permuted: true` with a line-level input). One seeded permutation of all lines moves the line input
+  (line c reads line π(c)'s input); the linear model's prediction, the targets and the genes stay each line's own.
+- **Rows.** The reader on components and on expression, each at weight decay 0.01 (the earlier arms' value) and 1.0
+  (a strong pull toward the linear model), and the control of each: eight configs, each a main run and five fold runs.
+  Hidden width 256, learning rate 1e-3, 64 lines by 256 genes per update, at most 30 epochs, patience 5, as the
+  earlier arms. `report_gene_reader` puts every row beside the base and the linear model and contrasts each arm with
+  the linear model and with its control.
+- **Scope.** Single-gene dependency on held-out lines; not SL evidence.

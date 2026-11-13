@@ -1,4 +1,4 @@
-# The per-gene reader's report (protocol §17): each arm against the default linear model refitted on the frame and against
+# The per-gene reader's report (protocol §18): each arm against the default linear model refitted on the frame and against
 # its control (the same arm on lines permuted). `hpc/run.sh stage-one-report CONFIG`
 # -> outputs/stage_one/gene_reader/report_gene_reader/. People read it; nothing is chosen in code.
 kind: report
