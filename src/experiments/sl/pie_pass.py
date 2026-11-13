@@ -292,20 +292,25 @@ def export_measured(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def response_scores(
-    predicted: np.ndarray, truth: np.ndarray, others: np.ndarray
+    predicted: np.ndarray, truth: np.ndarray, others: np.ndarray, one: np.ndarray
 ) -> dict[str, float]:
     """One (line, perturbation): Pearson and Spearman over genes of PIE's predicted
     response and of the other lines' mean response with the measured response, and
-    of PIE's deviation from that mean with the measured deviation."""
+    of PIE's deviation from that mean with the measured deviation. Both deviations
+    subtract the same mean, which makes their correlation positive for any
+    prediction; the deviation of one other line's measured response (``one``) from
+    the mean gives that level."""
     from scipy.stats import pearsonr, spearmanr
 
-    keep = np.isfinite(predicted) & np.isfinite(truth) & np.isfinite(others)
-    p, t, o = predicted[keep], truth[keep], others[keep]
+    keep = (np.isfinite(predicted) & np.isfinite(truth) & np.isfinite(others)
+            & np.isfinite(one))  # fmt: skip
+    p, t, o, w = predicted[keep], truth[keep], others[keep], one[keep]
     out = {}
     for name, (x, y) in {
         "pie": (p, t),
         "other_lines_mean": (o, t),
         "pie_deviation": (p - o, t - o),
+        "one_other_line_deviation": (w - o, t - o),
     }.items():
         varies = np.ptp(x) > 0 and np.ptp(y) > 0
         out[f"{name}_pearson"] = float(pearsonr(x, y)[0]) if varies else np.nan
@@ -332,10 +337,15 @@ def own_task_table(
         if not others or (context, perturbation) not in row_index:
             continue
         truth = np.asarray(delta_p[row_index[(context, perturbation)]], np.float64)
-        mean = np.asarray(delta_p[others], np.float64).mean(axis=0)
+        measured = np.asarray(delta_p[others], np.float64)
         records.append(
             {"context": context, "perturbation": perturbation, "others": len(others)}
-            | response_scores(np.asarray(predicted, np.float64), truth, mean)
+            | response_scores(
+                np.asarray(predicted, np.float64),
+                truth,
+                measured.mean(axis=0),
+                measured[0],
+            )  # fmt: skip
         )
     return pd.DataFrame(records)
 
