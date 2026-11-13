@@ -27,10 +27,9 @@ extra_scores:
   buffer_conditional_ablated: outputs/sl/conditional/conditional_buffer_seed0/scores/conditional_ablated.parquet
   buffer_head: outputs/sl/conditional/conditional_buffer_seed0/scores/head.parquet
   buffer_head_ablated: outputs/sl/conditional/conditional_buffer_seed0/scores/head_ablated.parquet
-  # PARIS hpc/run.sh sl-paris configs/sl/paris_benchmark.yaml (--shard, then --merge);
+  # (PARIS left out: its scores are not on the H20 since 2026-11-13)
   # SLIdR hpc/run.sh sl-slidr configs/sl/slidr.yaml; De Kegel hpc/paralog/dekegel_scores.py;
   # Kebabci hpc/paralog/kebabci.py (measured, and --held-gene-effect); MiT4SL hpc/mit4sl/train.py
-  paris: outputs/sl/paris_benchmark/seed0/scores.parquet
   slidr: outputs/sl/slidr/seed0/scores.parquet
   dekegel_paralog: outputs/sl/dekegel/scores.parquet
   kebabci_paralog: outputs/sl/kebabci/seed0/scores.parquet
