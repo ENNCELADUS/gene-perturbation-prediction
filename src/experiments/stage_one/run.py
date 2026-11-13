@@ -66,11 +66,21 @@ def predictions_frame(
 
 def run_genes(setup: Setup, config: Mapping[str, Any]) -> tuple[list[str], dict]:
     """The genes a run trains on and predicts (``data.genes``) and their coverage:
-    the decode panel, or the selective genes in it that have a full-panel profile
-    delta (``pie/full/``), the same set for both matched profile rows."""
+    the decode panel, the selective genes in it that have a full-panel profile
+    delta (``pie/full/``), the same set for both matched profile rows, or every
+    selective gene of the gene axis (the per-gene reader, which needs no panel)."""
     ladder = setup.ladder
     if config["data"]["genes"] == "panel":
         return ladder.panel, {"genes": "panel", "count": len(ladder.panel)}
+    if config["data"]["genes"] == "selective":
+        axis = [str(g) for g in ladder.genes.index]
+        genes = [g for g, s in zip(axis, ladder.genes["selective"]) if s]
+        inside = set(ladder.panel)
+        return genes, {
+            "genes": "selective",
+            "count": len(genes),
+            "outside_panel": sum(g not in inside for g in genes),
+        }
     selective = [g for g in ladder.panel if bool(ladder.genes.at[g, "selective"])]
     found = reader.full_panel_genes(ladder, selective)
     return found, {

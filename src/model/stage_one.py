@@ -1,8 +1,9 @@
 """Stage-one architecture arms (PIE stage-one design §3.3; protocol §16): each maps a
 ``PairBatch`` to ``z`` (genes x lines; GeneEffect minus the base ``m_g`` in units of
 ``sigma_g``) and the viability embedding ``V`` (genes x lines x 32) through Cilantro's
-``FiLMNet128`` tail. No module holds a per-gene parameter: a gene enters only through
-its sources (``GeneEncoder``), so a gene never seen in training decodes."""
+``FiLMNet128`` tail. Except in the per-gene reader (``GeneReader``), no module holds a
+per-gene parameter: a gene enters only through its sources (``GeneEncoder``), so a
+gene never seen in training decodes."""
 
 from __future__ import annotations
 
@@ -202,10 +203,14 @@ class PairBatch:
     linear_model: Tensor | None = (
         None  # (genes, lines): the linear model's prediction, z units
     )
+    gene_index: Tensor | None = None  # (genes,): positions in the run's genes
 
     @property
     def shape(self) -> tuple[int, int]:
-        genes = next(iter(self.gene_vectors.values())).shape[0]
+        if self.gene_index is not None:
+            genes = self.gene_index.shape[0]
+        else:
+            genes = next(iter(self.gene_vectors.values())).shape[0]
         for lines_tensor in (self.delta, self.own, self.evidence, self.linear_model):
             if lines_tensor is not None:
                 return genes, lines_tensor.shape[1]
@@ -404,6 +409,31 @@ class Hybrid(nn.Module):
         return self.tail(F.relu(self.join(joined)))
 
 
+class GeneReader(nn.Module):
+    """The per-gene reader (protocol §17): ``z(g, c) = linear model(g, c) +
+    u_g · h(c)``, with ``h`` one shared MLP (Linear ``hidden`` -> GELU -> Linear
+    ``VIABILITY_WIDTH``) over the line's input and ``u_g`` a weight vector for each
+    of the run's genes. The only module with a per-gene parameter: ``u_g`` starts at
+    zero, so the untrained reader is the linear model, and weight decay pulls it back
+    there. ``V`` is ``u_g * h(c)``, whose sum is the deviation; the readout runs in
+    fp32 outside autocast."""
+
+    def __init__(self, input_dim: int, genes: int, hidden: int) -> None:
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden),
+            nn.GELU(),
+            nn.Linear(hidden, VIABILITY_WIDTH),
+        )
+        self.weights = nn.Parameter(torch.zeros(genes, VIABILITY_WIDTH))
+
+    def forward(self, batch: PairBatch) -> tuple[Tensor, Tensor]:
+        h = self.encoder(batch.line.float())  # (lines, width)
+        with torch.autocast(h.device.type, enabled=False):
+            parts = self.weights[batch.gene_index].unsqueeze(1) * h.float().unsqueeze(0)
+            return batch.linear_model.float() + parts.sum(-1), parts
+
+
 @dataclass(frozen=True)
 class InputDims:
     """Widths the model is built for, read from the inputs."""
@@ -412,12 +442,15 @@ class InputDims:
     delta: int  # the delta's width (the basis's k for dE), or the line input's
     own: int  # summed own-slot widths
     text: int
+    genes: int = 0  # the run's genes (the per-gene reader's weight rows)
 
 
 def build_model(config: Mapping[str, object], dims: InputDims) -> nn.Module:
     """The arm a training config names (``validate_stage_one_config`` checked it)."""
     data, model = config["data"], config["model"]
     arm, kind = model["arm"], data["input"]
+    if arm == "gene_reader":
+        return GeneReader(dims.delta, dims.genes, int(model["hidden"]))
     if arm == "direct_readout" or arm == "hybrid":
         trunk = model["trunk"]
         direct = DirectReadout(
