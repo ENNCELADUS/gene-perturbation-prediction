@@ -269,31 +269,30 @@ def doublet_scores(counts: object) -> np.ndarray:
 def _cells_line(
     model_id: str,
     source_path: Path,
-    programs_path: Path,
     output_path: Path,
     *,
     genes: tuple[str, ...],
     hvg_order: tuple[str, ...],
     target_sum: float,
-    cycle_columns: tuple[int, int],
+    scoring_genes: tuple[str, ...],
+    cycle_members: Mapping[str, tuple[str, ...]],
     var_ensembl_col: str,
     seed: int,
 ) -> int:
     """Write one line's ``cells/<ModelID>.npz``; return its cell count."""
     from src.data.basal import symbol_column
     from src.data.ladder_cells import cell_qc, gene_summaries, hvg_cells, line_rng
+    from src.data.noise_inputs import program_scores
     from src.data.tx1_cache import read_basal_source
 
     source = read_basal_source(
         source_path, model_id=model_id, var_ensembl_col=var_ensembl_col
     )
     symbols = source.var[symbol_column(source.var)].astype(str).tolist()
-    with np.load(programs_path) as payload:
-        programs = payload["scores"]
-    if programs.shape[0] != source.n_obs:
-        raise ValueError(
-            f"{model_id}: {programs.shape[0]} program-score rows, {source.n_obs} cells"
-        )
+    # The cycle scores as the noise diagnosis's program scores define them.
+    cycle, _ = program_scores(
+        source.X, symbols, scoring_genes, cycle_members, target_sum
+    )
     summaries = gene_summaries(
         source.X, symbols, genes, rng=line_rng(model_id, seed, "poisson")
     )
@@ -307,7 +306,7 @@ def _cells_line(
     qc = np.column_stack(
         [
             cell_qc(source.X, symbols),
-            programs[:, list(cycle_columns)],
+            cycle,
             doublet_scores(source.X),
         ]
     ).astype(np.float32)
@@ -335,18 +334,24 @@ def _cells_line(
 
 def build_cells(setup: Setup, frame: Frame) -> dict[str, Any]:
     """``cells/<ModelID>.npz`` for every split line lacking one."""
-    from src.experiments.prepare import LINE_PROCESSES, NOISE_DIR, in_processes
+    from src.data.pseudobulk import PSEUDOBULK_DIR
+    from src.experiments.prepare import LINE_PROCESSES, in_processes
 
     genes = read_genes(setup.root)
     panel = list(genes.index[genes["in_panel"]])
     union = cell_genes(
         panel, bulk_gene_columns(Path(setup.linear_model["paths"]["bulk_expression"]))
     )
-    programs = list(setup.noise["cell_states"]["programs"])
-    cycle = tuple(programs.index(name) for name in CYCLE_PROGRAMS)
+    # The noise diagnosis's scoring set and Tirosh's phases (its program tables).
+    scoring = json.loads(
+        (setup.prepared / PSEUDOBULK_DIR / "manifest.json").read_text()
+    )["genes"]
+    phases = pd.read_csv(
+        Path(setup.linear_model["paths"]["reference"]) / "cell_cycle.tsv", sep="\t"
+    )
+    cycle = {p: tuple(phases.loc[phases["phase"] == p, "gene"]) for p in CYCLE_PROGRAMS}
     out = setup.root / "cells"
     out.mkdir(exist_ok=True)
-    noise_programs = setup.prepared / NOISE_DIR / "programs"
     recorded = settings(setup)
     preparation = setup.joint["preparation"]
     directory = Path(setup.joint["paths"]["basal_raw_umi"])
@@ -356,12 +361,12 @@ def build_cells(setup: Setup, frame: Frame) -> dict[str, Any]:
             _cells_line,
             model_id,
             directory / f"{model_id}.h5ad",
-            noise_programs / f"{model_id}.npz",
             out / f"{model_id}.npz",
             genes=tuple(union),
             hvg_order=tuple(recorded["hvg_order"]),
             target_sum=recorded["prepared_target_sum"],
-            cycle_columns=cycle,
+            scoring_genes=tuple(scoring),
+            cycle_members=cycle,
             var_ensembl_col=preparation["var_ensembl_col"],
             seed=setup.seed,
         )
