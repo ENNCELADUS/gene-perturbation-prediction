@@ -299,7 +299,8 @@ def response_scores(
     of PIE's deviation from that mean with the measured deviation. Both deviations
     subtract the same mean, which makes their correlation positive for any
     prediction; the deviation of one other line's measured response (``one``) from
-    the mean gives that level."""
+    the mean gives that level, and the mean shrunk toward zero (any factor below
+    one: its deviation is ``-mean``) the level of a prediction that only shrinks."""
     from scipy.stats import pearsonr, spearmanr
 
     keep = (np.isfinite(predicted) & np.isfinite(truth) & np.isfinite(others)
@@ -311,6 +312,7 @@ def response_scores(
         "other_lines_mean": (o, t),
         "pie_deviation": (p - o, t - o),
         "one_other_line_deviation": (w - o, t - o),
+        "shrunk_mean_deviation": (-o, t - o),
     }.items():
         varies = np.ptp(x) > 0 and np.ptp(y) > 0
         out[f"{name}_pearson"] = float(pearsonr(x, y)[0]) if varies else np.nan
