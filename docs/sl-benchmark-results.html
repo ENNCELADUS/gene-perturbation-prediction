@@ -46,6 +46,10 @@ a { color: var(--accent); }
 <body>
 <main>
 <h1>SL benchmark: our models against the baselines</h1>
+<figure style="margin:0;display:grid;gap:6px">
+<img src="Two-Stage%20Synthetic-Lethal%20Prediction%20Pipeline.png" alt="Two-stage pipeline: a linear expression model predicts GeneEffect from the line's basal profile; a logistic regression scores each gene pair from the predicted GeneEffect change when one gene's expression is set low." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff">
+<figcaption class="muted"><strong>Figure 1.</strong> The two-stage model.</figcaption>
+</figure>
 <h2>Stage one: GeneEffect in the SL held-out lines</h2>
 <p>Whole-line Pearson: predicted against measured GeneEffect over all genes of a line, mean over lines. MSE: mean squared GeneEffect error over all lines and genes. Per-line residual Spearman: the line-specific metric, over the selective genes of each line, after the training gene mean is removed (the selector).</p>
 
