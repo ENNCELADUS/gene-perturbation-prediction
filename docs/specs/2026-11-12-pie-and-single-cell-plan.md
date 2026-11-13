@@ -5,6 +5,20 @@ built) with the results of the two backbone runs ([round zero](../../results/sl_
 [buffer-aware reader](../../results/sl_buffer_aware_reader_seed0/README.md)). It is a plan, not a protocol: each round
 gets its own short spec when it starts.
 
+**Status (2026-11-13).** Rounds A and B and two parts of round C ran. All gave null results.
+
+| Round | Result (validation / test) | Record |
+| --- | --- | --- |
+| A. PIE as the counterfactual predictor | Conditional score, PIE's profile minus the simple edit: −0.043 / −0.088; minus PIE's profile of another line: +0.022 / +0.004. On its own task PIE (Pearson 0.303) is not above the mean response of the other lines (0.331). The measured profile of the line minus another line's: +0.040 [+0.000, +0.080] on two test lines, both rows near random. 66 of 86 lines had no context text. | [record](../../results/sl_pie_editor_seed0/README.md) |
+| B. The per-gene reader | 7 of 8 runs select epoch 0 (the linear model, 0.226 / 0.227); the best arm gains +0.002 / +0.005, intervals across zero. | [record](../../results/stage_one_gene_reader/README.md) |
+| C. Own-gene space; co-detection of A and B | Coverage 44% to 79% and stage one 0.183 / 0.193 to 0.207 / 0.197, but head −0.017 on test; co-detection minus shuffled +0.004 / +0.001. | [record](../../results/sl_single_cell_inputs_seed0/README.md) |
+
+Round D (a line-specific PIE) does not start yet. The measured profile after A's loss is the top for any
+counterfactual predictor, and through the linear reader it ranks near random (0.114 against 0.305 for the training SL
+fraction on the same rows). The next step is a measurement: a reader fitted on the measured response of one line
+(K562) and scored on another (Jurkat), against the same reader on another line's response. Only if the measured
+response holds SL signal is a better counterfactual predictor worth its cost.
+
 ## 1. Where the model is
 
 - **The SL rule works only at the level of the pair.** A linear reader, with or without each gene's buffer, gives a

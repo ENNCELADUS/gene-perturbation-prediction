@@ -104,11 +104,12 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 <main>
 
 <header>
-  <span class="eyebrow">Research status · 2026-10-29</span>
+  <span class="eyebrow">Research status · 2026-11-13</span>
   <h1>Context-specific synthetic lethality from basal single-cell profiles</h1>
   <div class="prose" style="display:grid;gap:8px">
     <p>This page shows the status of the two stages of the project. All numbers come from the run records in
-    <code>results/</code>. The last record is from 2026-10-23, and the code is at <code>c8df967</code>.</p>
+    <code>results/</code>. The tables of the two stages are from 2026-10-23 (code <code>c8df967</code>). The section on the PIE and
+    single-cell round is from 2026-11-13 (code <code>cb31a41</code>).</p>
     <p>Each run is one config at seed 0. The run selects <code>best.pt</code> on validation. Then it scores
     <code>best.pt</code> one time on test.</p>
   </div>
@@ -117,13 +118,13 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 <section>
   <div class="ledger" role="list">
     <div role="listitem"><span class="what">Stage one: GeneEffect</span><span class="chip neg">Below the linear model</span>
-      <span>No trained architecture is better than the default linear model refitted on the frame (0.215 validation, 0.228 test). When FiLM reads the linear model's prediction, it gets 0.199–0.203. This is still below the linear model.</span></div>
+      <span>No trained architecture is better than the default linear model refitted on the frame (0.226 validation, 0.227 test on the frame rebuilt on 2026-11-13). A reader with a weight vector for each gene returns the linear model.</span></div>
     <div role="listitem"><span class="what">Cell-state telemetry</span><span class="chip pos">Complete</span>
       <span>The run built 17 state vocabularies and read them through the frozen PIE. The deposit of origin controls most vocabularies. A mix of states adds little to the line's mean input.</span></div>
     <div role="listitem"><span class="what">Stage two: SL ranking</span><span class="chip flat">No context signal</span>
-      <span>Pair identity is best on all benchmarks. Predicted GeneEffect adds nothing to each gene's mean GeneEffect. Measured GeneEffect also adds almost nothing.</span></div>
+      <span>The training SL fraction is best on all benchmarks. Predicted GeneEffect adds nothing to each gene's mean GeneEffect. PIE's predicted profile after a gene's loss, a wider gene space and co-detection in single cells do not make the line matter.</span></div>
     <div role="listitem"><span class="what">Next</span><span class="chip next">Planned</span>
-      <span>Finish stage one: the bulk-encoder rows and the gene query. Then the data ladder and the frozen-state pilot.</span></div>
+      <span>Measure if the measured Perturb-seq response to a gene's loss holds SL signal under a fitted reader (K562 to Jurkat). A line-specific PIE starts only if it does.</span></div>
   </div>
 </section>
 
@@ -346,8 +347,61 @@ ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 8
 </section>
 
 <section>
+  <h2>The PIE and single-cell round (2026-11-13)</h2>
+  <div class="prose" style="display:grid;gap:12px">
+    <p>The round gave each part one job: PIE predicts the line's profile after gene A is lost, a per-gene reader
+    predicts a gene's dependency in a profile, and the single cells give the state of the line
+    (<code>docs/specs/2026-11-12-pie-and-single-cell-plan.md</code>). Three parts ran. All gave null results.</p>
+  </div>
+  <figure>
+    <figcaption><b>Table 8.</b> Recall in the top 10% on the multi-study SL benchmark (17 validation and 16 test lines), mean over lines; higher is better. The best model in each column is bold. The training SL fraction is a control.</figcaption>
+    <div class="scroll"><table>
+      <thead><tr><th>Model</th><th>Validation</th><th>Test</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="3">Conditional score (B's predicted change when A is lost), by editor</td></tr>
+        <tr><td>A's expression set low (simple edit)</td><td>0.295</td><td>0.288</td></tr>
+        <tr><td>PIE's predicted profile</td><td>0.252</td><td>0.200</td></tr>
+        <tr><td>PIE's predicted profile of another line</td><td>0.230</td><td>0.196</td></tr>
+        <tr class="group"><td colspan="3">Backbone head</td></tr>
+        <tr><td>Simple edit, narrow gene space (the backbone)</td><td>0.374</td><td>0.322</td></tr>
+        <tr><td>PIE's predicted profile</td><td>0.317</td><td>0.248</td></tr>
+        <tr><td>Each line in its own genes</td><td><b>0.381</b></td><td>0.304</td></tr>
+        <tr><td>With co-detection of A and B</td><td>0.374</td><td><b>0.331</b></td></tr>
+        <tr><td>With shuffled co-detection</td><td>0.369</td><td>0.330</td></tr>
+        <tr class="group"><td colspan="3">Control</td></tr>
+        <tr><td>Training SL fraction</td><td>0.524</td><td>0.495</td></tr>
+      </tbody>
+    </table></div>
+  </figure>
+  <figure>
+    <figcaption><b>Table 9.</b> Stage-one GeneEffect on the frame rebuilt on 2026-11-13 (27 validation, 28 test lines): per-line residual Spearman; higher is better. The best model in each column is bold. Each reader predicts the linear model's prediction plus a term with a weight vector for each gene.</figcaption>
+    <div class="scroll"><table>
+      <thead><tr><th>Model</th><th>Validation</th><th>Test</th></tr></thead>
+      <tbody>
+        <tr><td>Default linear model refitted on the frame</td><td>0.2261</td><td>0.2266</td></tr>
+        <tr><td>Per-gene reader on the 128 components, weight decay 1.0</td><td><b>0.2278</b></td><td><b>0.2311</b></td></tr>
+        <tr><td>The three other per-gene readers (epoch 0 selected)</td><td>0.2261</td><td>0.2266</td></tr>
+        <tr><td>The four readers with lines permuted (epoch 0 selected)</td><td>0.2261</td><td>0.2266</td></tr>
+      </tbody>
+    </table></div>
+  </figure>
+  <h3>Reading</h3>
+  <ul class="reading">
+    <li><b>PIE's profile is below the simple edit</b> (conditional score −0.043 [−0.094, +0.004] on validation, −0.088 [−0.137, −0.044] on test) <b>and it is not line-specific:</b> minus PIE's profile of another line it is +0.022 [+0.001, +0.046] and +0.004 [−0.017, +0.023].</li>
+    <li><b>On its own task PIE is not above the mean response of the other lines</b> (Pearson 0.303 against 0.331 on the four Replogle folds).</li>
+    <li><b>The measured profile after A's loss also ranks near random through the linear reader</b> (0.114 for the line's own Perturb-seq profile, 0.074 for another line's, random 0.10; two test lines).</li>
+    <li><b>The per-gene reader returns the linear model.</b> Seven of eight runs select epoch 0. The other gains +0.002 [−0.016, +0.022] and +0.005 [−0.011, +0.022]. Validation falls after one or two epochs.</li>
+    <li><b>A wider gene space helps stage one, not the SL ranking.</b> The reader can edit 79% of the held-out rows (44% before), but the head changes by +0.007 and −0.017. Co-detection minus shuffled co-detection is +0.004 and +0.001.</li>
+    <li><b>Limit.</b> 66 of the 86 screened lines had no Cellosaurus context text in the PIE run, because the embedding account had no credits.</li>
+  </ul>
+  <p class="sources">Records: <a href="sl_pie_editor_seed0/README.md">PIE editor</a> ·
+  <a href="stage_one_gene_reader/README.md">per-gene reader</a> ·
+  <a href="sl_single_cell_inputs_seed0/README.md">two single-cell inputs</a> (2026-11-13).</p>
+</section>
+
+<section>
   <h2>Next steps</h2>
-  <p class="prose">The stage-one plan (<code>docs/specs/2026-10-17-pie-stage-one-plan.md</code>) gives this sequence:</p>
+  <p class="prose">First, one measurement: a reader fitted on the measured Perturb-seq response of one line (K562) and scored on another (Jurkat), against the same reader on another line's response. The measured response is the top for any counterfactual predictor, so a line-specific PIE starts only if this response holds SL signal. The earlier stage-one plan (<code>docs/specs/2026-10-17-pie-stage-one-plan.md</code>) gave this sequence, which waits:</p>
   <ol class="next">
     <li><b>Finish stage one.</b> Add the bulk-encoder, 377-line and protocol-mean rows for the best arm. Add a separate bulk encoder on the 343 paired lines. Then add each gene-text source to the gene query.</li>
     <li><b>Data ladder and state pilot.</b> Add the cell-bank channels with per-line QC covariates. Run the frozen-state pilot of the state-mixture model on the selected vocabularies (about 55M pairs, about 50 h). Then test planted state effects.</li>
