@@ -18,7 +18,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `gene_sources`: Gene sources of the stage-one gene encoder (ladder design §4.4), aligned to the GeneEffect gene axis.
 - `io`: Atomic file writes every step shares, and plain-JSON conversion.
 - `labels`: DepMap GeneEffect labels by ModelID and what the training lines fit from them.
-- `ladder_cells`: Per-line cell inputs of the stage-one ladder (PIE's input, pseudo-bulk, per-gene spread, per-cell QC, HVG cells), each over every raw basal cell of the line.
+- `ladder_cells`: Per-line cell inputs of the stage-one ladder (PIE's input, pseudo-bulk, per-gene spread, per-cell QC, HVG cells), each over every raw basal cell of the line; co-detection of two genes in the same cells (SL protocol §13).
 - `ladder_reader`: Readers of the stage-one inputs (``data/geneeffect_joint/v2/ladder/``, protocol §15) and their GPU-resident form, each array checked against ``lines.parquet`` and the decode panel; numpy, pandas and torch only, so ``.venv-pie`` reads them too.
 - `noise_inputs`: Per-line inputs of the noise diagnosis from a line's raw basal cells.
 - `prepared`: Prepared joint-training inputs (``lines/<ModelID>.npz``, ``response/`` and the ``prepared_inputs.json`` manifest, written last), opened with train-only fitting or a checkpoint's restored state.
@@ -117,7 +117,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 ### `experiments/`
 
 - `config`: What every track's strict config loader shares.
-- `prepare`: Prepare fixed joint-training inputs once, in STATE's log expression space (``log1p(x * T / L_cell)``, Tx1 on raw UMI); the only reader of raw data.
+- `prepare`: Prepare fixed joint-training inputs once, in STATE's log expression space (``log1p(x * T / L_cell)``, Tx1 on raw UMI); the only reader of raw data; also the co-detection cache of the SL pairs (`--codetection`).
 - `run_dir`: What every experiment command does with its run directory.
 
 ### `experiments/joint/`
@@ -174,7 +174,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 ### `experiments/sl/`
 
 - `benchmark_baselines`: Baselines on the multi-study SL benchmark: pair identity, pan-essentiality, stage one's predicted GeneEffect, the measured GeneEffect (lines with GeneEffect only) and other harnesses' scores; headline recall in the top 10% of each list, reported for all lines, each GeneEffect group, cancer and non-cancer lines, each stratum and subset (partner pairs, no gene a dependency alone), with the paired differences named in the config and the label-agreement ceiling.
-- `conditional`: The modular SL backbone (SL protocol §11, §12): the reader of a linear model config (the default linear expression model, or the buffer-aware reader with the partner block) fitted on the SL split's training side, the conditional score (B's predicted change when A is lost, read from each line's edited rows), its context-ablated version, a logistic head, the partner flag and the stage-one ceiling of two DepMap screens.
+- `conditional`: The modular SL backbone (SL protocol §11, §12): the reader of a linear model config (the default linear expression model, or the buffer-aware reader with the partner block) fitted on the SL split's training side, the conditional score (B's predicted change when A is lost, read from each line's edited rows), its context-ablated version, a logistic head, the partner flag and the stage-one ceiling of two DepMap screens; optionally each line read in its own genes and co-detection inputs of the head (SL protocol §13).
 - `paris`: Python port of PARIS (`third_party/paris`): random forests of each dependency gene's GeneEffect on the expression of the training-side lines; with `sl_split`, it scores the held-out rows of the multi-study SL benchmark (selected pair's importance, else 0), in shards that `--merge` joins.
 - `slidr`: Python port of SLIdR (`third_party/slidr`): per lineage of the training-side lines, the rank-sum test of a gene's GeneEffect in the lines with a driver altered against the wild-type lines; it scores the held-out rows of the multi-study SL benchmark by the held line's lineage.
 - `stage_two`: Stage two, first run (SL protocol §10): a PARIS head and a viability-embedding head, scored per held-out line and screen of the SL screen benchmark against their controls.
