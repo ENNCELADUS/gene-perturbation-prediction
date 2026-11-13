@@ -187,7 +187,7 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
 
 <section>
   <h2>4. Baselines and results</h2>
-  <p>Results of 2026-11-06, seed 0, on the stage-two benchmark (run <code>benchmark_baselines_all_seed0</code>,
+  <p>Results of 2026-11-13, seed 0, on the stage-two benchmark (run <code>benchmark_baselines_all_seed0_v2</code>,
   <code>hpc/run.sh sl-baselines</code>). No baseline reads the basal single-cell profile. Each trained baseline fits
   only on training lines; validation and test lines are scored once.</p>
   <div class="wrap wide"><table>
@@ -206,6 +206,30 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
         model and settings, refitted on our split. A pair needs both genes in the line's top 2,048 tokens; the other pairs
         (98.5% of the held-out genetic rows) get 0.5.</td><td>Stage one: training-side lines with GeneEffect;
         classifier: training lines' genetic pairs</td><td>Yes</td></tr>
+      <tr><td>PARIS (Benfatto 2021, Python port of the R code)</td><td>For each gene of a held-out pair, a random forest
+        of its GeneEffect on the bulk expression of every protein-coding gene (corrected impurity importance, Janitza
+        selection). A pair scores the larger importance of a selected pair with Pearson r &gt; 0, either gene as the
+        dependency gene, else 0.</td><td>GeneEffect and expression of training-side lines</td><td>No</td></tr>
+      <tr><td>SLIdR (Srivatsa 2022, Python port of the R code)</td><td>Rank test of the partner's GeneEffect in the lines
+        where the other gene is mutated (damaging or hotspot call, or 0 copies), with the wild-type filter (p &lt; 0.1
+        rejects), in the held-out line's lineage, both orientations. Score −log10 p; a pair that no orientation tests
+        gets −log10 0.5.</td><td>GeneEffect, mutations and copy number of the training-side lines of the lineage</td><td>By lineage</td></tr>
+      <tr><td>De Kegel 2021 paralog classifier (released scores)</td><td>The released prediction score (Table S8,
+        36,648 paralog pairs, trained on DepMap 2020 dependencies). A pair outside the table gets the table's median.</td>
+        <td>As released (no screen labels)</td><td>No</td></tr>
+      <tr><td>Kebabci 2026 paralog classifier (official code)</td><td>The official random forest on 16
+        features of the line and the paralog pair (expression, GeneEffect ranks, copy number and mutations of the two
+        genes, De Kegel's score and sequence identity, STRING and GO neighbours), refitted on measured GeneEffect. A
+        held-out line's GeneEffect ranks come from stage one's prediction (the linear expression model), both on the
+        predicted genes. Rows outside its paralog pairs get the median score.</td>
+        <td>Training-side lines' genetic paralog rows</td><td>Yes</td></tr>
+      <tr><td><i>Kebabci 2026, measured GeneEffect (reference)</i></td><td>The same model, but a held-out line reads its
+        measured GeneEffect, so it is a reference, like the measured GeneEffect row.</td>
+        <td>As above</td><td>Yes</td></tr>
+      <tr><td>MiT4SL (Tao 2025, official code)</td><td>Graph model on PrimeKG, ESM-2 protein embeddings and a
+        contextualised PPI graph of the line (genes with TPM ≥ 400), without every edge inside a benchmark pair. The
+        official model and protocol, one run, epoch chosen on validation AUROC. Rows outside PrimeKG or without
+        DepMap expression get the median score.</td><td>Training-side lines' genetic rows</td><td>Yes</td></tr>
       <tr><td><i>Labels (check)</i></td><td>The label itself: the ceiling of the metric, min(1, 0.1 n / SL pairs) for each screen.</td><td>—</td><td>Yes</td></tr>
       <tr><td><i>Random (check)</i></td><td>A seeded random number: about 0.10.</td><td>—</td><td>—</td></tr>
     </tbody></table></div>
@@ -221,24 +245,41 @@ caption { caption-side: top; text-align: left; padding: 8px 10px; color: var(--m
     <tbody>
       <tr><td>Training SL fraction</td><td class="num"><b>0.524 / 0.495</b> (0.77 / 0.77)</td><td class="num"><b>0.962 / 0.926</b> (1.00 / 1.00)</td><td class="num">0.001 / 0.002 (0.00 / 0.00)</td><td class="num">0.100 / 0.100 (0.50 / 0.50)</td></tr>
       <tr><td>KG4SL</td><td class="num">0.352 / 0.306 (0.69 / 0.65)</td><td class="num">0.521 / 0.542 (0.80 / 0.79)</td><td class="num">0.079 / 0.081 (0.37 / 0.34)</td><td class="num"><b>0.278 / 0.228</b> (0.59 / 0.58)</td></tr>
-      <tr><td>Cilantro-SL</td><td class="num">0.113 / 0.115 (0.51 / 0.51)</td><td class="num">0.118 / 0.117 (0.51 / 0.51)</td><td class="num"><b>0.102 / 0.097</b> (0.49 / 0.49)</td><td class="num">0.105 / 0.111 (0.50 / 0.51)</td></tr>
+      <tr><td>Cilantro-SL</td><td class="num">0.113 / 0.115 (0.51 / 0.51)</td><td class="num">0.118 / 0.117 (0.51 / 0.51)</td><td class="num">0.102 / 0.097 (0.49 / 0.49)</td><td class="num">0.105 / 0.111 (0.50 / 0.51)</td></tr>
+      <tr><td>PARIS</td><td class="num">0.208 / 0.189 (0.57 / 0.57)</td><td class="num">0.241 / 0.255 (0.60 / 0.62)</td><td class="num">0.082 / 0.072 (0.46 / 0.40)</td><td class="num">0.231 / 0.217 (0.58 / 0.62)</td></tr>
+      <tr><td>SLIdR</td><td class="num">0.086 / 0.097 (0.48 / 0.50)</td><td class="num">0.094 / 0.087 (0.51 / 0.50)</td><td class="num"><b>0.105 / 0.111</b> (0.50 / 0.53)</td><td class="num">0.092 / 0.109 (0.49 / 0.52)</td></tr>
+      <tr><td>De Kegel 2021 paralog classifier</td><td class="num">0.270 / 0.267 (0.66 / 0.66)</td><td class="num">0.350 / 0.439 (0.69 / 0.76)</td><td class="num">0.092 / 0.084 (0.45 / 0.47)</td><td class="num">0.223 / 0.240 (0.61 / 0.69)</td></tr>
+      <tr><td>Kebabci 2026 paralog classifier</td><td class="num">0.343 / 0.359 (0.66 / 0.66)</td><td class="num">0.389 / 0.528 (0.67 / 0.75)</td><td class="num">0.071 / 0.083 (0.46 / 0.46)</td><td class="num">0.260 / 0.292 (0.61 / 0.62)</td></tr>
+      <tr><td><i>Kebabci 2026, measured GeneEffect (reference)</i></td><td class="num"><i>0.283 / 0.270 (0.62 / 0.62)</i></td><td class="num"><i>0.334 / 0.421 (0.64 / 0.69)</i></td><td class="num"><i>0.087 / 0.099 (0.49 / 0.52)</i></td><td class="num"><i>0.146 / 0.225 (0.54 / 0.57)</i></td></tr>
+      <tr><td>MiT4SL</td><td class="num">0.144 / 0.120 (0.59 / 0.56)</td><td class="num">0.124 / 0.181 (0.56 / 0.60)</td><td class="num">0.101 / 0.092 (0.50 / 0.51)</td><td class="num">0.130 / 0.171 (0.55 / 0.51)</td></tr>
       <tr><td><i>Labels (check)</i></td><td class="num"><i>0.964 / 0.920</i></td><td class="num"><i>0.962 / 0.926</i></td><td class="num"><i>0.278 / 0.243</i></td><td class="num"><i>0.842 / 0.718</i></td></tr>
       <tr><td><i>Random (check)</i></td><td class="num"><i>0.093 / 0.106</i></td><td class="num"><i>0.119 / 0.103</i></td><td class="num"><i>0.081 / 0.087 (0.47 / 0.45)</i></td><td class="num"><i>0.103 / 0.106</i></td></tr>
     </tbody></table></div>
-  <div class="wrap"><table>
-    <caption>Table 8. Recall in the top 10% ↑ (AUROC ↑), on the 6,804 rows Cilantro-SL scores.</caption>
-    <thead><tr><th>Baseline</th><th class="num">Validation</th><th class="num">Test</th></tr></thead>
+  <div class="wrap wide"><table>
+    <caption>Table 8. Recall in the top 10% ↑ (AUROC ↑ in brackets) of each baseline that scores only part of the held-out rows, on those rows only, beside the training SL fraction and the labels (the ceiling) on the same rows; mean over held-out lines (<code>results.md</code> Table 4).</caption>
+    <thead><tr><th>Baseline</th><th class="num">Rows scored</th><th class="num">Validation: baseline</th><th class="num">Training SL fraction</th><th class="num">Labels</th><th class="num">Test: baseline</th><th class="num">Training SL fraction</th><th class="num">Labels</th></tr></thead>
     <tbody>
-      <tr><td>Training SL fraction</td><td class="num">0.324 (<b>0.74</b>)</td><td class="num"><b>0.394</b> (<b>0.80</b>)</td></tr>
-      <tr><td>Cilantro-SL</td><td class="num"><b>0.357</b> (0.70)</td><td class="num">0.289 (0.75)</td></tr>
-      <tr><td>KG4SL</td><td class="num">0.141 (0.53)</td><td class="num">0.119 (0.46)</td></tr>
-      <tr><td><i>Labels (check)</i></td><td class="num"><i>0.764</i></td><td class="num"><i>0.759</i></td></tr>
-      <tr><td><i>Random (check)</i></td><td class="num"><i>0.120</i></td><td class="num"><i>0.093</i></td></tr>
+      <tr><td>KG4SL</td><td class="num">523,075 (96.2%)</td><td class="num">0.354 (0.69)</td><td class="num"><b>0.523</b> (<b>0.77</b>)</td><td class="num"><i>0.964</i></td><td class="num">0.306 (0.65)</td><td class="num"><b>0.494</b> (<b>0.77</b>)</td><td class="num"><i>0.919</i></td></tr>
+      <tr><td>Cilantro-SL</td><td class="num">6,804 (1.3%)</td><td class="num"><b>0.357</b> (0.70)</td><td class="num">0.324 (<b>0.74</b>)</td><td class="num"><i>0.764</i></td><td class="num">0.289 (0.75)</td><td class="num"><b>0.394</b> (<b>0.80</b>)</td><td class="num"><i>0.759</i></td></tr>
+      <tr><td>PARIS</td><td class="num">511,485 (94.1%)</td><td class="num">0.208 (0.57)</td><td class="num"><b>0.524</b> (<b>0.77</b>)</td><td class="num"><i>0.964</i></td><td class="num">0.195 (0.58)</td><td class="num"><b>0.495</b> (<b>0.77</b>)</td><td class="num"><i>0.914</i></td></tr>
+      <tr><td>SLIdR</td><td class="num">94,794 (17.4%)</td><td class="num">0.098 (0.49)</td><td class="num"><b>0.506</b> (<b>0.75</b>)</td><td class="num"><i>0.885</i></td><td class="num">0.102 (0.51)</td><td class="num"><b>0.374</b> (<b>0.71</b>)</td><td class="num"><i>0.823</i></td></tr>
+      <tr><td>De Kegel 2021 paralog classifier</td><td class="num">112,567 (20.7%)</td><td class="num">0.372 (0.79)</td><td class="num"><b>0.686</b> (<b>0.89</b>)</td><td class="num"><i>0.899</i></td><td class="num">0.372 (0.79)</td><td class="num"><b>0.595</b> (<b>0.89</b>)</td><td class="num"><i>0.865</i></td></tr>
+      <tr><td>Kebabci 2026 paralog classifier</td><td class="num">108,052 (19.9%)</td><td class="num">0.639 (<b>0.92</b>)</td><td class="num"><b>0.691</b> (0.89)</td><td class="num"><i>0.912</i></td><td class="num">0.599 (<b>0.90</b>)</td><td class="num"><b>0.615</b> (0.88)</td><td class="num"><i>0.876</i></td></tr>
+      <tr><td><i>Kebabci 2026, measured GeneEffect (reference)</i></td><td class="num">100,966 (18.6%)</td><td class="num"><b>0.661</b> (0.83)</td><td class="num">0.651 (<b>0.87</b>)</td><td class="num"><i>0.888</i></td><td class="num">0.539 (<b>0.88</b>)</td><td class="num"><b>0.601</b> (<b>0.88</b>)</td><td class="num"><i>0.829</i></td></tr>
+      <tr><td>MiT4SL</td><td class="num">472,797 (87.0%)</td><td class="num">0.149 (0.60)</td><td class="num"><b>0.582</b> (<b>0.80</b>)</td><td class="num"><i>0.959</i></td><td class="num">0.122 (0.56)</td><td class="num"><b>0.527</b> (<b>0.79</b>)</td><td class="num"><i>0.907</i></td></tr>
     </tbody></table></div>
   <ul>
     <li><b>Memory of training labels gives most of the signal.</b> The training SL fraction reads no held-out line and is at the ceiling on seen pairs whose label agrees.</li>
-    <li><b>No baseline follows context.</b> On pairs whose label differs between lines, all are at or below random (AUROC 0.00–0.49); KG4SL (0.37 / 0.34) gives each pair its training label.</li>
-    <li><b>Cilantro-SL scores 1.5% of rows.</b> It embeds a gene only by deleting its token from the line's top 2,048 Geneformer tokens, so a pair is scored only when both genes are among the line's most expressed genes; all other pairs get 0.5. Table 8 keeps these 6,804 (line, pair) rows. Unexpressed genes, often the SL context (a silenced paralog), are never read.</li>
+    <li><b>No baseline follows context.</b> On pairs whose label differs between lines, all are near or below random (AUROC 0.00–0.53); KG4SL (0.37 / 0.34) gives each pair its training label.</li>
+    <li><b>On its own rows, no baseline beats the training SL fraction on both splits</b> (Table 8). Each row of Table 8 compares the two scores on the same rows: the rows that the baseline scores. The other held-out rows get one fill score each, so they tie.</li>
+    <li><b>Paralog classifiers.</b> De Kegel's released scores rank paralog SL pairs (AUROC 0.79 on their rows) but below the training SL fraction (0.89). Kebabci's random forest with stage one's predicted GeneEffect is close to the training SL fraction on its rows (recall 0.639 against 0.691 on validation, 0.599 against 0.615 on test; AUROC 0.92 / 0.90 against 0.89 / 0.88).</li>
+    <li><b>Predicted GeneEffect does as well as measured in Kebabci.</b> On the lines with measured GeneEffect, the two versions score the same (recall 0.351 / 0.351 predicted, 0.359 / 0.347 measured, 12 validation and 11 test lines). The predicted version is higher overall (0.343 / 0.359 against 0.283 / 0.270) because it also scores the 5 + 5 held-out lines without measured GeneEffect (0.324 / 0.378).</li>
+    <li><b>MiT4SL is near random</b> (AUROC 0.60 / 0.56 on its 87% of rows). The released cross-cell-line protocol takes one full-batch step per epoch for 20 epochs; validation AUROC was still rising at the last epoch (0.69 on its training-format rows), so a longer run may score higher. It reads each line's PPI graph from its expressed genes, but on the pairs whose label differs it is at random (0.50 / 0.51).</li>
+    <li><b>PARIS ranks pairs only a little above random</b> (AUROC 0.57 / 0.58 on its 94.1% of rows, recall 0.208 / 0.195
+      against 0.524 / 0.495 for the training SL fraction). In the training lines, the expression of one gene predicts the GeneEffect of the
+      other; in the screens, this gives only a weak SL signal.</li>
+    <li><b>SLIdR is random on the rows it tests</b> (AUROC 0.49 / 0.51 on 17.4% of rows). Its 13 held-out lineages have 0–116 training-side lines (median 48); a mutation-driven dependency in the training lines does not predict the screen labels.</li>
+    <li><b>Cilantro-SL scores 1.5% of rows.</b> It embeds a gene only by deleting its token from the line's top 2,048 Geneformer tokens, so a pair is scored only when both genes are among the line's most expressed genes; all other pairs get 0.5. Unexpressed genes, often the SL context (a silenced paralog), are never read.</li>
     <li><b>On its own rows, Cilantro-SL is no better than label memory</b> (AUROC 0.70 / 0.75 against 0.74 / 0.80). Its pair embedding comes from a stage one that is mostly the gene mean (16% of within-gene variance, on its training rows; <a href="../../results/cilantro_reproduction_seed0/README.md">record</a>), so the classifier learns which genes are SL, not in which line. The released code also very likely feeds the 30M model gc95M token IDs instead of its gc30M vocabulary, and pooling drops the top-ranked gene; the matched gc30M run has not run.</li>
   </ul>
 </section>
