@@ -27,13 +27,14 @@ Replace this section on every update; history lives in `results/` and the protoc
   per-gene reader (linear model + `u_g · h(line)`) is null: 7 of 8 runs select epoch 0, the best gains +0.002 / +0.005
   ([record](results/stage_one_gene_reader/README.md)); older arms: [architecture](results/stage_one_architecture/README.md),
   [linear-model input](results/stage_one_linear_model_input/README.md). Outputs before 2026-11-13 are gone from the host.
-- **Stage two**: modular SL backbone, head 0.374 / 0.322 < training SL fraction. Three modules of the [plan](docs/specs/2026-11-12-pie-and-single-cell-plan.md) ran, all null: PIE's profile as the editor (SL protocol §14, [record](results/sl_pie_editor_seed0/README.md); below the simple edit, equal to another line's profile; 66 of 86 lines had no context text),
+- **Stage two**: modular SL backbone, buffer-aware head 0.394 / 0.361 < training SL fraction. Three modules of the [plan](docs/specs/2026-11-12-pie-and-single-cell-plan.md) ran, all null: PIE's profile as the editor (SL protocol §14, [record](results/sl_pie_editor_seed0/README.md); below the simple edit, equal to another line's profile; 66 of 86 lines had no context text),
   own-gene space and co-detection (§13, [record](results/sl_single_cell_inputs_seed0/README.md)). Next: test if the measured profile after A's loss holds SL signal under a fitted reader.
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html), [scoreboard](docs/sl-benchmark-results.html)): labels in `data/sl_studies/benchmark_v2` (H20);
-  headline = recall in the top 10% of genetic two-class screens, averaged over screens, studies, then lines (77 lines,
-  44/17/16, placed by hand). 2026-11-13, val / test: the training SL fraction 0.524 / 0.495 leads; Kebabci on predicted
-  GeneEffect 0.343 / 0.359, KG4SL 0.352 / 0.306, De Kegel 0.270 / 0.267, PARIS 0.208 / 0.189, MiT4SL 0.144 / 0.120,
-  Cilantro-SL 0.113 / 0.115, SLIdR 0.086 / 0.097; none follows context; labels 0.96 / 0.92, random 0.09 / 0.11 ([scoreboard](docs/sl-benchmark-results.html); the card holds data only).
+  headline = recall in the top 10% of genetic two-class screens, over min(SL pairs, top places) so the ceiling is 1,
+  averaged over screens, studies, then lines (77 lines, 44/17/16, placed by hand). 2026-11-13 (run `_v3`), val / test:
+  the training SL fraction 0.540 / 0.541 leads; Kebabci on predicted GeneEffect 0.355 / 0.395, KG4SL 0.367 / 0.338,
+  De Kegel 0.281 / 0.293, PARIS 0.219 / 0.213, MiT4SL 0.154 / 0.138, Cilantro-SL 0.123 / 0.134, SLIdR 0.095 / 0.115;
+  none follows context; labels 1.00 / 1.00, random 0.10 / 0.12.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands
