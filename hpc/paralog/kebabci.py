@@ -31,12 +31,19 @@ STRING and GO are named by symbol, not by Ensembl ID; GO is GOA human release 21
 (2023-07-12), not an Ensembl BioMart export; no PC9 or HeLa screen fills a line without
 GeneEffect.
 
-The features read the held-out line's measured GeneEffect, so this is a reference, like
-the measured GeneEffect row. A held-out row is covered when its pair is in Table S8, has
-no common essential gene, and its line has DepMap expression and GeneEffect; the other
-rows get the median score of the covered held-out rows, so they tie.
+By default the features read the held-out line's measured GeneEffect, so that run is a
+reference, like the measured GeneEffect row. With ``--held-gene-effect``, the held-out
+lines read stage one's predicted GeneEffect instead (lines x genes, the SL backbone's
+``predictions.parquet``); the fit keeps the training-side lines' measured GeneEffect,
+and both are cut to the genes of the prediction, so the ranks have one scale. A held-out
+row is covered when its pair is in Table S8, has no common essential gene, and its line
+has DepMap expression and GeneEffect (measured or predicted); the other rows get the
+median score of the covered held-out rows, so they tie.
 
     .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/seed0
+    .venv-tx1/bin/python hpc/paralog/kebabci.py \
+        --out outputs/sl/kebabci/predicted_seed0 \
+        --held-gene-effect outputs/sl/conditional/conditional_seed0/predictions.parquet
 """
 
 import argparse
@@ -260,6 +267,17 @@ def features(
     return out[FEATURES]
 
 
+def gene_effect(
+    measured: pd.DataFrame, predicted: pd.DataFrame, held_lines
+) -> pd.DataFrame:
+    """Measured GeneEffect for every line but the held-out ones, which take the
+    prediction; both on the predicted genes."""
+    genes = measured.columns.intersection(predicted.columns)
+    held = predicted.index.intersection(pd.Index(held_lines))
+    fit = measured.loc[~measured.index.isin(held_lines), genes]
+    return pd.concat([fit, predicted.loc[held, genes]])
+
+
 def benchmark_rows(labels: Path, split: Path) -> pd.DataFrame:
     sides = json.loads(split.read_text())
     side = {m: s for s in FIT_SIDES + HELD_SIDES for m in sides[s]}
@@ -292,6 +310,11 @@ def main() -> None:
         type=Path,
         default=ROOT / "configs/benchmarks/cell_line_sl_split.json",
     )
+    parser.add_argument(
+        "--held-gene-effect",
+        type=Path,
+        help="predicted GeneEffect (lines x genes) that the held-out lines read",
+    )
     cli = parser.parse_args()
     symbols = entrez_symbols(DEPMAP / "CRISPRGeneEffect.csv")
     pair_table = table_s8(BASELINES / "dekegel/Table_S8.csv", symbols).rename(
@@ -302,6 +325,10 @@ def main() -> None:
     )
     essential = set(essentials.iloc[:, 0].str.split(" ").str[0].str.upper())
     effect = read_depmap_matrix(DEPMAP / "CRISPRGeneEffect.csv")
+    rows = benchmark_rows(cli.labels, cli.split)
+    if cli.held_gene_effect:
+        held_lines = rows.loc[rows["side"].isin(HELD_SIDES), "model_id"].unique()
+        effect = gene_effect(effect, pd.read_parquet(cli.held_gene_effect), held_lines)
     expression = read_depmap_matrix(
         DEPMAP / "OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv"
     )
@@ -322,7 +349,6 @@ def main() -> None:
             BASELINES / "go/goa_human.gaf.218.gz", paralog & set(expression.columns)
         ),
     }
-    rows = benchmark_rows(cli.labels, cli.split)
     released = pd.MultiIndex.from_frame(pair_table[["gene_1", "gene_2"]])
     key = pd.MultiIndex.from_frame(rows[["gene_1", "gene_2"]])
     eligible = key.isin(released) & ~(

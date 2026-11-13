@@ -65,6 +65,8 @@ NAMES = {
     "dekegel_paralog": "De Kegel 2021 paralog classifier (released scores)",
     "kebabci_paralog": "Kebabci 2026 paralog classifier (reads measured GeneEffect, "
     "reference, official code, refitted)",
+    "kebabci_paralog_predicted": "Kebabci 2026 paralog classifier (stage one's "
+    "predicted GeneEffect in the held-out lines, official code, refitted)",
     "mit4sl": "MiT4SL (cell-line-specific graph model, official code, refitted)",
 }
 #: Scorers that check the code or give a reference; never the best row.
