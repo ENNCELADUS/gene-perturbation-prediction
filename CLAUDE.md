@@ -29,7 +29,7 @@ Replace this section on every update; history lives in `results/` and the protoc
   [linear-model input](results/stage_one_linear_model_input/README.md). Outputs before 2026-11-13 are gone from the host.
 - **Stage two**: modular SL backbone, buffer-aware head 0.394 / 0.361 < training SL fraction. Three modules of the [plan](docs/specs/2026-11-12-pie-and-single-cell-plan.md) ran, all null: PIE's profile as the editor (SL protocol §14, [record](results/sl_pie_editor_seed0/README.md); below the simple edit, equal to another line's profile; 66 of 86 lines had no context text),
   own-gene space and co-detection (§13, [record](results/sl_single_cell_inputs_seed0/README.md)). Next: test if the measured profile after A's loss holds SL signal under a fitted reader.
-- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html), [scoreboard](docs/sl-benchmark-results.html)): labels in `data/sl_studies/benchmark_v2` (H20);
+- **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html), [model status](model-status.html)): labels in `data/sl_studies/benchmark_v2` (H20);
   headline = recall in the top 10% of genetic two-class screens, over min(SL pairs, top places) so the ceiling is 1,
   averaged over screens, studies, then lines (77 lines, 44/17/16, placed by hand). 2026-11-13 (run `_v3`), val / test:
   the training SL fraction 0.540 / 0.541 leads; Kebabci on predicted GeneEffect 0.355 / 0.395, KG4SL 0.367 / 0.338,
@@ -63,7 +63,7 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
 ## Project rules
 
 - When a change alters behaviour a doc describes, update that doc in the same change. Update this file and
-  `README.md` in every conversation: replace old text, and keep both short (this file under 120 lines).
+  `README.md` in every conversation: replace old text, and keep both short (this file under 120 lines). When a model design finishes its run, update `model-status.html` (its design, figure and SL-benchmark scores).
 - Experiment code reports results (format: `.claude/skills/results-report`); decisions are made by reading them, not in code.
 - No formalism gates: do not add digest pinning, contract verifiers, eligibility ceremony or any check that blocks a run on
   model quality. Record provenance and proceed; model-quality signals are telemetry. The existing guards against silent wrong
