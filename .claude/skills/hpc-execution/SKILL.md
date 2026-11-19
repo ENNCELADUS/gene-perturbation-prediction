@@ -16,22 +16,26 @@ share 224 CPU cores: set `OMP_NUM_THREADS`/`MKL_NUM_THREADS` on torch processes 
 | 30838 | **4 × H20** |
 | 30757 | **4 × H20** |
 
-`ssh -A -p 30838 root@10.15.171.204`, then `cd /2023533015/VCC_Project`. Both ports accept password-free login with the
+`ssh -p 30838 root@10.15.171.204`, then `cd /2023533015/VCC_Project`. Both ports accept password-free login with the
 laptop's existing SSH key; use `ssh -p 30757 root@10.15.171.204` for the second container. Other ports (30030, 30734,
-30986) are out of date; do not use them. GitHub access on 30838 uses
-the laptop's GitHub key through SSH agent forwarding (`-A`); keep the session open while fetching or pulling. No GitHub
-private key is stored on the container. Ports change when a container is recreated; if one
+30986) are out of date; do not use them. The checkout fetches from GitHub over HTTPS (the repository is public), so
+no agent forwarding and no GitHub key is necessary. Ports change when a container is recreated; if one
 refuses, ask the user rather than scanning. Ports in `results/` are historical. Never store the SSH password in the repo.
 
 ## Sync code through Git only
 
-Never rsync, scp or tar a working tree. Commit and push authorized changes to GitHub from the laptop, then pull through
-port 30838 with agent forwarding:
+Never rsync, scp or tar a working tree. Commit and push authorized changes to GitHub from the laptop, then pull on
+either port with `hpc/pull.sh`:
 
 ```bash
 git push origin main
-ssh -A -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && git checkout main && git pull --ff-only origin main && git log -1 --oneline'
+ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && hpc/pull.sh'
 ```
+
+`hpc/pull.sh [BRANCH]` sets the fetch address to HTTPS and tries the pull up to 12 times, because the containers' DNS
+sometimes answers `github.com` with an address that does not connect (one plain pull fails about one time in two). It
+prints the checked-out commit; confirm that it is the commit you pushed. Do not use a plain `git pull` there, and
+chain the pull to a launch with `&&`.
 
 The checkout drifts: read
 `git branch --show-current`, `git log -1` and `git status --short` before assuming your code is present, and never discard
