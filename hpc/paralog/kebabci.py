@@ -38,7 +38,8 @@ lines read stage one's predicted GeneEffect instead (lines x genes, the SL backb
 and both are cut to the genes of the prediction, so the ranks have one scale. A held-out
 row is covered when its pair is in Table S8, has no common essential gene, and its line
 has DepMap expression and GeneEffect (measured or predicted); the other rows get the
-median score of the covered held-out rows, so they tie.
+median score of the covered held-out rows, so they tie. The training lines' rows are
+scored too, in sample (they read measured GeneEffect, as in the fit).
 
     .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/seed0
     .venv-tx1/bin/python hpc/paralog/kebabci.py \
@@ -65,6 +66,7 @@ from src.data.depmap import read_depmap_matrix  # noqa: E402
 from src.experiments.sl.slidr import (  # noqa: E402
     FIT_SIDES,
     HELD_SIDES,
+    SCORED_SIDES,
     read_copy_number,
 )
 
@@ -362,7 +364,8 @@ def main() -> None:
         fit.groupby(["model_id", "gene_1", "gene_2"])["label"].mean().ge(0.5)
         .astype(int).rename("label").reset_index()
     )  # fmt: skip
-    held = rows[rows["side"].isin(HELD_SIDES)].drop_duplicates(
+    # the held-out rows, and the training lines' rows in sample
+    held = rows[rows["side"].isin(SCORED_SIDES)].drop_duplicates(
         ["model_id", "gene_a", "gene_b"]
     )
     held_eligible = held[eligible[held.index]]
@@ -374,7 +377,7 @@ def main() -> None:
     covered = x_held[REQUIRED].notna().all(axis=1)
     score = pd.Series(np.nan, index=held.index)
     score[covered.index[covered]] = forest.predict_proba(x_held[covered])[:, 1]
-    fill = float(score.median())
+    fill = float(score[held["side"].isin(HELD_SIDES)].median())
     out = held[["model_id", "gene_a", "gene_b"]].assign(
         score=score.fillna(fill).to_numpy(), covered=score.notna().to_numpy()
     )
@@ -396,7 +399,7 @@ def main() -> None:
         "held_rows_covered_share": float(out["covered"].mean()),
         "uncovered_score": fill,
         "auroc_covered_genetic": {
-            side: auroc(scored[scored["side"] == side]) for side in HELD_SIDES
+            side: auroc(scored[scored["side"] == side]) for side in SCORED_SIDES
         },
         "auroc_covered_genetic_by_study": {
             f"{side}|{study}": auroc(group)

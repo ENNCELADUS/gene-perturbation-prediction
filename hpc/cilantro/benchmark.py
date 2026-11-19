@@ -12,8 +12,9 @@ refitted on the SL split's lines (run.json "benchmark": true; after the deletion
   lr 0.0001) on [V(line, a); V(line, b)] of the training lines' genetic rows, one per
   (line, gene a, gene b), SL when half or more of its rows are SL. The released code
   copies one global SynLethDB label to every line; here each line has its own.
-- Output: the SL probability of each held-out (line, gene a, gene b); a pair whose genes
-  are not both among the line's deleted genes (its top 2,048 tokens) gets 0.5 and ties.
+- Output: the SL probability of each (line, gene a, gene b) of the validation, test
+  and (in sample) training lines; a pair whose genes are not both among the line's
+  deleted genes (its top 2,048 tokens) gets 0.5 and ties.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from common import (  # noqa: E402
     SL_FIT_SIDES,
     SL_HELD_SIDES,
     SL_LABELS,
+    SL_SCORED_SIDES,
     SYMBOL_MAP,
     configure,
     mark_done,
@@ -143,7 +145,7 @@ def main() -> None:
     genetic = labels[labels["covered"] & (labels["condition"] == "genetic")]
     train = pair_frame(genetic[genetic["side"].isin(SL_FIT_SIDES)])
     val = pair_frame(genetic[genetic["side"] == "val"])
-    held = labels[labels["side"].isin(SL_HELD_SIDES) & labels["covered"]]
+    held = labels[labels["side"].isin(SL_SCORED_SIDES) & labels["covered"]]
     held = pair_frame(held)
     pc = fast_pair_classifier(train.copy(), model_type=pc_module.ModelType.COMBINED)
     pc.init_classification(batch_size=128, lr=0.0001, num_epochs=args.epochs)
@@ -153,7 +155,7 @@ def main() -> None:
     held_scores = held[["patient", "gene 1", "gene 2"]].assign(score=probs[:, 1])
     held_scores.columns = ["model_id", "gene_a", "gene_b", "score"]
 
-    every = labels[labels["side"].isin(SL_HELD_SIDES)]
+    every = labels[labels["side"].isin(SL_SCORED_SIDES)]
     every = every[["model_id", "gene_a", "gene_b"]].drop_duplicates()
     scores = every.merge(held_scores, how="left", on=["model_id", "gene_a", "gene_b"])
     scores = scores.assign(

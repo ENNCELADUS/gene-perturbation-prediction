@@ -204,9 +204,10 @@ def test_run_scores_every_list(tmp_path):
         "kg4sl",
         "cilantro_sl",
     )
+    # the training lines: every scorer but Cilantro-SL, whose table has no T0, T1 row
     assert {(s, c) for s, c, g in by if g == "all"} == {
         (s, c) for s in ("val", "test") for c in scorers
-    }
+    } | {("train", c) for c in scorers if c != "cilantro_sl"}
     assert ("test", "pair_identity", "non_cancer") in by  # E0 is non-cancer
     by = {(s, c): row for (s, c, g), row in by.items() if g == "all"}
     # On E0 the measured GeneEffect ranks the one SL pair (G0, G2) first.
@@ -217,6 +218,13 @@ def test_run_scores_every_list(tmp_path):
     # The labels reach the ceiling 1; the random score stays at or below it.
     assert by[("test", "labels")]["recall_top10"] == pytest.approx(1.0)
     assert 0.0 <= by[("test", "random")]["recall_top10"] <= 1.0
+    # in sample, T1's rates are its own labels: G0-G1 1.0, G0-G2 0.5, G1-G3 0.0, so
+    # its SL pairs G0-G1 and G0-G2 rank first and fill its 0.3 top places
+    t1 = pd.read_csv(out / "lines.csv").query(
+        "split == 'train' and scorer == 'pair_identity' and model_id == 'T1'"
+    )
+    assert t1["recall_top10"].item() == pytest.approx(1.0)
+    assert "| Model | Training (2 lines)" in report
     assert by[("test", "kg4sl")]["recall_top10"] == pytest.approx(1.0)
     assert by[("test", "cilantro_sl")]["recall_top10"] == pytest.approx(0.0)
     # flips: G0-G1 in E0 (SL in both training lines) and G0-G2 in V0 (a 0.5 rate

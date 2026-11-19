@@ -2,8 +2,9 @@
 benchmark: the released prediction score of each paralog pair (Table S8, 36,648 pairs,
 from cancergd.org/static/paralogs/supp_tables/). The classifier was trained on DepMap
 dependencies of 2020 and no screen labels, so it reads no benchmark line; it is not
-refitted. A pair is matched by Entrez ID, named by DepMap 26Q1's symbol for that ID
-(Table S8's 2020 symbol when DepMap lacks the ID), in either order. A held-out pair
+refitted; it scores the pairs of the training lines as well as the held-out ones. A
+pair is matched by Entrez ID, named by DepMap 26Q1's symbol for that ID
+(Table S8's 2020 symbol when DepMap lacks the ID), in either order. A pair
 that is not in the table gets the table's median score (``covered`` false), so these
 pairs tie in the middle of the released scores (0.01-0.43; 0.5 would rank them first).
 
@@ -51,11 +52,12 @@ def table_s8(path: Path, symbols: dict[str, str]) -> pd.DataFrame:
     return out.drop_duplicates(["gene_1", "gene_2"])
 
 
-def held_pairs(labels: Path, split: Path) -> pd.DataFrame:
+def benchmark_pairs(labels: Path, split: Path) -> pd.DataFrame:
+    """The labelled pairs of the training, validation and test lines."""
     sides = json.loads(split.read_text())
-    held = set(sides["val"]) | set(sides["test"])
+    lines = set(sides["train"]) | set(sides["val"]) | set(sides["test"])
     rows = pd.read_parquet(labels, columns=["model_id", "gene_a", "gene_b", "label"])
-    rows = rows[rows["label"].notna() & rows["model_id"].isin(held)]
+    rows = rows[rows["label"].notna() & rows["model_id"].isin(lines)]
     return rows[["gene_a", "gene_b"]].drop_duplicates().reset_index(drop=True)
 
 
@@ -82,7 +84,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     cli = parser.parse_args()
     table = table_s8(cli.table, entrez_symbols(cli.gene_effect))
-    pairs = held_pairs(cli.labels, cli.split)
+    pairs = benchmark_pairs(cli.labels, cli.split)
     key = pd.MultiIndex.from_arrays(
         [
             np.minimum(pairs["gene_a"], pairs["gene_b"]),
@@ -98,9 +100,9 @@ def main() -> None:
     metrics = {
         "table_pairs": len(table),
         "uncovered_score": fill,
-        "held_pairs": len(out),
-        "held_pairs_covered": int(covered.sum()),
-        "held_pairs_covered_share": float(covered.mean()),
+        "pairs": len(out),
+        "pairs_covered": int(covered.sum()),
+        "pairs_covered_share": float(covered.mean()),
     }
     (cli.out / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     print(json.dumps(metrics))
