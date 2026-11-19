@@ -170,3 +170,8 @@ def test_tx1_embeds_real_and_count_shuffled_cells(world, monkeypatch):
         assert np.array_equal(np.sort(real[:, j]), np.sort(moved[:, j]))
     ladder.run(config, ["tx1"], (1, 2))  # resumes: nothing left to encode
     assert len(seen) == 2 * len(lines)
+    # every line of a split (the unlabelled lines too), real cells only
+    ladder.run(config, ["tx1"], (0, 1), root / "split.json", ["real"])
+    split_lines = {*TRAIN, *UNLABELLED, *VAL, *TEST}
+    assert {p.name for p in (root / "tx1" / "real").iterdir()} == split_lines
+    assert {p.name for p in (root / "tx1" / "shuffled").iterdir()} == set(lines)

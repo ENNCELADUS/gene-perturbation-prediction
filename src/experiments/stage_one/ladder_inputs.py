@@ -547,14 +547,25 @@ def build_summaries(setup: Setup, frame: Frame) -> dict[str, Any]:
     }
 
 
+#: The Tx1 cache's two kinds of cells.
+TX1_KINDS: Final[tuple[str, ...]] = ("real", "shuffled")
+
+
 def tx1_lines(frame: Frame) -> list[str]:
     """The labelled lines with cells, in a fixed order the shards divide."""
     return sorted([*frame.single_cell_train, *frame.held_out])
 
 
-def build_tx1(setup: Setup, frame: Frame, shard: tuple[int, int]) -> dict[str, Any]:
+def build_tx1(
+    setup: Setup,
+    frame: Frame,
+    shard: tuple[int, int],
+    lines: Sequence[str] | None = None,
+    kinds: Sequence[str] = TX1_KINDS,
+) -> dict[str, Any]:
     """Tx1-3B embeddings of every cell (``real/``) and every count-shuffled cell
-    (``shuffled/``) of this shard's lines lacking them."""
+    (``shuffled/``) of this shard's lines lacking them, for the ``kinds`` asked.
+    ``lines``: these lines in place of the ladder's labelled lines with cells."""
     import time
 
     from src.data.basal import align_columns, symbol_column
@@ -563,9 +574,9 @@ def build_tx1(setup: Setup, frame: Frame, shard: tuple[int, int]) -> dict[str, A
     from src.model.tx1 import build_tx1_encoder
 
     index, count = shard
-    lines = tx1_lines(frame)[index::count]
+    lines = (tx1_lines(frame) if lines is None else sorted(lines))[index::count]
     root = Path(setup.config["paths"]["tx1_cache"])
-    todo = {kind: missing_lines(root / kind, lines) for kind in ("real", "shuffled")}
+    todo = {kind: missing_lines(root / kind, lines) for kind in kinds}
     if not any(todo.values()):
         return {"lines": len(lines), "encoded": 0}
     encoder, _ = build_tx1_encoder(
@@ -578,7 +589,7 @@ def build_tx1(setup: Setup, frame: Frame, shard: tuple[int, int]) -> dict[str, A
     directory = Path(setup.joint["paths"]["basal_raw_umi"])
     encoded, cells, seconds = 0, 0, 0.0
     for model_id in lines:
-        for kind in ("real", "shuffled"):
+        for kind in kinds:
             if model_id not in todo[kind]:
                 continue
             source = read_basal_source(
@@ -627,7 +638,11 @@ def _step_done(setup: Setup, step: str) -> bool:
 
 
 def run(
-    config: Mapping[str, Any], steps: Sequence[str], shard: tuple[int, int]
+    config: Mapping[str, Any],
+    steps: Sequence[str],
+    shard: tuple[int, int],
+    tx1_split: Path | None = None,
+    tx1_kinds: Sequence[str] = TX1_KINDS,
 ) -> None:
     setup = load_setup(config)
     open_manifest(setup)
@@ -640,7 +655,12 @@ def run(
     }
     for step in steps:
         if step == "tx1":
-            record = build_tx1(setup, frame, shard)
+            lines = None
+            if tx1_split is not None:
+                from src.data.splits import load_geneeffect_split
+
+                lines = load_geneeffect_split(tx1_split).all_model_ids
+            record = build_tx1(setup, frame, shard, lines, tx1_kinds)
             record_step(
                 setup.root / MANIFEST, f"tx1_shard_{shard[0]}_of_{shard[1]}", record
             )
@@ -657,7 +677,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("config", type=Path)
     parser.add_argument("--steps", default="lines,cells,mean,summaries")
     parser.add_argument("--shard", type=shard, default=(0, 1))
+    parser.add_argument(
+        "--tx1-split",
+        type=Path,
+        help="the tx1 step embeds every line of this split (e.g. the SL split), "
+        "not the ladder's labelled lines",
+    )
+    parser.add_argument("--tx1-kinds", default=",".join(TX1_KINDS))
     args = parser.parse_args(argv)
+    kinds = [k for k in args.tx1_kinds.split(",") if k]
+    if not kinds or set(kinds) - set(TX1_KINDS):
+        parser.error(f"--tx1-kinds takes some of {TX1_KINDS}")
     steps = [s for s in args.steps.split(",") if s]
     unknown = [s for s in steps if s not in STEPS]
     if unknown:
@@ -667,7 +697,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
-    run(load_ladder_config(args.config), steps, args.shard)
+    run(load_ladder_config(args.config), steps, args.shard, args.tx1_split, kinds)
     return 0
 
 

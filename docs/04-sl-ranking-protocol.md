@@ -642,3 +642,48 @@ model trains on.
   the target (§16) can be used only by a reader that has capacity for each pair or gene. Validation still selects the
   head trained on the calls.
 
+## 18. The gene-knowledge, cell-set model (2026-11-19)
+
+`src/model/sl_embedding.py`, `src/experiments/sl/embedding.py`, `configs/sl/embedding.yaml`,
+`hpc/run.sh sl-embedding`; the [plan](specs/2026-11-19-embedding-transfer-plan.md) gives the reasons. The question:
+can a deep model beat the baselines on SL in held-out lines? Stage one is pretraining. Stage two reads the model's
+gene-in-line embeddings, not its predicted GeneEffect. A better GeneEffect is not an aim.
+
+- **Model.** Width 32.
+  - *Gene vector:* `u_g = Σ_s P_s(k_gs) + r_g`. `k_gs` are frozen gene sources, each centred on its mean over the
+    genes it covers: function text (`gene_text`), ESM C 600M protein (`esmc_600m`) and the STRING space
+    (`string_space`). `P_s` is the stage-one gene encoder's projection. `r_g` is a free deviation for each gene, zero
+    at the start and pulled to zero by weight decay.
+  - *Line:* a mean token `t_0` (an MLP over the line's bridged pseudo-bulk, the SL backbone's line input of §11; bulk
+    RNA for a bulk-only line) and one token `t_i` for each cell (a linear map of its frozen Tx1-3B embedding, centred
+    on the fit lines' mean cell). Any number of cells: at most `cells.per_step` drawn at a training step, none at the
+    rate `cells.dropout`, all of them at scoring. A bulk-only line has `t_0` alone.
+  - *Reading:* `α_g = softmax_i(q(u_g) · t_i / √32)` over the line's cells, `h_g(c) = t_0 + Σ_i α_gi t_i`,
+    `V(g, c) = u_g ⊙ h_g(c)`, `z(g, c) = Σ_k V_k(g, c)`. The weights are normalised over the cells alone, so the
+    order and the number of the cells do not change the output. The token maps end in a zero layer: the untrained
+    model predicts `z = 0`, the gene mean.
+  - *Pair head:* an MLP on `[V_A + V_B ; |V_A − V_B| ; V_A ⊙ V_B ; u_A ⊙ u_B ⊙ Σ_i w_i t_i² ; combinatorial]`, with
+    `w_i` the product `α_Ai α_Bi` normalised over the cells. The score is the same for (A, B) and (B, A). An anchor
+    that is not a gene of the model has a zero vector, so the row reads gene B alone.
+- **Stage one.** Target `(GeneEffect − m_g) / σ_g`, mean squared error. Fit lines: the labelled single-cell training
+  lines of the SL split (every lineage, as the stage-one frame) and the labelled bulk-only lines of the linear
+  model's training side (without its dropped lineages), without every line that has an SL label and every line of
+  such a line's patient. `m_g`, `σ_g`, the expression scaling and the cells' centre
+  are fitted on the fit lines. The epoch kept has the lowest loss on the SL training lines with GeneEffect, which are
+  out of sample. Thus the model reads every SL line, training or held out, out of sample, in one coordinate system.
+  This track does not use the per-line residual Spearman as its selector (GeneEffect protocol §6), by the user's
+  decision of 2026-11-19.
+- **Stage two.** Rows: the SL training lines' genetic screens with both classes. A step draws lines evenly and, in
+  each line, rows at the benchmark's weights (§11: each line equal, then its studies, a study's screens, a screen's
+  two classes); the loss is binary cross-entropy on the SL call. First the head trains on the frozen stage-one model.
+  Then, from that state, the whole model trains with the GeneEffect loss kept at each weight of
+  `stage_two.geneeffect_weights`. Validation recall in the top 10% selects the epoch and the phase; test is scored
+  once.
+- **Outputs.** `scores/embedding.parquet` (one score per line, design and ordered pair) for the harness
+  (`configs/sl/benchmark_embedding.yaml`), `predictions.parquet` (the model's GeneEffect of the SL lines with
+  GeneEffect), `best.pt`, `metrics.json` and `results.md`: SL on training, validation and test; the stage-one numbers
+  on the SL lines, beside those of the fit lines' gene mean alone; each phase's validation recall; stage one's loss
+  per epoch.
+- **Not in this run.** A context-ablated row, a row without pretraining and any ablation of a module; a perturbation
+  model or perturbation data. The run stops if a line with cells has no Tx1 cache.
+- **Result.** Not run yet.
