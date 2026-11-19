@@ -19,6 +19,7 @@ prints every command's arguments.
 | `cell-states`, `pie-precompute --steps states` | the cell-state telemetry and the frozen PIE on its states | CPU; scVI and PIE on GPUs | [Cell states](#the-cell-states) |
 | `sl-paris`, `sl-stage-two` | PARIS (`sl.paris`) and SL stage two on stage one's GeneEffect (`sl.stage_two`) | CPU, `.venv-pie` | [SL stage two](#sl-stage-two) |
 | `sl-baselines` | baselines on the multi-study SL benchmark (`sl.benchmark_baselines`) | CPU, `.venv-pie` | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-line-specificity` | line-specific signal in the SL labels, no model (`sl.line_specificity`) | CPU, one process per study pair | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-conditional` | the modular SL backbone: round zero, the buffer-aware reader (`sl.conditional`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-pie-pass`, `sl-pie-editor` | the PIE editor of the SL backbone: PIE's profile changes, then the scores (`sl.pie_pass`, `sl.pie_editor`) | PIE on GPUs (`.venv-pie`); the editor on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
@@ -522,6 +523,19 @@ hpc/mit4sl/setup.sh
 PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/prepare.py --out data/mit4sl/benchmark
 PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/train.py --data data/mit4sl/benchmark \
   --out outputs/sl/mit4sl/seed0 --device 0
+```
+
+### Line-specific signal in the labels
+
+`sl-line-specificity` (`src.experiments.sl.line_specificity`) reads only the labels and the SL split. It reports the
+share of a study's score variance between pairs, and, for each two studies that share a line, the agreement of a
+pair's score in the same line against another line and the repeat of the line-specific part, with a bootstrap over
+pairs. Outputs: `outputs/sl/line_specificity/<run id>/results.md` and `metrics.json`. Each study pair is one
+process, so keep one thread per process:
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 hpc/run.sh sl-line-specificity \
+    configs/sl/line_specificity.yaml --run-id line_specificity_seed0 --workers "$(nproc)"
 ```
 
 ## The `linear-model` command
