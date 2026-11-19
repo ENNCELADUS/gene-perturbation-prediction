@@ -605,3 +605,40 @@ model trains on.
   so the value inside the study is an upper bound for the biology. The weight is per pair, not per pair and line. The
   common definition is the simplest one; a model-based score for all studies needs the raw counts. No model was
   trained on these targets.
+
+## 17. The head trained on the top of each screen's rank (2026-11-19)
+
+`head_target` in the `sl_conditional` config (`src/experiments/sl/conditional.py`): `call`, the screen's SL call, or
+`ramp`, §16's best target. `configs/sl/conditional_buffer_ramp.yaml` is `conditional_buffer.yaml` (§12) with
+`head_target: ramp`; the harness config is `configs/sl/benchmark_ramp_head.yaml`.
+
+- **Target.** The rank of a row's score inside its screen, turned so that the study's SL calls are high, then its top
+  10% as a ramp from 0 to 1 (0 below it). A row without a score keeps its call.
+- **Fit.** The same logistic head and inputs. A row counts as SL with weight `target` and as negative with weight
+  `1 − target`; the benchmark's weighting stays (every line equal, then its studies, its screens and the two classes of
+  a screen). The penalty is chosen on validation recall in the top 10% of the calls, as before. Only the training
+  target changes: validation and test read the labels as built.
+- **Runs** (H20 port 30838, code `c111597`, CPU, 100 threads each, 9 min): `conditional_buffer_call_seed0` and
+  `conditional_buffer_ramp_seed0`, then `benchmark_ramp_head_seed0`. The rerun of the head on the calls reproduces
+  §12's row (0.394 / 0.361).
+- **Result.** Recall in the top 10%, AUROC and AUPRC over the positive rate, in that order, mean over lines (17
+  validation, 16 test):
+
+  | Head on the buffer-aware reader's terms | Validation | Test |
+  | --- | --- | --- |
+  | Trained on the SL call | **0.394**, 0.743, 5.07 | 0.361, 0.716, 4.24 |
+  | Trained on the SL call, context-ablated | 0.383, 0.741, 4.80 | 0.355, 0.717, 4.52 |
+  | Trained on the top 10% of each screen's rank | 0.389, 0.743, 5.06 | **0.367**, 0.716, 4.20 |
+  | Trained on the top 10% of each screen's rank, context-ablated | 0.377, 0.740, 4.77 | 0.356, 0.717, 4.45 |
+
+  Paired differences in recall, 95% line bootstrap: ramp − call −0.005 [−0.014, +0.004] validation, +0.005 [−0.004,
+  +0.018] test; ramp − its context-ablated version +0.012 [−0.009, +0.030], +0.011 [−0.014, +0.038]; on seen pairs
+  whose label differs from the training lines, ramp − call +0.002 [−0.011, +0.018], +0.006 [−0.005, +0.017]. The
+  reader's stage-one numbers on the SL lines with GeneEffect: per-line residual Spearman 0.183 validation (12 lines),
+  0.194 test (11 lines).
+- **Reading.** A null result: the head trained on the better target equals the head trained on the calls, and neither
+  is above its context-ablated version. The head has seven inputs with one weight each for all pairs, fitted on 1.4
+  million rows, so noise in the target averages out and the target is not what limits it. The line-specific part of
+  the target (§16) can be used only by a reader that has capacity for each pair or gene. Validation still selects the
+  head trained on the calls.
+
