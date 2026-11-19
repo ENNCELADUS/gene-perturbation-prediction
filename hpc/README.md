@@ -398,7 +398,8 @@ hpc/run.sh sl-baselines configs/sl/benchmark_pie_editor.yaml --run-id benchmark_
 `sl-baselines` (`src.experiments.sl.benchmark_baselines`) reads the multi-study SL benchmark's labels, the SL split
 and the backbone's GeneEffect table ([data card](../docs/data/sl-benchmark.html)). It scores each validation and test
 list with pair identity, pan-essentiality, the predicted and the measured GeneEffect (a reference, on lines with
-GeneEffect only), and writes `scores.parquet`, `lists.csv`, `lines.csv`, `metrics.json` and `results.md` to
+GeneEffect only). It also scores the training lists, in sample and for all pairs only, with every scorer whose table
+covers them (Table 1's Training column). It writes `scores.parquet`, `lists.csv`, `lines.csv`, `metrics.json` and `results.md` to
 `outputs/sl/benchmark_baselines/<run id>/`. The headline is recall in the top 10% of each list (the known positives of
 a line's lists pooled, then the mean over lines), with the per-line difference from pair identity; AUROC and AUPRC over
 the positive rate follow. Each row is given for all lines, the lines with and without GeneEffect, and the cancer and

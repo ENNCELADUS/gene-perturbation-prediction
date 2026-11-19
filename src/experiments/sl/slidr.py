@@ -14,7 +14,8 @@ wild-type filter, 0 (p = 1) when every tested orientation fails it, and -log10 0
 (``covered`` false) when neither gene has enough mutated and wild-type lines, the
 partner has no viability, or the line's lineage is unknown or has fewer than
 ``min_lines`` lines. The score
-reads only the held-out line's lineage. Deviations from R are in
+reads only the line's lineage. The training lines are scored too, in sample (their own
+data are among the fitted lines). Deviations from R are in
 ``third_party/slidr/PROVENANCE.md``."""
 
 from __future__ import annotations
@@ -34,9 +35,10 @@ from src.data.io import write_json, write_parquet
 from src.experiments.config import read_yaml, require_keys
 from src.experiments.run_dir import bind
 
-#: SL split sides whose lines are fitted, and the held-out sides that are scored.
+#: SL split sides whose lines are fitted, the held-out sides, and the sides scored.
 FIT_SIDES = ("train", "bulk_labelled")
 HELD_SIDES = ("val", "test")
+SCORED_SIDES = ("train", *HELD_SIDES)
 #: R's normal approximation starts above this number of lines (``IH_CDF``).
 EXACT_MAX = 20
 #: Score of a pair that no orientation tests: p = 0.5, no evidence either way.
@@ -189,7 +191,7 @@ def lineage_scores(
     copy_number: pd.DataFrame,
     config: Mapping[str, Any],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """One lineage's data object, its tests and the scores of its held-out pairs."""
+    """One lineage's data object, its tests and the scores of its scored pairs."""
     if len(lines) < int(config["min_lines"]):
         none = pd.DataFrame(columns=["driver", "partner", "mutated_lines",
                                      "mut_pvalue", "wt_pvalue"])  # fmt: skip
@@ -222,7 +224,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     labels = pd.read_parquet(
         config["labels"], columns=["model_id", "gene_a", "gene_b", "label"]
     )
-    held = labels[labels["label"].notna() & labels["model_id"].isin(held_lines)]
+    scored_lines = {m for s in SCORED_SIDES for m in split[s]}
+    held = labels[labels["label"].notna() & labels["model_id"].isin(scored_lines)]
     held = held[["model_id", "gene_a", "gene_b"]].drop_duplicates()
     # a line without a lineage (HEK-293 in DepMap 26Q1) has no fitted lines: untested
     held = held.assign(lineage=held["model_id"].map(lineage).fillna(NO_LINEAGE))
@@ -241,8 +244,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         all_scores.append(group.merge(scores, on=["gene_a", "gene_b"]))
         per_lineage[name] = {
             "fit_lines": len(lines),
-            "held_lines": int(group["model_id"].nunique()),
-            "held_pairs": len(pairs),
+            "scored_lines": int(group["model_id"].nunique()),
+            "scored_pairs": len(pairs),
             "tests": len(tests),
             "covered_share": float(scores["covered"].mean()),
             "wt_filtered_share": (
@@ -257,8 +260,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         run_dir / "metrics.json",
         {
             "run_id": run_id,
-            "held_rows": len(scores),
-            "held_rows_covered_share": float(scores["covered"].mean()),
+            "scored_rows": len(scores),
+            "scored_rows_covered_share": float(scores["covered"].mean()),
             "lineages": per_lineage,
         },
     )

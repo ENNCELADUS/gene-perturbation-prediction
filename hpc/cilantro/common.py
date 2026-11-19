@@ -29,6 +29,7 @@ SL_SPLIT = ROOT / "configs" / "benchmarks" / "cell_line_sl_split.json"
 #: Sides of the SL split whose lines may be fitted (GeneEffect); the held-out sides.
 SL_FIT_SIDES = ("train", "bulk_labelled")
 SL_HELD_SIDES = ("val", "test")
+SL_SCORED_SIDES = ("train", *SL_HELD_SIDES)  # the training lines in sample
 
 
 def sl_split_sides() -> dict[str, str]:

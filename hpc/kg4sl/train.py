@@ -11,9 +11,9 @@ trains on the training lines' genetic pairs: one sample per ordered pair, SL whe
 least half of its rows are SL, and as many tested non-SL pairs as SL pairs (the official
 data are SynLethDB SL pairs and as many random pairs). The epoch is the one with the
 best AUROC on the validation lines' pairs (the official rule, read on our validation
-lines), with the official early stop on the training loss. Output: one score per held-
-out (gene_a, gene_b); a pair with a gene outside the graph gets the training SL rate, so
-it ties.
+lines), with the official early stop on the training loss. Output: one score per
+(gene_a, gene_b) of the validation, test and (in sample) training lines; a pair with a
+gene outside the graph gets 0.5, so it ties.
 
     PYTHONPATH=third_party/kg4sl/src .venv-kg4sl/bin/python hpc/kg4sl/train.py \
         --out outputs/sl/kg4sl/seed0
@@ -185,9 +185,8 @@ def main() -> None:
     drawn = np.random.choice(len(negative), len(positive), replace=False)
     train = np.concatenate([positive, negative[drawn]])
     np.random.shuffle(train)
-    held = rows[rows["split"].isin(["val", "test"])].drop_duplicates(
-        ["gene_a", "gene_b"]
-    )
+    # every scored pair: the held-out ones, and the training ones in sample
+    held = rows.drop_duplicates(["gene_a", "gene_b"])
     held_covered = held[held["covered"]]
     held_pairs = held_covered[["ia", "ib"]].to_numpy(np.int64)
 
@@ -257,8 +256,8 @@ def main() -> None:
         "training_pairs": len(train),
         "tested_training_pairs": len(positive) + len(negative),
         "validation_pairs": len(val),
-        "held_pairs": len(held),
-        "held_pairs_covered": int(held["covered"].sum()),
+        "scored_pairs": len(held),
+        "scored_pairs_covered": int(held["covered"].sum()),
         "held_rows_covered_share": float(held_rows["covered"].mean()),
         "args": vars(args),
         "seed": cli.seed,

@@ -6,9 +6,11 @@ learning rate 1e-3, each epoch all SL pairs and as many non-SL pairs drawn again
 one run, seed 1024 (the official MODEL_SEED). The official script takes 10% of its
 training rows as validation; here the validation lines are the validation set, and the
 epoch is the one with the best validation AUROC (the official monitor). Output: one
-score per held-out (model_id, gene_a, gene_b), the softmax SL probability; a row
-prepare.py could not keep (a gene outside PrimeKG, a line without DepMap expression)
-gets the median of the scored held-out rows, so these rows tie.
+score per (model_id, gene_a, gene_b) of the validation, test and (in sample, from the
+chosen epoch's weights) training lines, the softmax SL probability; a row prepare.py
+could not keep (a gene outside PrimeKG, a line without DepMap expression, a training
+row outside a genetic screen) gets the median of the scored held-out rows, so these
+rows tie.
 
     PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/train.py \
         --data data/mit4sl/benchmark --out outputs/sl/mit4sl/seed0 --device 0
@@ -211,22 +213,33 @@ def main() -> None:
         )  # fmt: skip
         print(json.dumps(history[-1]), flush=True)
         if best is None or auroc["val"] > best["val_auroc"]:
-            best = {"epoch": epoch, "val_auroc": auroc["val"], "scores": scores}
+            state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            best = {"epoch": epoch, "val_auroc": auroc["val"], "scores": scores,
+                    "state": state}  # fmt: skip
+
+    # the training rows, in sample, with the chosen epoch's weights
+    model.load_state_dict(best["state"])
+    train_part = parts["train"]
+    best["scores"]["train"] = predict(
+        model, loader["train"], train_part[0], train_part[2], train_part[3], device
+    )
+    train_auroc = float(roc_auc_score(train_part[0][3], best["scores"]["train"]))
 
     keys = pd.concat(
         [pd.read_csv(task / f"keys_{n}_0.csv").assign(score=best["scores"][n])
-         for n in HELD],
+         for n in ("train", *HELD)],
         ignore_index=True,
     )  # fmt: skip
     sides = json.loads(cli.split.read_text())
     held_lines = {m for s in HELD for m in sides[s]}
+    scored_lines = held_lines | set(sides["train"])
     labels = pd.read_parquet(
         cli.labels, columns=["model_id", "gene_a", "gene_b", "label"]
     )
-    held = labels[labels["label"].notna() & labels["model_id"].isin(held_lines)]
+    held = labels[labels["label"].notna() & labels["model_id"].isin(scored_lines)]
     held = held[["model_id", "gene_a", "gene_b"]].drop_duplicates()
     out = held.merge(keys, on=["model_id", "gene_a", "gene_b"], how="left")
-    fill = float(out["score"].median())
+    fill = float(out.loc[out["model_id"].isin(held_lines), "score"].median())
     out = out.assign(covered=out["score"].notna(), score=out["score"].fillna(fill))
     cli.out.mkdir(parents=True, exist_ok=True)
     out.to_parquet(cli.out / "scores.parquet", index=False)
@@ -236,6 +249,7 @@ def main() -> None:
         "seed": seed,
         "best_epoch": best["epoch"],
         "best_val_auroc": best["val_auroc"],
+        "train_auroc_at_best_epoch": train_auroc,
         "history": history,
         "held_rows": len(out),
         "held_rows_covered_share": float(out["covered"].mean()),

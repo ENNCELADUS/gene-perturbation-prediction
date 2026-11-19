@@ -4,8 +4,8 @@ predicts B's GeneEffect across cell lines from the expression of the other genes
 features A the forest finds important are reported with the Pearson r between B's
 dependency and A's expression. Stage two reads these pairs as SL evidence. With an
 ``sl_split``, PARIS fits DepMap's GeneEffect on its bulk expression in the SL split's
-training-side lines and also scores each held-out pair of the multi-study SL benchmark
-(``benchmark_scores``).
+training-side lines and also scores each pair of the multi-study SL benchmark in the
+held-out lines and, in sample, in the training lines (``benchmark_scores``).
 
 ``raw``: Boruta (Kursa & Rudnicki) with ranger's raw out-of-bag permutation importance.
 ``Ginicorrected``: ranger ``importance = "impurity_corrected"`` (Nembrini et al. 2018)
@@ -27,7 +27,7 @@ import pandas as pd
 from src.data.io import read_json, write_json, write_parquet
 from src.experiments.config import read_yaml, require_keys
 from src.experiments.run_dir import bind
-from src.experiments.sl.slidr import FIT_SIDES, HELD_SIDES
+from src.experiments.sl.slidr import FIT_SIDES, HELD_SIDES, SCORED_SIDES
 
 MODES = ("raw", "Ginicorrected")
 COLUMNS = ["dependency_gene", "feature_gene", "importance", "r", "r_pvalue", "mode"]
@@ -301,9 +301,9 @@ def sl_split_lines(path: Path) -> tuple[set[str], set[str]]:
     )
 
 
-def held_pairs(labels: pd.DataFrame, held: set[str]) -> pd.DataFrame:
-    """The benchmark's labelled (gene_a, gene_b) pairs in held-out lines."""
-    rows = labels[labels["label"].notna() & labels["model_id"].isin(held)]
+def labelled_pairs(labels: pd.DataFrame, lines: set[str]) -> pd.DataFrame:
+    """The benchmark's labelled (gene_a, gene_b) pairs in ``lines``."""
+    rows = labels[labels["label"].notna() & labels["model_id"].isin(lines)]
     return rows[["gene_a", "gene_b"]].drop_duplicates().reset_index(drop=True)
 
 
@@ -344,7 +344,7 @@ def benchmark_inputs(config: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFr
     lines = sorted(fit & set(effect.index) & set(expression.index))
     if set(lines) & held:
         raise ValueError("an SL validation or test line is among the fit lines")
-    pairs = held_pairs(pd.read_parquet(config["benchmark"]), held)
+    pairs = labelled_pairs(pd.read_parquet(config["benchmark"]), held)
     genes = sorted((set(pairs["gene_a"]) | set(pairs["gene_b"])) & set(effect.columns))
     return effect.loc[lines, genes], expression.loc[lines]
 
@@ -378,13 +378,15 @@ def write_scores(
     dependency: pd.DataFrame,
     expression: pd.DataFrame,
 ) -> None:
-    """The benchmark's held-out pair scores (``benchmark_scores``)."""
+    """The benchmark's pair scores (``benchmark_scores``) in the held-out lines and,
+    in sample, the training lines."""
     labels = pd.read_parquet(
         config["benchmark"], columns=["model_id", "gene_a", "gene_b", "label"]
     )
+    sides = json.loads(Path(config["sl_split"]).read_text())
     scores = benchmark_scores(
         pairs,
-        held_pairs(labels, sl_split_lines(config["sl_split"])[1]),
+        labelled_pairs(labels, {m for s in SCORED_SIDES for m in sides[s]}),
         set(dependency.columns),
         set(expression.columns),
     )

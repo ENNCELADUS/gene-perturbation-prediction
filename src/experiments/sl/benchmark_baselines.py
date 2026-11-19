@@ -18,7 +18,8 @@ random score (about 0.10). Every split is reported for all
 lines, the lines with and without GeneEffect, and the cancer and non-cancer lines,
 and for each stratum and subset of held-out pairs (STRATA, SUBSETS), ranked inside
 it in each screen. Each (scorer, control) pair of the config's ``paired_differences``
-gets its per-line difference with the same line bootstrap."""
+gets its per-line difference with the same line bootstrap. The training lines are
+scored too, all pairs only and in sample, by every scorer whose table covers them."""
 
 from __future__ import annotations
 
@@ -373,7 +374,7 @@ def summary(
     line count and positive count."""
     rng = np.random.default_rng(seed)
     out = []
-    for split in ("val", "test"):
+    for split in ("val", "test", "train"):  # train last: same draws for val and test
         side = lines[lines["split"] == split]
         control = side[side["scorer"] == "pair_identity"].set_index("model_id")
         for name, members in groups.items():
@@ -465,40 +466,68 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     if predicted is not None:
         genes &= set(predicted.columns)
     rows, dropped = benchmark_rows(pd.read_parquet(config["labels"]), split, genes)
-    training = rows[rows["split"] == "train"]
+    training = rows[rows["split"] == "train"].reset_index(drop=True)
     held = rows[rows["split"].isin(["val", "test"])].reset_index(drop=True)
-    scorers = {
-        "pair_identity": pair_identity(training, held),
-        "pan_essentiality": -pair_sum(
-            held, lambda gene: mean.reindex(held[gene]).to_numpy(dtype=np.float64)
-        ),
-        "measured_geneeffect": -line_values(effects, held),
-        "labels": held["label"].to_numpy(dtype=np.float64),
-        "random": np.random.default_rng(int(config["seed"])).random(len(held)),
-    }
-    if predicted is not None:
-        scorers["stage_one"] = -line_values(predicted, held)
-    # scores made outside this module (hpc/kg4sl, hpc/cilantro, sl-conditional, ...):
-    # one per (gene_a, gene_b), with model_id and design when the table has them; a
-    # held row the table lacks raises, a NaN score leaves the row unranked by that
-    # scorer; an optional ``covered`` column marks the rows the model really scores
-    covered, partner = {}, None
-    for name, path in config["extra_scores"].items():
-        table = pd.read_parquet(path)
-        keys = [k for k in ("model_id", "design", "gene_a", "gene_b") if k in table]
-        index = pd.MultiIndex.from_frame(held[keys])
-        missing = int((~index.isin(pd.MultiIndex.from_frame(table[keys]))).sum())
-        if missing:
-            raise ValueError(f"{path} has no row for {missing} held rows")
-        values = table.set_index(keys).reindex(index)
-        scorers[name] = values["score"].to_numpy(dtype=np.float64)
-        if "covered" in values and not values["covered"].all():
-            covered[name] = values["covered"].to_numpy(dtype=bool)
-        if "partner" in values:
-            flag = values["partner"].to_numpy(dtype=bool)
-            if partner is not None and not np.array_equal(partner, flag):
-                raise ValueError(f"{path} disagrees on the partner pairs")
-            partner = flag
+    tables = {n: pd.read_parquet(p) for n, p in config["extra_scores"].items()}
+
+    def scorers_for(frame: pd.DataFrame, strict: bool) -> tuple[dict, dict, Any]:
+        """Each scorer's score of each row of ``frame``. Scores made outside this
+        module (hpc/kg4sl, hpc/cilantro, sl-conditional, ...): one per (gene_a,
+        gene_b), with model_id and design when the table has them; a NaN score leaves
+        the row unranked by that scorer; an optional ``covered`` column marks the rows
+        the model really scores. A held row a table lacks raises (``strict``); a
+        training row it lacks leaves that scorer out of the training lines."""
+        scorers = {
+            "pair_identity": pair_identity(training, frame),
+            "pan_essentiality": -pair_sum(
+                frame,
+                lambda gene: mean.reindex(frame[gene]).to_numpy(dtype=np.float64),
+            ),
+            "measured_geneeffect": -line_values(effects, frame),
+            "labels": frame["label"].to_numpy(dtype=np.float64),
+            "random": np.random.default_rng(int(config["seed"])).random(len(frame)),
+        }
+        if predicted is not None:
+            scorers["stage_one"] = -line_values(predicted, frame)
+        covered, partner = {}, None
+        for name, table in tables.items():
+            keys = [k for k in ("model_id", "design", "gene_a", "gene_b") if k in table]
+            index = pd.MultiIndex.from_frame(frame[keys])
+            missing = int((~index.isin(pd.MultiIndex.from_frame(table[keys]))).sum())
+            if missing and strict:
+                path = config["extra_scores"][name]
+                raise ValueError(f"{path} has no row for {missing} held rows")
+            if missing:
+                continue
+            values = table.set_index(keys).reindex(index)
+            scorers[name] = values["score"].to_numpy(dtype=np.float64)
+            if "covered" in values and not values["covered"].all():
+                covered[name] = values["covered"].to_numpy(dtype=bool)
+            if "partner" in values:
+                flag = values["partner"].to_numpy(dtype=bool)
+                if partner is not None and not np.array_equal(partner, flag):
+                    raise ValueError(f"{name} disagrees on the partner pairs")
+                partner = flag
+        return scorers, covered, partner
+
+    def long(
+        frame: pd.DataFrame, scorers: Mapping[str, np.ndarray]
+    ) -> tuple[pd.DataFrame, int]:
+        """One row per (row, scorer); the measured control only on lines with
+        GeneEffect."""
+        scores = pd.concat(
+            [
+                frame.assign(scorer=name, score=values)
+                for name, values in scorers.items()
+            ],
+            ignore_index=True,
+        )
+        without = (scores["scorer"] == "measured_geneeffect") & ~scores[
+            "model_id"
+        ].isin(effects.index)
+        return scores[~without].reset_index(drop=True), int(without.sum())
+
+    scorers, covered, partner = scorers_for(held, strict=True)
     held["stratum"] = strata(training, held)
     # every row set reported: all rows, each stratum, each subset
     masks = {"all": np.ones(len(held), dtype=bool)}
@@ -509,15 +538,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     base = held[[*LIST_KEYS, "gene_a", "gene_b", "label", "stratum"]].assign(
         row=np.arange(len(held))
     )
-    scores = pd.concat(
-        [base.assign(scorer=name, score=values) for name, values in scorers.items()],
-        ignore_index=True,
-    )
-    # the measured control exists only on lines with GeneEffect
-    without = (scores["scorer"] == "measured_geneeffect") & ~scores["model_id"].isin(
-        effects.index
-    )
-    scores = scores[~without].reset_index(drop=True)
+    scores, without = long(base, scorers)
     split_table = pd.read_csv(Path(config["split"]).with_suffix(".csv"), dtype=str)
     groups = line_groups(split_table, non_cancer_lines(Path(config["model"])))
     by_stratum, results, differences = [], [], []
@@ -542,7 +563,18 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
             by_stratum.append(stratum_lines)
         if stratum == "all":
             lists = stratum_lists
-    lines = pd.concat(by_stratum, ignore_index=True)
+    # the training lines, in sample for every fitted scorer: all pairs only
+    train_scores, _ = long(
+        training[[*LIST_KEYS, "gene_a", "gene_b", "label"]],
+        scorers_for(training, strict=False)[0],
+    )
+    train_lists = list_records(train_scores, int(config["top_k"]))
+    train_lines = line_records(train_lists).assign(stratum="all")
+    results += [
+        row | {"stratum": "all"} for row in summary(train_lines, groups, reps, seed)
+    ]
+    lists = pd.concat([lists, train_lists], ignore_index=True)
+    lines = pd.concat([*by_stratum, train_lines], ignore_index=True)
     # each partial scorer beside the training SL fraction on the rows it covers
     on_covered = {}
     for name, mask in covered.items():
@@ -565,7 +597,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     metrics = {
         "run_id": run_id,
         "rows": {"training": len(training), "held": len(held), **dropped,
-                 "measured_rows_without_geneeffect": int(without.sum())},
+                 "measured_rows_without_geneeffect": without},
         "screens": screen_counts(lists),
         "strata": {k: int(v) for k, v in held["stratum"].value_counts().items()},
         "subsets": {k: {"rows": int(masks[k].sum()), "share": float(masks[k].mean())}
@@ -584,7 +616,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
 
 
 def results_markdown(metrics: Mapping[str, Any]) -> str:
-    """Table 1, recall in the top 10% per scorer on validation and test (all lines);
+    """Table 1, recall in the top 10% per scorer on training (in sample), validation
+    and test (all lines);
     Table 2, the difference from pair identity; Table 3, each stratum and subset;
     Table 4, each partial scorer on the rows it covers; Table 5, the paired
     differences named in the config. The other line groups, AUROC, AUPRC and each
@@ -616,7 +649,7 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         if row is None:
             return "—"
         text = f"{row['recall_top10']:.3f}"
-        return f"**{text}**" if row["recall_top10"] == best[split] else text
+        return f"**{text}**" if row["recall_top10"] == best.get(split) else text
 
     def gap(split: str, scorer: str) -> str:
         row = rows.get((split, scorer))
@@ -625,18 +658,22 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         low, high = row["interval"]
         return f"{row['minus_pair_identity']:+.3f} [{low:+.3f}, {high:+.3f}]"
 
-    n = {split: rows[(split, "pair_identity")]["lines"] for split in ("val", "test")}
+    n = {split: rows[(split, "pair_identity")]["lines"] for split in SIDES}
     lines = [
         f"# SL benchmark baselines: {metrics['run_id']}",
         "",
         "**Table 1.** Recall in the top 10% on the multi-study SL benchmark, mean over "
-        "held-out lines (each line: the mean over its studies of the mean over their "
-        "genetic screens with both classes). Higher is better; a random ranking gives "
-        "0.10. Best in bold.",
+        "lines (each line: the mean over its studies of the mean over their genetic "
+        "screens with both classes). Higher is better; a random ranking gives 0.10. "
+        "Best in bold on validation and test. The training lines are in sample: the "
+        "training SL fraction reads their own labels and every fitted model was "
+        "fitted on them; — : the model has no score for every training row.",
         "",
-        f"| Model | Validation ({n['val']} lines) | Test ({n['test']} lines) |",
-        "| --- | ---: | ---: |",
-        *(f"| {NAMES[s]} | {cell('val', s)} | {cell('test', s)} |" for s in scorers),
+        f"| Model | Training ({n['train']} lines) | Validation ({n['val']} lines) "
+        f"| Test ({n['test']} lines) |",
+        "| --- | ---: | ---: | ---: |",
+        *(f"| {NAMES[s]} | {cell('train', s)} | {cell('val', s)} | {cell('test', s)} |"
+          for s in scorers),
         "",
         "**Table 2.** Difference from pair identity in recall in the top 10%, mean "
         "over lines, with a 95% bootstrap interval over lines. Higher is better.",
