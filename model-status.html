@@ -47,30 +47,15 @@ a { color: var(--accent); }
 <main>
 <h1>SL benchmark: our models against the baselines</h1>
 <figure style="margin:0;display:grid;gap:6px">
-<img src="docs/Two-Stage%20Synthetic-Lethal%20Prediction%20Pipeline.png" alt="Two-stage pipeline: a linear expression model predicts GeneEffect from the line's basal profile; a logistic regression scores each gene pair from the predicted GeneEffect change when one gene's expression is set low." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff">
+<img src="docs/Two-Stage%20Synthetic-Lethal%20Prediction%20Pipeline.svg" alt="Two-stage pipeline: a linear expression model predicts GeneEffect from the line's basal profile; a logistic regression scores each gene pair from the predicted GeneEffect change when one gene's expression is set low." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff">
 <figcaption class="muted"><strong>Figure 1.</strong> The two-stage model.</figcaption>
 </figure>
-<h2>Stage one: GeneEffect in the SL held-out lines</h2>
-<p>Whole-line Pearson: predicted against measured GeneEffect over all genes of a line, mean over lines. MSE: mean squared GeneEffect error over all lines and genes. Per-line residual Spearman: the line-specific metric, over the selective genes of each line, after the training gene mean is removed (the selector).</p>
-
-<div class="wrap">
-<table>
-<caption><strong>Table 1.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect; each reader is fitted on the SL split's training side. Pearson and Spearman: higher is better. MSE: lower is better. Ceiling from the two-screen row, with independent noise of equal size in each screen: Pearson and Spearman √r, MSE half the two-screen MSE.</caption>
-<thead><tr><th>Model</th><th class="n">Whole-line Pearson ↑</th><th class="n">MSE ↓</th><th class="n">Per-line residual Spearman ↑</th></tr></thead>
-<tbody>
-<tr class="ours"><td>Our best: linear expression model, wider gene space (SL protocol §13)</td><td class="n">0.9197</td><td class="n">0.0301</td><td class="n">0.1965</td></tr>
-<tr><td>Ceiling: a perfect model against one measured screen (estimate)</td><td class="n">0.9283</td><td class="n">0.0277</td><td class="n">0.6054</td></tr>
-<tr><td>Two DepMap screens of one line (8 test lines)</td><td class="n">0.8618</td><td class="n">0.0553</td><td class="n">0.3665</td></tr>
-</tbody>
-</table>
-</div>
-
 <h2>Stage two: SL ranking</h2>
 <p>Recall in the top 10%: the SL pairs that a model ranks in a screen's top 10%, divided by the smaller of the screen's SL pairs and its top-10% places, so a perfect ranking gives 1. It is averaged over screens, then studies, then held-out lines. Random gives about 0.10, more in screens with over 10% SL pairs. Seed 0, one run per model; validation selects, test is scored once.</p>
 
 <div class="wrap">
 <table>
-<caption><strong>Table 2.</strong> Recall in the top 10% and AUROC (random 0.5) on the multi-study SL benchmark (validation 15 lines, test 13 lines). Higher is better. Rows are ranked by test recall. Best value in bold; a perfect ranking gives 1.</caption>
+<caption><strong>Table 1.</strong> Recall in the top 10% and AUROC (random 0.5) on the multi-study SL benchmark (validation 15 lines, test 13 lines). Higher is better. Rows are ranked by test recall. Best value in bold; a perfect ranking gives 1.</caption>
 <thead><tr><th>Model</th><th>What it reads</th><th class="n">Recall, validation ↑</th><th class="n">Recall, test ↑</th><th class="n">AUROC, validation ↑</th><th class="n">AUROC, test ↑</th></tr></thead>
 <tbody>
 <tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralog features with stage one's predicted GeneEffect</td><td class="n">0.355</td><td class="n"><b>0.395</b></td><td class="n">0.66</td><td class="n">0.66</td></tr>
@@ -91,6 +76,21 @@ a { color: var(--accent); }
 <ul>
 <li><strong>On test, our best model (0.361) is second to the Kebabci classifier on stage one's predicted GeneEffect (0.395), and above all other published baselines. On test AUROC it is first (0.72).</strong></li>
 </ul>
+
+<h2>Stage one: GeneEffect in the SL held-out lines</h2>
+<p>Whole-line Pearson: predicted against measured GeneEffect over all genes of a line, mean over lines. MSE: mean squared GeneEffect error over all lines and genes. Per-line residual Spearman: the line-specific metric, over the selective genes of each line, after the training gene mean is removed (the selector).</p>
+
+<div class="wrap">
+<table>
+<caption><strong>Table 2.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect; each reader is fitted on the SL split's training side. Pearson and Spearman: higher is better. MSE: lower is better. Ceiling from the two-screen row, with independent noise of equal size in each screen: Pearson and Spearman √r, MSE half the two-screen MSE.</caption>
+<thead><tr><th>Model</th><th class="n">Whole-line Pearson ↑</th><th class="n">MSE ↓</th><th class="n">Per-line residual Spearman ↑</th></tr></thead>
+<tbody>
+<tr class="ours"><td>Our best: linear expression model, wider gene space (SL protocol §13)</td><td class="n">0.9197</td><td class="n">0.0301</td><td class="n">0.1965</td></tr>
+<tr><td>Ceiling: a perfect model against one measured screen (estimate)</td><td class="n">0.9283</td><td class="n">0.0277</td><td class="n">0.6054</td></tr>
+<tr><td>Two DepMap screens of one line (8 test lines)</td><td class="n">0.8618</td><td class="n">0.0553</td><td class="n">0.3665</td></tr>
+</tbody>
+</table>
+</div>
 </main>
 </body>
 </html>
