@@ -1,0 +1,17 @@
+# Four ways to make the SL training target less noisy (src/experiments/sl/target_options.py), compared by how
+# well the line-specific part of the target repeats between two independent measurements. No model is read
+# and the benchmark's labels are not changed.
+# `hpc/run.sh sl-target-options configs/sl/target_options.yaml --run-id ID` (CPU, one process per study pair).
+kind: sl_target_options
+seed: 0
+output_root: outputs/sl
+task: target_options
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+bootstrap: 2000   # draws over gene pairs, for each two studies or replicates
+min_pairs: 20     # common pairs for one correlation, and for two studies to be compared
+min_lines: 3
+raw:
+  ito: data/sl_screens/raw/ito_2021/41588_2021_967_MOESM2_ESM.xlsx                           # Supplementary Table 4, raw LFCs
+  klingbeil_lfc: data/sl_screens/raw/klingbeil_2024/cd-23-1529_supplementary_table_s2_suppst2.xlsx  # Table S2, mean LFC
+  harle: data/sl_screens/raw/harle_2025/13059_2025_3737_MOESM1_ESM.xlsx                       # Tables S3 (counts) and S4 (variance)

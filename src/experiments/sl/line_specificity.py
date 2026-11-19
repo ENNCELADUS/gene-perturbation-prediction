@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Mapping, Sequence
+import warnings
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from itertools import combinations
 from pathlib import Path
@@ -198,7 +199,7 @@ def compare(task: Mapping[str, Any]) -> dict[str, Any]:
     rows_a = [lines_a.index(line) for line in shared]
     rows_b = [lines_b.index(line) for line in shared]
     pairs, min_pairs = task["value_a"].shape[1], task["min_pairs"]
-    ones = np.ones(pairs)
+    ones = task["weight"]  # each pair's weight: 1, or the caller's
     out = {"first": task["first"], "second": task["second"],
            "shared_lines": len(shared), "pairs": pairs}  # fmt: skip
     parts = {}
@@ -214,7 +215,7 @@ def compare(task: Mapping[str, Any]) -> dict[str, Any]:
             "other_line": mean_of(r[~match]),
             "advantage": advantage(r, match),
             "line_part_pairs": kept,
-            "line_part_repeat": ratio(parts[kind], np.ones(kept)),
+            "line_part_repeat": ratio(parts[kind], ones[parts[kind]["keep"]]),
         }
     agreement = positive_agreement(task["label_a"], task["label_b"], match)
     out["call"]["positive_agreement_same_line"] = agreement[0]
@@ -222,7 +223,7 @@ def compare(task: Mapping[str, Any]) -> dict[str, Any]:
     rng = np.random.default_rng(task["seed"])
     draws = np.empty((task["bootstrap"], len(KINDS), 2))
     for draw in draws:
-        weight = rng.multinomial(pairs, np.full(pairs, 1 / pairs)).astype(float)
+        weight = ones * rng.multinomial(pairs, np.full(pairs, 1 / pairs))
         for k, (kind, column) in enumerate(KINDS.items()):
             r = correlations(
                 task[f"{column}_a"], task[f"{column}_b"], weight, min_pairs
@@ -239,15 +240,16 @@ def interval(draws: np.ndarray) -> list[float] | None:
     return [float(v) for v in np.percentile(draws, [2.5, 97.5])] if len(draws) else None
 
 
-def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
-    run_dir = Path(config["output_root"]) / config["task"] / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    bind(run_dir, config)
-    split = load_geneeffect_split(Path(config["split"]))
-    columns = ["study_id", "list_id", "model_id", "design", "condition", *PAIR,
-               "score", "label"]  # fmt: skip
-    labels = pd.read_parquet(config["labels"], columns=columns)
-    cells, studies = study_cells(labels, set(split.all_model_ids))
+def analyse(
+    cells: pd.DataFrame,
+    config: Mapping[str, Any],
+    workers: int,
+    keep: Callable[[str, str], bool] = lambda first, second: True,
+    weight: pd.Series | None = None,
+) -> dict[str, Any]:
+    """Tables 1 to 3 from the (study, line, pair) values: ``within_study``,
+    ``study_pairs`` and ``pooled``. ``keep`` chooses the study pairs; ``weight`` gives
+    a pair's weight in every correlation (index: gene_a, gene_b; default 1)."""
     wide = {
         study: {
             column: group.pivot(index="model_id", columns=PAIR, values=column)
@@ -267,13 +269,17 @@ def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
     for first, second in combinations(sorted(wide), 2):
         a, b = wide[first], wide[second]
         common = a["value"].columns.intersection(b["value"].columns)
-        if len(common) < config["min_pairs"] or not set(a["value"].index) & set(
-            b["value"].index
+        if (
+            not keep(first, second)
+            or len(common) < config["min_pairs"]
+            or not set(a["value"].index) & set(b["value"].index)
         ):
             continue
+        base = np.ones(len(common)) if weight is None else weight.reindex(common)
         tasks.append(
             {"first": first, "second": second, "min_pairs": config["min_pairs"],
              "bootstrap": config["bootstrap"], "seed": [config["seed"], len(tasks)],
+             "weight": np.nan_to_num(np.asarray(base, float)),
              "lines_a": list(a["value"].index), "lines_b": list(b["value"].index)}
             | {f"{column}_{side}": t[column].reindex(columns=common).to_numpy(float)
                for column in KINDS.values() for side, t in (("a", a), ("b", b))}
@@ -285,7 +291,8 @@ def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
     pooled = {}
     if compared:
         draws = np.stack([r.pop("draws") for r in compared])
-        with np.errstate(invalid="ignore"):
+        with np.errstate(invalid="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # a column of NaN
             mean_draws = np.nanmean(draws, axis=0)
         for k, kind in enumerate(KINDS):
             for r, d in zip(compared, draws):
@@ -305,15 +312,27 @@ def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
                 "line_part_repeat_interval": interval(mean_draws[:, k, 1]),
                 "ceiling": float(np.sqrt(repeat)) if repeat > 0 else None,
             }  # fmt: skip
+    return {"within_study": within, "study_pairs": compared, "pooled": pooled}
+
+
+COLUMNS = ["study_id", "list_id", "model_id", "design", "condition", *PAIR,
+           "score", "label"]  # fmt: skip
+
+
+def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
+    run_dir = Path(config["output_root"]) / config["task"] / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    bind(run_dir, config)
+    split = load_geneeffect_split(Path(config["split"]))
+    labels = pd.read_parquet(config["labels"], columns=COLUMNS)
+    cells, studies = study_cells(labels, set(split.all_model_ids))
     metrics = {
         "run_id": run_id,
         "workers": workers,
         "rows": {"cells": len(cells), "studies": len(studies),
                  "lines": int(cells["model_id"].nunique())},
         "studies": studies.to_dict("records"),
-        "within_study": within,
-        "study_pairs": compared,
-        "pooled": pooled,
+        **analyse(cells, config, workers),
     }  # fmt: skip
     write_json(run_dir / "metrics.json", metrics)
     write_text(run_dir / "results.md", results_markdown(metrics))

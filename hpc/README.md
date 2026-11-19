@@ -20,6 +20,7 @@ prints every command's arguments.
 | `sl-paris`, `sl-stage-two` | PARIS (`sl.paris`) and SL stage two on stage one's GeneEffect (`sl.stage_two`) | CPU, `.venv-pie` | [SL stage two](#sl-stage-two) |
 | `sl-baselines` | baselines on the multi-study SL benchmark (`sl.benchmark_baselines`) | CPU, `.venv-pie` | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-line-specificity` | line-specific signal in the SL labels, no model (`sl.line_specificity`) | CPU, one process per study pair | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-target-options` | four options for a less noisy SL target, by the repeat of the line-specific part (`sl.target_options`) | CPU, one process per study pair | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-conditional` | the modular SL backbone: round zero, the buffer-aware reader (`sl.conditional`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-pie-pass`, `sl-pie-editor` | the PIE editor of the SL backbone: PIE's profile changes, then the scores (`sl.pie_pass`, `sl.pie_editor`) | PIE on GPUs (`.venv-pie`); the editor on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
@@ -536,6 +537,17 @@ process, so keep one thread per process:
 ```bash
 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 hpc/run.sh sl-line-specificity \
     configs/sl/line_specificity.yaml --run-id line_specificity_seed0 --workers "$(nproc)"
+```
+
+`sl-target-options` (`src.experiments.sl.target_options`) uses the same statistics to compare four ways to make the
+training target less noisy: the continuous score against the SL call, the mean of several measurements, a weight
+from each pair's measurement error, and one score definition for all studies. It also reads the raw tables of Ito
+2021, Klingbeil 2024 and Harle 2025 (`raw` in the config); Harle's replicates give the repeat inside one study.
+Outputs: `outputs/sl/target_options/<run id>/results.md` and `metrics.json`.
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 hpc/run.sh sl-target-options \
+    configs/sl/target_options.yaml --run-id target_options_seed0 --workers "$(nproc)"
 ```
 
 ## The `linear-model` command
