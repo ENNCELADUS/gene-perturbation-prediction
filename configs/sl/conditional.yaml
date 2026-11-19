@@ -23,3 +23,6 @@ screen_map: data/sl_dependency_v0/raw/depmap/CRISPRScreenMap.csv
 space_measured_share: null
 # the head's co-detection inputs: null, real or shuffled (SL protocol §13)
 codetection: null
+# what the head trains on: call (the screen's SL call) or ramp (the top 10% of the screen's rank
+# as a ramp from 0 to 1, SL protocol §17)
+head_target: call

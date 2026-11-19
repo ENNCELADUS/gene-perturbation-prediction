@@ -50,6 +50,26 @@ def load_config(path: Path) -> dict[str, Any]:
     return config
 
 
+def oriented_rank(rows: pd.DataFrame) -> tuple[np.ndarray, pd.Series]:
+    """Each row's percentile rank inside its screen (``list_id``), turned so that the
+    study's SL calls are on the high side (NaN without a score), and each study's
+    gap: the mean rank of its SL calls minus that of its other rows, mean over its
+    screens, before the turn."""
+    rank = rows.groupby("list_id")["score"].rank(pct=True)
+    by_class = rows.assign(rank=rank).groupby(["study_id", "list_id", "label"])["rank"]
+    by_class = by_class.mean().unstack()
+    gap = (by_class[1] - by_class[0]).groupby("study_id").mean()
+    low = rows["study_id"].map(gap).to_numpy() < 0
+    # a turned screen ranks from the other end, so its top row also reads 1
+    turned = rows.groupby("list_id")["score"].rank(pct=True, ascending=False)
+    return np.where(low, turned, rank), gap
+
+
+def ramp(value: np.ndarray) -> np.ndarray:
+    """The top 10% of a rank as a ramp from 0 to 1; 0 below it."""
+    return np.clip((value - (1 - TOP)) / TOP, 0, 1)
+
+
 def study_cells(
     labels: pd.DataFrame, lines: set[str]
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -65,16 +85,11 @@ def study_cells(
     ]
     rows = rows.assign(label=rows["label"].astype(int))
     rows = rows[rows.groupby("list_id")["label"].transform("nunique") == 2]
-    rows = rows.assign(rank=rows.groupby("list_id")["score"].rank(pct=True))
-    by_class = rows.groupby(["study_id", "list_id", "label"])["rank"].mean().unstack()
-    # a study's score direction: the side its SL calls are on, mean over its screens
-    gap = (by_class[1] - by_class[0]).groupby("study_id").mean()
-    low = rows["study_id"].map(gap).to_numpy() < 0
+    value, gap = oriented_rank(rows)
     first = rows["gene_a"] < rows["gene_b"]
-    value = np.where(low, 1 - rows["rank"], rows["rank"])
     rows = rows.assign(
         value=value,
-        tail=np.clip((value - (1 - TOP)) / TOP, 0, 1),
+        tail=ramp(value),
         gene_a=np.where(first, rows["gene_a"], rows["gene_b"]),
         gene_b=np.where(first, rows["gene_b"], rows["gene_a"]),
     )

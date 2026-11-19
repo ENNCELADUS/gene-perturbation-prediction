@@ -17,7 +17,7 @@ from src.experiments.sl.conditional import (
     partner_rows,
     terms,
     two_screens,
-    weights,
+    soft_weights,
 )
 from src.linear_model.linear_model import (
     LinearModelInputs,
@@ -180,7 +180,10 @@ def test_weights_give_each_line_then_each_class_of_a_screen_equal_weight():
          "model_id": ["L0"] * 3 + ["L1"] * 5,
          "label": [1, 0, 0, 1, 0, 0, 1, 0]}
     )  # fmt: skip
-    w = pd.Series(weights(rows), index=rows.index)
+    positive, negative = soft_weights(rows, rows["label"].to_numpy(float))
+    assert ((positive > 0) == (rows["label"] == 1)).all() and np.all(negative >= 0)
+    w = pd.Series(positive + negative, index=rows.index)
+    assert np.isclose(w.mean(), 1.0)
     by_line = w.groupby(rows["model_id"]).sum()
     assert np.isclose(by_line["L0"], by_line["L1"])
     first = rows["list_id"] == "a"
@@ -233,6 +236,33 @@ def test_the_head_learns_a_planted_term_and_is_chosen_on_validation():
     assert [r["penalty"] for r in records] == [0.1, 10.0]
     assert max(r["val_recall_top10"] for r in records) > 0.5
     assert np.isnan(decision(head, x_train[:1]))[0]
+
+
+def test_the_ramp_target_is_the_top_tenth_of_the_screen_and_keeps_the_weighting():
+    from src.experiments.sl.conditional import fit_head, ramp_target
+
+    rng = np.random.default_rng(1)
+    rows = pd.DataFrame(
+        {"split": "train", "design": "combinatorial", "condition": "genetic",
+         "study_id": "S", "model_id": np.repeat(["L0", "L1"], 100)}
+    )  # fmt: skip
+    rows["list_id"] = rows["model_id"]
+    x = rng.normal(size=(200, 7))
+    # the study's score is low for SL; two rows have no score and keep their call
+    rows["score"] = -(x[:, 0] + 0.3 * rng.normal(size=200))
+    rows["label"] = (rows.groupby("list_id")["score"].rank() <= 12).astype(int)
+    rows.loc[[0, 1], "score"] = np.nan
+    target = ramp_target(rows)
+    assert target[:2].tolist() == rows["label"].iloc[:2].tolist()
+    scored = rows["score"].notna().to_numpy()
+    assert ((target > 0) & scored).sum() == 20
+    lowest = rows.loc[scored].groupby("list_id")["score"].idxmin()
+    assert np.allclose(target[lowest.to_numpy()], 1.0)
+    positive, negative = soft_weights(rows, target)
+    by_screen = pd.DataFrame({"p": positive, "n": negative}).groupby(rows["list_id"])
+    assert np.allclose(by_screen["p"].sum(), by_screen["n"].sum())
+    head, _ = fit_head(rows, x, rows, x, [1.0], 5, "ramp")
+    assert head[-1].coef_[0][0] > 1.0  # it learns the planted input
 
 
 def test_the_wide_space_keeps_a_gene_one_held_out_line_lacks_and_does_not_cover_it():
