@@ -3,8 +3,8 @@ well the line-specific part of the target repeats between two independent
 measurements (``line_specificity.analyse``: the same-line advantage and the repeat of
 the line-specific part). No model is read and the benchmark's labels are not changed.
 
-1. The continuous score in place of the SL call: the rank against the call, in every
-   setting.
+1. The continuous score in place of the SL call: the rank, and the rank's top 10% as
+   a ramp (0 below it), against the call.
 2. The mean of several measurements: inside Harle 2025, the mean of two replicates
    against the third; between studies, the share of training cells that two studies
    screened.
@@ -45,19 +45,22 @@ SWITCHED = {"Ito2021", "Klingbeil2024"}
 HARLE = "Harle2025"
 #: Settings of the report: key, name, kinds shown.
 SETTINGS = (
-    ("between_studies", "Two studies, own score", ("rank", "call")),
+    ("between_studies", "Two studies, own score", ("rank", "tail", "call")),
     ("switched_own", "Study pairs with Ito or Klingbeil, own score (GEMINI)",
      ("rank",)),
     ("switched_common", "The same study pairs, one score definition", ("rank",)),
     ("harle_others", "Harle and another study", ("rank",)),
     ("harle_others_weighted", "Harle and another study, pairs weighted by the "
      "inverse of their variance", ("rank",)),
-    ("inside_harle", "Inside Harle, two replicates", ("rank", "call")),
+    ("inside_harle", "Inside Harle, two replicates", ("rank", "tail", "call")),
     ("inside_harle_weighted", "Inside Harle, two replicates, pairs weighted by the "
      "inverse of their variance", ("rank",)),
     ("inside_harle_mean_of_two", "Inside Harle, the mean of two replicates against "
-     "the third", ("rank", "call")),
+     "the third", ("rank", "tail", "call")),
 )  # fmt: skip
+
+
+TARGETS = {"rank": "rank", "tail": "top 10% of the rank, as a ramp", "call": "SL call"}
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -201,6 +204,20 @@ def harle_weight(table: pd.DataFrame, labels: pd.DataFrame) -> pd.Series:
     return pd.Series(weight, index=pd.MultiIndex.from_frame(rows[PAIR])).dropna()
 
 
+def published_agreement(labels: pd.DataFrame, replicates: pd.DataFrame) -> float:
+    """Output check: the Spearman correlation over pairs between the mean of a line's
+    replicate scores and Harle's published score, mean over the lines."""
+    rows = labels[(labels["study_id"] == HARLE) & labels["label"].notna()]
+    rows = rows.assign(pair=pair_key(rows["screen_gene_a"], rows["screen_gene_b"]))
+    mean = replicates.groupby(["line", "pair"])["gi"].mean().rename("gi").reset_index()
+    both = mean.merge(rows[["line", "pair", "score"]], on=["line", "pair"])
+    return float(
+        both.groupby("line")[["gi", "score"]]
+        .apply(lambda g: g["gi"].corr(g["score"], method="spearman"))
+        .mean()
+    )
+
+
 def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
     run_dir = Path(config["output_root"]) / config["task"] / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -218,9 +235,8 @@ def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
     )
     switched_rows = labels["study_id"].isin(SWITCHED) & labels["label"].notna()
     book = pd.ExcelFile(raw["harle"])
-    replicates = replicate_rows(
-        labels, harle_replicates(book.parse("Table S3", header=4))
-    )
+    scores = harle_replicates(book.parse("Table S3", header=4))
+    replicates = replicate_rows(labels, scores)
     weight = harle_weight(book.parse("Table S4", header=4), labels)
 
     own, _ = study_cells(labels, lines)
@@ -267,7 +283,9 @@ def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
             .to_dict("records"),
         },
         "harle": {"weighted_pairs": len(weight),
-                  "replicate_lists": int(replicates["list_id"].nunique())},
+                  "replicate_lists": int(replicates["list_id"].nunique()),
+                  "replicate_mean_against_published": published_agreement(
+                      labels, scores)},
         "several_studies": {
             "training_cells": len(studies),
             "cells_with_two_studies": int((studies >= 2).sum()),
@@ -296,7 +314,7 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
                 rows.append(f"| {name} | {kind} | 0 | | | | |")
                 continue
             rows.append(
-                f"| {name} | {'SL call' if kind == 'call' else 'rank'} | "
+                f"| {name} | {TARGETS[kind]} | "
                 f"{pooled['study_pairs']} | {number(pooled['same_line'], 3)} | "
                 f"{number(pooled['other_line'], 3)} | {ranged(pooled, 'advantage')} | "
                 f"{ranged(pooled, 'line_part_repeat')} |"
@@ -322,6 +340,11 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
             f"One score definition: {common['rows_with_common_score']} of "
             f"{common['rows']} labelled rows of Ito 2021 and Klingbeil 2024 have the "
             "LFC of the double loss and of both single losses.",
+            "",
+            "Output check: the mean of a line's replicate scores, computed here from "
+            "Harle's counts, against Harle's published score: Spearman "
+            f"{number(metrics['harle']['replicate_mean_against_published'], 3)} over "
+            "pairs, mean over lines.",
             "",
             f"Several studies: {several['cells_with_two_studies']} of "
             f"{several['training_cells']} (line, pair) cells of the training lines "
