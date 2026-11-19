@@ -5,7 +5,7 @@ cells and order of the Tx1 cache, and ``report.json`` (genes mapped to CellNet's
 layout). CellNet (arXiv:2610.21943, github.com/daydayup-xq/CellNet, Apache-2.0) is
 frozen: its converter normalises the raw counts to 10,000, takes log1p and draws each
 cell as an image; the embedding is its native readout. Genes are matched by Ensembl
-ID; columns with the same ID are summed first.
+ID without its version suffix; columns with the same ID are summed first.
 
 Run from the repo root with the project environment, CellNet's clone and ``timm`` on
 ``PYTHONPATH`` (hpc/README.md), one process for each GPU:
@@ -72,7 +72,9 @@ def main() -> int:
             model_id=model_id,
             var_ensembl_col=args.ensembl_column,
         )
-        x, genes = combine_duplicates(source.X, source.var_names.to_numpy())
+        # Ensembl IDs without their version suffix (some deposits list ENSG...5)
+        ids = source.var_names.str.split(".").str[0].to_numpy()
+        x, genes = combine_duplicates(source.X, ids)
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = target.with_name("embeddings.npy.partial")
         out = np.lib.format.open_memmap(
