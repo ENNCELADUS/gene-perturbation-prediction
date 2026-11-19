@@ -17,8 +17,10 @@
 A line with cells reads its mean token (bridged pseudo-bulk, as the SL backbone) and
 one token for each cell (its cached Tx1-3B embedding): a random subset at each training
 step (or none, at ``cells.dropout``), all of them at scoring. A bulk-only line has the
-mean token alone. The run stops if a line with cells lacks its Tx1 cache. With
-``tx1_cache: null`` no line reads a cell: the same model on the mean token alone.
+mean token alone. ``cell_embeddings`` names the cache of the cells' embeddings
+(``<ModelID>/embeddings.npy``): Tx1-3B's, or another frozen model's (CellNet's,
+``hpc/cellnet/embed_lines.py``). The run stops if a line with cells is not in it. With
+``cell_embeddings: null`` no line reads a cell: the same model on the mean token alone.
 
 Outputs: ``scores/embedding.parquet`` for the benchmark harness (``extra_scores``),
 ``predictions.parquet`` (the model's GeneEffect of the SL lines), ``best.pt``,
@@ -74,7 +76,7 @@ def load_config(path: Path) -> dict[str, Any]:
     require_keys(
         config,
         {"kind", "seed", "output_root", "task", "linear_model", "labels", "split",
-         "gene_sources", "tx1_cache", "top_k", *SECTIONS},
+         "gene_sources", "cell_embeddings", "top_k", *SECTIONS},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_embedding":
@@ -548,17 +550,16 @@ def read_sources(
 def read_cells(
     cache: Path | None, lines: Sequence[str], fit: set[str]
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The Tx1 cell embeddings of ``lines`` stacked (float16) and each line's count,
-    centred on the mean over the fit lines of each line's mean cell. Without a
-    ``cache`` (the mean-token variant), no line has a cell."""
-    from src.data.tx1_cache import missing_lines
-
+    """The cell embeddings of ``lines`` (``<cache>/<ModelID>/embeddings.npy``)
+    stacked (float16) and each line's count, centred on the mean over the fit lines
+    of each line's mean cell. Without a ``cache`` (the mean-token variant), no line
+    has a cell."""
     if cache is None:
         return np.zeros((0, 1), np.float16), np.zeros(len(lines), dtype=np.int64)
-    missing = missing_lines(cache, lines)
+    missing = [m for m in lines if not (Path(cache) / m / "embeddings.npy").is_file()]
     if missing:
         raise FileNotFoundError(
-            f"{len(missing)} lines with cells have no Tx1 cache in {cache}: "
+            f"{len(missing)} lines with cells have no embeddings in {cache}: "
             f"{missing[:10]}"
         )
     parts = [np.load(Path(cache) / m / "embeddings.npy", mmap_mode="r") for m in lines]
@@ -665,7 +666,7 @@ def load_data(
     targets[[position[m] for m in labelled.index]] = torch.tensor(
         ((labelled - m_g) / sigma_g).to_numpy(np.float32)
     )
-    cache = config["tx1_cache"]
+    cache = config["cell_embeddings"]
     cells, counts = read_cells(
         None if cache is None else Path(cache), cell_lines, set(fit)
     )

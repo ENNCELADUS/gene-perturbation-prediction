@@ -16,6 +16,8 @@ model: data/sl_dependency_v0/raw/depmap/Model.csv
 stage_one: outputs/sl/conditional/conditional_buffer_seed0/predictions.parquet
 extra_scores:
   embedding: outputs/sl/embedding/embedding_seed0/scores/embedding.parquet
+  # the same model with CellNet's cell embeddings (configs/sl/embedding_cellnet.yaml)
+  embedding_cellnet: outputs/sl/embedding/embedding_cellnet_seed0/scores/embedding.parquet
   # the same model without its cell tokens (configs/sl/embedding_mean_token.yaml)
   embedding_mean_token: outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding.parquet
   buffer_head: outputs/sl/conditional/conditional_buffer_seed0/scores/head.parquet
@@ -32,6 +34,8 @@ bootstrap: 1000
 # (scorer, control): the per-line difference in recall in the top 10% with the line bootstrap
 paired_differences:
   - [embedding, embedding_mean_token]
+  - [embedding_cellnet, embedding_mean_token]
+  - [embedding_cellnet, embedding]
   - [embedding, kebabci_paralog_predicted]
   - [embedding, kg4sl]
   - [embedding, buffer_head]

@@ -17,8 +17,8 @@ gene_sources:
   gene_text: data/geneeffect_joint/v2/ladder/gene_sources/gene_text.npz
   esmc_600m: data/geneeffect_joint/v2/ladder/gene_sources/esmc_600m.npz
   string_space: data/geneeffect_joint/v2/ladder/gene_sources/string_space.npz
-# Tx1-3B embeddings of every cell of a line (hpc/run.sh ladder-inputs --steps tx1)
-tx1_cache: data/tx1_basal_embeddings/v2_all/real
+# the cache of each cell's frozen embedding: Tx1-3B (hpc/run.sh ladder-inputs --steps tx1)
+cell_embeddings: data/tx1_basal_embeddings/v2_all/real
 top_k: 20
 model: {hidden: 256, head_hidden: 64}
 # cells of a line at one training step, and the rate at which a line reads its mean token alone
