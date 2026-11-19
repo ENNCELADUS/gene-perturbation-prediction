@@ -171,10 +171,6 @@ def test_gene_sources_align_to_the_genes_and_cells_need_their_cache(tmp_path: Pa
     for name, values in (("L1", [[1.0, 1.0], [3.0, 3.0]]), ("L2", [[10.0, 10.0]])):
         (tmp_path / name).mkdir()
         np.save(tmp_path / name / "embeddings.npy", np.array(values, np.float32))
-        np.save(tmp_path / name / "hvg.npy", np.zeros((len(values), 1), np.float32))
-        pd.DataFrame({"cell": range(len(values))}).to_parquet(
-            tmp_path / name / "obs.parquet"
-        )
     cells, counts = embedding.read_cells(tmp_path, ["L1", "L2"], {"L1"})
     assert counts.tolist() == [2, 1] and cells.dtype == np.float16
     assert np.allclose(cells, [[-1, -1], [1, 1], [8, 8]])  # centred on L1's mean cell
@@ -187,11 +183,15 @@ def test_gene_sources_align_to_the_genes_and_cells_need_their_cache(tmp_path: Pa
 def test_the_config_loads_and_a_missing_key_is_refused(tmp_path: Path):
     config = embedding.load_config(Path("configs/sl/embedding.yaml"))
     assert config["kind"] == "sl_embedding" and len(config["gene_sources"]) == 3
-    variant = embedding.load_config(Path("configs/sl/embedding_mean_token.yaml"))
-    assert variant["tx1_cache"] is None
-    assert {k: v for k, v in variant.items() if k != "tx1_cache"} == {
-        k: v for k, v in config.items() if k != "tx1_cache"
-    }
+    for name, cache in (
+        ("embedding_mean_token", None),
+        ("embedding_cellnet", "data/cellnet_basal_embeddings/v1"),
+    ):
+        variant = embedding.load_config(Path(f"configs/sl/{name}.yaml"))
+        assert variant["cell_embeddings"] == cache
+        assert {k: v for k, v in variant.items() if k != "cell_embeddings"} == {
+            k: v for k, v in config.items() if k != "cell_embeddings"
+        }
     text = Path("configs/sl/embedding.yaml").read_text().replace("top_k: 20\n", "")
     (tmp_path / "bad.yaml").write_text(text)
     with pytest.raises(ValueError, match="top_k"):

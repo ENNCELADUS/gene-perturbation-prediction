@@ -1,5 +1,5 @@
 # The gene-knowledge, cell-set model without its cell tokens (SL protocol §18): configs/sl/embedding.yaml with
-# `tx1_cache: null`, so every line reads its mean token alone. The difference from the full model is what the
+# `cell_embeddings: null`, so every line reads its mean token alone. The difference from the full model is what the
 # cells add. `hpc/run.sh sl-embedding configs/sl/embedding_mean_token.yaml --run-id ID` (one GPU).
 kind: sl_embedding
 seed: 0
@@ -15,7 +15,7 @@ gene_sources:
   esmc_600m: data/geneeffect_joint/v2/ladder/gene_sources/esmc_600m.npz
   string_space: data/geneeffect_joint/v2/ladder/gene_sources/string_space.npz
 # no cell tokens
-tx1_cache: null
+cell_embeddings: null
 top_k: 20
 model: {hidden: 256, head_hidden: 64}
 # not read without cells

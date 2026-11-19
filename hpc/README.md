@@ -430,7 +430,7 @@ The gene-knowledge, cell-set model (SL protocol §18) is one run on one GPU: `sl
 GeneEffect of the lines without an SL label, trains the pair head on its gene-in-line embeddings, then the whole
 model, and writes `scores/embedding.parquet`, `predictions.parquet`, `metrics.json` and `results.md` under
 `outputs/sl/embedding/<run id>/`. It reads the gene sources of the stage-one inputs (`ladder/gene_sources/`) and the
-Tx1 cache of every cell, and stops if a line with cells has no cache. Two inputs are built first when they are
+cache of every cell's embedding (`cell_embeddings`: Tx1's, or CellNet's), and stops if a line with cells is not in it. Two inputs are built first when they are
 absent: the three gene sources (function text, ESM C, STRING space; `--sources` leaves out ESM3 and Gene2vec) and the
 Tx1 cache of the SL split's lines that the stage-one inputs did not embed (`--tx1-split`; `--tx1-kinds real` leaves
 out the count-shuffled cells). The harness then scores the model's table beside the baselines:
@@ -452,6 +452,17 @@ for i in 0 1 2 3; do                                                            
 done
 CUDA_VISIBLE_DEVICES=0 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id embedding_seed0 \
   > outputs/launches/embedding_seed0.log 2>&1 < /dev/null &
+# the same model with CellNet's cell embeddings: CellNet's clone (weights by Git LFS, or from
+# media.githubusercontent.com, checked against its SHA256SUMS) and timm 1.0.22 beside the project environment
+CN=data/models/cellnet
+for i in 0 1 2 3; do
+  CUDA_VISIBLE_DEVICES=$i PYTHONPATH=$CN/CellNet:$CN/site:. setsid nohup .venv-tx1/bin/python hpc/cellnet/embed_lines.py \
+    --release $CN/CellNet --split configs/benchmarks/cell_line_sl_split.json \
+    --raw data/sl_dependency_v0/processed/basal_raw_umi --out data/cellnet_basal_embeddings/v1 --shard $i/4 \
+    > outputs/launches/cellnet_embed_$i.log 2>&1 < /dev/null &
+done
+CUDA_VISIBLE_DEVICES=2 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding_cellnet.yaml \
+  --run-id embedding_cellnet_seed0 > outputs/launches/embedding_cellnet_seed0.log 2>&1 < /dev/null &
 # the same model without its cell tokens (needs no Tx1 cache)
 CUDA_VISIBLE_DEVICES=1 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding_mean_token.yaml \
   --run-id embedding_mean_token_seed0 > outputs/launches/embedding_mean_token_seed0.log 2>&1 < /dev/null &

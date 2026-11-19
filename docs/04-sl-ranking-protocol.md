@@ -684,8 +684,13 @@ gene-in-line embeddings, not its predicted GeneEffect. A better GeneEffect is no
   GeneEffect), `best.pt`, `metrics.json` and `results.md`: SL on training, validation and test; the stage-one numbers
   on the SL lines, beside those of the fit lines' gene mean alone; each phase's validation recall; stage one's loss
   per epoch.
-- **Variant without cell tokens** (`configs/sl/embedding_mean_token.yaml`, `tx1_cache: null`): the same model and
+- **Variant without cell tokens** (`configs/sl/embedding_mean_token.yaml`, `cell_embeddings: null`): the same model and
   training, every line on its mean token alone. The difference from the full model is what the cells add.
+- **Variant with CellNet's cell embeddings** (`configs/sl/embedding_cellnet.yaml`): the same model and training with
+  another frozen cell encoder. CellNet (arXiv:2610.21943, weights of the repository's release 0.1.5, Apache-2.0 code)
+  draws each cell as an image; `hpc/cellnet/embed_lines.py` writes its native 768-wide readout for the same cells as
+  the Tx1 cache, from raw counts, with genes matched by Ensembl ID. Nothing is known here about cancer cell lines in
+  its pretraining data.
 - **Not in these runs.** A context-ablated row, a row without pretraining and any other ablation of a module; a
   perturbation model or perturbation data. The full model's run stops if a line with cells has no Tx1 cache.
 - **Result.** Not run yet.
