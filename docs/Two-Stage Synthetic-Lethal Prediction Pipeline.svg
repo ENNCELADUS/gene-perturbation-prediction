@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 850" width="1660" height="850" role="img" aria-labelledby="t" xml:space="preserve">
+<title id="t">Two-stage synthetic-lethal prediction pipeline</title>
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker>
+</defs>
+<style>
+text{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:16px;fill:#1a1a1a;text-anchor:middle}
+.sm{font-size:14.5px}.xs{font-size:13px}.b{font-weight:700}.sb{font-weight:600}
+.ttl{font-size:21px;font-weight:700}.h{font-size:19px;font-weight:700}.l{text-anchor:start}.gray{fill:#666}
+.m{font-family:"Times New Roman",Times,serif;font-size:18px}.i{font-style:italic}
+.ln{fill:none;stroke:#111;stroke-width:1.8}.dash{stroke-dasharray:6 5}
+.in{fill:#eef4fb;stroke:#151515;stroke-width:1.8}
+.p1{fill:#d6e8fc;stroke:#11253d;stroke-width:2}
+.b1{fill:#c4dbf7;stroke:#3e4d60;stroke-width:1.6}
+.pr{fill:#e9f1fb;stroke:#151515;stroke-width:1.8}
+.pill{fill:#ebebed;stroke:#9a9ca0;stroke-width:1.2}
+.ed{fill:#f2f2f2;stroke:#151515;stroke-width:1.8}
+.wb{fill:#f8f8f8;stroke:#151515;stroke-width:1.6}
+.same{fill:#d6e6f9;stroke:#7085a4;stroke-width:1.5}
+.p2{fill:#dff2d9;stroke:#224213;stroke-width:2}
+.b2{fill:#d4ecc3;stroke:#182417;stroke-width:1.6}
+.lr{fill:#c7e6b6;stroke:#1d3112;stroke-width:1.8}
+.ev{fill:#f5f5f5;stroke:#1b1b1c;stroke-width:1.8}
+.evb{fill:#fbfbfb;stroke:#1b1b1c;stroke-width:1.6}
+.lg{fill:#fff;stroke:#333;stroke-width:1.5}
+</style>
+<rect width="1660" height="850" fill="#fff"/>
+<g id="inputs">
+<rect class="in" x="20" y="56" width="180" height="80" rx="13"/>
+<text x="110" y="84">Basal scRNA-seq</text>
+<text x="110" y="106">of cell line <tspan class="m i">c</tspan></text>
+<circle cx="84" cy="122" r="6" fill="#3b7ddb"/><circle cx="110" cy="122" r="6" fill="#3b7ddb"/><circle cx="136" cy="122" r="6" fill="#3b7ddb"/>
+<rect class="in" x="20" y="160" width="180" height="74" rx="13"/>
+<text x="110" y="182.0" class="sm">Pseudo-bulk: sum cells,</text>
+<text x="110" y="202.0" class="sm">quantile-normalise to</text>
+<text x="110" y="222.0" class="sm">training bulk RNA</text>
+<rect class="in" x="20" y="258" width="180" height="92" rx="2"/>
+<text x="110" y="282.0" class="sm">Affine bridge to bulk</text>
+<text x="110" y="302.0" class="sm">space, one map per gene</text>
+<rect class="pill" x="38" y="312" width="144" height="28" rx="6"/>
+<text x="110" y="331" class="xs">fit on training lines</text>
+<rect class="in" x="20" y="362" width="180" height="56" rx="15"/>
+<text x="110" y="384.0"><tspan class="m i">x</tspan><tspan class="m i" style="font-size:12px" dy="4">c</tspan><tspan dy="-4"></tspan></text>
+<text x="110" y="406.0">6,523 genes</text>
+<rect class="ed" x="20" y="470" width="180" height="90" rx="2"/>
+<text x="110" y="497" class="sb sm">Simulated loss of A:</text>
+<text x="110" y="521.0" class="sm">cap A’s expression at its</text>
+<text x="110" y="541.0" class="sm">training 10th percentile</text>
+<rect class="wb" x="20" y="675" width="180" height="50" rx="12"/>
+<text x="110" y="706"><tspan class="m i">x</tspan><tspan class="m i" style="font-size:12px" dy="4">c</tspan><tspan dy="-4"></tspan><tspan> with A lost</tspan></text>
+<path class="ln" d="M110,136 V159" marker-end="url(#ah)"/>
+<path class="ln" d="M110,234 V257" marker-end="url(#ah)"/>
+<path class="ln" d="M110,350 V361" marker-end="url(#ah)"/>
+<path class="ln" d="M110,418 V469" marker-end="url(#ah)"/>
+<path class="ln" d="M110,560 V674" marker-end="url(#ah)"/>
+</g>
+<g id="stage1">
+<rect class="p1" x="230" y="145" width="510" height="495" rx="14"/>
+<text class="ttl" x="485" y="177">Stage 1: linear expression model</text>
+<rect class="in dash" x="270" y="195" width="300" height="50" rx="10" style="fill:#fff"/>
+<text x="420" y="215.0" class="sm">Training lines’ bulk RNA and GeneEffect</text>
+<text x="420" y="235.0" class="sm">(single-cell and bulk-only)</text>
+<path class="ln dash" d="M420,245 V261" marker-end="url(#ah)"/>
+<path class="ln dash" d="M420,322 V343" marker-end="url(#ah)"/>
+<path class="ln dash" d="M420,436 V457" marker-end="url(#ah)"/>
+<rect class="b1" x="280" y="262" width="280" height="60" rx="10"/>
+<text x="420" y="287.0" class="sm">128 expression components (PCA):</text>
+<text x="420" y="307.0" class="sm">a ridge per gene on them</text>
+<path class="ln" d="M250,292.0 H279" marker-end="url(#ah)"/>
+<path class="ln" d="M560,292.0 H580"/>
+<rect class="b1" x="280" y="344" width="280" height="92" rx="10"/>
+<text x="420" y="365.0" class="sm">Partner block, buffer-aware:</text>
+<text x="420" y="385.0" class="sm">paralogs and complex members;</text>
+<text x="420" y="405.0" class="sm">ridge per gene, shrunk to</text>
+<text x="420" y="425.0" class="sm">weights shared by all genes</text>
+<path class="ln" d="M250,390.0 H279" marker-end="url(#ah)"/>
+<path class="ln" d="M560,390.0 H580"/>
+<rect class="b1" x="280" y="458" width="280" height="60" rx="10"/>
+<text x="420" y="483.0" class="sm">50 genes selected per target</text>
+<text x="420" y="503.0" class="sm">gene: a ridge per gene</text>
+<path class="ln" d="M250,488.0 H279" marker-end="url(#ah)"/>
+<path class="ln" d="M560,488.0 H580"/>
+<path class="ln" d="M200,390 H250 M250,292 V488"/>
+<circle cx="215" cy="390" r="3.5" fill="#111"/>
+<path class="ln" d="M580,292 V488"/>
+<path class="ln" d="M580,390 H594" marker-end="url(#ah)"/>
+<circle cx="609" cy="390" r="15" fill="#fff" stroke="#111" stroke-width="1.6"/>
+<text x="609" y="397" class="m">Σ</text>
+<path class="ln" d="M624,390 H641" marker-end="url(#ah)"/>
+<rect class="pr" x="642" y="360" width="88" height="60" rx="10"/>
+<text x="686" y="386"><tspan class="m i">ŷ</tspan><tspan class="m">(</tspan><tspan class="m i">c</tspan><tspan>, </tspan><tspan class="m i">g</tspan><tspan class="m">)</tspan></text>
+<text x="686" y="408" class="sm">all genes</text>
+<text x="485" y="575.0" class="sm">Target: DepMap CRISPR GeneEffect, as</text>
+<text x="485" y="595.0" class="sm">(GeneEffect − training mean) ÷ residual SD;</text>
+<text x="485" y="615.0" class="sm">training lines predicted out of fold</text>
+</g>
+<g id="stage2">
+<rect class="p2" x="1130" y="40" width="340" height="790" rx="14"/>
+<text class="ttl" x="1300" y="72">Stage 2: logistic regression</text>
+<rect class="b2" x="1150" y="95" width="150" height="50" rx="10"/>
+<text x="1225" y="115.5" class="sm">expression of</text>
+<text x="1225" y="134.5" class="sm">A and B in <tspan class="m i">c</tspan></text>
+<path class="ln" d="M1300,120 H1318"/>
+<rect class="b2" x="1150" y="365" width="150" height="50" rx="10"/>
+<text x="1225" y="395.0" class="sm"><tspan class="m i">ŷ</tspan><tspan class="m">(</tspan><tspan class="m i">c</tspan><tspan>, A</tspan><tspan class="m">)</tspan><tspan>, </tspan><tspan class="m i">ŷ</tspan><tspan class="m">(</tspan><tspan class="m i">c</tspan><tspan>, B</tspan><tspan class="m">)</tspan></text>
+<path class="ln" d="M1300,390 H1318"/>
+<rect class="b2" x="1150" y="520" width="150" height="50" rx="10"/>
+<text x="1225" y="550.0" class="sm"><tspan class="m">Δ</tspan><tspan class="m i" style="font-size:12px" dy="4">AB</tspan><tspan dy="-4"></tspan><tspan>, </tspan><tspan class="m">Δ</tspan><tspan class="m i" style="font-size:12px" dy="4">BA</tspan><tspan dy="-4"></tspan></text>
+<path class="ln" d="M1300,545 H1318"/>
+<rect class="b2" x="1150" y="675" width="150" height="50" rx="10"/>
+<text x="1225" y="695.5" class="sm">screen type:</text>
+<text x="1225" y="714.5" class="sm">pair or anchor</text>
+<path class="ln" d="M1300,700 H1318"/>
+<path class="ln" d="M1318,120 V700"/>
+<path class="ln" d="M1318,410 H1334" marker-end="url(#ah)"/>
+<rect class="lr" x="1335" y="350" width="118" height="120" rx="1"/>
+<text x="1394" y="373.0">Logistic</text>
+<text x="1394" y="394.0">regression;</text>
+<text x="1394" y="415.0">L2 penalty</text>
+<text x="1394" y="436.0">chosen on</text>
+<text x="1394" y="457.0">validation</text>
+<path class="ln" d="M1394,470 V499" marker-end="url(#ah)"/>
+<rect class="b2" x="1340" y="500" width="108" height="60" rx="12" style="fill:#e3f3dd"/>
+<text class="b" x="1394" y="525">SL score</text>
+<text x="1394" y="548"><tspan class="m i">s</tspan><tspan class="m">(</tspan><tspan class="m i">c</tspan><tspan>, A, B</tspan><tspan class="m">)</tspan></text>
+<text x="1150" y="762" class="l sm">Fit on the training lines’ genetic screens</text>
+<text x="1150" y="782" class="l sm">that have both classes; each line, study,</text>
+<text x="1150" y="802" class="l sm">screen and class weighted equally.</text>
+</g>
+<g id="evaluation">
+<path class="ln" d="M1448,530 H1489" marker-end="url(#ah)"/>
+<rect class="ev" x="1490" y="250" width="156" height="390" rx="12"/>
+<text class="h" x="1568" y="282">Evaluation</text>
+<rect class="evb" x="1500" y="300" width="136" height="74" rx="10"/>
+<text x="1568" y="322.0" class="sm">Rank the pairs</text>
+<text x="1568" y="342.0" class="sm">of each screen</text>
+<text x="1568" y="362.0" class="sm">by score</text>
+<rect class="evb" x="1500" y="394" width="136" height="96" rx="10"/>
+<text x="1568" y="417.0" class="sm">Recall in the top</text>
+<text x="1568" y="437.0" class="sm">10% (÷ min(SL</text>
+<text x="1568" y="457.0" class="sm">pairs, top places))</text>
+<text x="1568" y="477.0" class="sm">and AUROC</text>
+<text x="1568" y="560.0" class="sm gray">Held out:</text>
+<text x="1568" y="580.0" class="sm gray">17 validation,</text>
+<text x="1568" y="600.0" class="sm gray">16 test lines</text>
+</g>
+<g id="rows">
+<path class="ln" d="M215,390 V120 H1149" marker-end="url(#ah)"/>
+<path class="ln" d="M730,390 H1149" marker-end="url(#ah)"/>
+<circle cx="870" cy="390" r="3.5" fill="#111"/>
+<path class="ln" d="M200,700 H329" marker-end="url(#ah)"/>
+<rect class="same" x="330" y="676" width="290" height="48" rx="1"/>
+<text x="475" y="705" class="sm">same stage-1 model</text>
+<path class="ln" d="M620,700 H769" marker-end="url(#ah)"/>
+<rect class="wb" x="770" y="680" width="200" height="40" rx="10"/>
+<text x="870" y="706"><tspan class="m i">ŷ</tspan><tspan class="m">(</tspan><tspan class="m i">c</tspan><tspan> with A lost, B</tspan><tspan class="m">)</tspan></text>
+<path class="ln" d="M870,390 V530" marker-end="url(#ah)"/>
+<text x="880" y="470" class="l sm gray"><tspan class="m i">ŷ</tspan><tspan class="m">(</tspan><tspan class="m i">c</tspan><tspan>, B</tspan><tspan class="m">)</tspan></text>
+<path class="ln" d="M870,680 V560" marker-end="url(#ah)"/>
+<circle cx="870" cy="545" r="14" fill="#fff" stroke="#111" stroke-width="1.6"/>
+<path d="M864,545 H876" stroke="#111" stroke-width="1.6"/>
+<path class="ln" d="M884,545 H899" marker-end="url(#ah)"/>
+<rect class="wb" x="900" y="515" width="210" height="60" rx="10"/>
+<text x="1005" y="539"><tspan class="m">Δ</tspan><tspan class="m i" style="font-size:12px" dy="4">AB</tspan><tspan dy="-4"></tspan><tspan> = </tspan><tspan class="m i">ŷ</tspan><tspan class="m">(</tspan><tspan class="m i">c</tspan><tspan> with A lost, B</tspan><tspan class="m">)</tspan></text>
+<text x="1005" y="563"><tspan>− </tspan><tspan class="m i">ŷ</tspan><tspan class="m">(</tspan><tspan class="m i">c</tspan><tspan>, B</tspan><tspan class="m">)</tspan></text>
+<text x="1005" y="600" class="sm gray"><tspan class="m">Δ</tspan><tspan class="m i" style="font-size:12px" dy="4">BA</tspan><tspan dy="-4"></tspan><tspan>: A and B swapped</tspan></text>
+<text x="1005" y="618" class="sm gray">(0 in anchor screens)</text>
+<path class="ln" d="M1110,545 H1149" marker-end="url(#ah)"/>
+</g>
+<g id="legend">
+<rect class="lg" x="230" y="780" width="880" height="40" rx="4"/>
+<text class="b l" x="250" y="806">Legend:</text>
+<path class="ln" d="M330,800 H386" marker-end="url(#ah)"/>
+<text class="l" x="400" y="806">data flow</text>
+<path class="ln dash" d="M510,800 H566" marker-end="url(#ah)"/>
+<text class="l" x="580" y="806">used only for fitting</text>
+<rect class="same" x="770" y="788" width="48" height="24" rx="1"/>
+<text class="l" x="832" y="806">stage 1, the same fitted model</text>
+</g>
+</svg>
