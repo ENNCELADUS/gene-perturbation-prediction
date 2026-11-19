@@ -684,6 +684,8 @@ gene-in-line embeddings, not its predicted GeneEffect. A better GeneEffect is no
   GeneEffect), `best.pt`, `metrics.json` and `results.md`: SL on training, validation and test; the stage-one numbers
   on the SL lines, beside those of the fit lines' gene mean alone; each phase's validation recall; stage one's loss
   per epoch.
-- **Not in this run.** A context-ablated row, a row without pretraining and any ablation of a module; a perturbation
-  model or perturbation data. The run stops if a line with cells has no Tx1 cache.
+- **Variant without cell tokens** (`configs/sl/embedding_mean_token.yaml`, `tx1_cache: null`): the same model and
+  training, every line on its mean token alone. The difference from the full model is what the cells add.
+- **Not in these runs.** A context-ablated row, a row without pretraining and any other ablation of a module; a
+  perturbation model or perturbation data. The full model's run stops if a line with cells has no Tx1 cache.
 - **Result.** Not run yet.

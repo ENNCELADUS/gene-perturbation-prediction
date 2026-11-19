@@ -180,11 +180,18 @@ def test_gene_sources_align_to_the_genes_and_cells_need_their_cache(tmp_path: Pa
     assert np.allclose(cells, [[-1, -1], [1, 1], [8, 8]])  # centred on L1's mean cell
     with pytest.raises(FileNotFoundError, match="L3"):
         embedding.read_cells(tmp_path, ["L1", "L3"], {"L1"})
+    cells, counts = embedding.read_cells(None, ["L1", "L3"], {"L1"})  # no cell tokens
+    assert cells.shape == (0, 1) and counts.tolist() == [0, 0]
 
 
 def test_the_config_loads_and_a_missing_key_is_refused(tmp_path: Path):
     config = embedding.load_config(Path("configs/sl/embedding.yaml"))
     assert config["kind"] == "sl_embedding" and len(config["gene_sources"]) == 3
+    variant = embedding.load_config(Path("configs/sl/embedding_mean_token.yaml"))
+    assert variant["tx1_cache"] is None
+    assert {k: v for k, v in variant.items() if k != "tx1_cache"} == {
+        k: v for k, v in config.items() if k != "tx1_cache"
+    }
     text = Path("configs/sl/embedding.yaml").read_text().replace("top_k: 20\n", "")
     (tmp_path / "bad.yaml").write_text(text)
     with pytest.raises(ValueError, match="top_k"):
