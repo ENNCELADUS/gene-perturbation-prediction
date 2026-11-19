@@ -5,12 +5,14 @@ fitted). A screen's score becomes a percentile rank inside the screen, turned so
 a study's SL calls are on the high side, and the lists of one study and line are
 averaged. Table 1, for each study with ``min_lines`` lines: the share of the variance
 that lies between pairs (one-way intraclass correlation), for the rank and for the
-call. Table 2, for each two studies that share a line: the correlation over pairs of
-one study's line with the same line and with another line of the other study, and
-the repeat of the line-specific part (a pair's deviation from its mean over the lines
-that both studies screened it in), with a bootstrap over pairs. The square root of
-that repeat estimates the top score of a perfect model against one screen. Study
-pairs are compared in parallel processes."""
+call. Tables 2 (rank) and 3 (SL call), for each two studies that share a line: the
+correlation over pairs of one study's line with the same line and with another line
+of the other study, the same-line advantage (that contrast with each screen's own
+level removed, so a screen of low quality does not decide it), and the repeat of the
+line-specific part (a pair's deviation from its mean over the lines that both studies
+screened it in), with a bootstrap over pairs. The square root of that repeat
+estimates the top score of a perfect model against one screen. Study pairs are
+compared in parallel processes."""
 
 from __future__ import annotations
 
@@ -167,55 +169,69 @@ def positive_agreement(
     )
 
 
+KINDS = {"rank": "value", "call": "label"}
+
+
+def advantage(r: np.ndarray, match: np.ndarray) -> float:
+    """Same line against another line with each screen's level removed: for each
+    matched cell of a lines x lines correlation matrix, the cell minus the mean of
+    its row's unmatched cells, minus that of its column's, plus that of the unmatched
+    cells in neither. It equals same minus other when every line is shared."""
+    other = np.where(match, np.nan, r)
+    rows, columns = np.arange(r.shape[0]), np.arange(r.shape[1])
+    values = [
+        r[i, j]
+        - mean_of(other[i])
+        - mean_of(other[:, j])
+        + mean_of(other[np.ix_(rows != i, columns != j)])
+        for i, j in zip(*np.nonzero(match))
+    ]
+    return mean_of(np.array(values))
+
+
 def compare(task: Mapping[str, Any]) -> dict[str, Any]:
-    """One pair of studies (lines x common pairs of each): Table 2's row and its
-    bootstrap draws."""
-    a, b = task["value_a"], task["value_b"]
+    """One pair of studies (lines x common pairs of each, for the rank and for the
+    call): its row of Tables 2 and 3 and its bootstrap draws."""
     lines_a, lines_b = task["lines_a"], task["lines_b"]
     match = np.array(lines_a)[:, None] == np.array(lines_b)[None, :]
-    pairs, min_pairs = a.shape[1], task["min_pairs"]
-
-    def same_other(weight: np.ndarray) -> tuple[float, float]:
-        r = correlations(a, b, weight, min_pairs)
-        return mean_of(r[match]), mean_of(r[~match])
-
     shared = [line for line in lines_a if line in lines_b]
-    parts = line_part(
-        a[[lines_a.index(line) for line in shared]],
-        b[[lines_b.index(line) for line in shared]],
-    )
+    rows_a = [lines_a.index(line) for line in shared]
+    rows_b = [lines_b.index(line) for line in shared]
+    pairs, min_pairs = task["value_a"].shape[1], task["min_pairs"]
     ones = np.ones(pairs)
-    same, other = same_other(ones)
-    valid = np.isfinite(correlations(a, b, ones, min_pairs))
+    out = {"first": task["first"], "second": task["second"],
+           "shared_lines": len(shared), "pairs": pairs}  # fmt: skip
+    parts = {}
+    for kind, column in KINDS.items():
+        a, b = task[f"{column}_a"], task[f"{column}_b"]
+        parts[kind] = line_part(a[rows_a], b[rows_b])
+        r = correlations(a, b, ones, min_pairs)
+        kept = int(parts[kind]["keep"].sum())
+        out[kind] = {
+            "same_line_comparisons": int(np.isfinite(r[match]).sum()),
+            "other_line_comparisons": int(np.isfinite(r[~match]).sum()),
+            "same_line": mean_of(r[match]),
+            "other_line": mean_of(r[~match]),
+            "advantage": advantage(r, match),
+            "line_part_pairs": kept,
+            "line_part_repeat": ratio(parts[kind], np.ones(kept)),
+        }
+    agreement = positive_agreement(task["label_a"], task["label_b"], match)
+    out["call"]["positive_agreement_same_line"] = agreement[0]
+    out["call"]["positive_agreement_other_line"] = agreement[1]
     rng = np.random.default_rng(task["seed"])
-    draws = np.empty((task["bootstrap"], 2))
+    draws = np.empty((task["bootstrap"], len(KINDS), 2))
     for draw in draws:
         weight = rng.multinomial(pairs, np.full(pairs, 1 / pairs)).astype(float)
-        s, o = same_other(weight)
-        draw[:] = s - o, ratio(parts, weight[parts["keep"]])
-    kept = int(parts["keep"].sum())
-    agreement = positive_agreement(task["label_a"], task["label_b"], match)
-    return {
-        "first": task["first"],
-        "second": task["second"],
-        "shared_lines": len(shared),
-        "pairs": pairs,
-        "same_line_comparisons": int(valid[match].sum()),
-        "other_line_comparisons": int(valid[~match].sum()),
-        "same_line": same,
-        "other_line": other,
-        "difference": same - other,
-        "line_part_pairs": kept,
-        "line_part_repeat": ratio(parts, np.ones(kept)),
-        "pair_mean_repeat": (
-            float(np.corrcoef(parts["mean_a"], parts["mean_b"])[0, 1])
-            if kept > 2
-            else float("nan")
-        ),  # fmt: skip
-        "positive_agreement_same_line": agreement[0],
-        "positive_agreement_other_line": agreement[1],
-        "draws": draws,
-    }
+        for k, (kind, column) in enumerate(KINDS.items()):
+            r = correlations(
+                task[f"{column}_a"], task[f"{column}_b"], weight, min_pairs
+            )
+            draw[k] = (
+                advantage(r, match),
+                ratio(parts[kind], weight[parts[kind]["keep"]]),
+            )
+    return out | {"draws": draws}
 
 
 def interval(draws: np.ndarray) -> list[float] | None:
@@ -233,58 +249,62 @@ def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
     labels = pd.read_parquet(config["labels"], columns=columns)
     cells, studies = study_cells(labels, set(split.all_model_ids))
     wide = {
-        study: (
-            group.pivot(index="model_id", columns=PAIR, values="value"),
-            group.pivot(index="model_id", columns=PAIR, values="label"),
-        )
+        study: {
+            column: group.pivot(index="model_id", columns=PAIR, values=column)
+            for column in KINDS.values()
+        }
         for study, group in cells.groupby("study_id")
     }
     within = [
-        {"study_id": study, "lines": len(value),
-         "pairs_in_two_lines": int((value.notna().sum() >= 2).sum()),
-         "pair_share_rank": pair_share(value.to_numpy(float)),
-         "pair_share_call": pair_share(label.to_numpy(float))}
-        for study, (value, label) in wide.items()
-        if len(value) >= config["min_lines"]
+        {"study_id": study, "lines": len(tables["value"]),
+         "pairs_in_two_lines": int((tables["value"].notna().sum() >= 2).sum()),
+         "pair_share_rank": pair_share(tables["value"].to_numpy(float)),
+         "pair_share_call": pair_share(tables["label"].to_numpy(float))}
+        for study, tables in wide.items()
+        if len(tables["value"]) >= config["min_lines"]
     ]  # fmt: skip
     tasks = []
     for first, second in combinations(sorted(wide), 2):
-        (value_a, label_a), (value_b, label_b) = wide[first], wide[second]
-        common = value_a.columns.intersection(value_b.columns)
-        if len(common) < config["min_pairs"] or not set(value_a.index) & set(
-            value_b.index
+        a, b = wide[first], wide[second]
+        common = a["value"].columns.intersection(b["value"].columns)
+        if len(common) < config["min_pairs"] or not set(a["value"].index) & set(
+            b["value"].index
         ):
             continue
         tasks.append(
             {"first": first, "second": second, "min_pairs": config["min_pairs"],
              "bootstrap": config["bootstrap"], "seed": [config["seed"], len(tasks)],
-             "lines_a": list(value_a.index), "lines_b": list(value_b.index),
-             "value_a": value_a.reindex(columns=common).to_numpy(float),
-             "value_b": value_b.reindex(columns=common).to_numpy(float),
-             "label_a": label_a.reindex(columns=common).to_numpy(float),
-             "label_b": label_b.reindex(columns=common).to_numpy(float)}
+             "lines_a": list(a["value"].index), "lines_b": list(b["value"].index)}
+            | {f"{column}_{side}": t[column].reindex(columns=common).to_numpy(float)
+               for column in KINDS.values() for side, t in (("a", a), ("b", b))}
         )  # fmt: skip
     with ProcessPoolExecutor(max_workers=max(1, min(workers, len(tasks)))) as pool:
-        compared = [r for r in pool.map(compare, tasks) if np.isfinite(r["same_line"])]
-    draws = np.stack([r.pop("draws") for r in compared]) if compared else None
+        compared = [
+            r for r in pool.map(compare, tasks) if np.isfinite(r["rank"]["same_line"])
+        ]
     pooled = {}
-    for r, d in zip(compared, draws if compared else []):
-        r["difference_interval"] = interval(d[:, 0])
-        r["line_part_repeat_interval"] = interval(d[:, 1])
     if compared:
+        draws = np.stack([r.pop("draws") for r in compared])
         with np.errstate(invalid="ignore"):
             mean_draws = np.nanmean(draws, axis=0)
-        repeat = mean_of(np.array([r["line_part_repeat"] for r in compared]))
-        pooled = {
-            "study_pairs": len(compared),
-            "same_line": mean_of(np.array([r["same_line"] for r in compared])),
-            "other_line": mean_of(np.array([r["other_line"] for r in compared])),
-            "difference": mean_of(np.array([r["difference"] for r in compared])),
-            "difference_interval": interval(mean_draws[:, 0]),
-            "line_part_repeat": repeat,
-            "line_part_repeat_interval": interval(mean_draws[:, 1]),
-            "ceiling": float(np.sqrt(repeat)) if repeat > 0 else None,
-        }
+        for k, kind in enumerate(KINDS):
+            for r, d in zip(compared, draws):
+                r[kind]["advantage_interval"] = interval(d[:, k, 0])
+                r[kind]["line_part_repeat_interval"] = interval(d[:, k, 1])
+            entries = pd.DataFrame([r[kind] for r in compared])
+            repeat = mean_of(entries["line_part_repeat"].to_numpy(float))
+            pooled[kind] = {
+                "study_pairs": len(compared),
+                "study_pairs_with_advantage": int(entries["advantage"].count()),
+                "study_pairs_with_repeat": int(entries["line_part_repeat"].count()),
+                "same_line": mean_of(entries["same_line"].to_numpy(float)),
+                "other_line": mean_of(entries["other_line"].to_numpy(float)),
+                "advantage": mean_of(entries["advantage"].to_numpy(float)),
+                "advantage_interval": interval(mean_draws[:, k, 0]),
+                "line_part_repeat": repeat,
+                "line_part_repeat_interval": interval(mean_draws[:, k, 1]),
+                "ceiling": float(np.sqrt(repeat)) if repeat > 0 else None,
+            }  # fmt: skip
     metrics = {
         "run_id": run_id,
         "workers": workers,
@@ -307,6 +327,45 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
             return number(row[key])
         return f"{number(row[key], 3)} [{number(bounds[0], 3)}, {number(bounds[1], 3)}]"
 
+    def table(kind: str, caption: str) -> list[str]:
+        agreement = kind == "call"
+        out = [
+            caption,
+            "",
+            "| Studies | Shared lines | Common pairs | Same line | Another line | "
+            "Same-line advantage | Repeat of the line-specific part |"
+            + (" Positive agreement |" if agreement else ""),
+            "| --- | ---: | ---: | ---: | ---: | --- | --- |"
+            + (" --- |" if agreement else ""),
+        ]
+        for r in sorted(metrics["study_pairs"], key=lambda r: -r["pairs"]):
+            e = r[kind]
+            out.append(
+                f"| {r['first']} × {r['second']} | {r['shared_lines']} | {r['pairs']} "
+                f"| {number(e['same_line'], 3)} | {number(e['other_line'], 3)} | "
+                f"{ranged(e, 'advantage')} | {ranged(e, 'line_part_repeat')} |"
+                + (
+                    f" {number(e['positive_agreement_same_line'], 3)} / "
+                    f"{number(e['positive_agreement_other_line'], 3)} |"
+                    if agreement
+                    else ""
+                )
+            )
+        pooled = metrics["pooled"].get(kind)
+        if pooled:
+            out += [
+                f"| **Mean over the study pairs** ({pooled['study_pairs']}; advantage "
+                f"{pooled['study_pairs_with_advantage']}; repeat "
+                f"{pooled['study_pairs_with_repeat']}) | | | "
+                f"{number(pooled['same_line'], 3)} | {number(pooled['other_line'], 3)} "
+                f"| {ranged(pooled, 'advantage')} | "
+                f"{ranged(pooled, 'line_part_repeat')} |" + (" |" if agreement else ""),
+                "",
+                "Ceiling of a line-specific metric (square root of the mean repeat): "
+                f"{number(pooled['ceiling'], 3)}.",
+            ]
+        return [*out, ""]
+
     rows = metrics["rows"]
     lines = [
         f"# Line-specific signal in the SL labels ({metrics['run_id']})",
@@ -327,37 +386,24 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
             for r in sorted(metrics["within_study"], key=lambda r: -r["lines"])
         ),
         "",
-        "**Table 2.** Two studies that share a line. Same line / another line: mean "
-        "correlation over the common pairs between a line of one study and the same "
-        "line, or another line, of the other study. Repeat of the line-specific "
-        "part: correlation between the two studies of a pair's deviation from its "
-        "mean over the shared lines (needs two shared lines). 95% bootstrap over "
-        "pairs. Positive agreement: the chance that a second call is SL when the "
-        "first is, same line / another line. Higher is better in every column.",
-        "",
-        "| Studies | Shared lines | Common pairs | Same line | Another line | "
-        "Same − another | Repeat of the line-specific part | Positive agreement |",
-        "| --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
-        *(
-            f"| {r['first']} × {r['second']} | {r['shared_lines']} | {r['pairs']} | "
-            f"{number(r['same_line'], 3)} | {number(r['other_line'], 3)} | "
-            f"{ranged(r, 'difference')} | {ranged(r, 'line_part_repeat')} | "
-            f"{number(r['positive_agreement_same_line'], 3)} / "
-            f"{number(r['positive_agreement_other_line'], 3)} |"
-            for r in sorted(metrics["study_pairs"], key=lambda r: -r["pairs"])
+        *table(
+            "rank",
+            "**Table 2.** The rank, for two studies that share a line. Same line / "
+            "another line: mean correlation over the common pairs between a line of "
+            "one study and the same line, or another line, of the other study. "
+            "Same-line advantage: that contrast with each screen's own level removed "
+            "(needs a second line in each study). Repeat of the line-specific part: "
+            "correlation between the two studies of a pair's deviation from its mean "
+            "over the shared lines (needs two shared lines). 95% bootstrap over "
+            "pairs. Higher is better in every column.",
+        ),
+        *table(
+            "call",
+            "**Table 3.** The SL call (1 or 0) in place of the rank, same columns. "
+            "Positive agreement: the chance that a second call is SL when the first "
+            "is, same line / another line.",
         ),
     ]
-    pooled = metrics["pooled"]
-    if pooled:
-        lines += [
-            f"| **Mean over the {pooled['study_pairs']} study pairs** | | | "
-            f"{number(pooled['same_line'], 3)} | {number(pooled['other_line'], 3)} | "
-            f"{ranged(pooled, 'difference')} | "
-            f"{ranged(pooled, 'line_part_repeat')} | |",
-            "",
-            "Ceiling of a line-specific metric (square root of the mean repeat): "
-            f"{number(pooled['ceiling'], 3)}.",
-        ]
     return "\n".join(lines) + "\n"
 
 

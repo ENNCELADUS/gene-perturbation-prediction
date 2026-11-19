@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from src.experiments.sl.line_specificity import (
+    advantage,
     correlations,
     load_config,
     pair_share,
@@ -71,12 +72,17 @@ def metrics(tmp_path, shared: bool) -> dict:
 def test_a_shared_line_effect_repeats(tmp_path):
     found = metrics(tmp_path, shared=True)
     row = found["study_pairs"][0]
+    rank, call = row["rank"], row["call"]
     assert (row["shared_lines"], row["pairs"]) == (4, 300)
-    assert (row["same_line_comparisons"], row["other_line_comparisons"]) == (4, 12)
-    assert row["line_part_repeat"] > 0.8 and row["line_part_repeat_interval"][0] > 0.7
-    assert row["difference"] > 0.3 and row["difference_interval"][0] > 0.2
-    assert row["positive_agreement_same_line"] > row["positive_agreement_other_line"]
-    assert found["pooled"]["ceiling"] == pytest.approx(row["line_part_repeat"] ** 0.5)
+    assert (rank["same_line_comparisons"], rank["other_line_comparisons"]) == (4, 12)
+    assert rank["line_part_repeat"] > 0.8 and rank["line_part_repeat_interval"][0] > 0.7
+    assert rank["advantage"] > 0.3 and rank["advantage_interval"][0] > 0.2
+    # every line is shared, so no screen's level is left to remove
+    assert rank["advantage"] == pytest.approx(rank["same_line"] - rank["other_line"])
+    assert call["advantage"] > 0.2 and call["line_part_repeat"] > 0.4
+    assert call["positive_agreement_same_line"] > call["positive_agreement_other_line"]
+    pooled = found["pooled"]["rank"]
+    assert pooled["ceiling"] == pytest.approx(rank["line_part_repeat"] ** 0.5)
     # half of the variance is the pair effect, in both studies
     assert [r["pair_share_rank"] for r in found["within_study"]] == pytest.approx(
         [0.48, 0.48], abs=0.08
@@ -85,10 +91,23 @@ def test_a_shared_line_effect_repeats(tmp_path):
 
 def test_an_unshared_line_effect_does_not_repeat(tmp_path):
     row = metrics(tmp_path, shared=False)["study_pairs"][0]
-    low, high = row["line_part_repeat_interval"]
-    assert low < 0 < high and abs(row["line_part_repeat"]) < 0.1
-    assert abs(row["difference"]) < 0.1
-    assert row["pair_mean_repeat"] > 0.6  # the pair effect still repeats
+    for kind in ("rank", "call"):
+        low, high = row[kind]["line_part_repeat_interval"]
+        assert low < 0 < high and abs(row[kind]["line_part_repeat"]) < 0.1
+        assert abs(row[kind]["advantage"]) < 0.1
+
+
+def test_a_noisy_screen_does_not_decide_the_advantage():
+    """One shared line whose screen is noisy in the second study: its plain
+    correlation is below another line's, the advantage still shows the line."""
+    rng = np.random.default_rng(2)
+    pair, line = rng.normal(size=4000), rng.normal(size=(3, 4000))
+    a = pair + line[:2] + 0.3 * rng.normal(size=(2, 4000))  # lines L0, L1
+    b = pair + line[[0, 2]] + 0.3 * rng.normal(size=(2, 4000))  # lines L0, L2
+    b[0] += 3 * rng.normal(size=4000)  # the shared line's screen is noisy
+    match = np.array([[True, False], [False, False]])
+    r = correlations(a, b, np.ones(4000), min_pairs=20)
+    assert r[0, 0] < r[0, 1] and advantage(r, match) > 0.05
 
 
 def test_a_score_whose_low_side_is_sl_is_turned():
