@@ -32,7 +32,7 @@ from src.data.io import write_json, write_text
 from src.data.splits import load_geneeffect_split
 from src.experiments.config import read_yaml, require_keys
 from src.experiments.run_dir import bind, number
-from src.experiments.sl.benchmark_baselines import HEADLINE
+from src.experiments.sl.benchmark_baselines import HEADLINE, TOP
 
 PAIR = ["gene_a", "gene_b"]
 
@@ -54,8 +54,9 @@ def study_cells(
     labels: pd.DataFrame, lines: set[str]
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """One row per (study, line, unordered gene pair): ``value``, the mean rank of
-    the pair in the study's screens of the line (high = SL), and ``label``, SL when
-    any of them calls it. Second frame: each study's screens, lines and score side."""
+    the pair in the study's screens of the line (high = SL), ``tail``, the mean of the
+    rank's top 10% as a ramp, and ``label``, SL when any of them calls it. Second
+    frame: each study's screens, lines and score side."""
     rows = labels[
         labels["label"].notna()
         & (labels["condition"] == HEADLINE)
@@ -70,13 +71,15 @@ def study_cells(
     gap = (by_class[1] - by_class[0]).groupby("study_id").mean()
     low = rows["study_id"].map(gap).to_numpy() < 0
     first = rows["gene_a"] < rows["gene_b"]
+    value = np.where(low, 1 - rows["rank"], rows["rank"])
     rows = rows.assign(
-        value=np.where(low, 1 - rows["rank"], rows["rank"]),
+        value=value,
+        tail=np.clip((value - (1 - TOP)) / TOP, 0, 1),
         gene_a=np.where(first, rows["gene_a"], rows["gene_b"]),
         gene_b=np.where(first, rows["gene_b"], rows["gene_a"]),
     )
     cells = rows.groupby(["study_id", "model_id", *PAIR], sort=False).agg(
-        value=("value", "mean"), label=("label", "max")
+        value=("value", "mean"), tail=("tail", "mean"), label=("label", "max")
     )
     studies = rows.groupby("study_id").agg(
         design=("design", lambda x: "/".join(sorted(set(x)))),
@@ -170,7 +173,9 @@ def positive_agreement(
     )
 
 
-KINDS = {"rank": "value", "call": "label"}
+#: What is compared: the rank, the rank's top 10% as a ramp from 0 to 1 (0 below it),
+#: and the SL call.
+KINDS = {"rank": "value", "tail": "tail", "call": "label"}
 
 
 def advantage(r: np.ndarray, match: np.ndarray) -> float:
