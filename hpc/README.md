@@ -446,6 +446,18 @@ done   # the co-detection runs after the cache
 hpc/run.sh sl-baselines configs/sl/benchmark_single_cell_inputs.yaml --run-id benchmark_single_cell_inputs_seed0
 ```
 
+The head trained on the top 10% of each screen's rank as a ramp (SL protocol §17) is the same run with
+`head_target: ramp` in the config. It runs beside the head trained on the SL call, then the harness scores both:
+
+```bash
+export OMP_NUM_THREADS=100 MKL_NUM_THREADS=100
+for run in conditional_buffer:conditional_buffer_call_seed0 conditional_buffer_ramp:conditional_buffer_ramp_seed0; do
+  setsid nohup hpc/run.sh sl-conditional configs/sl/${run%%:*}.yaml --run-id ${run#*:} \
+    > outputs/launches/${run#*:}.log 2>&1 < /dev/null &
+done
+hpc/run.sh sl-baselines configs/sl/benchmark_ramp_head.yaml --run-id benchmark_ramp_head_seed0
+```
+
 The config's `extra_scores` adds scores from other harnesses, per (gene A, gene B), with the line and the design
 when the table has `model_id` and `design`; the run stops if a held-out row is missing from a table, and a NaN score
 leaves the row unranked by that scorer. KG4SL makes one (`hpc/kg4sl/`, its own environment `.venv-kg4sl`, Python 3.11 and
