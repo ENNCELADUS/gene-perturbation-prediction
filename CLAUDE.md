@@ -104,6 +104,8 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
 
 Mistakes here produce a complete-looking **wrong artifact**, not an exception.
 
+- One null run with new data or a new foundation model does not close that route. Report it, find why it did not help
+  (input, reader, training, scale), and test the next change on the same route.
 - Never weaken the fail-closed loads: no `.get(key, default)` config reads, no bypass of the `expression_space` manifest
   check, no bare `load_state_dict(..., strict=False)`. Use a checkpoint only with the split it was trained on.
 - Residuals: targets center on the fold-fit `mu_hat_g^(-c)`, predictions on `mu_bar`; centering a prediction on `mu_hat`
@@ -112,5 +114,3 @@ Mistakes here produce a complete-looking **wrong artifact**, not an exception.
   (`K-562` ≠ `K562`). Fit means, gene membership and normalization on labelled training lines only.
 - Context claims need residual evaluation against context-blind baselines (GeneEffect protocol §11, SL protocol §8).
   Single-gene predictions are not SL evidence.
-- One null run with new data or a new foundation model does not close that route. Report it, find why it did not help
-  (input, reader, training, scale), and test the next change on the same route.
