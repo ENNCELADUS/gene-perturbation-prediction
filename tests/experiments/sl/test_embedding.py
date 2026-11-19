@@ -192,6 +192,11 @@ def test_the_config_loads_and_a_missing_key_is_refused(tmp_path: Path):
         assert {k: v for k, v in variant.items() if k != "cell_embeddings"} == {
             k: v for k, v in config.items() if k != "cell_embeddings"
         }
+    slow = embedding.load_config(
+        Path("configs/sl/embedding_mean_token_slow_stage_one.yaml")
+    )
+    assert slow["stage_one"]["learning_rate"] == 1.0e-4
+    assert slow["cell_embeddings"] is None
     text = Path("configs/sl/embedding.yaml").read_text().replace("top_k: 20\n", "")
     (tmp_path / "bad.yaml").write_text(text)
     with pytest.raises(ValueError, match="top_k"):
