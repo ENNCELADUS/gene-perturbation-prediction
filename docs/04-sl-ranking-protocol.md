@@ -531,3 +531,37 @@ head's inputs do not change.
   the editor job. PIE equal to its permuted version and the measured own-line profile above another line's: a
   line-specific PIE. The measured own-line profile equal to another line's: the profile after A's loss does not
   carry the line effect through this reader; repeat with the per-gene reader.
+
+## 15. Line-specific signal in the labels (2026-11-19)
+
+`src/experiments/sl/line_specificity.py`, `configs/sl/line_specificity.yaml`, `hpc/run.sh sl-line-specificity`. No
+model is read. The question comes before any line-specific model: does the difference between lines in a pair's
+screen score repeat?
+
+- **Rows.** The genetic screens with both classes and a score, on the 77 lines of the SL split (every side; nothing is
+  fitted): 47 studies, 1,737,816 (study, line, pair) values. A score becomes a percentile rank inside its screen,
+  turned so that the study's SL calls are on the high side.
+- **Inside a study** (14 studies with three or more lines): the share of the variance between pairs, for the rank and
+  for the SL call. The remainder is the line-specific part plus noise.
+- **Between two studies that share a line** (41 study pairs): the correlation over the common pairs of a line with the
+  same line and with another line of the other study; the same-line advantage, that contrast with each screen's own
+  level removed; and the repeat of the line-specific part, the correlation between the two studies of a pair's
+  deviation from its mean over the shared lines (two shared lines or more, 12 study pairs). Bootstrap over pairs,
+  2,000 draws. Each is given for the rank and for the SL call.
+- **Result** (run `line_specificity_seed0_v2`, H20 port 30838, code `feb9e0e`, 9 s on 224 cores; outputs in
+  `outputs/sl/line_specificity/line_specificity_seed0_v2/` on the host). Mean over the study pairs:
+
+  | Value | Same line | Another line | Same-line advantage | Repeat of the line-specific part |
+  | --- | ---: | ---: | --- | --- |
+  | Rank | 0.141 | 0.127 | +0.049 [+0.017, +0.081] | 0.039 [−0.017, +0.093] |
+  | SL call | 0.269 | 0.226 | +0.029 [+0.002, +0.065] | 0.060 [+0.006, +0.119] |
+
+  The share of the rank variance between pairs is 0.66 in Harle 2025, 0.48 in Ito 2021, 0.42 in Flister 2025 (hybrid),
+  0.28 in Klingbeil 2024 and 0.22 in Ebright 2026.
+- **Reading.** A line-specific signal is there, and it is small between studies: the square root of the repeat puts
+  the top score of a perfect model near 0.20 (rank) to 0.25 (call), against 0.50 for stage one's GeneEffect. The
+  agreement between two studies is low even in the same line, so noise between studies limits this estimate. The
+  advantage is clear between the paralog-library studies (Ito × Klingbeil +0.157 [+0.12, +0.20], Ebright × Klingbeil
+  +0.364 [+0.20, +0.54], Ebright × Ito +0.302 [+0.16, +0.45]) and absent in most other study pairs.
+- **Limit.** The label table holds one score for each pair and screen (constructs are merged), so the repeat inside
+  one study, which is what the benchmark's metric needs, is not measured here; it needs the raw replicate files.
