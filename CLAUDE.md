@@ -104,17 +104,13 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
 
 Mistakes here produce a complete-looking **wrong artifact**, not an exception.
 
-- `src/experiments/config.py` raises on unknown or missing keys; never add `.get(key, default)` config reads.
-- `load_inputs` refuses manifests without `expression_space`, and checkpoint loads raise on zero or mismatched keys
-  (`load_released_state`). Never bypass either or add a bare `load_state_dict(..., strict=False)`.
-- Resume rejects a conflicting config; a batch-size change needs a new run id. A checkpoint does not record the split
-  membership: use a checkpoint only with the split it was trained on.
-- Residuals: targets center on the fold-fit `mu_hat_g^(-c)`, predictions on fold-independent `mu_bar` — centering a prediction
-  on `mu_hat` scores Spearman +1.0 by construction. Gene-mean and copy-baseline residual correlations are undefined, not zero.
-- Join cell lines by DepMap ModelID, never by informal names at run time (`K-562` ≠ `K562`): a source's spelling becomes a
-  ModelID only through a reviewed row of `configs/benchmarks/single_cell_atlas_candidates.csv`. A line without a ModelID
-  has the ID of its reviewed row in `configs/benchmarks/sl_line_identities.csv` (Cellosaurus accession, else
-  `SL-<study>-<line>`); `read_models` adds those rows. Fit means, gene membership and normalization on labeled training
-  lines only.
-- Context claims need residual evaluation against context-blind baselines; the rules are in the GeneEffect protocol (§11) and the
-  SL protocol (§8). Single-gene predictions are not SL or genetic-interaction evidence.
+- Never weaken the fail-closed loads: no `.get(key, default)` config reads, no bypass of the `expression_space` manifest
+  check, no bare `load_state_dict(..., strict=False)`. Use a checkpoint only with the split it was trained on.
+- Residuals: targets center on the fold-fit `mu_hat_g^(-c)`, predictions on `mu_bar`; centering a prediction on `mu_hat`
+  scores Spearman +1.0 by construction.
+- Join cell lines by DepMap ModelID (or the reviewed ID in `configs/benchmarks/sl_line_identities.csv`), never by names
+  (`K-562` ≠ `K562`). Fit means, gene membership and normalization on labelled training lines only.
+- Context claims need residual evaluation against context-blind baselines (GeneEffect protocol §11, SL protocol §8).
+  Single-gene predictions are not SL evidence.
+- One null run with new data or a new foundation model does not close that route. Report it, find why it did not help
+  (input, reader, training, scale), and test the next change on the same route.
