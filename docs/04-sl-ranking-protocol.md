@@ -565,3 +565,43 @@ screen score repeat?
   +0.364 [+0.20, +0.54], Ebright × Ito +0.302 [+0.16, +0.45]) and absent in most other study pairs.
 - **Limit.** The label table holds one score for each pair and screen (constructs are merged), so the repeat inside
   one study, which is what the benchmark's metric needs, is not measured here; it needs the raw replicate files.
+
+## 16. Options for a less noisy training target (2026-11-19)
+
+`src/experiments/sl/target_options.py`, `configs/sl/target_options.yaml`, `hpc/run.sh sl-target-options`. Four ways
+to make the training target less noisy are compared by one quantity, §15's repeat of the line-specific part between
+two independent measurements. No model is read. The benchmark's labels are not changed; an option changes only what a
+model trains on.
+
+- **The continuous score in place of the SL call.** Two forms: the rank inside the screen, and the rank's top 10% as a
+  ramp from 0 to 1 (0 below it).
+- **The mean of several measurements.** Inside Harle 2025: the mean of two replicates against the third. Between
+  studies: the share of the training lines' (line, pair) cells that two studies screened.
+- **A weight from the measurement error.** Each pair's weight is the inverse of its mean variance in Harle's Table S4.
+- **One score definition.** Ito 2021 and Klingbeil 2024 publish GEMINI; their score becomes the LFC of the double loss
+  minus the LFC of each single loss (the other side a cutting control), for 101,447 of their 104,403 labelled rows.
+- **Inside one study.** Harle's count matrix (Table S3) gives a score for each replicate, the same difference of LFCs;
+  a replicate's SL calls are as many of its lowest scores as the line has SL calls. The mean of a line's replicate
+  scores agrees with Harle's published score at Spearman 0.734 (output check).
+- **Result** (run `target_options_seed0_v2`, H20 port 30838, code `6d74075`, 63 s; outputs in
+  `outputs/sl/target_options/target_options_seed0_v2/` on the host). Repeat of the line-specific part, 95% bootstrap
+  over gene pairs:
+
+  | Setting | Rank | Top 10% of the rank, as a ramp | SL call |
+  | --- | --- | --- | --- |
+  | Two studies (12 study pairs) | 0.039 [−0.017, +0.093] | 0.116 [+0.049, +0.167] | 0.060 [+0.006, +0.119] |
+  | Inside Harle, two replicates | 0.178 [0.162, 0.196] | **0.392** [0.353, 0.427] | 0.348 [0.313, 0.381] |
+  | Inside Harle, mean of two replicates against the third | 0.225 [0.195, 0.255] | **0.498** [0.439, 0.549] | 0.435 [0.376, 0.490] |
+
+  The weight: 0.130 to 0.134 for Harle against another study (7 study pairs), 0.178 to 0.162 inside Harle. One score
+  definition, on the 16 study pairs with Ito or Klingbeil: same-line agreement 0.188 to 0.031, same-line advantage
+  +0.059 [+0.028, +0.087] to +0.017 [−0.009, +0.043]. Several studies: 8,297 of 1,258,077 training cells (0.7%).
+- **Reading.** The top of the rank as a continuous target repeats best, the plain rank worst: most pairs are not SL,
+  and their order is noise. The mean of two measurements repeats better than one, but two studies share too few cells
+  to use it, and a published score is already the mean of its replicates. The weight gives no gain. The simple common
+  definition is worse than GEMINI. Inside one study the line-specific part repeats at 0.35 to 0.39 for one replicate,
+  against 0.04 to 0.12 between two studies.
+- **Limits.** One study has replicate data here; its replicates share the library, the guides and the cell population,
+  so the value inside the study is an upper bound for the biology. The weight is per pair, not per pair and line. The
+  common definition is the simplest one; a model-based score for all studies needs the raw counts. No model was
+  trained on these targets.
