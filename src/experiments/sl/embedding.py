@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import logging
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -57,6 +58,8 @@ from src.experiments.sl.conditional import KEYS, recall_top10, soft_weights
 from src.linear_model.targets import Definitions, residual_frame
 from src.model.sl_embedding import GeneLineModel
 from src.training.stage_one_trainer import masked_mse
+
+log = logging.getLogger(__name__)
 
 SCORER = "embedding"
 SECTIONS = {
@@ -270,6 +273,11 @@ def fit_dependency(
             {"epoch": epoch, "train_loss": float(torch.stack(losses).mean()),
              "stop_loss": held}
         )  # fmt: skip
+        log.info(
+            "stage one, epoch %d: training loss %.4f, loss on the SL training lines "
+            "%.4f (epoch 0: %.4f)",
+            epoch, history[-1]["train_loss"], held, history[0]["stop_loss"],
+        )  # fmt: skip
         if held < best:
             best, state, bad = held, copy.deepcopy(model.state_dict()), 0
         else:
@@ -435,6 +443,12 @@ def fit_pairs(
         history.append(
             {"epoch": epoch, "train_loss": float(torch.stack(losses).mean()),
              "val_recall_top10": recall}
+        )  # fmt: skip
+        log.info(
+            "stage two, %s, epoch %d: training loss %.4f, validation recall in the "
+            "top 10%% %.4f",
+            "whole model" if joint else "frozen stage one", epoch,
+            history[-1]["train_loss"], recall,
         )  # fmt: skip
         if recall > best:
             best, state, bad = recall, copy.deepcopy(model.state_dict()), 0
@@ -719,6 +733,7 @@ def run(config: Mapping[str, Any], run_id: str, device: str) -> Path:
     bind(run_dir, config)
     torch.manual_seed(int(config["seed"]))
     data, base, counts = load_data(config, torch.device(device))
+    log.info("inputs: %s", counts)
     model = build_model(config, data)
     result = train(model, data, config)
     torch.save({"weights": model.state_dict(), "config": jsonable(config)},
@@ -847,6 +862,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--device", default="cuda" if torch.cuda.is_available() else "cpu"
     )
     args = parser.parse_args(argv)
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     out = run(load_config(args.config), args.run_id, args.device)
     print(f"gene-knowledge, cell-set model: {out}", flush=True)
     return 0
