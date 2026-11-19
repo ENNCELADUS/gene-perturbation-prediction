@@ -1,0 +1,12 @@
+# Line-specific signal in the multi-study SL benchmark's labels (src/experiments/sl/line_specificity.py):
+# does the difference between lines in a pair's screen score repeat between two studies? No model is read.
+# `hpc/run.sh sl-line-specificity configs/sl/line_specificity.yaml --run-id ID` (CPU, one process per study pair).
+kind: sl_line_specificity
+seed: 0
+output_root: outputs/sl
+task: line_specificity
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+bootstrap: 2000   # draws over pairs, for each two studies
+min_pairs: 20     # common pairs for one correlation, and for two studies to be compared
+min_lines: 3      # lines of a study for Table 1
