@@ -6,7 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The task is context-specific synthetic-lethality (SL) prediction in held-out **cell lines**, read from their basal
 profiles with a single-cell foundation model: stage one predicts DepMap GeneEffect, stage two ranks SL partners against
-experimental SL-database labels (`docs/01-blueprint.md` §3). 
+experimental SL-database labels (`docs/01-blueprint.md` §3). **The goal is SL performance in held-out lines.** Stage one is
+a means: its accuracy is no goal and no bar for SL work. Report SL first, then the stage-one numbers of the reader behind
+it. Spend effort on what separates this work from Cilantro-SL (one score per pair in every line, no line held out): a
+score that changes with the cell line and holds in unseen lines, not only a different foundation model.
 
 `docs/` outranks this file. Start at `docs/01-blueprint.md` (introduction, related work and task formulation, no modelling; it mirrors the
 Notion page https://app.notion.com/p/3f4c3591aaf681f68db1ccb9fd595c41, so edit both together);
@@ -18,15 +21,10 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-11-13)
+## Current state (2026-11-19)
 
 Replace this section on every update; history lives in `results/` and the protocol.
 
-- **Stage one** (protocol §16, §18): no arm beats the default linear model refitted on the frame (per-line residual
-  Spearman 0.226 validation / 0.227 test on the frame rebuilt 2026-11-13; two screens of one line agree at 0.246). The
-  per-gene reader (linear model + `u_g · h(line)`) is null: 7 of 8 runs select epoch 0, the best gains +0.002 / +0.005
-  ([record](results/stage_one_gene_reader/README.md)); older arms: [architecture](results/stage_one_architecture/README.md),
-  [linear-model input](results/stage_one_linear_model_input/README.md). Outputs before 2026-11-13 are gone from the host.
 - **Stage two**: modular SL backbone, buffer-aware head 0.394 / 0.361 < training SL fraction. Three modules of the [plan](docs/specs/2026-11-12-pie-and-single-cell-plan.md) ran, all null: PIE's profile as the editor (SL protocol §14, [record](results/sl_pie_editor_seed0/README.md); below the simple edit, equal to another line's profile; 66 of 86 lines had no context text),
   own-gene space and co-detection (§13, [record](results/sl_single_cell_inputs_seed0/README.md)). Next: test if the measured profile after A's loss holds SL signal under a fitted reader.
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html), [model status](model-status.html)): labels in `data/sl_studies/benchmark_v2` (H20);
@@ -35,6 +33,11 @@ Replace this section on every update; history lives in `results/` and the protoc
   the training SL fraction 0.540 / 0.541 leads; Kebabci on predicted GeneEffect 0.355 / 0.395, KG4SL 0.367 / 0.338,
   De Kegel 0.281 / 0.293, PARIS 0.219 / 0.213, MiT4SL 0.154 / 0.138, Cilantro-SL 0.123 / 0.134, SLIdR 0.095 / 0.115;
   none follows context; labels 1.00 / 1.00, random 0.10 / 0.12.
+- **Stage one**, the reader behind the SL model (protocol §16, §18): no arm beats the default linear model refitted on the frame (per-line residual
+  Spearman 0.226 validation / 0.227 test on the frame rebuilt 2026-11-13; two screens of one line agree at 0.246). The
+  per-gene reader (linear model + `u_g · h(line)`) is null: 7 of 8 runs select epoch 0, the best gains +0.002 / +0.005
+  ([record](results/stage_one_gene_reader/README.md)); older arms: [architecture](results/stage_one_architecture/README.md),
+  [linear-model input](results/stage_one_linear_model_input/README.md). Outputs before 2026-11-13 are gone from the host.
 - One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test.
 
 ## Commands

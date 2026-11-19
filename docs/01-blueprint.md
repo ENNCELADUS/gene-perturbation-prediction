@@ -211,11 +211,12 @@ and ARID1A–ARID1B.
 
 ## 5. Research plan
 
-**Goal.** Predict GeneEffect in unseen cancer cell lines from their basal profile, beyond what a context-blind
-gene mean and a linear expression model already give, and establish whether an AI-virtual-cell (single-cell
-foundation-model) representation adds to that. Once a model clears the bar, carry its predicted dependencies
-into SL prediction in unseen lines. A clean negative on the AI-virtual-cell question is a result, not a failed
-plan.
+**Goal.** Predict SL in unseen cancer cell lines. The result that counts is SL ranking in held-out lines (Task B,
+§3.7). Stage one is a means: its accuracy is reported beside the SL result, after it, and SL work does not wait for a
+stage-one bar. The work must differ from Cilantro-SL in more than the foundation model: the SL score of a pair must
+change with the cell line, and that change must hold in lines excluded from both stages. Whether an AI-virtual-cell
+(single-cell foundation-model) representation adds to SL ranking is part of the question; a clean negative is a
+result, not a failed plan.
 
 **Task 1: cross-line GeneEffect prediction and interpretability.**
 
@@ -254,7 +255,7 @@ with intervals spanning zero; at one penalty pair the single-cell arm beats the 
 joint STATE model trailed the context ridge, and in the single-cell correction every trained epoch lowered
 validation and STATE absent beat STATE frozen or trainable (GeneEffect protocol §7, §12).
 
-**Future extension: SL prediction in unseen lines.** Stage one's predicted, line-specific dependencies feed an
+**SL prediction in unseen lines.** Stage one's predicted, line-specific dependencies feed an
 SL framework evaluated on held-out lines, on cell-line-specific benchmarks: multi-line combinatorial screens that
 test one pair library in every line of a panel and publish a per-line score. The benchmark (chosen 2026-10-11) is
 the screen set of Kebabci et al. 2026: Ito et al. 2021 (11 lines), Klingbeil et al. 2024 (22) and Harle et al. 2025

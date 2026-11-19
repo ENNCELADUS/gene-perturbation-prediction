@@ -12,6 +12,10 @@ in one sentence. Give validation and test as separate tables or columns; validat
 once. Contrasts with bootstrap intervals go in a second table. Never use bullet dumps or arm × scorer pivots as the
 main presentation, and name every row by what it is, not by an internal label.
 
+**Order.** The goal is SL performance, so the SL (stage two) table comes first: recall in the top 10%, AUROC and AUPRC on
+the SL benchmark. After it, give the stage-one numbers of the reader behind the SL model (per-line residual Spearman,
+whole-line Pearson, MSE). Stage-one accuracy is not a goal: never present it as the headline or as a bar for SL work.
+
 Report in chat by default: one line on what ran (config, host, code SHA, seed), the result tables, then a short
 **Reading** section of bold one-line findings, each backed by a table. Never write a new `README.md` (or any other
 Markdown record) for a run, an analysis or a results folder; a run's record is its `summary.html`. The `README.md`
@@ -38,7 +42,7 @@ benchmark (the final split with its line counts, the genes or pairs scored, the 
 baseline and control is); what ran (host port, output path, code SHA, seed, a table of steps with finish times in
 UTC, and a link to the copied host report); results (the tables above, then figures); **Reading**.
 
-**Status page story.** The task (blueprint §3, two stages); the benchmark and final split; one section per stage with
+**Status page story.** The task (blueprint §3, two stages); the benchmark and final split; one section per stage, stage two (SL) first, with
 its current headline table, its **Reading** and links to the run pages (or older `README.md` records) behind it; then
 what runs next. It replaces the previous status page in place; it is not a history.
 
