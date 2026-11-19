@@ -94,6 +94,8 @@ NAMES = {
     # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding)
     "embedding": "Gene-knowledge, cell-set model (pair head on gene-in-line "
     "embeddings, pretrained on GeneEffect)",
+    "embedding_mean_token": "Gene-knowledge model without cell tokens (each line "
+    "reads its mean token alone)",
     # the PIE editor (configs/sl/pie_editor.yaml): PIE's predicted profile after A's
     # loss in place of the simple edit; 0 outside the rows the simple edit covers,
     # or (pie_all) outside the rows PIE can edit

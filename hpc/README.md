@@ -452,6 +452,9 @@ for i in 0 1 2 3; do                                                            
 done
 CUDA_VISIBLE_DEVICES=0 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id embedding_seed0 \
   > outputs/launches/embedding_seed0.log 2>&1 < /dev/null &
+# the same model without its cell tokens (needs no Tx1 cache)
+CUDA_VISIBLE_DEVICES=1 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding_mean_token.yaml \
+  --run-id embedding_mean_token_seed0 > outputs/launches/embedding_mean_token_seed0.log 2>&1 < /dev/null &
 hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0
 ```
 
