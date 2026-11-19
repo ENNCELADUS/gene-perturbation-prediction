@@ -56,6 +56,11 @@ NAMES = {
     "buffer_head": "Backbone head on the buffer-aware reader's terms",
     "buffer_head_ablated": "Backbone head on the buffer-aware reader's terms, "
     "context-ablated (training mean profile)",
+    # the head trained on the top 10% of each screen's rank as a ramp (SL protocol §17)
+    "ramp_head": "Backbone head on the buffer-aware reader's terms, trained on the top "
+    "10% of each screen's rank",
+    "ramp_head_ablated": "Backbone head trained on the top 10% of each screen's rank, "
+    "context-ablated (training mean profile)",
     # the single-cell parts of the backbone (SL protocol §13)
     "wide_conditional": "Conditional score, each line read in its own genes",
     "wide_conditional_ablated": "Conditional score, each line read in its own genes, "

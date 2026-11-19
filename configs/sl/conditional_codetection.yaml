@@ -16,3 +16,6 @@ screen_gene_effect: data/sl_dependency_v0/raw/depmap/ScreenGeneEffect.csv
 screen_map: data/sl_dependency_v0/raw/depmap/CRISPRScreenMap.csv
 space_measured_share: null
 codetection: real
+# what the head trains on: call (the screen's SL call) or ramp (the top 10% of the screen's rank
+# as a ramp from 0 to 1, SL protocol §17)
+head_target: call

@@ -17,7 +17,9 @@ expression to the training side's ``LOW_PERCENTILE`` percentile, and leaves it a
 when it is already lower. The context-ablated score reads the training-side mean
 profile in place of the line's. A logistic head on the training lines' SL labels reads
 both terms, the predicted GeneEffect and the expression of both genes and the design;
-its penalty is chosen on validation recall in the top 10%. Each score goes to
+its penalty is chosen on validation recall in the top 10%; ``head_target`` makes it
+train on the SL calls or on the top 10% of each screen's rank as a ramp (SL protocol
+§17). Each score goes to
 ``scores/<name>.parquet`` for the benchmark harness (``extra_scores``) with
 ``covered`` (the reader can edit the row) and ``partner`` (A is a paralog or complex
 co-member of B, or for a pair B of A), and the reader's GeneEffect table to
@@ -69,6 +71,7 @@ from src.experiments.sl.benchmark_baselines import (
     list_records,
     read_gene_effect,
 )
+from src.experiments.sl.line_specificity import oriented_rank, ramp
 from src.linear_model.bridge import Bridge, fit_bridge
 from src.linear_model.folds import training_side_folds
 from src.linear_model.linear_model import (
@@ -96,6 +99,9 @@ FEATURES = (
 #: The head's co-detection inputs (the ``codetection`` option).
 CODETECTION_FEATURES = ("codetection", "codetection_log_ratio")
 CODETECTION_MODES = (None, "real", "shuffled")
+#: What the head trains on: the screen's SL call, or the top 10% of the screen's
+#: rank as a ramp from 0 to 1 (SL protocol §17).
+HEAD_TARGETS = ("call", "ramp")
 #: Pairs reported by name where a held-out line screened them.
 NAMED = (("SMARCA4", "SMARCA2"), ("ARID1A", "ARID1B"))
 #: The full fit's key among the readers (folds are 0..k-1).
@@ -110,13 +116,15 @@ def load_config(path: Path) -> dict[str, Any]:
         config,
         {"kind", "seed", "output_root", "task", "linear_model", "labels", "split",
          "head_penalties", "top_k", "screen_gene_effect", "screen_map",
-         "space_measured_share", "codetection"},
+         "space_measured_share", "codetection", "head_target"},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_conditional":
         raise ValueError(f"{path} is a {config['kind']} config")
     if config["codetection"] not in CODETECTION_MODES:
         raise ValueError(f"codetection must be one of {CODETECTION_MODES}")
+    if config["head_target"] not in HEAD_TARGETS:
+        raise ValueError(f"head_target must be one of {HEAD_TARGETS}")
     return config
 
 
@@ -304,14 +312,30 @@ def features(
     return np.nan_to_num(values, nan=0.0)
 
 
-def weights(rows: pd.DataFrame) -> np.ndarray:
-    """The benchmark's weighting: every line equal, then its studies, then a study's
-    screens, then the two classes of a screen; mean 1."""
-    n_class = rows.groupby([*LIST_KEYS, "label"])["label"].transform("size")
+def ramp_target(rows: pd.DataFrame) -> np.ndarray:
+    """The head's continuous target: the rank of the row's score inside its screen,
+    turned so that the study's SL calls are high, then its top 10% as a ramp from 0
+    to 1. A row without a score keeps its call."""
+    value, _ = oriented_rank(rows)
+    return np.where(np.isfinite(value), ramp(value), rows["label"].to_numpy(float))
+
+
+def soft_weights(rows: pd.DataFrame, target: np.ndarray) -> tuple[np.ndarray, ...]:
+    """The benchmark's weighting (every line equal, then its studies, then a study's
+    screens, then the two classes of a screen; mean 1) for a target between 0 and 1:
+    a row counts as SL with weight ``target`` and as negative with ``1 - target``."""
     screens = rows.groupby(["model_id", "study_id"])["list_id"].transform("nunique")
     studies = rows.groupby("model_id")["study_id"].transform("nunique")
-    w = 1.0 / (n_class * screens * studies).to_numpy(dtype=np.float64)
-    return w / w.mean()
+    keys = [rows[key] for key in LIST_KEYS]
+    scale = (screens * studies).to_numpy(dtype=np.float64)
+    parts = []
+    for part in (
+        pd.Series(target, index=rows.index),
+        1 - pd.Series(target, rows.index),
+    ):
+        parts.append((part / part.groupby(keys).transform("sum")).fillna(0) / scale)
+    mean = (parts[0] + parts[1]).mean()
+    return tuple((part / mean).to_numpy() for part in parts)
 
 
 def head_rows(rows: pd.DataFrame, x: np.ndarray) -> np.ndarray:
@@ -347,25 +371,31 @@ def fit_head(
     x_val: np.ndarray,
     penalties: Sequence[float],
     top_k: int,
+    target: str = "call",
 ) -> tuple[Any, list[dict[str, float]]]:
     """A logistic head per penalty (sklearn's C is its inverse), weighted as the
-    benchmark; the one with the best validation recall in the top 10%."""
+    benchmark; the one with the best validation recall in the top 10% of the calls.
+    ``target`` (HEAD_TARGETS) is what it trains on."""
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
     keep = head_rows(train, x_train)
     chosen = train[keep]
+    if target == "ramp":
+        positive, negative = soft_weights(chosen, ramp_target(chosen))
+    else:
+        positive, negative = soft_weights(chosen, chosen["label"].to_numpy(float))
+    # each row once for each class it has weight in
+    x_fit = np.concatenate([x_train[keep][positive > 0], x_train[keep][negative > 0]])
+    y_fit = np.repeat([1, 0], [(positive > 0).sum(), (negative > 0).sum()])
+    w_fit = np.concatenate([positive[positive > 0], negative[negative > 0]])
     records, best = [], None
     for penalty in penalties:
         model = make_pipeline(
             StandardScaler(), LogisticRegression(C=1.0 / float(penalty), max_iter=2000)
         )
-        model.fit(
-            x_train[keep],
-            chosen["label"].to_numpy(),
-            logisticregression__sample_weight=weights(chosen),
-        )
+        model.fit(x_fit, y_fit, logisticregression__sample_weight=w_fit)
         recall = recall_top10(val, decision(model, x_val), top_k)
         records.append({"penalty": float(penalty), "val_recall_top10": recall})
         if best is None or recall > best[0]:
@@ -626,6 +656,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         x["line"][val],
         config["head_penalties"],
         int(config["top_k"]),
+        config["head_target"],
     )
     scores = {
         "conditional": -reading["line"][0].sum(axis=1),
@@ -665,7 +696,8 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
                   "held_out_unmeasured": {"min": int(unmeasured.min()),
                                           "median": float(unmeasured.median()),
                                           "max": int(unmeasured.max())}},
-        "head": {"features": names, "selection": selection,
+        "head": {"target": config["head_target"], "features": names,
+                 "selection": selection,
                  "coefficients": head[-1].coef_[0].tolist()},
         "stage_one": stage_one_metrics(base, residual, int(config["seed"])),
         "stage_one_ceiling": stage_one_ceiling(
