@@ -215,12 +215,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--gene2vec", type=Path, required=True)
     parser.add_argument("--gene-names", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--sources", default=",".join(SOURCES), help="comma-separated, of SOURCES"
+    )
     args = parser.parse_args(argv)
+    names = [name for name in args.sources.split(",") if name]
+    if not names or set(names) - set(SOURCES):
+        parser.error(f"--sources takes some of {SOURCES}")
     genes = pd.read_parquet(args.genes)
     axis = [str(gene) for gene in genes.index]
     selective = [gene for gene, keep in zip(axis, genes["selective"]) if bool(keep)]
     paths = SourcePaths(args.pie_sources, args.protein, args.gene2vec, args.gene_names)
-    record = write_sources(args.out, align_sources(axis, paths), paths, selective)
+    record = write_sources(
+        args.out, align_sources(axis, paths, names), paths, selective
+    )
     for name, row in record["sources"].items():
         print(
             f"{name}: dim {row['dim']}, {row['covered']} of {record['axis']} genes "

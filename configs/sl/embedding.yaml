@@ -1,0 +1,44 @@
+# The gene-knowledge, cell-set model on the multi-study SL benchmark (SL protocol §18;
+# docs/specs/2026-11-19-embedding-transfer-plan.md): stage one pretrains the model on GeneEffect of
+# the lines without an SL label, stage two trains the pair head on its gene-in-line embeddings and
+# then the whole model. Validation recall in the top 10% selects; test is scored once.
+# `hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id ID` (one GPU); then
+# `hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id ID` reads its scores/.
+kind: sl_embedding
+seed: 0
+output_root: outputs/sl
+task: embedding
+# the SL backbone's line input: bridged pseudo-bulk on the SL split's training side
+linear_model: configs/linear_model/default_linear_model.yaml
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+# frozen gene sources (hpc/run.sh gene-sources): function text, protein, network
+gene_sources:
+  gene_text: data/geneeffect_joint/v2/ladder/gene_sources/gene_text.npz
+  esmc_600m: data/geneeffect_joint/v2/ladder/gene_sources/esmc_600m.npz
+  string_space: data/geneeffect_joint/v2/ladder/gene_sources/string_space.npz
+# Tx1-3B embeddings of every cell of a line (hpc/run.sh ladder-inputs --steps tx1)
+tx1_cache: data/tx1_basal_embeddings/v2_all/real
+top_k: 20
+model: {hidden: 256, head_hidden: 64}
+# cells of a line at one training step, and the rate at which a line reads its mean token alone
+cells: {per_step: 256, dropout: 0.25}
+stage_one:
+  max_epochs: 30
+  patience: 3
+  learning_rate: 1.0e-3
+  weight_decay: 0.01
+  lines_per_step: 32
+  genes_per_step: 512
+stage_two:
+  max_epochs: 30
+  patience: 5
+  steps_per_epoch: 200
+  lines_per_step: 4
+  rows_per_line: 1024
+  learning_rate: 1.0e-3
+  backbone_learning_rate: 1.0e-4
+  weight_decay: 0.01
+  # the GeneEffect loss's weight when the whole model trains; one phase for each
+  geneeffect_weights: [1.0]
+eval: {rows_per_chunk: 1024, genes_per_chunk: 2048}

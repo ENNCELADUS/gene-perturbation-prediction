@@ -403,6 +403,38 @@ def fit_head(
     return best[1], records
 
 
+def bridged_rows(
+    base: RunBase,
+) -> tuple[dict[str, int], pd.DataFrame, dict[int, Bridge]]:
+    """Every split line's input row (bridged pseudo-bulk; a labelled single-cell
+    training line's by the bridge fitted on the paired lines outside its fold, any
+    other line's by the bridge fitted on all of them), each line's bridge key and the
+    bridges."""
+    bridge = base.bridge
+    train = list(bridge.single_cell_train)
+    paired = list(bridge.paired)
+    others = [m for m in base.split.all_model_ids if m not in set(train)]
+    bridges = {
+        k: fit_bridge(bridge.pseudobulk.loc[fit], bridge.bulk.loc[fit])
+        for k, fit in [(FULL, paired)]
+        + [
+            (fold, [m for m in paired if bridge.folds[m] != fold])
+            for fold in sorted({bridge.folds[m] for m in train})
+        ]
+    }
+    order = [*train, *others]
+    assignment = {m: bridge.folds.get(m, FULL) for m in order}
+    rows = pd.concat(
+        [
+            fitted.apply(
+                bridge.pseudobulk.loc[[m for m in order if assignment[m] == k]]
+            )
+            for k, fitted in bridges.items()
+        ]
+    ).loc[order]
+    return assignment, rows, bridges
+
+
 def readers_and_rows(
     base: RunBase,
 ) -> tuple[
@@ -449,27 +481,7 @@ def readers_and_rows(
             fit_lines=[m for m in base.labelled if folds[m] != fold],
             encoder_lines=[m for m in encoders if folds[m] != fold],
         )
-    train = list(bridge.single_cell_train)
-    paired = list(bridge.paired)
-    others = [m for m in base.split.all_model_ids if m not in set(train)]
-    bridges = {
-        k: fit_bridge(bridge.pseudobulk.loc[fit], bridge.bulk.loc[fit])
-        for k, fit in [(FULL, paired)]
-        + [
-            (fold, [m for m in paired if bridge.folds[m] != fold])
-            for fold in sorted({bridge.folds[m] for m in train})
-        ]
-    }
-    order = [*train, *others]
-    assignment = {m: bridge.folds.get(m, FULL) for m in order}
-    rows = pd.concat(
-        [
-            fitted.apply(
-                bridge.pseudobulk.loc[[m for m in order if assignment[m] == k]]
-            )
-            for k, fitted in bridges.items()
-        ]
-    ).loc[order]
+    assignment, rows, bridges = bridged_rows(base)
     return readers, assignment, rows, linear_model, bridges
 
 

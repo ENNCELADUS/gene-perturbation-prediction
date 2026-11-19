@@ -91,6 +91,9 @@ NAMES = {
     "kebabci_paralog_predicted": "Kebabci 2026 paralog classifier (stage one's "
     "predicted GeneEffect in the held-out lines, official code, refitted)",
     "mit4sl": "MiT4SL (cell-line-specific graph model, official code, refitted)",
+    # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding)
+    "embedding": "Gene-knowledge, cell-set model (pair head on gene-in-line "
+    "embeddings, pretrained on GeneEffect)",
     # the PIE editor (configs/sl/pie_editor.yaml): PIE's predicted profile after A's
     # loss in place of the simple edit; 0 outside the rows the simple edit covers,
     # or (pie_all) outside the rows PIE can edit

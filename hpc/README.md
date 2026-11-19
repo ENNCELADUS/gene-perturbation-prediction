@@ -22,6 +22,7 @@ prints every command's arguments.
 | `sl-line-specificity` | line-specific signal in the SL labels, no model (`sl.line_specificity`) | CPU, one process per study pair | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-target-options` | four options for a less noisy SL target, by the repeat of the line-specific part (`sl.target_options`) | CPU, one process per study pair | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-conditional` | the modular SL backbone: round zero, the buffer-aware reader (`sl.conditional`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-embedding` | the gene-knowledge, cell-set SL model: GeneEffect pretraining, then the pair head on gene-in-line embeddings (`sl.embedding`) | one GPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-pie-pass`, `sl-pie-editor` | the PIE editor of the SL backbone: PIE's profile changes, then the scores (`sl.pie_pass`, `sl.pie_editor`) | PIE on GPUs (`.venv-pie`); the editor on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 
@@ -423,6 +424,35 @@ OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 nohup hpc/run.sh sl-conditional configs/sl
   --run-id conditional_buffer_seed0 > outputs/launches/conditional_buffer_seed0.log 2>&1 &
 OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 nohup hpc/run.sh sl-baselines configs/sl/benchmark_baselines.yaml \
   --run-id benchmark_buffer_seed0 > outputs/launches/benchmark_buffer_seed0.log 2>&1 &
+```
+
+The gene-knowledge, cell-set model (SL protocol §18) is one run on one GPU: `sl-embedding` pretrains the model on the
+GeneEffect of the lines without an SL label, trains the pair head on its gene-in-line embeddings, then the whole
+model, and writes `scores/embedding.parquet`, `predictions.parquet`, `metrics.json` and `results.md` under
+`outputs/sl/embedding/<run id>/`. It reads the gene sources of the stage-one inputs (`ladder/gene_sources/`) and the
+Tx1 cache of every cell, and stops if a line with cells has no cache. Two inputs are built first when they are
+absent: the three gene sources (function text, ESM C, STRING space; `--sources` leaves out ESM3 and Gene2vec) and the
+Tx1 cache of the SL split's lines that the stage-one inputs did not embed (`--tx1-split`; `--tx1-kinds real` leaves
+out the count-shuffled cells). The harness then scores the model's table beside the baselines:
+
+```bash
+SRC=data/pie/hf/datasets/arcinstitute/pie_sources/cb1aaa4e7655605bdc70a9bd77bbd62016b8c7d7
+OUT=data/geneeffect_joint/v2/ladder/gene_sources
+hpc/run.sh gene-sources proteins --pie-sources $SRC --out $OUT/protein                     # .venv-pie, CPU
+CUDA_VISIBLE_DEVICES=0 HF_HOME=/2023533015/.cache/huggingface HF_HUB_OFFLINE=1 \
+  /2023533015/ppi-mutation-ddg/.venv/bin/python -m src.data.builders.embed_protein_sources --steps esmc --out $OUT/protein
+hpc/run.sh gene-sources align --genes data/geneeffect_joint/v2/ladder/genes.parquet --pie-sources $SRC \
+  --protein $OUT/protein --gene2vec data/cilantro/official/gene2vec_embs.pt \
+  --gene-names data/cilantro/geneformer/geneformer/gene_dictionaries_30m/gene_name_id_dict_gc30M.pkl --out $OUT \
+  --sources gene_text,esmc_600m,string_space
+for i in 0 1 2 3; do                                                                        # ~7 cells/s on one GPU
+  CUDA_VISIBLE_DEVICES=$i setsid nohup hpc/run.sh ladder-inputs configs/stage_one/ladder_inputs.yaml --steps tx1 \
+    --shard $i/4 --tx1-split configs/benchmarks/cell_line_sl_split.json --tx1-kinds real \
+    > outputs/launches/tx1_sl_split_$i.log 2>&1 < /dev/null &
+done
+CUDA_VISIBLE_DEVICES=0 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id embedding_seed0 \
+  > outputs/launches/embedding_seed0.log 2>&1 < /dev/null &
+hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0
 ```
 
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw
