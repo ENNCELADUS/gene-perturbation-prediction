@@ -32,7 +32,7 @@ Replace this section on every update; history lives in `results/` and the protoc
   the training SL fraction 0.540 / 0.541 leads; Kebabci on predicted GeneEffect 0.355 / 0.395, KG4SL 0.367 / 0.338,
   De Kegel 0.281 / 0.293, PARIS 0.219 / 0.213, MiT4SL 0.154 / 0.138, Cilantro-SL 0.123 / 0.134, SLIdR 0.095 / 0.115;
   none follows context; labels 1.00 / 1.00, random 0.10 / 0.12.
-- **Line-specific signal in the SL labels** (SL protocol §15, §16, no model): between two studies the line-specific part of a pair's score repeats at 0.04–0.12; inside Harle 2025 two replicates repeat at 0.35–0.39. Of four target options (run `target_options_seed0_v2`), the top 10% of the rank as a continuous target repeats best (0.392 against 0.348 for the SL call, 0.178 for the plain rank); the mean of measurements helps but two studies share 0.7% of training cells; error weights and a simple common score definition do not help. No model is trained on these targets yet.
+- **Line-specific signal in the SL labels** (SL protocol §15, §16, no model): between two studies the line-specific part of a pair's score repeats at 0.04–0.12; inside Harle 2025 two replicates repeat at 0.35–0.39. Of four target options (run `target_options_seed0_v2`), the top 10% of the rank as a continuous target repeats best (0.392 against 0.348 for the SL call, 0.178 for the plain rank); the mean of measurements helps but two studies share 0.7% of training cells; error weights and a simple common score definition do not help. The logistic head trained on that target (§17) equals the head trained on the calls: 0.389 / 0.367, difference −0.005 [−0.014, +0.004] / +0.005 [−0.004, +0.018]; neither follows the line, because the head has one weight for each input over all pairs.
 - **Stage one**, the reader behind the SL model (protocol §16, §18): no arm beats the default linear model refitted on the frame (per-line residual
   Spearman 0.226 validation / 0.227 test on the frame rebuilt 2026-11-13; two screens of one line agree at 0.246). The
   per-gene reader (linear model + `u_g · h(line)`) is null: 7 of 8 runs select epoch 0, the best gains +0.002 / +0.005
@@ -73,7 +73,7 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
   artifacts (below) fail closed and stay.
 - GPU work needs the H20 container: finish everything local first (config, tests, commit, push) and end with the exact
   `hpc/run.sh` launch command.
-- Sync code between machines through Git only: commit, push, then pull on the H20 checkout. Never rsync/scp/tar working trees.
+- Sync code between machines through Git only: commit, push, then run `hpc/pull.sh` in the H20 checkout (HTTPS with retries, no agent forwarding). Never rsync/scp/tar working trees.
 - Work done on its own branch or worktree is merged into `main` as soon as the feature is established as working — suite and
   lint pass, any requested review is adjudicated, and an asset-dependent path has run on the H20 host — then `main` is pushed and the branch
   deleted. Do not leave finished work on a side branch. These pushes of `main`, and the push before GPU work, are approved.
