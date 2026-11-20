@@ -32,10 +32,15 @@ git push origin main
 ssh -p 30838 root@10.15.171.204 'cd /2023533015/VCC_Project && hpc/pull.sh'
 ```
 
-`hpc/pull.sh [BRANCH]` sets the fetch address to HTTPS and tries the pull up to 12 times, because the containers' DNS
-sometimes answers `github.com` with an address that does not connect (one plain pull fails about one time in two). It
-prints the checked-out commit; confirm that it is the commit you pushed. Do not use a plain `git pull` there, and
-chain the pull to a launch with `&&`.
+`hpc/pull.sh [BRANCH]` sets the fetch address to HTTPS and sends each try to one of GitHub's own addresses, because
+the containers' DNS sometimes answers `github.com` with an address that does not connect (one plain pull fails about
+one time in two). It tries up to 12 times and prints the checked-out commit; confirm that it is the commit you
+pushed. Do not use a plain `git pull` there, and chain the pull to a launch with `&&`.
+
+Git on the H20 is 2.56.1, built from source (without the Rust parts) into `/2023533015/.local/git-2.56.1` on the
+shared disk; `/usr/local/bin/git` in each container is a link to it, and `hpc/pull.sh` calls it by its full path. A
+recreated container has only its own git 2.25.1 until the link is made again:
+`ln -sfn /2023533015/.local/git-2.56.1/bin/git /usr/local/bin/git`.
 
 The checkout drifts: read
 `git branch --show-current`, `git log -1` and `git status --short` before assuming your code is present, and never discard
