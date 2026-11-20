@@ -673,6 +673,8 @@ gene-in-line embeddings, not its predicted GeneEffect. A better GeneEffect is no
   out of sample. Thus the model reads every SL line, training or held out, out of sample, in one coordinate system.
   This track does not use the per-line residual Spearman as its selector (GeneEffect protocol §6), by the user's
   decision of 2026-11-19.
+  §19 replaces this residual target with GeneEffect itself. With the residual target the early stop of the
+  2026-11-19 runs kept the untrained model, so their stage two started from untrained weights.
 - **Stage two.** Rows: the SL training lines' genetic screens with both classes. A step draws lines evenly and, in
   each line, rows at the benchmark's weights (§11: each line equal, then its studies, a study's screens, a screen's
   two classes); the loss is binary cross-entropy on the SL call. First the head trains on the frozen stage-one model.
@@ -784,3 +786,92 @@ gene-in-line embeddings, not its predicted GeneEffect. A better GeneEffect is no
   on new pairs is the same with another line's input. Thus no row here is context evidence (§8): the score is a
   score of the gene pair. The open parts are a stage one that learns something that transfers to the SL lines, a
   model that must use the line to fit the training lines, and new pairs.
+
+## 19. The direct GeneEffect target and the line term (2026-11-20)
+
+`src/model/sl_embedding.py`, `src/experiments/sl/embedding.py`, `src/experiments/sl/gene_in_line.py`, the four
+configs below, `configs/sl/benchmark_line_term.yaml`, `hpc/run.sh sl-embedding`; the
+[plan](specs/2026-11-20-line-term-and-direct-target-plan.md) gives the reasons. The question: do a line's single
+cells make the SL score change with the line, and does that change hold in unseen lines? This section changes two
+parts of §18. All other parts of §18 stay.
+
+- **Stage one.** The target is GeneEffect itself, `(GeneEffect − c) / s`, mean squared error. `c` and `s` are one
+  centre and one scale, shared by every gene: the mean and the SD of all the fit lines' values (`target_scale`). The
+  model must learn how essential each gene is, and how a gene differs between lines. The bias of the mean-token map
+  gives a term that is the same in every line. The fit lines and the early stop do not change: the epoch kept has the
+  lowest loss on the SL training lines, which stage one does not fit. The untrained model predicts one value for
+  every gene, so a trained epoch has a lower loss, and stage two starts from trained weights. The code has no
+  residual target. Its rows are the finished runs of 2026-11-19 (§18).
+- **The line term.** The SL score of a row (line `c`, pair A, B) is
+
+  ```text
+  s(c, A, B) = p(A, B) + D(c, A, B) − mean over r in R of D(r, A, B)
+  ```
+
+  - `p(A, B)`: the pair head of the chosen phase on the mean input (the fit lines' mean expression, no cells). It is
+    the context-ablated score of that phase.
+  - `D(r, A, B)`: the line head, a second MLP. It reads the pair head's input for the pair in line `r` and the
+    gene-in-line features of A and B in line `r`. Its last layer starts at zero, so the untrained line term is 0.
+  - `R`: the SL training lines. At a training step, `R` is a draw of `line_term.reference_lines` of them, with
+    replacement. At scoring, `R` is all of them, with all their cells.
+  - The line term trains last, on the chosen phase, with binary cross-entropy on `s` and the rows of stage two. Only
+    the line head and its input projections train, so `p` does not change. Validation recall in the top 10% of `s`
+    selects the epoch (`line_term.max_epochs`, `patience`, `learning_rate`).
+  - The line term is a deviation from the SL training lines' mean. Thus the gene pair alone cannot fill it. The
+    line's gain is `s − p`.
+- **Gene-in-line features.** Each source gives one vector for each (line, gene). A linear projection takes it to
+  width 32, the sources are summed to `e_g`, and the line head reads `[e_A + e_B ; |e_A − e_B| ; e_A ⊙ e_B]`.
+  - *Own expression* (`line_term.own_expression`): the line's scaled bridged pseudo-bulk value of the gene and a
+    presence flag, built at load time.
+  - *Tx1-3B gene level* (`gene_in_line.tx1_gene`): the mean over the line's cells of Tx1-3B's contextual embedding of
+    the gene (2,560 wide) and the share of the cells whose input sequence holds the gene.
+  - *PIE change* (`gene_in_line.pie_change`): PIE's predicted change of the line's profile after the gene's loss, in
+    64 components fitted on the SL training lines.
+  - The caches are written by `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml` under
+    `data/sl_gene_in_line/v1/` ([card](data/gene-in-line-features.md)). Each cache holds `genes.json` and one
+    `<ModelID>.npy` for each line (genes × width, float16, a NaN row where the line has no value). Each column is
+    centred and scaled on the SL training lines. A gene without a value reads zeros and a presence flag of 0. The run
+    stops if a line with benchmark rows has no file in a cache.
+- **Rows of the study.** One config each, seed 0, run id `<config name>_seed0`. The configs are
+  `configs/sl/embedding.yaml` with a `line_term` section (8 reference lines, at most 30 epochs, patience 5, learning
+  rate 1e-3, own expression on):
+
+  | Config (`configs/sl/`) | Cell tokens | Gene-in-line features |
+  | --- | --- | --- |
+  | `embedding_direct.yaml` | Tx1-3B | own expression |
+  | `embedding_direct_mean_token.yaml` | none | own expression |
+  | `embedding_direct_pie_change.yaml` | Tx1-3B | own expression, PIE change |
+  | `embedding_direct_tx1_gene.yaml` | Tx1-3B | own expression, Tx1-3B gene level |
+
+  The rows with the residual target are the finished runs `embedding_seed0`, `embedding_mean_token_seed0` and
+  `embedding_cellnet_seed0` (§18). They are not run again; they are the rows without pretraining.
+- **Outputs.** Each run writes five score tables under `outputs/sl/embedding/<run id>/scores/`:
+  `embedding.parquet` (the model of the chosen phase), `embedding_mean_input.parquet` and
+  `embedding_other_line.parquet` (the line-input controls of §18), `embedding_line_term.parquet` (`s`) and
+  `embedding_line_term_other_line.parquet` (`s` with `D` read in another line, the next one in a seeded order; `p`
+  and `R` do not change). `metrics.json` has two keys for the line term: `sl_line_term` (SL metrics of `mean_input`,
+  `line_term` and `line_term_other_line`) and `line_term` (the validation recall and the history of each epoch).
+  Both are null without a line term. `results.md` reports the line term in its own SL table and after the phases of stage two. A `best.pt` written before
+  this change has no line head and does not load; the finished runs keep their score tables.
+- **Measures** (`configs/sl/benchmark_line_term.yaml`; scorer keys `direct`, `direct_mean_token`,
+  `direct_pie_change`, `direct_tx1_gene`, each with `_mean_input`, `_other_line`, `_line_term` and
+  `_line_term_other_line`). Recall in the top 10%, AUROC and AUPRC over the positive rate, on all pairs, validation
+  and test. Validation selects; test is scored once.
+  - *The line's gain:* in each run, the model with the line term minus the context-ablated model, minus itself on
+    another line's input, and minus the model without the line term.
+  - *What the cells add:* Tx1-3B cell tokens minus no cell tokens (`direct` against `direct_mean_token`, with and
+    without the line term); the PIE row and the Tx1-3B gene-level row minus `embedding_direct`, with the line term.
+  - *What pretraining on the direct target adds:* `direct` and `direct_mean_token` minus the finished runs of
+    2026-11-19 with the same inputs (`embedding`, `embedding_mean_token`).
+  - The model with the line term minus Kebabci's paralog classifier on predicted GeneEffect.
+  - The same differences on the harness's row sets: pairs on which the training lines differ, pairs that no training
+    line called SL, new pairs. The stage-one numbers of each model come after the SL tables.
+- **Limits.** The direct target is mostly the gene mean: the line-specific part gets a smaller share of the gradient,
+  and the early stop mostly follows the fit of the gene means. The row set "the training lines differ" has 13 / 10
+  held-out lines, so a gain below about 0.05 will not show. The line-specific part of the labels repeats at 0.35 to
+  0.39 inside Harle 2025 and at 0.04 to 0.12 between two studies (§15, §16). PIE was trained on 42 of the project's
+  lines. A549 (ACH-000681) is one of them; it is a training line of the SL split. Which SL validation or test lines
+  are among the 42 is not recorded. Tx1-3B's exposure to the project's lines is not recorded.
+- **Not in this study.** CellNet's gene-level outputs, in-silico deletion with Tx1-3B, adapter training of Tx1-3B,
+  and any other foundation model.
+- **Runs:** none yet.

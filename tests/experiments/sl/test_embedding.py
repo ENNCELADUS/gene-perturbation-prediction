@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 import torch
 
-from src.experiments.sl import embedding
+from src.experiments.sl import benchmark_baselines, embedding
 from src.experiments.sl.benchmark_baselines import HEADLINE
 
 CONFIG = {
@@ -381,6 +381,42 @@ def test_the_config_loads_and_a_missing_key_is_refused(tmp_path: Path):
     (tmp_path / "bad.yaml").write_text(text)
     with pytest.raises(ValueError, match="top_k"):
         embedding.load_config(tmp_path / "bad.yaml")
+
+
+def test_the_study_configs_differ_only_where_the_plan_says():
+    base = embedding.load_config(Path("configs/sl/embedding_direct.yaml"))
+    finished = embedding.load_config(Path("configs/sl/embedding.yaml"))
+    assert {k: v for k, v in base.items() if k != "line_term"} == {
+        k: v for k, v in finished.items() if k != "line_term"
+    }
+    assert finished["line_term"] is None
+    assert base["line_term"] == {
+        "reference_lines": 8, "max_epochs": 30, "patience": 5, "learning_rate": 1.0e-3,
+        "own_expression": True, "gene_in_line": {},
+    }  # fmt: skip
+    changes = {
+        "embedding_direct_mean_token": {("cell_embeddings",): None},
+        "embedding_direct_pie_change": {("line_term", "gene_in_line"): {
+            "pie_change": "data/sl_gene_in_line/v1/pie_change"}},
+        "embedding_direct_tx1_gene": {("line_term", "gene_in_line"): {
+            "tx1_gene": "data/sl_gene_in_line/v1/tx1_gene"}},
+    }  # fmt: skip
+    for name, change in changes.items():
+        expected = copy.deepcopy(base)
+        for keys, value in change.items():
+            target = expected
+            for key in keys[:-1]:
+                target = target[key]
+            target[keys[-1]] = value
+        assert embedding.load_config(Path(f"configs/sl/{name}.yaml")) == expected
+
+
+def test_the_harness_names_every_table_of_the_study():
+    config = benchmark_baselines.load_config(
+        Path("configs/sl/benchmark_line_term.yaml")
+    )
+    assert set(config["extra_scores"]) <= set(benchmark_baselines.NAMES)
+    assert len([k for k in config["extra_scores"] if k.startswith("direct")]) == 20
 
 
 def test_stage_one_fits_no_sl_line_and_no_line_of_an_sl_lines_patient():
