@@ -212,6 +212,44 @@ def test_line_term_is_a_deviation_from_the_training_lines():
     assert np.allclose(same, on_mean, atol=1e-4)
 
 
+def test_line_term_scores_follow_the_definition_row_by_row():
+    data, *_ = world()
+    data.rows.loc[[0, 1], "a"] = -1  # anchors without a gene vector
+    torch.manual_seed(0)
+    model = embedding.build_model(LINE_CONFIG, data)
+    torch.nn.init.normal_(model.mean_token[-1].weight, std=0.5)
+    torch.nn.init.normal_(model.line_head[-1].weight, std=0.5)
+    pairs = embedding.pair_rows(data)
+    rows = np.array([0, 1, 5, 400, len(data.rows) - 1])
+    got = embedding.line_term_scores(model, data, pairs, rows, LINE_CONFIG)
+    assert np.isfinite(got).all()
+    with torch.no_grad():
+        u = model.gene_vectors()
+        mean = model.tokens(torch.zeros(1, data.expression.shape[1]), None)[0][0]
+
+        def features(line: int, gene: int) -> dict[str, torch.Tensor]:
+            at = int(data.in_line_at[line])
+            return {  # gene -1 reads zeros
+                n: (torch.zeros(t.shape[2]) if gene < 0 else t[at, gene].float())[None]
+                for n, t in data.in_line.items()
+            }
+
+        def deviation(line: int, a: int, b: int, c: torch.Tensor) -> torch.Tensor:
+            tokens = embedding.one_line(model, data, line, None, None)
+            return model.line_term(
+                u[[a]], u[[b]], c, features(line, a), features(line, b), *tokens
+            )[0]
+
+        for k, i in enumerate(rows):
+            a, b, c = int(pairs.a[i]), int(pairs.b[i]), pairs.combinatorial[[i]]
+            p = model.pair(u[[a]], u[[b]], c, mean, None, None)[0]
+            reference = torch.stack(
+                [deviation(r, a, b, c) for r in sorted(pairs.draws)]
+            ).mean()
+            want = p + deviation(int(pairs.line[i]), a, b, c) - reference
+            assert abs(got[k] - float(want)) < 1e-5
+
+
 def test_the_line_term_trains_alone_and_train_reports_it():
     data, *_ = world()
     torch.manual_seed(0)
@@ -229,6 +267,7 @@ def test_the_line_term_trains_alone_and_train_reports_it():
     )  # fmt: skip
     moved = {k for k in before if not torch.equal(before[k], state[k])}
     assert moved and all(k.startswith(("line_head.", "in_line.")) for k in moved)
+    assert all(p.requires_grad for p in model.parameters())
     assert history and all("val_recall_top10" in r for r in history)
 
 
