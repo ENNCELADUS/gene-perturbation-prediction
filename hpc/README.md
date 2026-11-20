@@ -402,15 +402,17 @@ hpc/run.sh sl-baselines configs/sl/benchmark_pie_editor.yaml --run-id benchmark_
 and the backbone's GeneEffect table ([data card](../docs/data/sl-benchmark.html)). It scores each validation and test
 list with pair identity, pan-essentiality, the predicted and the measured GeneEffect (a reference, on lines with
 GeneEffect only). It also scores the training lists, in sample and for all pairs only, with every scorer whose table
-covers them (Table 1's Training column). It writes `scores.parquet`, `lists.csv`, `lines.csv`, `metrics.json` and `results.md` to
+covers them (Table 1's Training column). It writes `scores.parquet`, `lists.csv`, `lines.csv`, `summary.csv` (recall, AUROC and AUPRC of every row, row set and line group), `metrics.json` and `results.md` to
 `outputs/sl/benchmark_baselines/<run id>/`. The headline is recall in the top 10% of each list (the known positives of
 a line's lists pooled, then the mean over lines), with the per-line difference from pair identity; AUROC and AUPRC over
 the positive rate follow. Each row is given for all lines, the lines with and without GeneEffect, and the cancer and
 non-cancer lines. An anchor list is ranked by gene B, so drug anchors keep their lists. Table 3 repeats the headline for each stratum of held-out pairs, ranked inside the
 stratum of each screen: a seen pair (the same study labelled it in a training line) whose label agrees with the
 majority of those labels, a seen pair whose label differs, and a new pair whose genes the training rows have. The
-labels as the score (the ceiling) and a seeded random score (about 0.10) check the code. Table 3 also gives two
-subsets: the partner pairs (the `partner` column of a score table) and the rows where no gene of the pair is a
+labels as the score (the ceiling) and a seeded random score (about 0.10) check the code. Table 3 also gives
+subsets. Four of them read no label of the held-out line: the seen pairs, and the seen pairs that no, some or
+every training line of the study called SL (inside the first and the last the training SL fraction is constant).
+Two more: the partner pairs (the `partner` column of a score table) and the rows where no gene of the pair is a
 dependency alone (measured GeneEffect at or above −0.5). Table 5 gives the per-line difference of each (scorer,
 control) pair in the config's `paired_differences`, with the same line bootstrap.
 
@@ -429,7 +431,10 @@ OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 nohup hpc/run.sh sl-baselines configs/sl/b
 The gene-knowledge, cell-set model (SL protocol §18) is one run on one GPU: `sl-embedding` pretrains the model on the
 GeneEffect of the lines without an SL label, trains the pair head on its gene-in-line embeddings, then the whole
 model, and writes `scores/embedding.parquet`, `predictions.parquet`, `metrics.json` and `results.md` under
-`outputs/sl/embedding/<run id>/`. It reads the gene sources of the stage-one inputs (`ladder/gene_sources/`) and the
+`outputs/sl/embedding/<run id>/`. It also writes the line-input controls, the same weights with each line's input
+replaced: `scores/embedding_mean_input.parquet` (the fit lines' mean input, no cells: the context-ablated row) and
+`scores/embedding_other_line.parquet` (another line's input). `--line-input-controls` writes these two tables for
+a finished run from its `best.pt`, without training. It reads the gene sources of the stage-one inputs (`ladder/gene_sources/`) and the
 cache of every cell's embedding (`cell_embeddings`: Tx1's, or CellNet's), and stops if a line with cells is not in it. Two inputs are built first when they are
 absent: the three gene sources (function text, ESM C, STRING space; `--sources` leaves out ESM3 and Gene2vec) and the
 Tx1 cache of the SL split's lines that the stage-one inputs did not embed (`--tx1-split`; `--tx1-kinds real` leaves
@@ -466,7 +471,9 @@ CUDA_VISIBLE_DEVICES=2 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding
 # the same model without its cell tokens (needs no Tx1 cache)
 CUDA_VISIBLE_DEVICES=1 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding_mean_token.yaml \
   --run-id embedding_mean_token_seed0 > outputs/launches/embedding_mean_token_seed0.log 2>&1 < /dev/null &
-hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0
+# the line-input controls of a run that finished before 2026-11-20 (a later run writes them itself)
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id embedding_seed0 --line-input-controls
+hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0_v3
 ```
 
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw
