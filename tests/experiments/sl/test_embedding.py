@@ -31,8 +31,10 @@ CONFIG = {
 SIDES = {"train": 8, "val": 4, "test": 4}
 
 
-def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray]:
-    """40 fit lines with cells, 40 bulk-only fit lines and 16 SL lines; 30 genes."""
+def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray, np.ndarray]:
+    """40 fit lines with cells, 40 bulk-only fit lines and 16 SL lines; 30 genes.
+    GeneEffect is ``z`` plus a gene offset that is the same in every line; the SL
+    labels read ``z``. Returns the data, the true GeneEffect and the offset."""
     rng = np.random.default_rng(seed)
     genes = [f"G{i}" for i in range(30)]
     sl = [f"{side}{i}" for side, n in SIDES.items() for i in range(n)]
@@ -48,9 +50,9 @@ def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray]:
         [state[i] @ to_cell + 0.3 * rng.normal(size=(n, 8))
          for i, n in enumerate(counts) if n]
     )  # fmt: skip
-    targets = np.full(z.shape, np.nan)
+    measured = np.full(z.shape, np.nan)
     labelled = [i for i, m in enumerate(lines) if not m.startswith(("val", "test"))]
-    targets[labelled] = z[labelled] + 0.1 * rng.normal(size=(len(labelled), 30))
+    measured[labelled] = z[labelled] + 0.1 * rng.normal(size=(len(labelled), 30))
     records = []
     for name in sl:
         line = lines.index(name)
@@ -70,23 +72,27 @@ def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray]:
     present = np.ones(30, dtype=bool)
     present[7] = False
     knowledge = gene @ rng.normal(size=(2, 5)) * present[:, None]
+    offset = 3 * rng.normal(size=30)  # drawn last: the earlier draws do not change
+    measured += offset
+    fit = [i for i, m in enumerate(lines) if m[0] in "CB"]
+    centre, scale = embedding.target_scale(pd.DataFrame(measured[fit]))
     data = embedding.Data(
         genes=genes,
         lines=lines,
         expression=torch.tensor(expression, dtype=torch.float32),
         cells=torch.tensor(cells, dtype=torch.float16),
         offsets=torch.tensor(np.concatenate([[0], np.cumsum(counts)])),
-        targets=torch.tensor(targets, dtype=torch.float32),
-        fit=torch.tensor([i for i, m in enumerate(lines) if m[0] in "CB"]),
+        targets=torch.tensor((measured - centre) / scale, dtype=torch.float32),
+        fit=torch.tensor(fit),
         stop=torch.tensor([i for i, m in enumerate(lines) if m.startswith("train")]),
         rows=pd.concat(records, ignore_index=True),
         sources={"knowledge": (torch.tensor(knowledge, dtype=torch.float32),
                                torch.tensor(present))},
-        m_g=np.zeros(30),
-        centre=0.0,
-        scale=1.0,
+        m_g=measured[fit].mean(axis=0),
+        centre=centre,
+        scale=scale,
     )  # fmt: skip
-    return data, z
+    return data, z + offset, offset
 
 
 def test_the_target_is_geneeffect_itself_on_one_scale():
@@ -98,7 +104,7 @@ def test_the_target_is_geneeffect_itself_on_one_scale():
 
 
 def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
-    data, z = world()
+    data, effect, offset = world()
     torch.manual_seed(0)
     model = embedding.build_model(CONFIG, data)
     result = embedding.train(model, data, CONFIG)
@@ -106,7 +112,8 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
     assert history[0]["epoch"] == 0 and history[0]["train_loss"] is None
     assert min(r["stop_loss"] for r in history) < 0.5 * history[0]["stop_loss"]
     # the kept checkpoint is a trained one, so the frozen head reads embeddings (on an
-    # untrained model it reads a constant, and its recall is about 0.1)
+    # untrained model it reads a constant, and its recall is about 0.1); the gene
+    # offset makes the untrained model's loss high
     assert min(history, key=lambda r: r["stop_loss"])["epoch"] >= 1
     assert result["phases"][0]["val_recall_top10"] > 0.2
     phases = result["phases"]
@@ -132,8 +139,15 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
     # the held-out lines' GeneEffect, never a target, is predicted from their inputs
     held = [m for m in data.lines if m.startswith(("val", "test"))]
     table = embedding.geneeffect_table(model, data, held, CONFIG)
-    truth = z[[data.lines.index(m) for m in held]]
-    assert np.corrcoef(table.to_numpy().ravel(), truth.ravel())[0, 1] > 0.5
+    truth = effect[[data.lines.index(m) for m in held]]
+    assert np.corrcoef(table.to_numpy().ravel(), truth.ravel())[0, 1] > 0.9
+    # the model holds the gene mean: the offset that is the same in every line
+    assert np.corrcoef(table.to_numpy().mean(axis=0), offset)[0, 1] > 0.9
+    # and the line-specific part: each gene centred over the held-out lines
+    centred = table.to_numpy() - table.to_numpy().mean(axis=0)
+    assert (
+        np.corrcoef(centred.ravel(), (truth - truth.mean(axis=0)).ravel())[0, 1] > 0.5
+    )
     report = embedding.results_markdown(
         {"run_id": "synthetic", "sl": metrics, "phases": phases,
          "chosen_phase": result["chosen"], "stage_one_history": history,
@@ -148,7 +162,7 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
 
 
 def test_training_reads_only_training_rows_of_two_class_genetic_screens():
-    data, _ = world()
+    data, *_ = world()
     rows = data.rows.copy()
     one_class = rows["model_id"] == "train0"
     rows.loc[one_class, "label"] = 0
@@ -165,7 +179,7 @@ def test_training_reads_only_training_rows_of_two_class_genetic_screens():
 
 
 def test_cell_batch_caps_drops_and_pads():
-    data, _ = world()
+    data, *_ = world()
     generator = torch.Generator().manual_seed(0)
     lines = torch.tensor([0, 1, len(data.lines) - 1])  # two with cells, one bulk-only
     counts = (data.offsets[lines + 1] - data.offsets[lines]).tolist()

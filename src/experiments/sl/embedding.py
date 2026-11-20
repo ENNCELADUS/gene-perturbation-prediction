@@ -99,10 +99,11 @@ def load_config(path: Path) -> dict[str, Any]:
 class Data:
     """Everything the model reads, on one device. ``lines`` orders the line-level
     tensors; a line's cells are ``cells[offsets[i] : offsets[i + 1]]`` (none for a
-    bulk-only line). ``targets`` (lines x genes) holds the GeneEffect residual of the
-    fit lines and of the early-stop lines only, NaN elsewhere. ``rows`` are the
-    benchmark's rows with ``line`` (position in ``lines``), ``a`` and ``b`` (positions
-    in ``genes``; -1 for an anchor without a gene vector)."""
+    bulk-only line). ``targets`` (lines x genes) holds GeneEffect on one scale
+    (``(GeneEffect - centre) / scale``) of the fit lines and of the early-stop lines
+    only, NaN elsewhere. ``rows`` are the benchmark's rows with ``line`` (position in
+    ``lines``), ``a`` and ``b`` (positions in ``genes``; -1 for an anchor without a
+    gene vector)."""
 
     genes: list[str]
     lines: list[str]

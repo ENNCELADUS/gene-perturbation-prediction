@@ -11,11 +11,11 @@ cells in its own way, and a pair head on the gene-in-line embeddings.
                        u_A * u_B * sum_i w_i t_i^2 ; combinatorial])
     w_i      ~ alpha_Ai alpha_Bi, normalised over the cells
 
-``z`` is the GeneEffect residual stage one trains on; the pair head reads ``V`` and the
+``z`` is the scaled GeneEffect stage one trains on; the pair head reads ``V`` and the
 cell tokens, never ``z``. The cells' weights are normalised over the cells alone, so
 neither their order nor their number changes the output, and a line without cells reads
 ``h = t_0``. The token projections end in a zero layer, so the untrained model predicts
-``z = 0`` (the gene mean)."""
+``z = 0`` (the one centre of every gene)."""
 
 from __future__ import annotations
 
