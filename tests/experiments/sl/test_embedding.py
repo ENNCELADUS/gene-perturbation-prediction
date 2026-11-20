@@ -5,6 +5,7 @@ lines' pairs above random, and the inputs' readers fail closed."""
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -31,6 +32,10 @@ CONFIG = {
     "line_term": None,
 }  # fmt: skip
 SIDES = {"train": 8, "val": 4, "test": 4}
+LINE_CONFIG = CONFIG | {
+    "line_term": {"reference_lines": 3, "max_epochs": 4, "patience": 2,
+                  "learning_rate": 1.0e-2, "own_expression": True, "gene_in_line": {}}
+}  # fmt: skip
 
 
 def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray, np.ndarray]:
@@ -77,6 +82,12 @@ def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray, np.ndarray]:
     offset = 3 * rng.normal(size=30)  # drawn last: the earlier draws do not change
     measured += offset
     fit = [i for i, m in enumerate(lines) if m[0] in "CB"]
+    # the SL lines' one gene-in-line source: z itself and a presence flag
+    sl_at = [lines.index(m) for m in sl]
+    own = np.concatenate([z[sl_at][:, :, None], np.ones((16, 30, 1))], axis=2)
+    own = np.concatenate([own, np.zeros((16, 1, 2))], axis=1)
+    in_line_at = torch.full((len(lines),), -1)
+    in_line_at[sl_at] = torch.arange(16)
     centre, scale = embedding.target_scale(pd.DataFrame(measured[fit]))
     data = embedding.Data(
         genes=genes,
@@ -93,8 +104,8 @@ def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray, np.ndarray]:
         m_g=measured[fit].mean(axis=0),
         centre=centre,
         scale=scale,
-        in_line={},
-        in_line_at=torch.full((len(lines),), -1),
+        in_line={"own": torch.tensor(own, dtype=torch.float16)},
+        in_line_at=in_line_at,
     )  # fmt: skip
     return data, z + offset, offset
 
@@ -124,6 +135,7 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
     assert [p["phase"] for p in phases] == ["frozen", "trained further"]
     assert result["chosen"] == int(np.argmax([p["val_recall_top10"] for p in phases]))
     assert np.isfinite(result["scores"]).all()
+    assert result["line_term"] is None
     # the controls: with the fit lines' mean input a pair has one score in every line
     controls = result["controls"]
     assert set(controls) == {"mean_input", "other_line"}
@@ -152,17 +164,72 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
     assert (
         np.corrcoef(centred.ravel(), (truth - truth.mean(axis=0)).ravel())[0, 1] > 0.5
     )
-    report = embedding.results_markdown(
-        {"run_id": "synthetic", "sl": metrics, "phases": phases,
-         "chosen_phase": result["chosen"], "stage_one_history": history,
-         "stage_one": {s: {"lines": n, "line_spearman": 0.1} for s, n in SIDES.items()},
-         "stage_one_base": {s: {"lines": n} for s, n in SIDES.items()},
-         "counts": {"fit_lines": 80, "fit_lines_with_cells": 40, "stop_lines": 8,
-                    "sl_lines_left_out": 8, "patient_mates_left_out": 0, "cells": 1,
-                    "genes": 30, "gene_source_coverage": {"knowledge": 29},
-                    "training_rows": 1}}
-    )  # fmt: skip
+    report_metrics = {
+        "run_id": "synthetic", "sl": metrics, "phases": phases,
+        "chosen_phase": result["chosen"], "stage_one_history": history,
+        "stage_one": {s: {"lines": n, "line_spearman": 0.1} for s, n in SIDES.items()},
+        "stage_one_base": {s: {"lines": n} for s, n in SIDES.items()},
+        "counts": {"fit_lines": 80, "fit_lines_with_cells": 40, "stop_lines": 8,
+                   "sl_lines_left_out": 8, "patient_mates_left_out": 0, "cells": 1,
+                   "genes": 30, "gene_source_coverage": {"knowledge": 29},
+                   "training_rows": 1},
+        "sl_line_term": None, "line_term": None,
+    }  # fmt: skip
+    report = embedding.results_markdown(report_metrics)
     assert "**Table 1.**" in report and "trained further" in report
+    assert "No line term" in report
+    with_line_term = embedding.results_markdown(
+        report_metrics
+        | {"sl_line_term": {n: metrics for n in ("mean_input", "line_term",
+                                                 "line_term_other_line")},
+           "line_term": {"val_recall_top10": 0.3, "history": phases[0]["history"]}}
+    )  # fmt: skip
+    assert "The model with the line term" in with_line_term
+    assert "| line term |" in with_line_term
+
+
+def test_line_term_is_a_deviation_from_the_training_lines():
+    data, *_ = world()
+    torch.manual_seed(0)
+    model = embedding.build_model(LINE_CONFIG, data)
+    pairs = embedding.pair_rows(data)
+    every = np.arange(len(data.rows))
+    torch.nn.init.normal_(model.mean_token[-1].weight, std=0.5)
+    on_mean = embedding.line_input_controls(model, data, pairs, LINE_CONFIG)[
+        "mean_input"
+    ]
+    # an untrained line head gives 0: the score is the pair score on the mean input
+    start = embedding.line_term_scores(model, data, pairs, every, LINE_CONFIG)
+    assert np.allclose(start, on_mean, atol=1e-5)
+    torch.nn.init.normal_(model.line_head[-1].weight, std=0.5)
+    own = embedding.line_term_scores(model, data, pairs, every, LINE_CONFIG)
+    assert np.isfinite(own).all() and not np.allclose(own, on_mean)
+    # a line head whose input is the same in every line gives no deviation
+    data.expression[:] = data.expression[0]
+    data.offsets[:] = 0  # no line has a cell
+    data.in_line["own"][:] = data.in_line["own"][0]
+    same = embedding.line_term_scores(model, data, pairs, every, LINE_CONFIG)
+    assert np.allclose(same, on_mean, atol=1e-4)
+
+
+def test_the_line_term_trains_alone_and_train_reports_it():
+    data, *_ = world()
+    torch.manual_seed(0)
+    model = embedding.build_model(LINE_CONFIG, data)
+    result = embedding.train(model, data, LINE_CONFIG)
+    line = result["line_term"]
+    assert set(line) == {"val_recall_top10", "history", "scores", "other_line"}
+    assert np.isfinite(line["scores"]).all()
+    assert not np.allclose(line["scores"], line["other_line"])
+    assert not np.allclose(line["scores"], result["controls"]["mean_input"])
+    before = copy.deepcopy(model.state_dict())
+    state, _, history = embedding.fit_line_term(
+        model, data, embedding.pair_rows(data), LINE_CONFIG,
+        torch.Generator().manual_seed(1),
+    )  # fmt: skip
+    moved = {k for k in before if not torch.equal(before[k], state[k])}
+    assert moved and all(k.startswith(("line_head.", "in_line.")) for k in moved)
+    assert history and all("val_recall_top10" in r for r in history)
 
 
 def test_training_reads_only_training_rows_of_two_class_genetic_screens():
