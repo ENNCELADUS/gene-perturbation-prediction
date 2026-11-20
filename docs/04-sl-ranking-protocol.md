@@ -800,8 +800,8 @@ parts of §18. All other parts of §18 stay.
   model must learn how essential each gene is, and how a gene differs between lines. The bias of the mean-token map
   gives a term that is the same in every line. The fit lines and the early stop do not change: the epoch kept has the
   lowest loss on the SL training lines, which stage one does not fit. The untrained model predicts one value for
-  every gene, so a trained epoch has a lower loss, and stage two starts from trained weights. The code has no
-  residual target. Its rows are the finished runs of 2026-11-19 (§18).
+  every gene. In the runs of 2026-11-20 its loss was 1.0224 and the kept epoch (1 or 2) had 0.196 to 0.207, so stage
+  two started from trained weights. The code has no residual target. Its rows are the finished runs of 2026-11-19 (§18).
 - **The line term.** The SL score of a row (line `c`, pair A, B) is
 
   ```text
@@ -880,4 +880,50 @@ parts of §18. All other parts of §18 stay.
   are among the 42 is not recorded. Tx1-3B's exposure to the project's lines is not recorded.
 - **Not in this study.** CellNet's gene-level outputs, in-silico deletion with Tx1-3B, adapter training of Tx1-3B,
   and any other foundation model.
-- **Runs:** none yet.
+- **Runs** (seed 0, 2026-11-20, [record](../results/sl_line_term_seed0/summary.html)). Caches on H20 port 30838:
+  `pie_change` (code `15a754f`; 86 lines, 64 components fitted on 200,000 vectors of the 53 SL training lines) and
+  `tx1_gene` (code `d9d2950`; 86 lines, at most 256 cells each, four GPUs, about 30 s for each line). Runs on port
+  30757, code `880fb7e`, one GPU each: `embedding_direct_seed0_v2`, `embedding_direct_mean_token_seed0_v2`,
+  `embedding_direct_pie_change_seed0_v2`, `embedding_direct_tx1_gene_seed0_v2`; then the harness run
+  `benchmark_line_term_seed0_v2`. The two `_seed0` runs (code `15a754f`) used the first base of the line term.
+- **Result, all pairs.** Recall in the top 10%, validation / test, mean over lines (17 / 16):
+
+  | Model | Model | On the mean input | On another line's input | With the line term |
+  | --- | --- | --- | --- | --- |
+  | Direct target, Tx1-3B cell tokens; own expression in the line term | 0.553 / 0.496 | 0.466 / 0.430 | 0.512 / 0.490 | 0.553 / 0.497 |
+  | Direct target, no cell tokens; own expression in the line term | 0.545 / **0.505** | 0.398 / 0.399 | 0.485 / 0.471 | 0.549 / **0.505** |
+  | Direct target, Tx1-3B cell tokens; PIE change in the line term | 0.553 / 0.496 | 0.466 / 0.430 | 0.512 / 0.490 | **0.555** / 0.501 |
+  | Direct target, Tx1-3B cell tokens; Tx1-3B gene embeddings in the line term | 0.553 / 0.496 | 0.466 / 0.430 | 0.512 / 0.490 | 0.507 / 0.484 |
+  | Residual target, Tx1-3B cell tokens (§18) | 0.500 / 0.485 | 0.509 / 0.498 | 0.447 / 0.496 | — |
+  | Residual target, no cell tokens (§18) | 0.508 / 0.501 | 0.460 / 0.485 | 0.456 / 0.491 | — |
+
+  Paired differences, 95% line bootstrap, validation / test:
+  - Direct minus residual target: +0.052 [+0.019, +0.088] / +0.011 [−0.027, +0.055] with cell tokens;
+    +0.036 [+0.009, +0.067] / +0.004 [−0.018, +0.025] without. The gain holds on validation only.
+  - The model with the line term minus its row on the mean input: +0.088 [+0.049, +0.128] / +0.067 [+0.015, +0.119]
+    with cell tokens; +0.150 [+0.090, +0.218] / +0.107 [+0.039, +0.183] without. Minus its row on another line's
+    input: +0.045 [+0.007, +0.083] / +0.012 [−0.007, +0.030] with cell tokens;
+    +0.062 [+0.032, +0.099] / +0.032 [+0.005, +0.067] without. The score reads the line; against another line's
+    input the test interval is above zero only without cell tokens.
+  - The line term minus the model: +0.001 [−0.005, +0.006] / +0.001 [−0.004, +0.005] (own expression);
+    +0.002 [−0.001, +0.005] / +0.005 [−0.000, +0.010] (PIE change);
+    −0.046 [−0.073, −0.018] / −0.012 [−0.035, +0.007] (Tx1-3B gene embeddings). The line term adds nothing, and with
+    the Tx1-3B gene embeddings it fits the training lines (recall 0.914) and lowers validation.
+  - Cell tokens minus no cell tokens: +0.008 [−0.011, +0.027] / −0.009 [−0.039, +0.020].
+  - The model with the line term minus the Kebabci classifier: +0.198 [+0.121, +0.274] / +0.102 [+0.054, +0.149].
+- **Result, row sets** (the model with Tx1-3B cell tokens; recall in the top 10%, validation / test). Seen pairs
+  0.560 / 0.520; new pairs 0.548 / 0.518 (residual target 0.475 / 0.354; the difference is
+  +0.073 [−0.010, +0.159] / +0.164 [−0.048, +0.413]); pairs that no training line called SL 0.443 / 0.330; pairs on
+  which the training lines differ 0.438 / 0.627. On the pairs on which the training lines differ, the model with the
+  line term minus its row on the mean input is +0.142 [+0.029, +0.255] / +0.211 [+0.121, +0.288], and minus its row on
+  another line's input −0.025 [−0.095, +0.036] / +0.029 [−0.002, +0.059].
+- **The first base of the line term.** With `p`, the pair score on the mean input, as the base (the `_seed0` runs),
+  the model with the line term scored 0.288 / 0.279 with cell tokens and 0.277 / 0.314 without, below `p` itself
+  (0.466 / 0.430 and 0.398 / 0.399). `p` is a weak base for a model that reads the line, and a deviation with zero
+  mean over the lines cannot repair it.
+- **Stage one, for the record.** Per-line residual Spearman of the model's GeneEffect on the SL lines:
+  0.033 / 0.033 with cell tokens and 0.070 / 0.070 without. It decides nothing.
+- **Reading.** Stage one on GeneEffect itself gives stage two trained weights: the head on the frozen pretrained model
+  scores 0.425 (0.464 without cell tokens) on validation, against 0.109 in §18. The score now changes with the line.
+  The all-pairs gain over the residual target holds on validation and not on test. A line term on gene-in-line
+  features of the cells adds nothing; cell tokens add nothing. One seed.
