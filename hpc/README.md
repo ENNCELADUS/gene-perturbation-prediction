@@ -22,7 +22,7 @@ prints every command's arguments.
 | `sl-line-specificity` | line-specific signal in the SL labels, no model (`sl.line_specificity`) | CPU, one process per study pair | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-target-options` | four options for a less noisy SL target, by the repeat of the line-specific part (`sl.target_options`) | CPU, one process per study pair | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-conditional` | the modular SL backbone: round zero, the buffer-aware reader (`sl.conditional`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
-| `sl-embedding` | the gene-knowledge, cell-set SL model: GeneEffect pretraining, then the pair head on gene-in-line embeddings (`sl.embedding`) | one GPU | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-embedding` | the gene-knowledge, cell-set SL model: GeneEffect pretraining, then the pair head on gene-in-line embeddings, then the line term (`sl.embedding`) | one GPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-pie-pass`, `sl-pie-editor` | the PIE editor of the SL backbone: PIE's profile changes, then the scores (`sl.pie_pass`, `sl.pie_editor`) | PIE on GPUs (`.venv-pie`); the editor on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-gene-in-line` | the gene-in-line caches of the SL line term: Tx1-3B's gene embeddings, PIE's predicted changes (`sl.gene_in_line`) | Tx1-3B on GPUs; PIE on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
@@ -489,6 +489,22 @@ for i in 0 1 2 3; do
     --shard $i/4 > outputs/launches/gene_in_line_tx1_$i.log 2>&1 < /dev/null &
 done
 hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps pie_change
+```
+
+The study of the direct GeneEffect target and the line term (SL protocol §19) is four `sl-embedding` runs, one GPU
+each, then the harness. A config with a `line_term` section also writes `scores/embedding_line_term.parquet` (the
+model with the line term) and `scores/embedding_line_term_other_line.parquet` (the line term read in another line).
+`embedding_direct_pie_change` and `embedding_direct_tx1_gene` read the caches above, so those caches come first:
+
+```bash
+i=0
+for NAME in embedding_direct embedding_direct_mean_token embedding_direct_pie_change embedding_direct_tx1_gene; do
+  CUDA_VISIBLE_DEVICES=$i setsid nohup hpc/run.sh sl-embedding configs/sl/$NAME.yaml --run-id ${NAME}_seed0 \
+    > outputs/launches/${NAME}_seed0.log 2>&1 < /dev/null &
+  i=$((i + 1))
+done
+# when the four runs have finished
+hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0
 ```
 
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw

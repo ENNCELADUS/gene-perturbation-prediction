@@ -91,9 +91,11 @@ NAMES = {
     "kebabci_paralog_predicted": "Kebabci 2026 paralog classifier (stage one's "
     "predicted GeneEffect in the held-out lines, official code, refitted)",
     "mit4sl": "MiT4SL (cell-line-specific graph model, official code, refitted)",
-    # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding)
+    # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding):
+    # the runs of 2026-11-19 on the residual target, whose stage two started from the
+    # untrained model
     "embedding": "Gene-knowledge, cell-set model (pair head on gene-in-line "
-    "embeddings, pretrained on GeneEffect)",
+    "embeddings, residual GeneEffect target)",
     "embedding_mean_input": "Gene-knowledge, cell-set model, context-ablated (the fit "
     "lines' mean input, no cells)",
     "embedding_other_line": "Gene-knowledge, cell-set model on another line's input",
@@ -105,6 +107,26 @@ NAMES = {
     "context-ablated (the fit lines' mean input)",
     "embedding_mean_token_other_line": "Gene-knowledge model without cell tokens on "
     "another line's input",
+    # the direct GeneEffect target and the line term (SL protocol §19): each run's
+    # model, its two line-input controls, the model with the line term and the line
+    # term on another line's input
+    **{
+        f"{run}{suffix}": "Gene-knowledge, cell-set model, direct GeneEffect target"
+        f"{model}{control}"
+        for run, model in (
+            ("direct", ""),
+            ("direct_mean_token", ", without cell tokens"),
+            ("direct_pie_change", ", PIE change in the line term"),
+            ("direct_tx1_gene", ", Tx1-3B gene embeddings in the line term"),
+        )
+        for suffix, control in (
+            ("", ""),
+            ("_mean_input", ", context-ablated (the fit lines' mean input)"),
+            ("_other_line", " on another line's input"),
+            ("_line_term", " with the line term"),
+            ("_line_term_other_line", " with the line term on another line's input"),
+        )
+    },
     # the PIE editor (configs/sl/pie_editor.yaml): PIE's predicted profile after A's
     # loss in place of the simple edit; 0 outside the rows the simple edit covers,
     # or (pie_all) outside the rows PIE can edit
