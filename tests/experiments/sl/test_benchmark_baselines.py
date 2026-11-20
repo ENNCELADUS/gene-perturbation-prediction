@@ -22,6 +22,7 @@ from src.experiments.sl.benchmark_baselines import (
     run,
     strata,
     summary,
+    training_calls,
 )
 
 GENES = ["G0", "G1", "G2", "G3"]
@@ -59,6 +60,15 @@ def test_strata_split_seen_pairs_by_agreement_with_the_training_lines():
         "seen_agree",
         "new_pair",
     ]
+    # the same pairs by the training lines' calls alone; E0's label is not read
+    pairs = (held["gene_a"] + "-" + held["gene_b"]).to_numpy()
+    calls = training_calls(training, held)
+    assert {k: pairs[m].tolist() for k, m in calls.items()} == {
+        "seen": ["G0-G1", "G0-G2", "G1-G3"],
+        "seen_never": ["G1-G3"],
+        "seen_mixed": ["G0-G2"],
+        "seen_always": ["G0-G1"],
+    }
     unseen = held.iloc[[3]].assign(gene_b="G9")
     assert strata(training, unseen).tolist() == ["unseen_gene"]
 
@@ -225,6 +235,8 @@ def test_run_scores_every_list(tmp_path):
     )
     assert t1["recall_top10"].item() == pytest.approx(1.0)
     assert "| Model | Training (2 lines)" in report
+    table = pd.read_csv(out / "summary.csv")
+    assert {"stratum", "scorer", "lines", "recall_top10", "auroc"} <= set(table)
     assert by[("test", "kg4sl")]["recall_top10"] == pytest.approx(1.0)
     assert by[("test", "cilantro_sl")]["recall_top10"] == pytest.approx(0.0)
     # flips: G0-G1 in E0 (SL in both training lines) and G0-G2 in V0 (a 0.5 rate
@@ -246,7 +258,12 @@ def test_run_scores_every_list(tmp_path):
     assert "Table 4" in report and "cilantro_sl" not in metrics["covered"]
     assert "row" not in scores.columns
     # the subsets: G0-G2 in V0 and E0; only V0's G1-G3 has no gene below -0.5
+    # and the seen pairs by the training lines' calls: one pair of each kind per line
     assert metrics["subsets"] == {
+        "seen": {"rows": 6, "share": pytest.approx(6 / 7)},
+        "seen_never": {"rows": 2, "share": pytest.approx(2 / 7)},
+        "seen_mixed": {"rows": 2, "share": pytest.approx(2 / 7)},
+        "seen_always": {"rows": 2, "share": pytest.approx(2 / 7)},
         "partner": {"rows": 2, "share": pytest.approx(2 / 7)},
         "no_dependency_alone": {"rows": 1, "share": pytest.approx(1 / 7)},
     }

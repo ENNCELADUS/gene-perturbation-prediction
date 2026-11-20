@@ -100,6 +100,17 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
     assert [p["phase"] for p in phases] == ["frozen", "trained further"]
     assert result["chosen"] == int(np.argmax([p["val_recall_top10"] for p in phases]))
     assert np.isfinite(result["scores"]).all()
+    # the controls: with the fit lines' mean input a pair has one score in every line
+    controls = result["controls"]
+    assert set(controls) == {"mean_input", "other_line"}
+    assert all(np.isfinite(c).all() for c in controls.values())
+    pair = ["design", "gene_a", "gene_b"]
+    spread = {
+        name: data.rows.assign(score=score).groupby(pair)["score"].agg(np.ptp).max()
+        for name, score in {**controls, "own": result["scores"]}.items()
+    }
+    assert spread["mean_input"] < 1e-4 < spread["own"]
+    assert not np.allclose(controls["other_line"], result["scores"])
     metrics = embedding.sl_metrics(data.rows, result["scores"], 20)
     assert {s: metrics[s]["lines"] for s in SIDES} == SIDES
     # a random score has a recall in the top 10% near 0.1 and an AUROC near 0.5

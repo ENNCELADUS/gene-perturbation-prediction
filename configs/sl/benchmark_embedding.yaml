@@ -2,7 +2,7 @@
 # SL backbone's head, on the multi-study SL benchmark. The model's run is
 # `hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id embedding_seed0`; the other tables are
 # those of configs/sl/benchmark_baselines.yaml, as scored before.
-# `hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0` (CPU).
+# `hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0_v2` (CPU).
 kind: sl_benchmark_baselines
 seed: 0
 output_root: outputs/sl
@@ -16,10 +16,17 @@ model: data/sl_dependency_v0/raw/depmap/Model.csv
 stage_one: outputs/sl/conditional/conditional_buffer_seed0/predictions.parquet
 extra_scores:
   embedding: outputs/sl/embedding/embedding_seed0/scores/embedding.parquet
+  # the same weights with each line's input replaced (no refit): by the fit lines' mean, and by
+  # another line's input; `hpc/run.sh sl-embedding <config> --run-id <id> --line-input-controls`
+  # writes them for a run that finished before 2026-11-20
+  embedding_mean_input: outputs/sl/embedding/embedding_seed0/scores/embedding_mean_input.parquet
+  embedding_other_line: outputs/sl/embedding/embedding_seed0/scores/embedding_other_line.parquet
   # the same model with CellNet's cell embeddings (configs/sl/embedding_cellnet.yaml)
   embedding_cellnet: outputs/sl/embedding/embedding_cellnet_seed0/scores/embedding.parquet
   # the same model without its cell tokens (configs/sl/embedding_mean_token.yaml)
   embedding_mean_token: outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding.parquet
+  embedding_mean_token_mean_input: outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding_mean_input.parquet
+  embedding_mean_token_other_line: outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding_other_line.parquet
   buffer_head: outputs/sl/conditional/conditional_buffer_seed0/scores/head.parquet
   buffer_head_ablated: outputs/sl/conditional/conditional_buffer_seed0/scores/head_ablated.parquet
   kg4sl: outputs/sl/kg4sl/seed0/scores.parquet
@@ -33,6 +40,10 @@ top_k: 20
 bootstrap: 1000
 # (scorer, control): the per-line difference in recall in the top 10% with the line bootstrap
 paired_differences:
+  - [embedding, embedding_mean_input]
+  - [embedding, embedding_other_line]
+  - [embedding_mean_token, embedding_mean_token_mean_input]
+  - [embedding_mean_token, embedding_mean_token_other_line]
   - [embedding, embedding_mean_token]
   - [embedding_cellnet, embedding_mean_token]
   - [embedding_cellnet, embedding]
