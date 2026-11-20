@@ -31,6 +31,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh sl-codetection JOINT_CONFIG LABELS SL_SPLIT   (co-detection of each SL pair in the screened lines' cells, CPU)
        hpc/run.sh sl-pie-pass CONFIG --steps tables|pass|measured|rescore|own_task [--shard I/N] [--device cuda]   (PIE's profile changes for the PIE editor, GPU, .venv-pie)
        hpc/run.sh sl-pie-editor CONFIG --run-id ID   (the SL backbone with the PIE editor, CPU)
+       hpc/run.sh sl-gene-in-line CONFIG --steps tx1_gene|pie_change [--shard I/N] [--device cuda]   (the gene-in-line caches of the SL line term: Tx1-3B on a GPU, PIE on CPU)
        hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
        hpc/run.sh pie-precompute CONFIG --steps states|assemble_states --set NAME[,NAME]|ALL [--shard I/N]   (frozen PIE on state inputs, GPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment; pie-reproduce,
@@ -89,7 +90,7 @@ if [[ $# == 0 || $1 == --help || $1 == -h ]]; then
 fi
 command=$1
 shift
-case "$command" in all|revision|test|linear-model|linear-model-selected|linear-model-export|linear-model-production|linear-model-stack|linear-model-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-linear-model|sl-paris|sl-slidr|sl-stage-two|sl-baselines|sl-conditional|sl-embedding|sl-codetection|sl-line-specificity|sl-target-options|sl-pie-pass|sl-pie-editor|cell-states) ;; *) usage >&2; exit 2 ;; esac
+case "$command" in all|revision|test|linear-model|linear-model-selected|linear-model-export|linear-model-production|linear-model-stack|linear-model-noise|pie-reproduce|ladder-inputs|pie-precompute|gene-sources|stage-one|stage-one-queue|stage-one-report|stage-one-linear-model|sl-paris|sl-slidr|sl-stage-two|sl-baselines|sl-conditional|sl-embedding|sl-codetection|sl-line-specificity|sl-target-options|sl-pie-pass|sl-pie-editor|sl-gene-in-line|cell-states) ;; *) usage >&2; exit 2 ;; esac
 if [[ $# == 0 ]]; then usage >&2; exit 2; fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
@@ -146,6 +147,7 @@ case "$command" in
     pie_environment
     exec "$repo_root/.venv-pie/bin/python" -m src.experiments.sl.pie_pass "$@" ;;
   sl-pie-editor) exec "$python_bin" -m src.experiments.sl.pie_editor "$@" ;;
+  sl-gene-in-line) exec "$python_bin" -m src.experiments.sl.gene_in_line "$@" ;;
   gene-sources)
     step=$1; shift
     case "$step" in

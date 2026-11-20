@@ -1,0 +1,15 @@
+# The gene-in-line caches (docs/data/gene-in-line-features.md): for each gene of the SL labels in each line, Tx1-3B's
+# mean contextual embedding and the share of cells that hold the gene (tx1_gene, GPU), and PIE's predicted change after
+# the gene's loss in 64 components fitted on the SL training lines (pie_change, CPU).
+# `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps tx1_gene --shard I/N` (one process per GPU), then
+# `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps pie_change`.
+kind: sl_gene_in_line
+seed: 0
+# its paths.tx1_model_dir, paths.basal_raw_umi and preparation.var_ensembl_col
+joint: configs/revision/frozen_huber.yaml
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+out: data/sl_gene_in_line/v1
+tx1: {batch_size: 32, max_length: 2048, max_cells: 256, cells_per_pass: 64}
+# the PIE root of hpc/run.sh sl-pie-pass; a seeded sample of training-line vectors fits the components
+pie: {root: data/sl_pie/v1, components: 64, sample: 200000}

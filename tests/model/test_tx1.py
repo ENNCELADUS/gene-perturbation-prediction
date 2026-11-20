@@ -37,3 +37,13 @@ def test_checkpoint_load_allows_removed_chemical_head() -> None:
 
     report = validate_load_result(LoadResult())
     assert report["complete_backbone_load"] is True
+
+
+def test_gene_sums_add_each_gene_over_the_cells_that_hold_it():
+    from src.model.tx1 import gene_sums
+
+    ids = torch.tensor([[7, 3, 0], [3, 9, 0], [5, 0, 0]])
+    emb = torch.arange(18, dtype=torch.float32).reshape(3, 3, 2)
+    sums, counts = gene_sums(ids, emb, torch.tensor([3, 9, 4]))
+    assert counts.tolist() == [2, 1, 0]
+    assert sums.tolist() == [[8.0, 10.0], [8.0, 9.0], [0.0, 0.0]]
