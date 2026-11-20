@@ -2,7 +2,7 @@
 # SL backbone's head, on the multi-study SL benchmark. The model's run is
 # `hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id embedding_seed0`; the other tables are
 # those of configs/sl/benchmark_baselines.yaml, as scored before.
-# `hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0_v2` (CPU).
+# `hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0_v3` (CPU).
 kind: sl_benchmark_baselines
 seed: 0
 output_root: outputs/sl
@@ -50,3 +50,6 @@ paired_differences:
   - [embedding, kebabci_paralog_predicted]
   - [embedding, kg4sl]
   - [embedding, buffer_head]
+  # the context-blind control: the gene mean GeneEffect of the two genes
+  - [embedding, pan_essentiality]
+  - [embedding_mean_token, pan_essentiality]
