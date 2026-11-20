@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import logging
 import os
 from collections.abc import Callable, Mapping, Sequence
@@ -76,6 +77,8 @@ SECTIONS = {
                   "weight_decay", "geneeffect_weights"},
     "eval": {"rows_per_chunk", "genes_per_chunk"},
 }  # fmt: skip
+LINE_TERM = {"reference_lines", "max_epochs", "patience", "learning_rate",
+             "own_expression", "gene_in_line"}  # fmt: skip
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -83,13 +86,15 @@ def load_config(path: Path) -> dict[str, Any]:
     require_keys(
         config,
         {"kind", "seed", "output_root", "task", "linear_model", "labels", "split",
-         "gene_sources", "cell_embeddings", "top_k", *SECTIONS},
+         "gene_sources", "cell_embeddings", "top_k", "line_term", *SECTIONS},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_embedding":
         raise ValueError(f"{path} is a {config['kind']} config")
     for name, keys in SECTIONS.items():
         require_keys(config[name], keys, name)
+    if config["line_term"] is not None:
+        require_keys(config["line_term"], LINE_TERM, "line_term")
     if not config["gene_sources"]:
         raise ValueError("gene_sources: one source or more")
     return config
@@ -103,7 +108,10 @@ class Data:
     (``(GeneEffect - centre) / scale``) of the fit lines and of the early-stop lines
     only, NaN elsewhere. ``rows`` are the benchmark's rows with ``line`` (position in
     ``lines``), ``a`` and ``b`` (positions in ``genes``; -1 for an anchor without a
-    gene vector)."""
+    gene vector). ``in_line`` holds each source's gene-in-line features (feature
+    lines x genes + 1 x width, float16; the last column is the presence flag, the last
+    gene row is zero); the feature lines are the lines with benchmark rows, and
+    ``in_line_at`` gives each line's row in them (-1 for a line without rows)."""
 
     genes: list[str]
     lines: list[str]
@@ -118,6 +126,8 @@ class Data:
     m_g: np.ndarray
     centre: float
     scale: float
+    in_line: dict[str, Tensor]
+    in_line_at: Tensor
 
     @property
     def device(self) -> torch.device:
@@ -131,7 +141,7 @@ def build_model(config: Mapping[str, Any], data: Data) -> GeneLineModel:
         cell_dim=data.cells.shape[1],
         hidden=int(config["model"]["hidden"]),
         head_hidden=int(config["model"]["head_hidden"]),
-        gene_in_line={},
+        gene_in_line={name: t.shape[2] for name, t in data.in_line.items()},
     ).to(data.device)
 
 
@@ -628,6 +638,63 @@ def read_cells(
     return cells, np.array([len(part) for part in parts])
 
 
+def read_in_line(
+    cache: Path, lines: Sequence[str], genes: Sequence[str], fit: Sequence[str]
+) -> np.ndarray:
+    """The gene-in-line features of ``lines`` (``<cache>/<ModelID>.npy``, genes x
+    width on the axis of ``<cache>/genes.json``) on ``genes``: (lines, genes + 1,
+    width + 1), float16. An entry is present when all its values are finite. Each
+    column is centred and scaled (SD, ``ddof=0``) on the present entries of the
+    ``fit`` lines; an absent entry is zero. The last column is the presence flag; the
+    last gene row is zero."""
+    cache = Path(cache)
+    missing = [m for m in lines if not (cache / f"{m}.npy").is_file()]
+    if missing:
+        raise FileNotFoundError(
+            f"{len(missing)} lines have no gene-in-line features in {cache}: "
+            f"{missing[:10]}"
+        )
+    at = {g: i for i, g in enumerate(json.loads((cache / "genes.json").read_text()))}
+    index = np.array([at.get(g, -1) for g in genes])
+    on_axis = np.flatnonzero(index >= 0)
+
+    def one(model_id: str) -> tuple[np.ndarray, np.ndarray]:
+        values = np.load(cache / f"{model_id}.npy", mmap_mode="r")[index[on_axis]]
+        values = values.astype(np.float64)
+        return values, np.isfinite(values).all(axis=1)
+
+    width = np.load(cache / f"{lines[0]}.npy", mmap_mode="r").shape[1]
+    total, squares, count = np.zeros(width), np.zeros(width), 0
+    for model_id in fit:
+        values, present = one(model_id)
+        total += values[present].sum(axis=0)
+        squares += np.square(values[present]).sum(axis=0)
+        count += int(present.sum())
+    mean = total / count
+    sd = np.sqrt(np.maximum(squares / count - mean**2, 0.0))
+    sd = np.where(sd > 0, sd, 1.0)
+    # filled line by line: the whole array exists only in float16
+    out = np.zeros((len(lines), len(genes) + 1, width + 1), np.float16)
+    for i, model_id in enumerate(lines):
+        values, present = one(model_id)
+        out[i, on_axis, :width] = np.where(present[:, None], (values - mean) / sd, 0.0)
+        out[i, on_axis, width] = present
+    return out
+
+
+def own_expression(
+    expression: pd.DataFrame, lines: Sequence[str], genes: Sequence[str]
+) -> np.ndarray:
+    """The line's own value of each gene in the scaled expression frame and the
+    presence flag: (lines, genes + 1, 2), float16. A gene that is not an expression
+    column is absent (zero); the last gene row is zero."""
+    frame = expression.loc[list(lines)].reindex(columns=list(genes))
+    out = np.zeros((len(lines), len(genes) + 1, 2), np.float16)
+    out[:, :-1, 0] = frame.fillna(0.0).to_numpy()
+    out[:, :-1, 1] = frame.notna().to_numpy()
+    return out
+
+
 def stage_one_lines(
     split: Any,
     bulk_labelled: Sequence[str],
@@ -732,6 +799,18 @@ def load_data(
     )
     total = int(counts.sum())
     offsets = np.concatenate([[0], np.cumsum(counts), [total] * len(bulk_lines)])
+    with_rows = set(rows["model_id"])
+    feature_lines = [m for m in lines if m in with_rows]
+    in_line = {}
+    if config["line_term"] is not None:
+        sl_train = set(rows.loc[rows["split"] == "train", "model_id"])
+        train = [m for m in feature_lines if m in sl_train]
+        if config["line_term"]["own_expression"]:
+            in_line["expression"] = own_expression(expression, feature_lines, genes)
+        for name, path in config["line_term"]["gene_in_line"].items():
+            in_line[name] = read_in_line(Path(path), feature_lines, genes, train)
+    in_line_at = torch.full((len(lines),), -1)
+    in_line_at[[position[m] for m in feature_lines]] = torch.arange(len(feature_lines))
     gene_at = {g: i for i, g in enumerate(genes)}
     rows = rows.assign(
         line=rows["model_id"].map(position),
@@ -755,6 +834,8 @@ def load_data(
         m_g=m_g.to_numpy(np.float64),
         centre=target_centre,
         scale=target_sd,
+        in_line={n: torch.from_numpy(a).to(device) for n, a in in_line.items()},
+        in_line_at=in_line_at.to(device),
     )
     counts_record = {
         "fit_lines": len(fit),
@@ -768,6 +849,9 @@ def load_data(
         "rows": {s: int((rows["split"] == s).sum()) for s in ("train", "val", "test")}
         | dropped,
         "training_rows": int(training_rows(rows).sum()),
+        "in_line_coverage": {
+            n: int(np.count_nonzero(a[:, :, -1])) for n, a in in_line.items()
+        },
     }
     return data, base, counts_record
 
