@@ -477,6 +477,57 @@ def line_input_controls(
     }  # fmt: skip
 
 
+def fit_epochs(
+    model: GeneLineModel,
+    data: Data,
+    config: Mapping[str, Any],
+    optimizer: torch.optim.Optimizer,
+    step: Callable[[], Tensor],
+    scores: Callable[[np.ndarray], np.ndarray],
+    epochs: int,
+    patience: int,
+    name: str,
+) -> tuple[dict[str, Tensor], float, list[dict[str, Any]]]:
+    """The epoch loop of stage two and of the line term: ``step`` gives the loss of
+    one step; validation recall in the top 10% of ``scores`` (of the validation row
+    positions) selects the epoch. Returns the weights, validation recall and history
+    of the best epoch; the model is left at its last epoch, with every parameter
+    trainable again (also on an error)."""
+    val = np.flatnonzero((data.rows["split"] == "val").to_numpy())
+    val_rows = data.rows.iloc[val]
+    best, state, bad, history = -np.inf, None, 0, []
+    try:
+        for epoch in range(1, epochs + 1):
+            losses = []
+            for _ in range(int(config["stage_two"]["steps_per_epoch"])):
+                loss = step()
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+                losses.append(loss.detach())
+            recall = recall_top10(val_rows, scores(val), int(config["top_k"]))
+            history.append(
+                {"epoch": epoch, "train_loss": float(torch.stack(losses).mean()),
+                 "val_recall_top10": recall}
+            )  # fmt: skip
+            log.info(
+                "%s, epoch %d: training loss %.4f, validation recall in the top 10%% "
+                "%.4f", name, epoch, history[-1]["train_loss"], recall,
+            )  # fmt: skip
+            if recall > best:
+                best, state, bad = recall, copy.deepcopy(model.state_dict()), 0
+            else:
+                bad += 1
+                if bad >= patience:
+                    break
+    finally:
+        for parameter in model.parameters():
+            parameter.requires_grad_(True)
+    if state is None:
+        raise RuntimeError("no epoch had a validation recall in the top 10%")
+    return state, float(best), history
+
+
 def fit_pairs(
     model: GeneLineModel,
     data: Data,
@@ -501,49 +552,25 @@ def fit_pairs(
     optimizer = torch.optim.AdamW(
         groups, lr=train["learning_rate"], weight_decay=train["weight_decay"]
     )
-    val = np.flatnonzero((data.rows["split"] == "val").to_numpy())
-    val_rows = data.rows.iloc[val]
-    best, state, bad, history = -np.inf, None, 0, []
-    for epoch in range(1, int(train["max_epochs"]) + 1):
-        losses = []
-        for _ in range(int(train["steps_per_epoch"])):
-            loss = pair_loss(model, data, pairs, config, generator)
-            if joint:
-                genes = torch.randperm(len(data.genes), generator=generator)
-                lines = torch.randperm(len(data.fit), generator=generator)
-                loss = loss + geneeffect_weight * dependency_loss(
-                    model, data, genes[: one["genes_per_step"]].to(data.device),
-                    data.fit[lines[: one["lines_per_step"]].to(data.device)], config,
-                    generator,
-                )  # fmt: skip
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward()
-            optimizer.step()
-            losses.append(loss.detach())
-        recall = recall_top10(
-            val_rows, pair_scores(model, data, pairs, val, config), int(config["top_k"])
-        )
-        history.append(
-            {"epoch": epoch, "train_loss": float(torch.stack(losses).mean()),
-             "val_recall_top10": recall}
-        )  # fmt: skip
-        log.info(
-            "stage two, %s, epoch %d: training loss %.4f, validation recall in the "
-            "top 10%% %.4f",
-            "whole model" if joint else "frozen stage one", epoch,
-            history[-1]["train_loss"], recall,
-        )  # fmt: skip
-        if recall > best:
-            best, state, bad = recall, copy.deepcopy(model.state_dict()), 0
-        else:
-            bad += 1
-            if bad >= int(train["patience"]):
-                break
-    for parameter in model.backbone():
-        parameter.requires_grad_(True)
-    if state is None:
-        raise RuntimeError("no epoch had a validation recall in the top 10%")
-    return state, float(best), history
+
+    def step() -> Tensor:
+        loss = pair_loss(model, data, pairs, config, generator)
+        if joint:
+            genes = torch.randperm(len(data.genes), generator=generator)
+            lines = torch.randperm(len(data.fit), generator=generator)
+            loss = loss + geneeffect_weight * dependency_loss(
+                model, data, genes[: one["genes_per_step"]].to(data.device),
+                data.fit[lines[: one["lines_per_step"]].to(data.device)], config,
+                generator,
+            )  # fmt: skip
+        return loss
+
+    return fit_epochs(
+        model, data, config, optimizer, step,
+        lambda val: pair_scores(model, data, pairs, val, config),
+        int(train["max_epochs"]), int(train["patience"]),
+        f"stage two, {'whole model' if joint else 'frozen stage one'}",
+    )  # fmt: skip
 
 
 def line_term_of(
@@ -683,41 +710,12 @@ def fit_line_term(
     optimizer = torch.optim.AdamW(
         trained, lr=term["learning_rate"], weight_decay=train["weight_decay"]
     )
-    val = np.flatnonzero((data.rows["split"] == "val").to_numpy())
-    val_rows = data.rows.iloc[val]
-    best, state, bad, history = -np.inf, None, 0, []
-    for epoch in range(1, int(term["max_epochs"]) + 1):
-        losses = []
-        for _ in range(int(train["steps_per_epoch"])):
-            loss = line_term_loss(model, data, pairs, config, generator)
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward()
-            optimizer.step()
-            losses.append(loss.detach())
-        recall = recall_top10(
-            val_rows,
-            line_term_scores(model, data, pairs, val, config),
-            int(config["top_k"]),
-        )
-        history.append(
-            {"epoch": epoch, "train_loss": float(torch.stack(losses).mean()),
-             "val_recall_top10": recall}
-        )  # fmt: skip
-        log.info(
-            "line term, epoch %d: training loss %.4f, validation recall in the top "
-            "10%% %.4f", epoch, history[-1]["train_loss"], recall,
-        )  # fmt: skip
-        if recall > best:
-            best, state, bad = recall, copy.deepcopy(model.state_dict()), 0
-        else:
-            bad += 1
-            if bad >= int(term["patience"]):
-                break
-    for parameter in model.parameters():
-        parameter.requires_grad_(True)
-    if state is None:
-        raise RuntimeError("no epoch had a validation recall in the top 10%")
-    return state, float(best), history
+    return fit_epochs(
+        model, data, config, optimizer,
+        lambda: line_term_loss(model, data, pairs, config, generator),
+        lambda val: line_term_scores(model, data, pairs, val, config),
+        int(term["max_epochs"]), int(term["patience"]), "line term",
+    )  # fmt: skip
 
 
 def train(
