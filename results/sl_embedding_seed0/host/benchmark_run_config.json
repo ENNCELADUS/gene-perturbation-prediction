@@ -11,8 +11,12 @@
     "stage_one": "outputs/sl/conditional/conditional_buffer_seed0/predictions.parquet",
     "extra_scores": {
       "embedding": "outputs/sl/embedding/embedding_seed0/scores/embedding.parquet",
+      "embedding_mean_input": "outputs/sl/embedding/embedding_seed0/scores/embedding_mean_input.parquet",
+      "embedding_other_line": "outputs/sl/embedding/embedding_seed0/scores/embedding_other_line.parquet",
       "embedding_cellnet": "outputs/sl/embedding/embedding_cellnet_seed0/scores/embedding.parquet",
       "embedding_mean_token": "outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding.parquet",
+      "embedding_mean_token_mean_input": "outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding_mean_input.parquet",
+      "embedding_mean_token_other_line": "outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding_other_line.parquet",
       "buffer_head": "outputs/sl/conditional/conditional_buffer_seed0/scores/head.parquet",
       "buffer_head_ablated": "outputs/sl/conditional/conditional_buffer_seed0/scores/head_ablated.parquet",
       "kg4sl": "outputs/sl/kg4sl/seed0/scores.parquet",
@@ -26,6 +30,22 @@
     "top_k": 20,
     "bootstrap": 1000,
     "paired_differences": [
+      [
+        "embedding",
+        "embedding_mean_input"
+      ],
+      [
+        "embedding",
+        "embedding_other_line"
+      ],
+      [
+        "embedding_mean_token",
+        "embedding_mean_token_mean_input"
+      ],
+      [
+        "embedding_mean_token",
+        "embedding_mean_token_other_line"
+      ],
       [
         "embedding",
         "embedding_mean_token"
@@ -49,6 +69,14 @@
       [
         "embedding",
         "buffer_head"
+      ],
+      [
+        "embedding",
+        "pan_essentiality"
+      ],
+      [
+        "embedding_mean_token",
+        "pan_essentiality"
       ]
     ]
   }

@@ -99,9 +99,10 @@ a { color: var(--accent); }
 </div>
 
 <ul>
-<li><strong>The gene-knowledge models are above every published baseline on validation and test (run of 2026-11-19): 0.500 / 0.485 with cell tokens against 0.355 / 0.395 for the Kebabci classifier, paired difference +0.145 [+0.084, +0.203] / +0.090 [+0.037, +0.147].</strong></li>
+<li><strong>The gene-knowledge models are above every published baseline on validation and test (run of 2026-11-19): 0.500 / 0.485 with cell tokens against 0.355 / 0.395 for the Kebabci classifier, paired difference +0.145 [+0.090, +0.205] / +0.090 [+0.038, +0.145].</strong></li>
 <li>The cell tokens and the GeneEffect pretraining add nothing: the model without cell tokens is the highest row, and the early stop of the pretraining keeps the untrained model.</li>
-<li>The gain is on pairs that the training lines labelled in the same way. It is not shown on new pairs on test, and the score does not yet follow the line where the label differs.</li>
+<li>By row set, the model with cell tokens scores 0.782 on its training lines, 0.518 / 0.514 on seen pairs of unseen lines and 0.475 / 0.354 on new pairs, where it is not above the Kebabci classifier on test (0.330 / 0.411).</li>
+<li>The score does not yet read the line: the same weights with the line's input replaced by the training-side mean score 0.509 / 0.498 on all pairs (paired difference −0.009 [−0.034, +0.020] / −0.013 [−0.048, +0.018]).</li>
 </ul>
 
 <h2>Stage one: GeneEffect in the SL held-out lines</h2>
