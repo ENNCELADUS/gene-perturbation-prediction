@@ -48,6 +48,6 @@ line_term:
   patience: 5
   learning_rate: 1.0e-3
   own_expression: true
-  # Tx1-3B's mean contextual gene embedding (hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml)
+  # Tx1-3B's mean contextual gene embedding (hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps tx1_gene --shard I/N)
   gene_in_line:
     tx1_gene: data/sl_gene_in_line/v1/tx1_gene

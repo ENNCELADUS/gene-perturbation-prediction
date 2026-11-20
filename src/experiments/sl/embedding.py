@@ -870,7 +870,7 @@ def read_in_line(
     width + 1), float16. An entry is present when all its values are finite. Each
     column is centred and scaled (SD, ``ddof=0``) on the present entries of the
     ``fit`` lines; an absent entry is zero. The last column is the presence flag; the
-    last gene row is zero."""
+    last gene row is zero. A scaled value outside the float16 range raises."""
     cache = Path(cache)
     missing = [m for m in lines if not (cache / f"{m}.npy").is_file()]
     if missing:
@@ -901,7 +901,14 @@ def read_in_line(
     out = np.zeros((len(lines), len(genes) + 1, width + 1), np.float16)
     for i, model_id in enumerate(lines):
         values, present = one(model_id)
-        out[i, on_axis, :width] = np.where(present[:, None], (values - mean) / sd, 0.0)
+        with np.errstate(over="ignore"):
+            out[i, on_axis, :width] = np.where(
+                present[:, None], (values - mean) / sd, 0.0
+            )
+        if not np.isfinite(out[i]).all():
+            raise ValueError(
+                f"{cache}: a scaled value of {model_id} is outside float16"
+            )
         out[i, on_axis, width] = present
     return out
 
@@ -911,10 +918,14 @@ def own_expression(
 ) -> np.ndarray:
     """The line's own value of each gene in the scaled expression frame and the
     presence flag: (lines, genes + 1, 2), float16. A gene that is not an expression
-    column is absent (zero); the last gene row is zero."""
+    column is absent (zero); the last gene row is zero. A value outside the float16
+    range raises."""
     frame = expression.loc[list(lines)].reindex(columns=list(genes))
     out = np.zeros((len(lines), len(genes) + 1, 2), np.float16)
-    out[:, :-1, 0] = frame.fillna(0.0).to_numpy()
+    with np.errstate(over="ignore"):
+        out[:, :-1, 0] = frame.fillna(0.0).to_numpy()
+    if not np.isfinite(out).all():
+        raise ValueError("the expression: a scaled value is outside float16")
     out[:, :-1, 1] = frame.notna().to_numpy()
     return out
 

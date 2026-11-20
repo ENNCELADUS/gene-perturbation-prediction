@@ -812,8 +812,8 @@ parts of §18. All other parts of §18 stay.
     the context-ablated score of that phase.
   - `D(r, A, B)`: the line head, a second MLP. It reads the pair head's input for the pair in line `r` and the
     gene-in-line features of A and B in line `r`. Its last layer starts at zero, so the untrained line term is 0.
-  - `R`: the SL training lines. At a training step, `R` is a draw of `line_term.reference_lines` of them, with
-    replacement. At scoring, `R` is all of them, with all their cells.
+  - `R`: the SL training lines with training rows (genetic screens with both classes). At a training step, `R` is a
+    draw of `line_term.reference_lines` of them, with replacement. At scoring, `R` is all of them, with all their cells.
   - The line term trains last, on the chosen phase, with binary cross-entropy on `s` and the rows of stage two. Only
     the line head and its input projections train, so `p` does not change. Validation recall in the top 10% of `s`
     selects the epoch (`line_term.max_epochs`, `patience`, `learning_rate`).
@@ -827,11 +827,13 @@ parts of §18. All other parts of §18 stay.
     the gene (2,560 wide) and the share of the cells whose input sequence holds the gene.
   - *PIE change* (`gene_in_line.pie_change`): PIE's predicted change of the line's profile after the gene's loss, in
     64 components fitted on the SL training lines.
-  - The caches are written by `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml` under
+  - The caches are written by `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps tx1_gene --shard I/N`
+    (one process for each GPU) and `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps pie_change` under
     `data/sl_gene_in_line/v1/` ([card](data/gene-in-line-features.md)). Each cache holds `genes.json` and one
     `<ModelID>.npy` for each line (genes × width, float16, a NaN row where the line has no value). Each column is
-    centred and scaled on the SL training lines. A gene without a value reads zeros and a presence flag of 0. The run
-    stops if a line with benchmark rows has no file in a cache.
+    centred and scaled on every SL training line with benchmark rows. A gene without a value reads zeros and a
+    presence flag of 0. The run stops if a line with benchmark rows has no file in a cache, or if a scaled value is
+    outside the float16 range.
 - **Rows of the study.** One config each, seed 0, run id `<config name>_seed0`. The configs are
   `configs/sl/embedding.yaml` with a `line_term` section (8 reference lines, at most 30 epochs, patience 5, learning
   rate 1e-3, own expression on):

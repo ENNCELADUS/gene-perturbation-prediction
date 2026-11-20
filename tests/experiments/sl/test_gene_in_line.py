@@ -72,6 +72,20 @@ def test_pie_change_writes_each_pie_line_in_components(tmp_path):
         gene_in_line.pie_change(config, ["ATM"], [])
 
 
+def test_pie_change_writes_every_line_again_when_one_line_is_missing(tmp_path):
+    config = pie_root(tmp_path)
+    gene_in_line.pie_change(config, GENES, [])
+    cache = tmp_path / "out" / "pie_change"
+    first = np.load(cache / "ACH-1.npy")
+    np.save(cache / "ACH-1.npy", np.zeros_like(first))
+    gene_in_line.pie_change(config, GENES, [])  # every file exists: nothing is written
+    assert not np.load(cache / "ACH-1.npy").any()
+    (cache / "ACH-2.npy").unlink()
+    gene_in_line.pie_change(config, GENES, [])  # one basis for all lines
+    np.testing.assert_array_equal(np.load(cache / "ACH-1.npy"), first)
+    assert (cache / "ACH-2.npy").is_file()
+
+
 def test_pie_change_fits_its_components_on_the_training_lines_only(tmp_path):
     for name, value in (("plain", None), ("extreme", 1000.0)):
         gene_in_line.pie_change(pie_root(tmp_path / name, value), GENES, [])
@@ -94,3 +108,11 @@ def test_a_value_outside_the_float16_range_is_refused():
     assert gene_in_line.as_float16(np.array([1.0, np.nan]), "ACH-1").dtype == np.float16
     with pytest.raises(ValueError, match="ACH-1"):
         gene_in_line.as_float16(np.array([1.0e6]), "ACH-1")
+
+
+def test_an_axis_gene_takes_the_first_var_row_of_its_upper_cased_symbol():
+    import pandas as pd
+
+    symbols = pd.Series(["ATM", "C1orf112", "ATM", "TP53"])
+    rows = gene_in_line.var_rows(symbols, ["ATM", "BRCA1", "C1ORF112"])
+    np.testing.assert_array_equal(rows, [0.0, np.nan, 1.0])

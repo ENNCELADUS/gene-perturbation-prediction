@@ -94,19 +94,21 @@ NAMES = {
     # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding):
     # the runs of 2026-11-19 on the residual target, whose stage two started from the
     # untrained model
-    "embedding": "Gene-knowledge, cell-set model (pair head on gene-in-line "
-    "embeddings, residual GeneEffect target)",
-    "embedding_mean_input": "Gene-knowledge, cell-set model, context-ablated (the fit "
-    "lines' mean input, no cells)",
-    "embedding_other_line": "Gene-knowledge, cell-set model on another line's input",
-    "embedding_cellnet": "Gene-knowledge, cell-set model with CellNet's cell "
-    "embeddings in place of Tx1's",
-    "embedding_mean_token": "Gene-knowledge model without cell tokens (each line "
-    "reads its mean token alone)",
-    "embedding_mean_token_mean_input": "Gene-knowledge model without cell tokens, "
-    "context-ablated (the fit lines' mean input)",
-    "embedding_mean_token_other_line": "Gene-knowledge model without cell tokens on "
-    "another line's input",
+    "embedding": "Gene-knowledge, cell-set model, residual GeneEffect target (pair "
+    "head on gene-in-line embeddings)",
+    "embedding_mean_input": "Gene-knowledge, cell-set model, residual GeneEffect "
+    "target, context-ablated (the fit lines' mean input, no cells)",
+    "embedding_other_line": "Gene-knowledge, cell-set model, residual GeneEffect "
+    "target on another line's input",
+    "embedding_cellnet": "Gene-knowledge, cell-set model, residual GeneEffect target, "
+    "CellNet's cell embeddings in place of Tx1's",
+    "embedding_mean_token": "Gene-knowledge, cell-set model, residual GeneEffect "
+    "target, without cell tokens (each line reads its mean token alone)",
+    "embedding_mean_token_mean_input": "Gene-knowledge, cell-set model, residual "
+    "GeneEffect target, without cell tokens, context-ablated (the fit lines' mean "
+    "input)",
+    "embedding_mean_token_other_line": "Gene-knowledge, cell-set model, residual "
+    "GeneEffect target, without cell tokens on another line's input",
     # the direct GeneEffect target and the line term (SL protocol §19): each run's
     # model, its two line-input controls, the model with the line term and the line
     # term on another line's input
