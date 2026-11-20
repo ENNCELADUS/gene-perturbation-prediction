@@ -1,7 +1,12 @@
 # Gene-in-line features
 
-**Status:** code ready on 2026-11-20 (`src/experiments/sl/gene_in_line.py`, `configs/sl/gene_in_line.yaml`); the
-caches are not built yet. They go under `data/sl_gene_in_line/v1/` on the H20.
+**Status:** built on the H20 on 2026-11-20 under `data/sl_gene_in_line/v1/` (`src/experiments/sl/gene_in_line.py`,
+`configs/sl/gene_in_line.yaml`). `pie_change`: 86 lines, 64 components fitted on 200,000 vectors of the 53 SL training
+lines, 275 MB, about 2 minutes on the CPU (code `15a754f`). `tx1_gene`: 86 lines, at most 256 cells each, 11 GB, 21 to
+41 s for each line on one H20, about 13 minutes on four (code `d9d2950`); a line has a value for about 10,000 to 13,000
+of the 25,861 names of the axis. Run record: [`results/sl_line_term_seed0/summary.html`](../../results/sl_line_term_seed0/summary.html).
+A first `tx1_gene` cache with a case-sensitive symbol match is beside it as `tx1_gene_case_sensitive_15a754f`; no run
+reads it.
 
 **Role.** The line term of the gene-knowledge, cell-set SL model reads one vector for each (line, gene) from each
 cache (`line_term.gene_in_line` of an SL embedding config; plan `docs/specs/2026-11-20-line-term-and-direct-target-plan.md`
@@ -33,6 +38,12 @@ it reads a cache (`read_in_line`).
 
 **Known limits.**
 
+- **One line has no Tx1-3B value.** ACH-000696, an SL training line, lists its Ensembl IDs with a version suffix (`ENSG00000223972.5`). Tx1-3B's
+  vocabulary holds no such ID and gives a missing ID the padding token. Thus this line has no Tx1-3B gene-level
+  value (0 of 25,861), and its Tx1-3B cell embeddings in `data/tx1_basal_embeddings/v2_all/real`, built earlier,
+  come from padding tokens only (their spread across cells is 0.004, against about 0.010 in other lines). It is
+  the only one of the 455 raw files with such IDs. The repair is to remove the suffix in `read_basal_source` and
+  to encode the line again in both caches; it is not done, because it changes a cache that earlier runs read.
 - A gene has a Tx1-3B value only in the cells whose 2,048-gene sequence holds it. A gene that no cell holds, a gene
   whose Ensembl ID is not in Tx1-3B's vocabulary and a gene that the line's source does not list are NaN rows.
 - PIE was trained on 42 of the project's lines. A549 is one of them, and it is a training line of the SL split. Which

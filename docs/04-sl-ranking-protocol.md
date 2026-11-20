@@ -878,6 +878,9 @@ parts of §18. All other parts of §18 stay.
   0.39 inside Harle 2025 and at 0.04 to 0.12 between two studies (§15, §16). PIE was trained on 42 of the project's
   lines. A549 (ACH-000681) is one of them; it is a training line of the SL split. Which SL validation or test lines
   are among the 42 is not recorded. Tx1-3B's exposure to the project's lines is not recorded.
+  One SL training line, ACH-000696, has no Tx1-3B gene-level value and degenerate Tx1-3B cell embeddings: its raw file
+  lists Ensembl IDs with a version suffix, which Tx1-3B's vocabulary does not hold
+  ([card](data/gene-in-line-features.md)). It is one of the 53 SL training lines of the feature scaling.
 - **Not in this study.** CellNet's gene-level outputs, in-silico deletion with Tx1-3B, adapter training of Tx1-3B,
   and any other foundation model.
 - **Runs** (seed 0, 2026-11-20, [record](../results/sl_line_term_seed0/summary.html)). Caches on H20 port 30838:
