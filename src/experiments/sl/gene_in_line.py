@@ -71,18 +71,26 @@ def open_cache(directory: Path, genes: Sequence[str]) -> None:
         raise ValueError(f"{path}: another gene axis than the label table's")
 
 
+def as_float16(values: np.ndarray, model_id: str) -> np.ndarray:
+    """``values`` in float16; a finite value that float16 cannot hold raises."""
+    with np.errstate(over="ignore"):
+        stored = values.astype(np.float16)
+    if (np.isfinite(values) & ~np.isfinite(stored)).any():
+        raise ValueError(f"{model_id}: a value is outside the float16 range")
+    return stored
+
+
 def fit_components(
     vectors: np.ndarray, components: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """The centre (panel,) and an orthonormal basis (panel, components) of the
     vectors' leading principal directions."""
-    centre = vectors.mean(axis=0, dtype=np.float64)
-    centred = (vectors - centre).astype(np.float32)
+    centre = vectors.mean(axis=0, dtype=np.float64).astype(np.float32)
+    # float32 throughout: a float64 copy of the PIE sample would double its memory
+    centred = np.subtract(vectors, centre, dtype=np.float32)
     covariance = (centred.T @ centred).astype(np.float64)
     _, vectors_of = np.linalg.eigh(covariance)
-    return centre.astype(np.float32), vectors_of[:, ::-1][:, :components].astype(
-        np.float32
-    )
+    return centre, vectors_of[:, ::-1][:, :components].astype(np.float32)
 
 
 def tx1_gene(
@@ -140,7 +148,7 @@ def tx1_gene(
         take = at[on].astype(np.int64)
         values[on] = np.column_stack([mean[take], share[take]])
         values[values[:, -1] == 0] = np.nan
-        write_npy(out / f"{model_id}.npy", values.astype(np.float16))
+        write_npy(out / f"{model_id}.npy", as_float16(values, model_id))
         with_value = int(np.isfinite(values).all(axis=1).sum())
         record_step(
             out / "report.json",
@@ -163,7 +171,8 @@ def pie_change(
     """Per line of the PIE root: PIE's predicted change after the loss of each axis
     gene, in ``pie.components`` components fitted on a seeded sample of at most
     ``pie.sample`` (line, gene) vectors of the lines with role ``train``. The change
-    files are read one at a time."""
+    files are read one at a time; every lost gene of ``genes.parquet`` must have
+    one, so that an unfinished PIE pass does not read as genes without a value."""
     root = Path(config["pie"]["root"])
     out = Path(config["out"]) / "pie_change"
     open_cache(out, genes)
@@ -172,6 +181,16 @@ def pie_change(
     todo = [i for i, m in enumerate(model_ids) if not (out / f"{m}.npy").is_file()]
     if not todo:
         return
+    lost = pd.read_parquet(root / "genes.parquet")
+    lost = [str(g) for g in lost.index[lost["lost"]]]
+    unfinished = [
+        g for g in lost if not (root / "pie" / "change" / f"{g}.npy").is_file()
+    ]
+    if unfinished:
+        raise FileNotFoundError(
+            f"PIE's pass is incomplete: {len(unfinished)} lost genes have no change "
+            f"file, e.g. {unfinished[:10]}"
+        )
     files = {g: root / "pie" / "change" / f"{g.upper()}.npy" for g in genes}
     with_file = [g for g in genes if files[g].is_file()]
     train = np.flatnonzero(lines["role"].to_numpy() == "train")
@@ -192,12 +211,13 @@ def pie_change(
                 )
             )
     sample = np.concatenate(parts)
+    del parts
     if not np.isfinite(sample).all():
         raise ValueError(f"{root}: a sampled PIE change is not finite")
     components = int(config["pie"]["components"])
     centre, basis = fit_components(sample, components)
     log.info("pie_change: %d components fitted on %d vectors", components, len(sample))
-    del sample, parts
+    del sample
     values = np.full((len(model_ids), len(genes), components), np.nan, np.float32)
     present = set(with_file)
     for k, gene in enumerate(genes):
@@ -209,7 +229,7 @@ def pie_change(
                 )
             values[:, k] = (change - centre) @ basis
     for i in todo:
-        write_npy(out / f"{model_ids[i]}.npy", values[i].astype(np.float16))
+        write_npy(out / f"{model_ids[i]}.npy", as_float16(values[i], model_ids[i]))
     write_json(
         out / "report.json",
         {
@@ -229,23 +249,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("config", type=Path)
-    parser.add_argument("--steps", nargs="+", choices=STEPS, required=True)
+    parser.add_argument("--steps", choices=STEPS, required=True)
     parser.add_argument("--shard", type=shard, default=(0, 1))
-    parser.add_argument(
-        "--device", default="cuda", help="not read: Tx1-3B runs on CUDA only"
-    )
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
     config = load_config(args.config)
     genes, lines = axis_and_lines(config)
-    for step in args.steps:
-        if step == "tx1_gene":
-            tx1_gene(config, genes, lines, args.shard)
-        else:
-            pie_change(config, genes, lines)
-        log.info("%s: done", step)
+    if args.steps == "tx1_gene":
+        tx1_gene(config, genes, lines, args.shard)
+    else:
+        pie_change(config, genes, lines)
+    log.info("%s: done", args.steps)
     return 0
 
 
