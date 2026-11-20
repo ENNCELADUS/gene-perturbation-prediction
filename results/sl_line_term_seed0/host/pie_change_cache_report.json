@@ -1,0 +1,9 @@
+{
+  "lines": 86,
+  "train_lines": 53,
+  "genes": 25861,
+  "genes_with_change": 14372,
+  "sample": 200000,
+  "components": 64,
+  "labelled_lines_without_pie": []
+}

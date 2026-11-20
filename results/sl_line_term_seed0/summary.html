@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direct Target and Line Term</title>
+<style>
+/* Layout: one reading column, a verdict ledger up top, then results in the order of the run-page story. */
+:root {
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --ink: #1b2420;
+  --muted: #5b6862;
+  --rule: #d5dbd7;
+  --accent: #1f5f73;
+  --accent-soft: #e3eef1;
+  --neg: #9a3b2c;
+  --neg-soft: #f6e6e2;
+  --pos: #2e6b3f;
+  --pos-soft: #e3f0e6;
+  --flat: #6d6420;
+  --flat-soft: #f2efd9;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121715; --surface: #1a211e; --ink: #e3e9e5; --muted: #9aa8a1; --rule: #2f3a35;
+    --accent: #7fbfd1; --accent-soft: #1d3138; --neg: #e59a8b; --neg-soft: #3a2420;
+    --pos: #8fcf9f; --pos-soft: #1f3325; --flat: #d8cb7a; --flat-soft: #34301a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121715; --surface: #1a211e; --ink: #e3e9e5; --muted: #9aa8a1; --rule: #2f3a35;
+  --accent: #7fbfd1; --accent-soft: #1d3138; --neg: #e59a8b; --neg-soft: #3a2420;
+  --pos: #8fcf9f; --pos-soft: #1f3325; --flat: #d8cb7a; --flat-soft: #34301a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 980px; margin: 0 auto; display: grid; gap: 48px; }
+main > * { min-width: 0; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 2.1rem; }
+h2 { font-size: 1.5rem; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+h3 { font-size: 1.1rem; }
+p { margin: 0; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font: 0.86em var(--mono); background: var(--accent-soft); padding: 1px 4px; border-radius: 3px; overflow-wrap: anywhere; }
+pre { margin: 0; padding: 12px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; overflow-x: auto; font: 0.9rem/1.5 var(--mono); }
+section { display: grid; gap: 18px; min-width: 0; }
+section > *, header > * { min-width: 0; }
+.eyebrow { font: 600 0.72rem/1 var(--body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 12px; }
+.meta { color: var(--muted); font-size: 0.88rem; }
+
+/* verdict ledger */
+.ledger { display: grid; border-top: 1px solid var(--rule); }
+.ledger > div {
+  display: grid; grid-template-columns: 11rem 9rem 1fr; gap: 16px; align-items: baseline;
+  padding: 12px 0; border-bottom: 1px solid var(--rule);
+}
+.ledger .what { font-weight: 600; }
+.chip { justify-self: start; font: 600 0.72rem/1 var(--body); letter-spacing: 0.04em; padding: 5px 8px; border-radius: 3px; white-space: nowrap; }
+.chip.neg { color: var(--neg); background: var(--neg-soft); }
+.chip.pos { color: var(--pos); background: var(--pos-soft); }
+.chip.flat { color: var(--flat); background: var(--flat-soft); }
+@media (max-width: 640px) {
+  .ledger > div { grid-template-columns: 1fr; gap: 6px; }
+}
+
+/* tables and figures */
+figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+figcaption { font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
+figcaption b { color: var(--ink); }
+figure img { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 4px; }
+.wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+caption { caption-side: top; text-align: left; padding: 10px 10px 8px; font-size: 0.88rem; color: var(--muted); max-width: 90ch; }
+th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 15rem; }
+thead th { font-weight: 600; color: var(--muted); font-size: 0.78rem; vertical-align: bottom; border-bottom: 1.5px solid var(--ink); white-space: normal; min-width: 4.2rem; }
+tbody tr:last-child td { border-bottom: none; }
+tr.group td { font-style: italic; color: var(--muted); background: var(--bg); padding-top: 8px; }
+tr.set td { font-weight: 600; color: var(--ink); background: var(--accent-soft); }
+th.l, td.l { text-align: left; white-space: normal; min-width: 18rem; }
+td.up { color: var(--pos); }
+td.down { color: var(--neg); }
+.reading { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; max-width: 80ch; }
+.reading li { padding-left: 14px; border-left: 2px solid var(--rule); }
+ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; max-width: 80ch; }
+details { display: grid; gap: 8px; min-width: 0; }
+details > summary { cursor: pointer; color: var(--accent); font-size: 0.88rem; max-width: 80ch; }
+details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details[open] > summary { margin-bottom: 8px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+<p class="eyebrow">Stage two · SL benchmark</p>
+<h1>The Direct GeneEffect Target and the Line Term on the SL Benchmark</h1>
+<p class="meta">Four runs of the gene-knowledge, cell-set model with the direct GeneEffect target and a line term,
+scored by the harness run <code>benchmark_line_term_seed0_v2</code>, on the H20 (ports 30838 and 30757), seed 0,
+2026-11-20. Model and training: <a href="../../docs/04-sl-ranking-protocol.md">SL protocol</a> §19. Reasons:
+<a href="../../docs/specs/2026-11-20-line-term-and-direct-target-plan.md">plan</a>. Previous experiment:
+<a href="../sl_embedding_seed0/summary.html">run record of 2026-11-19</a>.</p>
+<div class="ledger">
+<div><span class="what">SL against the baselines</span><span class="chip pos">ABOVE</span><span>With the line term
+(own expression), the model scores 0.553 / 0.497 (validation / test), against 0.355 / 0.395 for the best published
+baseline. The paired difference is +0.198 [+0.121, +0.274] / +0.102 [+0.054, +0.149] (Table 2).</span></div>
+<div><span class="what">Direct target against residual target</span><span class="chip flat">VALIDATION ONLY</span><span>Stage
+two now starts from trained weights. With Tx1-3B cell tokens: +0.052 [+0.019, +0.088] / +0.011 [−0.027, +0.055].
+Without cell tokens: +0.036 [+0.009, +0.067] / +0.004 [−0.018, +0.025] (Table 2).</span></div>
+<div><span class="what">A score that reads the line</span><span class="chip flat">IN PART</span><span>Each model is above
+its context-ablated row on all pairs. Against another line's input, the model without cell tokens is above zero on
+both splits (+0.062 / +0.032); the model with Tx1-3B cell tokens is above zero on validation only (Table 2).</span></div>
+<div><span class="what">The line term</span><span class="chip neg">NO GAIN</span><span>With own expression or PIE change,
+the line term changes recall by +0.005 or less. With Tx1-3B gene embeddings it lowers recall: −0.046 [−0.073, −0.018] on validation (Table 2).</span></div>
+<div><span class="what">Cell tokens, PIE, Tx1-3B gene level</span><span class="chip neg">NO GAIN</span><span>Tx1-3B cell
+tokens minus no cell tokens: +0.008 [−0.011, +0.027] / −0.009 [−0.039, +0.020]. PIE change minus own expression
+alone: +0.001 / +0.004, both intervals include zero (Table 2).</span></div>
+</div>
+</header>
+
+<section>
+<h2>Question</h2>
+<p class="prose">Does a stage one that trains on GeneEffect itself give stage two trained weights? Does the SL score
+then change with the line? What do gene-in-line features of the line's cells add through a line term? This is the
+study of the <a href="../../docs/specs/2026-11-20-line-term-and-direct-target-plan.md">plan of 2026-11-20</a>
+(§1 to §7). The previous experiment found two problems. Its early stop kept the untrained model in all runs, and its
+score did not change with the line (<a href="../sl_embedding_seed0/summary.html">run record</a>, Tables 6 and 8).</p>
+</section>
+
+<section>
+<h2>Model: two changes</h2>
+<p class="prose">The model is the gene-knowledge, cell-set model of SL protocol §18: gene vectors from function text,
+ESM C protein and STRING sources; a line as a mean token and one Tx1-3B token for each cell; a gene-specific reading
+of the cells; a pair head on the gene-in-line embeddings of the two genes. This study changes two parts.</p>
+<ul class="plain">
+<li><b>The stage-one target is GeneEffect itself.</b> The target is (GeneEffect − c) / s, with one centre c and one
+scale s for every gene, fitted on the fit lines. The model must learn how essential each gene is. The untrained
+model predicts one value for every gene, so a trained epoch has a lower loss, and the early stop keeps trained
+weights. The previous target was the difference from the training gene mean; the rows of that target are the
+reference rows here.</li>
+<li><b>The SL score has a line term.</b> A second head D reads the pair head's input and the gene-in-line features
+of genes A and B in the line. The score is
+<pre>s(c, A, B) = f(c, A, B) + D(c, A, B) − mean over r in R of D(r, A, B)</pre>
+f is the model's own score in line c (the pair head of the chosen phase). R is the 44 SL training lines with
+training rows. The line term trains last, on the frozen f, with binary cross-entropy on s. Because it is a deviation
+from the training lines' mean, the gene pair alone cannot fill it. The line's gain is s − f.</li>
+<li><b>Gene-in-line features.</b> Own expression: the line's scaled pseudo-bulk value of the gene. PIE change: PIE's
+predicted change of the line's profile after the gene's loss, in 64 components. Tx1-3B gene level: the mean over
+the line's cells of Tx1-3B's contextual embedding of the gene (2,560 wide), and the share of the cells that hold the
+gene. Each source is projected to width 32 and the sources are summed.</li>
+</ul>
+</section>
+
+<section>
+<h2>Benchmark</h2>
+<ul class="plain">
+<li>Labels: <code>data/sl_studies/benchmark_v2</code> on the H20
+(<a href="../../docs/data/sl-benchmark.html">card</a>). The SL split
+(<code>configs/benchmarks/cell_line_sl_split.json</code>) places 77 lines by hand: 44 training, 17 validation and 16
+test. Rows: 1,420,001 training, 255,286 validation and 288,470 test. Stage two trains on 1,146,517 rows of the 44
+training lines.</li>
+<li>A screen is the set of pairs that one study tested in one line with one method. The headline uses the genetic
+screens with both classes: recall in the top 10% of each screen, over the smaller of its SL pairs and its top-10%
+places, averaged over screens, then studies, then lines. A perfect ranking gives 1; a random one about 0.10.</li>
+<li>Every held-out line is an unseen line: it enters a model only through its basal expression and cells. Negatives
+are tested and not called; they are not true negatives.</li>
+<li><b>Row sets.</b> A pair is seen when the same study labelled it in a training line; else it is new. The seen
+pairs divide by what those training lines called them: no line called the pair SL, or the lines differ. These sets
+read no label of the held-out line. A row set is ranked inside it in each screen.</li>
+<li>The harness report also has two strata that the held-out label defines. They are not shown here.</li>
+</ul>
+</section>
+
+<section>
+<h2>Rows</h2>
+<ul class="plain">
+<li><b>Direct target, Tx1-3B cell tokens</b>: the gene-knowledge, cell-set model with the direct GeneEffect target
+and one Tx1-3B token for each cell (<code>configs/sl/embedding_direct.yaml</code>). Its score is f, without the line
+term. The PIE and Tx1-3B gene-level runs train the same model with the same seed; their f is equal to this f in
+every number.</li>
+<li><b>Direct target, no cell tokens</b>: the same model, each line on its mean token alone
+(<code>embedding_direct_mean_token.yaml</code>).</li>
+<li><b>+ line term (features)</b>: the score s of the same run, with the line term on the features in brackets.
+Own expression is in all four line terms. PIE change: <code>embedding_direct_pie_change.yaml</code>. Tx1-3B gene
+embeddings: <code>embedding_direct_tx1_gene.yaml</code>.</li>
+<li><b>Context-ablated</b>: the finished weights, scored with the fit lines' mean expression and no cells in place of
+each line's input. <b>On another line's input</b>: the same weights with the input of another benchmark line (the
+next line in a seeded order). For a line-term row, both f and the line term read the other line; R does not change.
+No model is refitted for these rows.</li>
+<li><b>Residual target</b> (reference): the finished runs of 2026-11-19 with the residual GeneEffect target
+(<a href="../sl_embedding_seed0/summary.html">run record</a>). Their early stop kept the untrained model, so stage
+two started from untrained weights.</li>
+<li><b>Backbone head on the buffer-aware reader's terms</b>: the project's earlier stage-two model (SL protocol §12).</li>
+<li><b>Published baselines</b>: KG4SL, Cilantro-SL, PARIS, SLIdR, De Kegel 2021, Kebabci 2026 and MiT4SL, as in the
+<a href="../sl_study_benchmark/summary.html">baseline record</a>.</li>
+<li><b>Controls and references</b>: stage one's predicted GeneEffect (linear expression model), pan-essentiality
+(the gene mean GeneEffect of the two genes, which reads no line), measured GeneEffect, the labels (the ceiling) and
+a random score.</li>
+</ul>
+</section>
+
+<section>
+<h2>What ran</h2>
+<p class="prose">Each run is <code>hpc/run.sh sl-embedding configs/sl/&lt;config&gt;.yaml --run-id
+&lt;config&gt;_seed0_v2</code> on one GPU. Stage one fits the GeneEffect of 928 lines without an SL label (366 with
+cells; 652,399 cells), with the early stop on 47 SL training lines with GeneEffect. Stage two first fits the pair
+head on the frozen model, then the whole model with the GeneEffect loss at weight 1. The line term trains last.
+Validation recall in the top 10% selects each epoch and phase. Outputs on the H20:
+<code>outputs/sl/embedding/&lt;run id&gt;/</code>,
+<code>outputs/sl/benchmark_baselines/benchmark_line_term_seed0_v2/</code> and the caches under
+<code>data/sl_gene_in_line/v1/</code>. Copied reports: <a href="host/benchmark_results.md">harness</a>
+(<a href="host/benchmark_run_config.json">config</a>), <a href="host/embedding_direct_seed0_v2.md">Tx1-3B cell
+tokens</a>, <a href="host/embedding_direct_mean_token_seed0_v2.md">no cell tokens</a>,
+<a href="host/embedding_direct_pie_change_seed0_v2.md">PIE change</a>,
+<a href="host/embedding_direct_tx1_gene_seed0_v2.md">Tx1-3B gene embeddings</a>, each with its
+<code>_metrics.json</code>; the two first runs (<a href="host/embedding_direct_seed0_first_base.md">Tx1-3B cell
+tokens</a>, <a href="host/embedding_direct_mean_token_seed0_first_base.md">no cell tokens</a>); the cache reports
+(<a href="host/tx1_gene_cache_report.json">Tx1-3B gene level</a>,
+<a href="host/pie_change_cache_report.json">PIE change</a>).</p>
+<div class="wrap"><table><caption>Steps and finish times (UTC, 2026-11-20).</caption>
+<thead><tr><th>Step</th><th>Port</th><th>Code</th><th>Finished</th></tr></thead><tbody>
+<tr><td>PIE change cache (<code>hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps pie_change</code>, CPU)</td><td>30838</td><td><code>15a754f</code></td><td>19:44</td></tr>
+<tr><td>Tx1-3B gene-level pilot on one line</td><td>30838</td><td><code>15a754f</code></td><td>19:44</td></tr>
+<tr><td>First runs with the first base of the line term (the model on the mean input): Tx1-3B cell tokens, no cell tokens</td><td>30757</td><td><code>15a754f</code></td><td>19:55, 19:50</td></tr>
+<tr><td>Tx1-3B gene-level cache, 86 lines, four GPUs (<code>--steps tx1_gene --shard I/4</code>), after the fix of the symbol case</td><td>30838</td><td><code>d9d2950</code></td><td>20:15</td></tr>
+<tr><td>Final runs: Tx1-3B cell tokens, no cell tokens, PIE change, Tx1-3B gene embeddings (one GPU each)</td><td>30757</td><td><code>880fb7e</code></td><td>20:21, 20:20, 20:22, 20:24</td></tr>
+<tr><td>Harness (<code>hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0_v2</code>, CPU)</td><td>30757</td><td><code>880fb7e</code></td><td>20:30</td></tr>
+</tbody></table></div>
+<p class="prose">A first Tx1-3B gene-level cache matched gene symbols with case. About 58 genes of each line had no
+value in it. It was moved aside on the H20 and no run used it.</p>
+</section>
+
+<section>
+<h2>Results: all pairs</h2>
+<p class="prose">Recall in the top 10% is the share of a screen's SL pairs that a model ranks in the screen's top
+10%, over the smaller of the SL pairs and the top-10% places. The baselines' scores are those of the run of
+2026-11-13, read again by this harness run.</p>
+<figure>
+<img src="figures/all_pairs.svg" alt="Dot chart of recall in the top 10% on all pairs: the six direct-target rows are near 0.55 on validation and 0.50 on test; the residual-target rows are near 0.50; every published baseline is at or below 0.40.">
+<figcaption><b>Figure 1.</b> Recall in the top 10% on all pairs, mean over held-out lines; higher is better. Orange
+diamond: validation lines (17). Blue circle: test lines (16). The values beside four rows are validation / test.
+Table 1 has every number, with AUROC and AUPRC.</figcaption>
+</figure>
+<div class="wrap"><table><caption>Table 1. The multi-study SL benchmark, all pairs, mean over held-out lines (17
+validation, 16 test; measured GeneEffect 12 and 11). Recall in the top 10% (perfect 1, random about 0.10), AUROC
+(random 0.5) and AUPRC over the positive rate (random 1). Higher is better. Best ranked model in bold; the rows with
+a replaced line input, the reference rows and the controls are not ranked. Validation selected each model's epoch
+and phase; test was scored once. Recall: the harness report. AUROC and AUPRC: each run's report for this study; the
+harness CSV of the run record of 2026-11-19 for the other rows (their recall is equal in both harness runs).
+— : not in the copied reports.</caption><thead><tr>
+<th>Model</th>
+<th>Recall, validation</th>
+<th>Recall, test</th>
+<th>AUROC, validation</th>
+<th>AUROC, test</th>
+<th>AUPRC over positive rate, validation</th>
+<th>AUPRC over positive rate, test</th>
+</tr></thead><tbody>
+<tr class="group"><td colspan="7">This study: direct GeneEffect target</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens</td><td>0.553</td><td>0.496</td><td><b>0.817</b></td><td>0.786</td><td>12.9</td><td>9.0</td></tr>
+<tr><td>Direct target, no cell tokens</td><td>0.545</td><td><b>0.505</b></td><td>0.813</td><td>0.789</td><td>18.9</td><td>9.0</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression)</td><td>0.553</td><td>0.497</td><td><b>0.817</b></td><td>0.786</td><td>12.1</td><td>8.9</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression)</td><td>0.549</td><td><b>0.505</b></td><td>0.813</td><td><b>0.790</b></td><td>19.0</td><td><b>9.1</b></td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change)</td><td><b>0.555</b></td><td>0.501</td><td><b>0.817</b></td><td>0.786</td><td>12.9</td><td>9.0</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings)</td><td>0.507</td><td>0.484</td><td>0.803</td><td>0.777</td><td>9.8</td><td>7.8</td></tr>
+<tr class="group"><td colspan="7">This study with the line&#x27;s input replaced (no refit; not ranked)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td>0.466</td><td>0.430</td><td>0.780</td><td>0.761</td><td>5.6</td><td>4.6</td></tr>
+<tr><td>Direct target, no cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td>0.398</td><td>0.399</td><td>0.732</td><td>0.722</td><td>4.8</td><td>5.7</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens, on another line&#x27;s input</td><td>0.512</td><td>0.490</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>Direct target, no cell tokens, on another line&#x27;s input</td><td>0.485</td><td>0.471</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression), both on another line&#x27;s input</td><td>0.509</td><td>0.485</td><td>0.808</td><td>0.780</td><td>16.8</td><td>8.4</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression), both on another line&#x27;s input</td><td>0.487</td><td>0.473</td><td>0.793</td><td>0.766</td><td>13.0</td><td>8.6</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change), both on another line&#x27;s input</td><td>0.509</td><td>0.489</td><td>0.809</td><td>0.781</td><td>16.9</td><td>8.4</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings), both on another line&#x27;s input</td><td>0.473</td><td>0.458</td><td>0.789</td><td>0.766</td><td>12.6</td><td>8.4</td></tr>
+<tr class="group"><td colspan="7">Reference: residual GeneEffect target, run of 2026-11-19 (not ranked)</td></tr>
+<tr><td>Residual target, Tx1-3B cell tokens</td><td>0.500</td><td>0.485</td><td>0.787</td><td>0.774</td><td>20.0</td><td>7.9</td></tr>
+<tr><td>Residual target, no cell tokens</td><td>0.508</td><td>0.501</td><td>0.789</td><td>0.776</td><td>17.5</td><td>8.5</td></tr>
+<tr><td>Residual target, CellNet cell tokens</td><td>0.486</td><td>0.473</td><td>0.783</td><td>0.766</td><td>9.8</td><td>8.0</td></tr>
+<tr class="group"><td colspan="7">Earlier model of this project</td></tr>
+<tr><td>Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>0.394</td><td>0.361</td><td>0.743</td><td>0.716</td><td>5.1</td><td>4.2</td></tr>
+<tr class="group"><td colspan="7">Published baselines</td></tr>
+<tr><td>Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>0.355</td><td>0.395</td><td>0.656</td><td>0.664</td><td>5.7</td><td>6.4</td></tr>
+<tr><td>KG4SL</td><td>0.367</td><td>0.338</td><td>0.689</td><td>0.653</td><td>3.4</td><td>3.0</td></tr>
+<tr><td>De Kegel 2021 paralog classifier</td><td>0.281</td><td>0.293</td><td>0.656</td><td>0.665</td><td>3.3</td><td>3.9</td></tr>
+<tr><td>PARIS</td><td>0.219</td><td>0.213</td><td>0.573</td><td>0.572</td><td><b>33.9</b></td><td>2.8</td></tr>
+<tr><td>MiT4SL</td><td>0.154</td><td>0.138</td><td>0.589</td><td>0.557</td><td>1.6</td><td>1.4</td></tr>
+<tr><td>Cilantro-SL</td><td>0.123</td><td>0.134</td><td>0.507</td><td>0.510</td><td>1.2</td><td>1.2</td></tr>
+<tr><td>SLIdR</td><td>0.095</td><td>0.115</td><td>0.483</td><td>0.498</td><td>1.0</td><td>1.0</td></tr>
+<tr class="group"><td colspan="7">Controls and references (not ranked)</td></tr>
+<tr><td>Stage one&#x27;s predicted GeneEffect (linear expression model)</td><td>0.381</td><td>0.298</td><td>0.730</td><td>0.683</td><td>4.6</td><td>3.6</td></tr>
+<tr><td>Pan-essentiality (gene mean GeneEffect, reads no line)</td><td>0.380</td><td>0.297</td><td>0.728</td><td>0.679</td><td>4.5</td><td>3.5</td></tr>
+<tr><td>Measured GeneEffect (reference, lines with GeneEffect)</td><td>0.425</td><td>0.296</td><td>0.736</td><td>0.639</td><td>7.5</td><td>3.9</td></tr>
+<tr><td>Labels as the score (check: the ceiling)</td><td>1.000</td><td>1.000</td><td>1.000</td><td>1.000</td><td>96.3</td><td>396.5</td></tr>
+<tr><td>Random score (check)</td><td>0.102</td><td>0.124</td><td>0.496</td><td>0.519</td><td>1.1</td><td>1.2</td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2>Results: paired differences on all pairs</h2>
+<p class="prose">Each difference pairs the two rows line by line. A row with the line term that reads the line must
+be above the same weights on a replaced input. The context-ablated input is one that the model never saw in stage
+two. Another line's input is a real input of the wrong line, so it is the stricter control.</p>
+<figure>
+<img src="figures/line_term.svg" alt="Three interval charts for the four line-term rows: the differences from the context-ablated model are above zero; the differences from another line's input are smaller and above zero on validation; the differences from the model without the line term are near zero, or below zero with Tx1-3B gene embeddings.">
+<figcaption><b>Figure 2.</b> Each row with the line term minus a control: the paired difference in recall in the
+top 10% on all pairs, with its 95% bootstrap interval over lines. Orange diamond: validation lines. Blue circle: test
+lines. An interval to the right of zero means that the row with the line term is higher. Table 2 has the numbers.</figcaption>
+</figure>
+<div class="wrap"><table><caption>Table 2. All pairs. Paired difference in recall in the top 10% (row minus control),
+mean over lines, with a 95% bootstrap interval over lines and the line count. Higher is better. Green: the interval
+is above zero. Red: the interval is below zero.</caption><thead><tr>
+<th>Row − control</th>
+<th>Validation</th>
+<th>Test</th>
+</tr></thead><tbody>
+<tr class="group"><td colspan="3">What the direct target adds (direct minus residual target)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Residual target, Tx1-3B cell tokens</td><td class="up">+0.052 [+0.019, +0.088] (17)</td><td>+0.011 [−0.027, +0.055] (16)</td></tr>
+<tr><td>Direct target, no cell tokens − Residual target, no cell tokens</td><td class="up">+0.036 [+0.009, +0.067] (17)</td><td>+0.004 [−0.018, +0.025] (16)</td></tr>
+<tr class="group"><td colspan="3">Does the score read the line? (with the line term minus the same weights on a replaced input)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td class="up">+0.088 [+0.049, +0.128] (17)</td><td class="up">+0.067 [+0.015, +0.119] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens + line term (own expression), both on another line&#x27;s input</td><td class="up">+0.045 [+0.007, +0.083] (17)</td><td>+0.012 [−0.007, +0.030] (16)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td class="up">+0.150 [+0.090, +0.218] (17)</td><td class="up">+0.107 [+0.039, +0.183] (16)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression), both on another line&#x27;s input</td><td class="up">+0.062 [+0.032, +0.099] (17)</td><td class="up">+0.032 [+0.005, +0.067] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (PIE run)</td><td class="up">+0.089 [+0.050, +0.127] (17)</td><td class="up">+0.071 [+0.014, +0.130] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression, PIE change), both on another line&#x27;s input</td><td class="up">+0.046 [+0.011, +0.088] (17)</td><td>+0.011 [−0.008, +0.030] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (Tx1-3B gene-level run)</td><td>+0.042 [−0.002, +0.088] (17)</td><td class="up">+0.054 [+0.002, +0.105] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings), both on another line&#x27;s input</td><td class="up">+0.034 [+0.006, +0.067] (17)</td><td class="up">+0.026 [+0.005, +0.045] (16)</td></tr>
+<tr class="group"><td colspan="3">What the line term adds (with minus without the line term)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens</td><td>+0.001 [−0.005, +0.006] (17)</td><td>+0.001 [−0.004, +0.005] (16)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens</td><td>+0.004 [−0.002, +0.010] (17)</td><td>+0.000 [−0.003, +0.004] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens (the PIE run&#x27;s model)</td><td>+0.002 [−0.001, +0.005] (17)</td><td>+0.005 [−0.000, +0.010] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens (the Tx1-3B gene-level run&#x27;s model)</td><td class="down">−0.046 [−0.073, −0.018] (17)</td><td>−0.012 [−0.035, +0.007] (16)</td></tr>
+<tr class="group"><td colspan="3">What the cell tokens add</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Direct target, no cell tokens</td><td>+0.008 [−0.011, +0.027] (17)</td><td>−0.009 [−0.039, +0.020] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression)</td><td>+0.005 [−0.018, +0.027] (17)</td><td>−0.008 [−0.040, +0.023] (16)</td></tr>
+<tr class="group"><td colspan="3">What PIE change and Tx1-3B gene embeddings add to the own-expression line term</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td>+0.001 [−0.004, +0.006] (17)</td><td>+0.004 [−0.001, +0.009] (16)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td class="down">−0.046 [−0.072, −0.021] (17)</td><td>−0.013 [−0.034, +0.004] (16)</td></tr>
+<tr class="group"><td colspan="3">Against the best published baseline</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td class="up">+0.198 [+0.121, +0.274] (17)</td><td class="up">+0.102 [+0.054, +0.149] (16)</td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2>Results: row sets</h2>
+<p class="prose">Table 3 follows each model from the training lines to unseen lines, and there from seen pairs to new
+pairs. On seen pairs that no training line called SL, an SL call is new in the held-out line. On seen pairs where the
+training lines differ, the line must decide the call; a gain below about 0.05 will not show there (13 / 10 lines).</p>
+<div class="wrap"><table><caption>Table 3. Recall in the top 10% by row set, each set ranked inside it in each
+screen, mean over lines. Training lines: one value, in sample (44 lines). Held-out lines: validation / test; seen
+pairs 15 / 13 lines (311,834 held-out rows), new pairs 8 / 10, seen pairs that no training line called SL 14 / 11
+(290,388 rows), seen pairs on which the training lines differ 13 / 10 (17,584 rows). Higher is better; best ranked
+model in bold. — : the model has no score for every training row.</caption><thead><tr>
+<th>Model</th>
+<th>Training lines (in sample)</th>
+<th>Seen pairs</th>
+<th>New pairs, both genes seen</th>
+<th>Seen pairs, no training line called SL</th>
+<th>Seen pairs, the training lines differ</th>
+</tr></thead><tbody>
+<tr class="group"><td colspan="6">This study: direct GeneEffect target</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens</td><td>0.846</td><td>0.560 / 0.520</td><td>0.548 / 0.518</td><td>0.443 / 0.330</td><td>0.438 / <b>0.627</b></td></tr>
+<tr><td>Direct target, no cell tokens</td><td>0.923</td><td>0.556 / <b>0.529</b></td><td>0.555 / 0.434</td><td>0.352 / 0.332</td><td>0.405 / 0.614</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression)</td><td>0.848</td><td>0.559 / 0.524</td><td>0.549 / 0.515</td><td>0.426 / 0.324</td><td><b>0.447</b> / 0.607</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression)</td><td><b>0.925</b></td><td>0.557 / <b>0.529</b></td><td><b>0.563</b> / 0.440</td><td>0.349 / <b>0.338</b></td><td>0.395 / 0.582</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change)</td><td>0.849</td><td><b>0.561</b> / 0.524</td><td>0.550 / <b>0.520</b></td><td><b>0.451</b> / 0.330</td><td>0.446 / 0.598</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings)</td><td>0.914</td><td>0.515 / 0.508</td><td>0.515 / 0.425</td><td>0.417 / 0.315</td><td>0.391 / 0.514</td></tr>
+<tr class="group"><td colspan="6">This study with the line&#x27;s input replaced (not ranked)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td>0.580</td><td>0.464 / 0.448</td><td>0.330 / 0.477</td><td>0.354 / 0.271</td><td>0.305 / 0.396</td></tr>
+<tr><td>Direct target, no cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td>0.475</td><td>0.379 / 0.402</td><td>0.508 / 0.538</td><td>0.300 / 0.256</td><td>0.279 / 0.398</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens, on another line&#x27;s input</td><td>0.708</td><td>0.522 / 0.510</td><td>0.370 / 0.529</td><td>0.407 / 0.315</td><td>0.475 / 0.576</td></tr>
+<tr><td>Direct target, no cell tokens, on another line&#x27;s input</td><td>0.709</td><td>0.513 / 0.490</td><td>0.354 / 0.481</td><td>0.331 / 0.293</td><td>0.376 / 0.502</td></tr>
+<tr class="group"><td colspan="6">Reference: residual GeneEffect target (not ranked)</td></tr>
+<tr><td>Residual target, Tx1-3B cell tokens</td><td>0.782</td><td>0.518 / 0.514</td><td>0.475 / 0.354</td><td>0.388 / 0.375</td><td>0.411 / 0.564</td></tr>
+<tr><td>Residual target, no cell tokens</td><td>0.898</td><td>0.529 / 0.525</td><td>0.472 / 0.403</td><td>0.366 / 0.347</td><td>0.427 / 0.552</td></tr>
+<tr class="group"><td colspan="6">Published baselines</td></tr>
+<tr><td>Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>—</td><td>0.355 / 0.412</td><td>0.330 / 0.411</td><td>0.229 / 0.303</td><td>0.371 / 0.564</td></tr>
+<tr><td>KG4SL</td><td>—</td><td>0.374 / 0.368</td><td>0.310 / 0.323</td><td>0.290 / 0.226</td><td>0.287 / 0.461</td></tr>
+<tr class="group"><td colspan="6">Controls (not ranked)</td></tr>
+<tr><td>Pan-essentiality (gene mean GeneEffect, reads no line)</td><td>0.318</td><td>0.353 / 0.292</td><td>0.329 / 0.382</td><td>0.409 / 0.261</td><td>0.263 / 0.301</td></tr>
+<tr><td>Random score (check)</td><td>0.093</td><td>0.101 / 0.119</td><td>0.224 / 0.220</td><td>0.071 / 0.095</td><td>0.230 / 0.225</td></tr>
+</tbody></table></div>
+<details>
+<summary>Table 4: the paired differences of Table 2 on each row set</summary>
+<div class="wrap"><table><caption>Table 4. The paired differences of Table 2 on each row set. Paired difference in
+recall in the top 10% (row minus control), mean over lines, with a 95% bootstrap interval over lines and the line
+count. Higher is better. Green: the interval is above zero. Red: the interval is below zero.</caption><thead><tr>
+<th>Row − control</th>
+<th>Validation</th>
+<th>Test</th>
+</tr></thead><tbody>
+<tr class="set"><td colspan="3">Seen pairs</td></tr>
+<tr class="group"><td colspan="3">What the direct target adds (direct minus residual target)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Residual target, Tx1-3B cell tokens</td><td class="up">+0.041 [+0.018, +0.066] (15)</td><td>+0.007 [−0.029, +0.038] (13)</td></tr>
+<tr><td>Direct target, no cell tokens − Residual target, no cell tokens</td><td class="up">+0.027 [+0.005, +0.048] (15)</td><td>+0.005 [−0.014, +0.025] (13)</td></tr>
+<tr class="group"><td colspan="3">Does the score read the line? (with the line term minus the same weights on a replaced input)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td class="up">+0.095 [+0.045, +0.153] (15)</td><td class="up">+0.076 [+0.022, +0.131] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens + line term (own expression), both on another line&#x27;s input</td><td>+0.042 [−0.000, +0.092] (15)</td><td>+0.019 [+0.000, +0.038] (13)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td class="up">+0.178 [+0.106, +0.256] (15)</td><td class="up">+0.127 [+0.055, +0.192] (13)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression), both on another line&#x27;s input</td><td class="up">+0.046 [+0.025, +0.068] (15)</td><td class="up">+0.035 [+0.003, +0.076] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (PIE run)</td><td class="up">+0.097 [+0.044, +0.151] (15)</td><td class="up">+0.076 [+0.017, +0.142] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression, PIE change), both on another line&#x27;s input</td><td class="up">+0.042 [+0.002, +0.089] (15)</td><td>+0.014 [−0.009, +0.036] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (Tx1-3B gene-level run)</td><td>+0.051 [−0.006, +0.112] (15)</td><td class="up">+0.060 [+0.003, +0.114] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings), both on another line&#x27;s input</td><td>+0.028 [−0.003, +0.068] (15)</td><td>+0.024 [−0.001, +0.045] (13)</td></tr>
+<tr class="group"><td colspan="3">What the line term adds (with minus without the line term)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens</td><td>−0.001 [−0.009, +0.007] (15)</td><td>+0.003 [−0.005, +0.012] (13)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens</td><td>+0.001 [−0.009, +0.011] (15)</td><td>−0.001 [−0.005, +0.004] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens (the PIE run&#x27;s model)</td><td>+0.001 [−0.003, +0.006] (15)</td><td>+0.003 [−0.003, +0.009] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens (the Tx1-3B gene-level run&#x27;s model)</td><td class="down">−0.045 [−0.074, −0.014] (15)</td><td>−0.012 [−0.032, +0.007] (13)</td></tr>
+<tr class="group"><td colspan="3">What the cell tokens add</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Direct target, no cell tokens</td><td>+0.004 [−0.020, +0.028] (15)</td><td>−0.009 [−0.042, +0.024] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression)</td><td>+0.001 [−0.025, +0.028] (15)</td><td>−0.005 [−0.041, +0.027] (13)</td></tr>
+<tr class="group"><td colspan="3">What PIE change and Tx1-3B gene embeddings add to the own-expression line term</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td>+0.002 [−0.004, +0.009] (15)</td><td>−0.000 [−0.008, +0.007] (13)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td class="down">−0.044 [−0.073, −0.013] (15)</td><td>−0.015 [−0.033, +0.003] (13)</td></tr>
+<tr class="group"><td colspan="3">Against the best published baseline</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td class="up">+0.204 [+0.127, +0.280] (15)</td><td class="up">+0.112 [+0.073, +0.159] (13)</td></tr>
+<tr class="set"><td colspan="3">New pairs, both genes seen</td></tr>
+<tr class="group"><td colspan="3">What the direct target adds (direct minus residual target)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Residual target, Tx1-3B cell tokens</td><td>+0.073 [−0.010, +0.159] (8)</td><td>+0.164 [−0.048, +0.413] (10)</td></tr>
+<tr><td>Direct target, no cell tokens − Residual target, no cell tokens</td><td class="up">+0.083 [+0.013, +0.153] (8)</td><td>+0.031 [−0.016, +0.098] (10)</td></tr>
+<tr class="group"><td colspan="3">Does the score read the line? (with the line term minus the same weights on a replaced input)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td class="up">+0.219 [+0.033, +0.482] (8)</td><td>+0.038 [−0.194, +0.291] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens + line term (own expression), both on another line&#x27;s input</td><td class="up">+0.173 [+0.008, +0.442] (8)</td><td>−0.019 [−0.048, +0.003] (10)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td>+0.054 [−0.021, +0.129] (8)</td><td>−0.097 [−0.323, +0.091] (10)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression), both on another line&#x27;s input</td><td class="up">+0.204 [+0.032, +0.481] (8)</td><td>−0.039 [−0.105, +0.010] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (PIE run)</td><td class="up">+0.220 [+0.032, +0.476] (8)</td><td>+0.043 [−0.162, +0.299] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression, PIE change), both on another line&#x27;s input</td><td class="up">+0.177 [+0.021, +0.424] (8)</td><td>−0.009 [−0.031, +0.007] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (Tx1-3B gene-level run)</td><td>+0.185 [−0.029, +0.466] (8)</td><td>−0.052 [−0.305, +0.260] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings), both on another line&#x27;s input</td><td class="up">+0.173 [+0.016, +0.425] (8)</td><td>−0.119 [−0.289, +0.012] (10)</td></tr>
+<tr class="group"><td colspan="3">What the line term adds (with minus without the line term)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens</td><td>+0.001 [−0.010, +0.011] (8)</td><td>−0.003 [−0.009, +0.000] (10)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens</td><td class="up">+0.007 [+0.001, +0.015] (8)</td><td class="up">+0.006 [+0.001, +0.012] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens (the PIE run&#x27;s model)</td><td>+0.002 [−0.003, +0.007] (8)</td><td>+0.002 [−0.002, +0.009] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens (the Tx1-3B gene-level run&#x27;s model)</td><td class="down">−0.033 [−0.057, −0.006] (8)</td><td class="down">−0.093 [−0.243, −0.001] (10)</td></tr>
+<tr class="group"><td colspan="3">What the cell tokens add</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Direct target, no cell tokens</td><td>−0.007 [−0.042, +0.025] (8)</td><td>+0.084 [−0.068, +0.303] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression)</td><td>−0.014 [−0.051, +0.020] (8)</td><td>+0.075 [−0.073, +0.315] (10)</td></tr>
+<tr class="group"><td colspan="3">What PIE change and Tx1-3B gene embeddings add to the own-expression line term</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td>+0.001 [−0.006, +0.008] (8)</td><td>+0.006 [+0.000, +0.014] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td class="down">−0.034 [−0.063, −0.001] (8)</td><td>−0.090 [−0.243, +0.003] (10)</td></tr>
+<tr class="group"><td colspan="3">Against the best published baseline</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td class="up">+0.220 [+0.039, +0.421] (8)</td><td>+0.104 [−0.026, +0.247] (10)</td></tr>
+<tr class="set"><td colspan="3">Seen pairs that no training line called SL</td></tr>
+<tr class="group"><td colspan="3">What the direct target adds (direct minus residual target)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Residual target, Tx1-3B cell tokens</td><td>+0.055 [−0.013, +0.118] (14)</td><td>−0.045 [−0.154, +0.031] (11)</td></tr>
+<tr><td>Direct target, no cell tokens − Residual target, no cell tokens</td><td>−0.014 [−0.103, +0.059] (14)</td><td>−0.015 [−0.098, +0.075] (11)</td></tr>
+<tr class="group"><td colspan="3">Does the score read the line? (with the line term minus the same weights on a replaced input)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td>+0.072 [−0.003, +0.156] (14)</td><td>+0.053 [−0.012, +0.146] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens + line term (own expression), both on another line&#x27;s input</td><td>+0.037 [−0.002, +0.086] (14)</td><td>+0.013 [−0.035, +0.056] (11)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td>+0.050 [−0.019, +0.105] (14)</td><td class="up">+0.082 [+0.004, +0.163] (11)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression), both on another line&#x27;s input</td><td>+0.022 [−0.013, +0.058] (14)</td><td>+0.068 [−0.017, +0.154] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (PIE run)</td><td class="up">+0.097 [+0.030, +0.171] (14)</td><td>+0.060 [−0.028, +0.195] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression, PIE change), both on another line&#x27;s input</td><td class="up">+0.050 [+0.004, +0.100] (14)</td><td>+0.019 [−0.051, +0.098] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (Tx1-3B gene-level run)</td><td>+0.063 [−0.035, +0.202] (14)</td><td>+0.045 [−0.050, +0.179] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings), both on another line&#x27;s input</td><td>+0.043 [−0.040, +0.141] (14)</td><td>+0.059 [−0.080, +0.226] (11)</td></tr>
+<tr class="group"><td colspan="3">What the line term adds (with minus without the line term)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens</td><td>−0.018 [−0.060, +0.013] (14)</td><td>−0.007 [−0.049, +0.021] (11)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens</td><td>−0.003 [−0.015, +0.013] (14)</td><td>+0.006 [−0.006, +0.022] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens (the PIE run&#x27;s model)</td><td>+0.008 [−0.006, +0.023] (14)</td><td>−0.000 [−0.012, +0.008] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens (the Tx1-3B gene-level run&#x27;s model)</td><td>−0.026 [−0.089, +0.036] (14)</td><td>−0.015 [−0.080, +0.029] (11)</td></tr>
+<tr class="group"><td colspan="3">What the cell tokens add</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Direct target, no cell tokens</td><td class="up">+0.091 [+0.034, +0.148] (14)</td><td>−0.002 [−0.068, +0.065] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression)</td><td class="up">+0.076 [+0.018, +0.142] (14)</td><td>−0.015 [−0.095, +0.056] (11)</td></tr>
+<tr class="group"><td colspan="3">What PIE change and Tx1-3B gene embeddings add to the own-expression line term</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td>+0.026 [−0.000, +0.065] (14)</td><td>+0.007 [−0.020, +0.049] (11)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td>−0.008 [−0.066, +0.056] (14)</td><td>−0.008 [−0.075, +0.056] (11)</td></tr>
+<tr class="group"><td colspan="3">Against the best published baseline</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td class="up">+0.196 [+0.071, +0.337] (14)</td><td>+0.020 [−0.083, +0.134] (11)</td></tr>
+<tr class="set"><td colspan="3">Seen pairs on which the training lines differ</td></tr>
+<tr class="group"><td colspan="3">What the direct target adds (direct minus residual target)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Residual target, Tx1-3B cell tokens</td><td>+0.026 [−0.050, +0.087] (13)</td><td class="up">+0.063 [+0.004, +0.132] (10)</td></tr>
+<tr><td>Direct target, no cell tokens − Residual target, no cell tokens</td><td>−0.022 [−0.118, +0.084] (13)</td><td class="up">+0.062 [+0.021, +0.106] (10)</td></tr>
+<tr class="group"><td colspan="3">Does the score read the line? (with the line term minus the same weights on a replaced input)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td class="up">+0.142 [+0.029, +0.255] (13)</td><td class="up">+0.211 [+0.121, +0.288] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens + line term (own expression), both on another line&#x27;s input</td><td>−0.025 [−0.095, +0.036] (13)</td><td>+0.029 [−0.002, +0.059] (10)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens, context-ablated (the fit lines&#x27; mean input)</td><td class="up">+0.116 [+0.030, +0.221] (13)</td><td class="up">+0.185 [+0.098, +0.272] (10)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression), both on another line&#x27;s input</td><td>+0.011 [−0.052, +0.083] (13)</td><td class="up">+0.081 [+0.003, +0.153] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (PIE run)</td><td class="up">+0.142 [+0.047, +0.260] (13)</td><td class="up">+0.202 [+0.105, +0.299] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression, PIE change), both on another line&#x27;s input</td><td>−0.015 [−0.097, +0.058] (13)</td><td>+0.020 [−0.002, +0.042] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens, context-ablated (the fit lines&#x27; mean input) (Tx1-3B gene-level run)</td><td class="up">+0.087 [+0.018, +0.179] (13)</td><td>+0.118 [−0.013, +0.254] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings), both on another line&#x27;s input</td><td>−0.040 [−0.139, +0.044] (13)</td><td>−0.034 [−0.110, +0.026] (10)</td></tr>
+<tr class="group"><td colspan="3">What the line term adds (with minus without the line term)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, Tx1-3B cell tokens</td><td>+0.009 [−0.006, +0.033] (13)</td><td>−0.020 [−0.054, +0.003] (10)</td></tr>
+<tr><td>Direct target, no cell tokens + line term (own expression) − Direct target, no cell tokens</td><td>−0.010 [−0.041, +0.014] (13)</td><td class="down">−0.031 [−0.069, −0.001] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens (the PIE run&#x27;s model)</td><td>+0.009 [−0.012, +0.043] (13)</td><td>−0.029 [−0.065, +0.003] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens (the Tx1-3B gene-level run&#x27;s model)</td><td class="down">−0.046 [−0.085, −0.001] (13)</td><td class="down">−0.113 [−0.198, −0.038] (10)</td></tr>
+<tr class="group"><td colspan="3">What the cell tokens add</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens − Direct target, no cell tokens</td><td>+0.032 [−0.043, +0.100] (13)</td><td>+0.013 [−0.037, +0.062] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Direct target, no cell tokens + line term (own expression)</td><td>+0.051 [−0.024, +0.116] (13)</td><td>+0.025 [−0.036, +0.089] (10)</td></tr>
+<tr class="group"><td colspan="3">What PIE change and Tx1-3B gene embeddings add to the own-expression line term</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, PIE change) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td>−0.000 [−0.036, +0.044] (13)</td><td>−0.009 [−0.037, +0.010] (10)</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression, Tx1-3B gene embeddings) − Direct target, Tx1-3B cell tokens + line term (own expression)</td><td class="down">−0.055 [−0.110, −0.003] (13)</td><td class="down">−0.093 [−0.192, −0.006] (10)</td></tr>
+<tr class="group"><td colspan="3">Against the best published baseline</td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens + line term (own expression) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td class="up">+0.075 [+0.019, +0.134] (13)</td><td>+0.043 [−0.058, +0.125] (10)</td></tr>
+</tbody></table></div>
+</details>
+</section>
+
+<section>
+<h2>Results: training</h2>
+<div class="wrap"><table><caption>Table 5. Stage one: the GeneEffect loss on the 47 SL training lines with
+GeneEffect (out of sample; lower is better) and the training loss, by epoch. Epoch 0 is the untrained model. The kept
+epoch is in bold. The three runs with Tx1-3B cell tokens have the same stage one.</caption><thead><tr>
+<th>Run and loss</th><th>Epoch 0</th><th>Epoch 1</th><th>Epoch 2</th><th>Epoch 3</th><th>Epoch 4</th><th>Epoch 5</th>
+</tr></thead><tbody>
+<tr><td>Direct target, Tx1-3B cell tokens (all three Tx1-3B runs): loss on the 47 SL training lines</td><td>1.0224</td><td><b>0.2073</b></td><td>0.3068</td><td>0.2268</td><td>0.2144</td><td></td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens (all three Tx1-3B runs): training loss</td><td>—</td><td>0.2784</td><td>2.0113</td><td>0.1895</td><td>0.1728</td><td></td></tr>
+<tr><td>Direct target, no cell tokens: loss on the 47 SL training lines</td><td>1.0224</td><td>0.2031</td><td><b>0.1963</b></td><td>0.2424</td><td>0.2038</td><td>0.1981</td></tr>
+<tr><td>Direct target, no cell tokens: training loss</td><td>—</td><td>0.2687</td><td>0.1821</td><td>4.0518</td><td>0.1973</td><td>0.1737</td></tr>
+</tbody></table></div>
+<div class="wrap"><table><caption>Table 6. Stage two: validation recall in the top 10% of each phase at its best
+epoch (higher is better). The chosen phase is in bold, with the recall of that state on the training lines (in
+sample). The three runs with Tx1-3B cell tokens have the same phases.</caption><thead><tr>
+<th>Run</th><th class="l">Phase</th><th>GeneEffect loss weight</th><th>Best epoch / epochs run</th><th>Validation</th><th>Training lines</th>
+</tr></thead><tbody>
+<tr><td>Direct target, Tx1-3B cell tokens</td><td class="l">pair head on the frozen stage-one model</td><td>—</td><td>4 / 9</td><td>0.4247</td><td></td></tr>
+<tr><td>Direct target, Tx1-3B cell tokens</td><td class="l">whole model trained</td><td>1</td><td>2 / 7</td><td><b>0.5528</b></td><td>0.846</td></tr>
+<tr><td>Direct target, no cell tokens</td><td class="l">pair head on the frozen stage-one model</td><td>—</td><td>23 / 28</td><td>0.4639</td><td></td></tr>
+<tr><td>Direct target, no cell tokens</td><td class="l">whole model trained</td><td>1</td><td>5 / 10</td><td><b>0.5447</b></td><td>0.923</td></tr>
+</tbody></table></div>
+<div class="wrap"><table><caption>Table 7. The line term: validation recall in the top 10% of s at each epoch (higher
+is better), beside the validation recall of f, its base. The kept epoch is in bold.</caption><thead><tr>
+<th>Line term</th><th>f (base)</th><th>Epoch 1</th><th>Epoch 2</th><th>Epoch 3</th><th>Epoch 4</th><th>Epoch 5</th><th>Epoch 6</th><th>Epoch 7</th><th>Epoch 8</th><th>Epoch 9</th><th>Epoch 10</th><th>Epoch 11</th><th>Epoch 12</th><th>Epoch 13</th>
+</tr></thead><tbody>
+<tr><td>Line term (own expression), Tx1-3B cell tokens</td><td>0.5528</td><td><b>0.5535</b></td><td>0.5513</td><td>0.5530</td><td>0.5457</td><td>0.5469</td><td>0.5488</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Line term (own expression), no cell tokens</td><td>0.5447</td><td>0.5441</td><td>0.5405</td><td>0.5422</td><td>0.5420</td><td>0.5431</td><td>0.5461</td><td>0.5461</td><td><b>0.5488</b></td><td>0.5471</td><td>0.5449</td><td>0.5447</td><td>0.5458</td><td>0.5421</td></tr>
+<tr><td>Line term (own expression, PIE change)</td><td>0.5528</td><td><b>0.5545</b></td><td>0.5542</td><td>0.5463</td><td>0.5476</td><td>0.5489</td><td>0.5464</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Line term (own expression, Tx1-3B gene embeddings)</td><td>0.5528</td><td><b>0.5073</b></td><td>0.4716</td><td>0.4412</td><td>0.4182</td><td>0.3985</td><td>0.3782</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2>The first base of the line term</h2>
+<p class="prose">The first two runs of the day used another base: the model on the mean input, in place of f. That
+base reads no line, and it is weak. The line term on it scored far below the model, so the base became f (SL protocol
+§19).</p>
+<div class="wrap"><table><caption>Table 8. The first base of the line term (runs <code>_seed0</code> of 2026-11-20),
+all pairs, mean over held-out lines. Recall in the top 10% and AUROC; higher is better. The last row of each group is
+the final run.</caption><thead><tr>
+<th>Score</th><th>Recall, validation</th><th>Recall, test</th><th>AUROC, validation</th><th>AUROC, test</th>
+</tr></thead><tbody>
+<tr class="group"><td colspan="5">Direct target, Tx1-3B cell tokens</td></tr>
+<tr><td>The model in the line (f)</td><td>0.553</td><td>0.496</td><td>0.817</td><td>0.786</td></tr>
+<tr><td>The model on the mean input (the first base)</td><td>0.466</td><td>0.430</td><td>0.780</td><td>0.761</td></tr>
+<tr><td>The first base + the line term</td><td>0.288</td><td>0.279</td><td>0.642</td><td>0.615</td></tr>
+<tr><td>The first base + the line term on another line's input</td><td>0.197</td><td>0.243</td><td>0.526</td><td>0.589</td></tr>
+<tr><td>For comparison: the final base (f) + the line term</td><td>0.553</td><td>0.497</td><td>0.817</td><td>0.786</td></tr>
+<tr class="group"><td colspan="5">Direct target, no cell tokens</td></tr>
+<tr><td>The model in the line (f)</td><td>0.545</td><td>0.505</td><td>0.813</td><td>0.789</td></tr>
+<tr><td>The model on the mean input (the first base)</td><td>0.399</td><td>0.399</td><td>0.733</td><td>0.722</td></tr>
+<tr><td>The first base + the line term</td><td>0.277</td><td>0.314</td><td>0.676</td><td>0.689</td></tr>
+<tr><td>The first base + the line term on another line's input</td><td>0.302</td><td>0.340</td><td>0.691</td><td>0.700</td></tr>
+<tr><td>For comparison: the final base (f) + the line term</td><td>0.549</td><td>0.505</td><td>0.813</td><td>0.790</td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2>Results: stage one</h2>
+<p class="prose">The GeneEffect that each model predicts for the SL lines after its training. These numbers decide
+nothing: stage one is a means for SL ranking.</p>
+<div class="wrap"><table><caption>Table 9. Stage-one numbers on the SL lines with GeneEffect (12 validation, 11 test;
+out of sample for stage one): the predicted GeneEffect as a residual over the training gene mean, and the whole-line
+Pearson. Higher is better.</caption><thead><tr>
+<th>Model</th>
+<th>Per-line residual Spearman, validation</th><th>Per-line residual Spearman, test</th>
+<th>Per-gene residual Spearman, validation</th><th>Per-gene residual Spearman, test</th>
+<th>Residual skill score, validation</th><th>Residual skill score, test</th>
+<th>Whole-line Pearson, validation</th><th>Whole-line Pearson, test</th>
+</tr></thead><tbody>
+<tr><td>Direct target, Tx1-3B cell tokens</td><td>0.0325</td><td>0.0333</td><td>0.0347</td><td>0.0306</td><td>−0.1356</td><td>−0.2231</td><td>0.9150</td><td>0.9007</td></tr>
+<tr><td>Direct target, no cell tokens</td><td>0.0695</td><td>0.0701</td><td>0.0567</td><td>0.0724</td><td>−0.0517</td><td>−0.0713</td><td>0.9205</td><td>0.9117</td></tr>
+<tr><td>Gene mean of the fit lines (no model)</td><td>−0.0530</td><td>−0.0213</td><td>—</td><td>—</td><td>−0.0121</td><td>−0.0080</td><td>0.9235</td><td>0.9162</td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2>Gene-in-line coverage and the caches</h2>
+<div class="wrap"><table><caption>Table 10. The gene-in-line features of the 86 lines with benchmark rows, on the
+model's 17,787 genes (1,529,682 line-gene entries). An entry without a value reads zeros and a presence flag of 0.
+Entries with a value: the run's <code>in_line_coverage</code>; the share and the mean for each line are computed from
+it.</caption><thead><tr>
+<th>Source</th><th>Entries with a value</th><th>Share</th><th>Mean genes for each line</th><th class="l">Cache</th>
+</tr></thead><tbody>
+<tr><td>Own expression</td><td>549,454</td><td>35.9%</td><td>6,389</td><td class="l">built at load time from the scaled expression frame (6,523 genes)</td></tr>
+<tr><td>PIE change</td><td>1,199,700</td><td>78.4%</td><td>13,950</td><td class="l">86 lines; 14,372 of 25,861 genes with a change; 64 components fitted on 200,000 sampled vectors of 53 training-role lines; no labelled line without PIE</td></tr>
+<tr><td>Tx1-3B gene level</td><td>970,086</td><td>63.4%</td><td>11,280</td><td class="l">86 lines; 18 to 256 cells for each line (median 256; 16,854 in all); 0 to 14,375 genes with a value (median 11,955); finished 20:02 to 20:15</td></tr>
+</tbody></table></div>
+<p class="prose">One SL training line, ACH-000696, has no gene with a value in the Tx1-3B gene-level cache (128
+cells). Its Tx1-3B gene features are all zeros. The cause was found on the H20 after the runs: the raw file of this
+line lists Ensembl IDs with a version suffix (<code>ENSG00000223972.5</code>), and Tx1-3B's vocabulary gives a missing ID
+the padding token. Thus the Tx1-3B cell embeddings of this line, built earlier, also come from padding tokens only.
+It is the only one of the 455 raw files with such IDs
+(<a href="../../docs/data/gene-in-line-features.md">card of the caches</a>).</p>
+</section>
+
+<section>
+<h2>Reading</h2>
+<ul class="reading">
+<li><b>The model with the line term is above every published baseline on all pairs</b> (Figure 1, Table 2):
+0.553 / 0.497 against 0.355 / 0.395 for the Kebabci classifier, +0.198 [+0.121, +0.274] / +0.102 [+0.054, +0.149].
+On new pairs this holds on validation only (Table 4).</li>
+<li><b>The direct target lets the pretraining reach stage two.</b> The early stop keeps epoch 1 (loss 0.2073) and
+epoch 2 (0.1963), not the untrained model (1.0224) (Table 5). The pair head on the frozen model now scores 0.425 and
+0.464 on validation (Table 6).</li>
+<li><b>The direct target is above the residual target on validation only</b> (Table 2): +0.052 [+0.019, +0.088] /
++0.011 [−0.027, +0.055] with Tx1-3B cell tokens, and +0.036 [+0.009, +0.067] / +0.004 [−0.018, +0.025] without.</li>
+<li><b>The score now changes with the line, in part</b> (Figure 2, Table 2). Every model is above its
+context-ablated row on all pairs, with intervals above zero on both splits except one validation interval. But the
+context-ablated input is new to the model. Against another line's input, the model without cell tokens is above zero
+on both splits (+0.062 [+0.032, +0.099] / +0.032 [+0.005, +0.067]). With Tx1-3B cell tokens it is above zero on
+validation only (+0.045 [+0.007, +0.083] / +0.012 [−0.007, +0.030]).</li>
+<li><b>On the pairs where the training lines differ, the own line is not above another line</b> (Table 4). With
+Tx1-3B cell tokens: −0.025 [−0.095, +0.036] / +0.029 [−0.002, +0.059]. Without cell tokens, the difference is above
+zero on test only (+0.081 [+0.003, +0.153]). This is the row set where the line must decide the call.</li>
+<li><b>The line term adds nothing</b> (Table 2). With own expression or PIE change, s − f is +0.005 or less, and every
+interval includes zero. With Tx1-3B gene embeddings, the line term lowers recall: −0.046 [−0.073, −0.018] on
+validation, −0.012 [−0.035, +0.007] on test. Its validation recall falls at each epoch, from 0.507 to 0.378, while
+its training loss falls (Table 7).</li>
+<li><b>The cells add nothing.</b> Tx1-3B cell tokens minus no cell tokens: +0.008 [−0.011, +0.027] /
+−0.009 [−0.039, +0.020] (Table 2). PIE change minus own expression alone: +0.001 [−0.004, +0.006] /
++0.004 [−0.001, +0.009]. Tx1-3B gene embeddings minus own expression alone: −0.046 [−0.072, −0.021] /
+−0.013 [−0.034, +0.004].</li>
+<li><b>The first base of the line term failed</b> (Table 8): on the model's mean-input score, the line term scored
+0.288 / 0.279 with Tx1-3B cell tokens and 0.277 / 0.314 without.</li>
+<li><b>Stage one, for the record</b> (Table 9): the per-line residual Spearman is 0.032 / 0.033 with Tx1-3B cell
+tokens and 0.069 / 0.070 without. The whole-line Pearson (0.915 / 0.901 and 0.921 / 0.912) is below that of the
+fit lines' gene mean (0.923 / 0.916). It decides nothing.</li>
+<li><b>Limits.</b> One seed. 17 validation and 16 test lines; 8 to 15 lines in a row set. Validation selected each
+epoch and phase, and the line term's epoch. The context-ablated row uses an input that the model never saw in stage
+two. PIE was trained on 42 of the project's lines; A549, a training line of the SL split, is one of them. Tx1-3B's
+exposure to the lines is not recorded. One SL training line has no Tx1-3B gene-level value (Table 10).</li>
+</ul>
+</section>
+</main>
+</body>
+</html>

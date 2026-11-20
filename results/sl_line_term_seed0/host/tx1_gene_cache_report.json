@@ -1,0 +1,434 @@
+{
+  "steps": {
+    "ACH-000023": {
+      "cells": 85,
+      "genes_with_value": 10620,
+      "finished": "2026-11-20T20:02:43+00:00"
+    },
+    "ACH-000019": {
+      "cells": 143,
+      "genes_with_value": 11705,
+      "finished": "2026-11-20T20:02:50+00:00"
+    },
+    "ACH-000018": {
+      "cells": 256,
+      "genes_with_value": 10404,
+      "finished": "2026-11-20T20:02:54+00:00"
+    },
+    "ACH-000022": {
+      "cells": 244,
+      "genes_with_value": 11829,
+      "finished": "2026-11-20T20:03:07+00:00"
+    },
+    "ACH-000085": {
+      "cells": 18,
+      "genes_with_value": 8861,
+      "finished": "2026-11-20T20:03:11+00:00"
+    },
+    "ACH-000094": {
+      "cells": 256,
+      "genes_with_value": 11828,
+      "finished": "2026-11-20T20:03:26+00:00"
+    },
+    "ACH-000054": {
+      "cells": 256,
+      "genes_with_value": 11710,
+      "finished": "2026-11-20T20:03:32+00:00"
+    },
+    "ACH-000042": {
+      "cells": 256,
+      "genes_with_value": 11813,
+      "finished": "2026-11-20T20:03:36+00:00"
+    },
+    "ACH-000164": {
+      "cells": 128,
+      "genes_with_value": 12211,
+      "finished": "2026-11-20T20:03:47+00:00"
+    },
+    "ACH-000114": {
+      "cells": 82,
+      "genes_with_value": 11509,
+      "finished": "2026-11-20T20:03:49+00:00"
+    },
+    "ACH-000138": {
+      "cells": 128,
+      "genes_with_value": 11930,
+      "finished": "2026-11-20T20:03:53+00:00"
+    },
+    "ACH-000146": {
+      "cells": 256,
+      "genes_with_value": 13516,
+      "finished": "2026-11-20T20:03:54+00:00"
+    },
+    "ACH-000213": {
+      "cells": 56,
+      "genes_with_value": 10634,
+      "finished": "2026-11-20T20:03:56+00:00"
+    },
+    "ACH-000207": {
+      "cells": 163,
+      "genes_with_value": 11586,
+      "finished": "2026-11-20T20:04:20+00:00"
+    },
+    "ACH-000169": {
+      "cells": 256,
+      "genes_with_value": 12183,
+      "finished": "2026-11-20T20:04:31+00:00"
+    },
+    "ACH-000195": {
+      "cells": 256,
+      "genes_with_value": 12733,
+      "finished": "2026-11-20T20:04:35+00:00"
+    },
+    "ACH-000222": {
+      "cells": 128,
+      "genes_with_value": 10794,
+      "finished": "2026-11-20T20:04:41+00:00"
+    },
+    "ACH-000265": {
+      "cells": 256,
+      "genes_with_value": 12026,
+      "finished": "2026-11-20T20:04:48+00:00"
+    },
+    "ACH-000218": {
+      "cells": 256,
+      "genes_with_value": 12403,
+      "finished": "2026-11-20T20:05:14+00:00"
+    },
+    "ACH-000219": {
+      "cells": 256,
+      "genes_with_value": 12050,
+      "finished": "2026-11-20T20:05:17+00:00"
+    },
+    "ACH-000354": {
+      "cells": 256,
+      "genes_with_value": 13810,
+      "finished": "2026-11-20T20:05:23+00:00"
+    },
+    "ACH-000362": {
+      "cells": 256,
+      "genes_with_value": 12410,
+      "finished": "2026-11-20T20:05:31+00:00"
+    },
+    "ACH-000444": {
+      "cells": 82,
+      "genes_with_value": 10928,
+      "finished": "2026-11-20T20:05:38+00:00"
+    },
+    "ACH-000290": {
+      "cells": 256,
+      "genes_with_value": 14142,
+      "finished": "2026-11-20T20:05:55+00:00"
+    },
+    "ACH-000336": {
+      "cells": 256,
+      "genes_with_value": 10875,
+      "finished": "2026-11-20T20:05:58+00:00"
+    },
+    "ACH-000551": {
+      "cells": 128,
+      "genes_with_value": 7812,
+      "finished": "2026-11-20T20:05:58+00:00"
+    },
+    "ACH-000510": {
+      "cells": 256,
+      "genes_with_value": 12077,
+      "finished": "2026-11-20T20:06:13+00:00"
+    },
+    "ACH-000601": {
+      "cells": 128,
+      "genes_with_value": 11707,
+      "finished": "2026-11-20T20:06:19+00:00"
+    },
+    "ACH-000552": {
+      "cells": 128,
+      "genes_with_value": 11717,
+      "finished": "2026-11-20T20:06:33+00:00"
+    },
+    "ACH-000373": {
+      "cells": 256,
+      "genes_with_value": 13065,
+      "finished": "2026-11-20T20:06:38+00:00"
+    },
+    "ACH-000406": {
+      "cells": 256,
+      "genes_with_value": 12197,
+      "finished": "2026-11-20T20:06:40+00:00"
+    },
+    "ACH-000517": {
+      "cells": 71,
+      "genes_with_value": 11411,
+      "finished": "2026-11-20T20:06:50+00:00"
+    },
+    "ACH-000649": {
+      "cells": 256,
+      "genes_with_value": 12801,
+      "finished": "2026-11-20T20:07:01+00:00"
+    },
+    "ACH-000615": {
+      "cells": 256,
+      "genes_with_value": 12053,
+      "finished": "2026-11-20T20:07:16+00:00"
+    },
+    "ACH-000563": {
+      "cells": 186,
+      "genes_with_value": 11597,
+      "finished": "2026-11-20T20:07:21+00:00"
+    },
+    "ACH-000681": {
+      "cells": 128,
+      "genes_with_value": 11650,
+      "finished": "2026-11-20T20:07:22+00:00"
+    },
+    "ACH-000535": {
+      "cells": 256,
+      "genes_with_value": 11767,
+      "finished": "2026-11-20T20:07:22+00:00"
+    },
+    "ACH-000662": {
+      "cells": 95,
+      "genes_with_value": 11155,
+      "finished": "2026-11-20T20:07:32+00:00"
+    },
+    "ACH-000625": {
+      "cells": 118,
+      "genes_with_value": 11421,
+      "finished": "2026-11-20T20:07:40+00:00"
+    },
+    "ACH-000757": {
+      "cells": 128,
+      "genes_with_value": 12858,
+      "finished": "2026-11-20T20:07:43+00:00"
+    },
+    "ACH-000696": {
+      "cells": 128,
+      "genes_with_value": 0,
+      "finished": "2026-11-20T20:07:53+00:00"
+    },
+    "ACH-000665": {
+      "cells": 144,
+      "genes_with_value": 12058,
+      "finished": "2026-11-20T20:08:04+00:00"
+    },
+    "ACH-000587": {
+      "cells": 256,
+      "genes_with_value": 12068,
+      "finished": "2026-11-20T20:08:05+00:00"
+    },
+    "ACH-000788": {
+      "cells": 256,
+      "genes_with_value": 11866,
+      "finished": "2026-11-20T20:08:24+00:00"
+    },
+    "ACH-000768": {
+      "cells": 256,
+      "genes_with_value": 12807,
+      "finished": "2026-11-20T20:08:35+00:00"
+    },
+    "ACH-000730": {
+      "cells": 256,
+      "genes_with_value": 12341,
+      "finished": "2026-11-20T20:08:46+00:00"
+    },
+    "ACH-000639": {
+      "cells": 256,
+      "genes_with_value": 13518,
+      "finished": "2026-11-20T20:08:47+00:00"
+    },
+    "ACH-000845": {
+      "cells": 164,
+      "genes_with_value": 11546,
+      "finished": "2026-11-20T20:08:51+00:00"
+    },
+    "ACH-000900": {
+      "cells": 128,
+      "genes_with_value": 12486,
+      "finished": "2026-11-20T20:09:12+00:00"
+    },
+    "ACH-000769": {
+      "cells": 162,
+      "genes_with_value": 12035,
+      "finished": "2026-11-20T20:09:13+00:00"
+    },
+    "ACH-000832": {
+      "cells": 256,
+      "genes_with_value": 12132,
+      "finished": "2026-11-20T20:09:18+00:00"
+    },
+    "ACH-000677": {
+      "cells": 256,
+      "genes_with_value": 12148,
+      "finished": "2026-11-20T20:09:30+00:00"
+    },
+    "ACH-000943": {
+      "cells": 128,
+      "genes_with_value": 11023,
+      "finished": "2026-11-20T20:09:32+00:00"
+    },
+    "ACH-000756": {
+      "cells": 58,
+      "genes_with_value": 10494,
+      "finished": "2026-11-20T20:09:40+00:00"
+    },
+    "ACH-000833": {
+      "cells": 172,
+      "genes_with_value": 12292,
+      "finished": "2026-11-20T20:09:41+00:00"
+    },
+    "ACH-000971": {
+      "cells": 128,
+      "genes_with_value": 12542,
+      "finished": "2026-11-20T20:09:54+00:00"
+    },
+    "ACH-000866": {
+      "cells": 256,
+      "genes_with_value": 12224,
+      "finished": "2026-11-20T20:10:00+00:00"
+    },
+    "ACH-000779": {
+      "cells": 128,
+      "genes_with_value": 11203,
+      "finished": "2026-11-20T20:10:01+00:00"
+    },
+    "ACH-001039": {
+      "cells": 128,
+      "genes_with_value": 11270,
+      "finished": "2026-11-20T20:10:14+00:00"
+    },
+    "ACH-000869": {
+      "cells": 256,
+      "genes_with_value": 12123,
+      "finished": "2026-11-20T20:10:23+00:00"
+    },
+    "ACH-000915": {
+      "cells": 256,
+      "genes_with_value": 11204,
+      "finished": "2026-11-20T20:10:35+00:00"
+    },
+    "ACH-001190": {
+      "cells": 128,
+      "genes_with_value": 12359,
+      "finished": "2026-11-20T20:10:35+00:00"
+    },
+    "ACH-000841": {
+      "cells": 219,
+      "genes_with_value": 11888,
+      "finished": "2026-11-20T20:10:37+00:00"
+    },
+    "ACH-000932": {
+      "cells": 128,
+      "genes_with_value": 11300,
+      "finished": "2026-11-20T20:10:43+00:00"
+    },
+    "ACH-000956": {
+      "cells": 128,
+      "genes_with_value": 12777,
+      "finished": "2026-11-20T20:10:56+00:00"
+    },
+    "ACH-000957": {
+      "cells": 128,
+      "genes_with_value": 11882,
+      "finished": "2026-11-20T20:11:04+00:00"
+    },
+    "ACH-002010": {
+      "cells": 256,
+      "genes_with_value": 11869,
+      "finished": "2026-11-20T20:11:16+00:00"
+    },
+    "ACH-000881": {
+      "cells": 256,
+      "genes_with_value": 11285,
+      "finished": "2026-11-20T20:11:18+00:00"
+    },
+    "ACH-000995": {
+      "cells": 128,
+      "genes_with_value": 8408,
+      "finished": "2026-11-20T20:11:25+00:00"
+    },
+    "ACH-000987": {
+      "cells": 256,
+      "genes_with_value": 12487,
+      "finished": "2026-11-20T20:11:40+00:00"
+    },
+    "CVCL_4388": {
+      "cells": 256,
+      "genes_with_value": 8498,
+      "finished": "2026-11-20T20:11:59+00:00"
+    },
+    "ACH-000938": {
+      "cells": 256,
+      "genes_with_value": 12269,
+      "finished": "2026-11-20T20:12:01+00:00"
+    },
+    "ACH-001085": {
+      "cells": 256,
+      "genes_with_value": 13601,
+      "finished": "2026-11-20T20:12:08+00:00"
+    },
+    "ACH-001061": {
+      "cells": 256,
+      "genes_with_value": 12685,
+      "finished": "2026-11-20T20:12:21+00:00"
+    },
+    "ACH-000960": {
+      "cells": 256,
+      "genes_with_value": 12810,
+      "finished": "2026-11-20T20:12:44+00:00"
+    },
+    "ACH-001357": {
+      "cells": 256,
+      "genes_with_value": 11936,
+      "finished": "2026-11-20T20:12:50+00:00"
+    },
+    "ACH-001318": {
+      "cells": 256,
+      "genes_with_value": 11917,
+      "finished": "2026-11-20T20:13:05+00:00"
+    },
+    "ACH-000997": {
+      "cells": 128,
+      "genes_with_value": 11580,
+      "finished": "2026-11-20T20:13:05+00:00"
+    },
+    "ACH-001086": {
+      "cells": 128,
+      "genes_with_value": 11768,
+      "finished": "2026-11-20T20:13:27+00:00"
+    },
+    "ACH-002475": {
+      "cells": 128,
+      "genes_with_value": 11974,
+      "finished": "2026-11-20T20:13:27+00:00"
+    },
+    "CVCL_0058": {
+      "cells": 256,
+      "genes_with_value": 12477,
+      "finished": "2026-11-20T20:13:33+00:00"
+    },
+    "ACH-001390": {
+      "cells": 256,
+      "genes_with_value": 12747,
+      "finished": "2026-11-20T20:14:09+00:00"
+    },
+    "CVCL_9773": {
+      "cells": 256,
+      "genes_with_value": 14375,
+      "finished": "2026-11-20T20:14:11+00:00"
+    },
+    "SL-Nebenfuehr2026-eHAP": {
+      "cells": 256,
+      "genes_with_value": 13328,
+      "finished": "2026-11-20T20:14:16+00:00"
+    },
+    "CVCL_0063": {
+      "cells": 256,
+      "genes_with_value": 12806,
+      "finished": "2026-11-20T20:14:53+00:00"
+    },
+    "SL-Tuano2023-HMLE": {
+      "cells": 256,
+      "genes_with_value": 12523,
+      "finished": "2026-11-20T20:15:37+00:00"
+    }
+  }
+}
