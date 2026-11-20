@@ -124,7 +124,8 @@ The rows with the residual target are the finished runs `embedding_seed0`, `embe
 - **Power.** The row set "training lines differ" has 13 / 10 held-out lines. A gain below about 0.05 will not show.
 - **The labels.** The line-specific part repeats at 0.35 to 0.39 inside Harle 2025 and at 0.04 to 0.12 between two
   studies (SL protocol §15, §16).
-- **Pretraining exposure.** PIE was trained on 42 of our lines, the test line A549 among them. Tx1-3B's exposure to
+- **Pretraining exposure.** PIE was trained on 42 of the project's lines. A549 is one of them; it is a training line
+  of the SL split. Which SL validation or test lines are among the 42 is not recorded. Tx1-3B's exposure to
   our lines is not recorded.
 - **Old checkpoints.** A `best.pt` written before this change has no line head and does not load in the new code.
   The finished runs keep their score tables; use their commit to rescore them.
