@@ -126,12 +126,12 @@ is 0.500 / 0.485 (validation / test), against 0.355 / 0.395 for the best
 published baseline. Every interval against a baseline is above zero on all pairs (Table 2).</span></div>
 <div><span class="what">Seen pairs, unseen lines</span><span class="chip pos">ABOVE</span><span>0.518 / 0.514
 against 0.355 / 0.412 (Table 3). On the pairs that no training line called SL:
-0.388 / 0.375 against 0.229 / 0.303, with an interval above zero on validation only (Tables 4 and 6).</span></div>
+0.388 / 0.375 against 0.229 / 0.303, with an interval above zero on validation only (Tables 4 and 5).</span></div>
 <div><span class="what">New pairs, unseen lines</span><span class="chip flat">NOT ABOVE ON TEST</span><span>0.475 / 0.354;
-the difference from the best published baseline is above zero on validation and not on test (Table 6).</span></div>
+the difference from the best published baseline is above zero on validation and not on test (Table 5).</span></div>
 <div><span class="what">A score that reads the line</span><span class="chip neg">NOT SHOWN</span><span>With the fit
 lines' mean input in place of the line's own, the full model scores 0.509 / 0.498: the same
-(Table 5).</span></div>
+(Table 6).</span></div>
 <div><span class="what">Cell tokens, GeneEffect pretraining</span><span class="chip flat">NO GAIN</span><span>The model
 without cell tokens scores 0.508 / 0.501, and the early stop keeps the untrained model in all
 four runs (Tables 2 and 8).</span></div>
@@ -143,6 +143,35 @@ four runs (Tables 2 and 8).</span></div>
 the plan (§4): one architecture, one config, seed 0. Stage one is pretraining on GeneEffect and its accuracy is no
 aim. Stage two reads the model's gene-in-line embeddings, not its predicted GeneEffect. A second question, added on
 2026-11-20: where does the result hold (seen and new pairs), and does the score read the line?</p>
+</section>
+<section>
+<h2>Model</h2>
+<figure>
+<div class="wrap"><svg viewBox="0 0 860 224" role="img" aria-label="The gene-knowledge, cell-set model: a gene encoder and a line encoder feed a gene-specific reading; its gene-in-line embedding gives GeneEffect by a sum and the SL score by a pair head." style="display:block;width:100%;min-width:640px;height:auto;font:12px var(--body)">
+<defs><marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+<g fill="none" stroke="var(--muted)" stroke-width="1.2">
+<rect x="8" y="30" width="100" height="44" rx="4"/><rect x="8" y="150" width="100" height="44" rx="4"/>
+<rect x="148" y="14" width="236" height="76" rx="4"/><rect x="148" y="134" width="236" height="76" rx="4"/>
+<rect x="434" y="74" width="170" height="76" rx="4" fill="var(--accent-soft)"/>
+<rect x="664" y="14" width="188" height="60" rx="4"/><rect x="664" y="150" width="188" height="60" rx="4" fill="var(--accent-soft)"/>
+<g marker-end="url(#tip)"><path d="M108 52H148"/><path d="M108 172H148"/><path d="M384 52H409V96H434"/><path d="M384 172H409V128H434"/><path d="M604 112H634V44H664"/><path d="M604 112H634V180H664"/></g>
+</g>
+<g fill="var(--ink)" text-anchor="middle">
+<text x="58" y="56">Gene g</text><text x="58" y="176">Cells of line c</text>
+<text x="266" y="38" font-weight="600">Gene encoder</text><text x="266" y="56">function text + ESM C protein</text><text x="266" y="74">+ STRING network + free vector</text>
+<text x="266" y="158" font-weight="600">Line encoder</text><text x="266" y="176">mean token (MLP on mean expression)</text><text x="266" y="194">+ one token per cell (Tx1-3B)</text>
+<text x="519" y="98" font-weight="600">Gene-specific reading</text><text x="519" y="116">each gene weights</text><text x="519" y="134">the line's cells</text>
+<text x="519" y="170" fill="var(--muted)">gene-in-line embedding</text>
+<text x="758" y="40">Sum of the embedding</text><text x="758" y="58">GeneEffect (pretraining)</text>
+<text x="758" y="176" font-weight="600">Pair head on genes A and B</text><text x="758" y="194">SL score in line c</text>
+</g>
+</svg></div>
+<figcaption><b>Figure 1.</b> The gene-knowledge, cell-set model, 32 wide. Stage one fits the upper output on the
+GeneEffect of lines without an SL label. Stage two fits the pair head, then the whole model, on the SL labels of the
+44 training lines. The pair head reads the gene-in-line embeddings of the two genes, not the predicted GeneEffect.
+The variant without cell tokens has the mean token alone; the context-ablated rows give every line the fit lines'
+mean expression and no cells.</figcaption>
+</figure>
 </section>
 <section>
 <h2>Benchmark</h2>
@@ -327,7 +356,7 @@ line called a pair SL, an SL call is new in the held-out line, and the training 
 <tr><td>Measured GeneEffect (reference, lines with GeneEffect)</td><td>0.448 / 0.285 (0.72 / 0.61)</td><td>0.328 / 0.295 (0.63 / 0.59)</td><td>0.612 / 0.438 (0.50 / 0.57)</td></tr>
 <tr><td>Random score (check)</td><td>0.071 / 0.095 (0.50 / 0.49)</td><td>0.230 / 0.225 (0.51 / 0.53)</td><td>0.667 / 0.417 (0.58 / 0.51)</td></tr>
 </tbody></table></div>
-<div class="wrap"><table><caption>Table 6. The models against the baselines and each other on each row set. Paired difference in recall in the top 10% (model minus control), mean over lines, with a 95% bootstrap interval over lines and the line count. Higher is better.</caption><thead><tr>
+<div class="wrap"><table><caption>Table 5. The models against the baselines and each other on each row set. Paired difference in recall in the top 10% (model minus control), mean over lines, with a 95% bootstrap interval over lines and the line count. Higher is better.</caption><thead><tr>
 <th>Model − control</th>
 <th>Validation</th>
 <th>Test</th>
@@ -401,7 +430,7 @@ line called a pair SL, an SL call is new in the held-out line, and the training 
 <h2>Results: does the score read the line?</h2>
 <p class="prose">A score that reads the line must fall when the line's input is taken away or exchanged. The first
 control gives the genes alone; the second gives a real input of the wrong line.</p>
-<div class="wrap"><table><caption>Table 5. Does the score read the line? Each model minus the same weights with the line's input replaced. Paired difference in recall in the top 10% (model minus control), mean over lines, with a 95% bootstrap interval over lines and the line count. Higher is better.</caption><thead><tr>
+<div class="wrap"><table><caption>Table 6. Does the score read the line? Each model minus the same weights with the line's input replaced. Paired difference in recall in the top 10% (model minus control), mean over lines, with a 95% bootstrap interval over lines and the line count. Higher is better.</caption><thead><tr>
 <th>Row set</th>
 <th>Validation</th>
 <th>Test</th>
@@ -518,27 +547,27 @@ line called SL (53% of the held-out rows) it scores 0.388 / 0.375, AUROC
 0.71 / 0.67. The training label is constant in this set, so this is no copy of the training
 lines' calls. Kebabci scores 0.229 / 0.303 there and KG4SL
 0.290 / 0.226; the difference from Kebabci is +0.159 [+0.060, +0.304] / +0.072 [−0.021, +0.163],
-above zero on validation only (Tables 4 and 6).</li>
+above zero on validation only (Tables 4 and 5).</li>
 <li><b>That ranking comes from the genes, not from the line.</b> In the same set the context-ablated model scores
 0.338 / 0.366, and pan-essentiality, which reads no line, scores
 0.409 / 0.261; the model minus pan-essentiality is
-−0.021 [−0.126, +0.077] / +0.114 [−0.026, +0.269] (Tables 4 and 6).</li>
+−0.021 [−0.126, +0.077] / +0.114 [−0.026, +0.269] (Tables 4 and 5).</li>
 <li><b>The full model does not read the line.</b> The model minus its context-ablated version is
-−0.009 [−0.034, +0.020] / −0.013 [−0.048, +0.018] on all pairs, and in no row set is the interval above zero (Table 5).
+−0.009 [−0.034, +0.020] / −0.013 [−0.048, +0.018] on all pairs, and in no row set is the interval above zero (Table 6).
 Another line's input lowers the score on the pairs that no training line called SL
 (+0.075 [+0.006, +0.153] / +0.072 [+0.003, +0.154]), so the score depends on the line input there, but the right
 line is not above no line (+0.050 [−0.043, +0.157] / +0.009 [−0.073, +0.104]).</li>
 <li><b>The model without cell tokens reads the line on validation only.</b> On all pairs, minus its context-ablated
 version it is
 +0.049 [+0.014, +0.088] / +0.016 [−0.012, +0.045], and minus another line's input
-+0.053 [+0.001, +0.131] / +0.010 [−0.010, +0.031] (Table 5). Validation selected its epoch, so the
++0.053 [+0.001, +0.131] / +0.010 [−0.010, +0.031] (Table 6). Validation selected its epoch, so the
 test side is the one that counts. On new pairs its gain over the mean input
 (+0.177 [−0.024, +0.448] / +0.075 [−0.049, +0.230]) is not a reading of the line: another
 line's input gives the same score (+0.005 [−0.037, +0.053] / +0.009 [−0.066, +0.113]).</li>
 <li><b>Where the training lines differ, the line could decide, and it does not.</b> In that set (3.2% of the
 held-out rows) the model scores 0.411 / 0.564 against 0.371 / 0.564
 for Kebabci, and the model minus its context-ablated version is −0.012 [−0.058, +0.033] / −0.028 [−0.116, +0.050]
-(Tables 4 and 5). The set where every training line called the pair SL has 0.7% of the rows and a high random
+(Tables 4 and 6). The set where every training line called the pair SL has 0.7% of the rows and a high random
 level; it shows nothing.</li>
 <li><b>The cells add nothing.</b> The model without cell tokens is the highest row (0.508 / 0.501).
 The full model minus that model is −0.008 [−0.029, +0.015] / −0.016 [−0.052, +0.018], and CellNet's cell tokens give

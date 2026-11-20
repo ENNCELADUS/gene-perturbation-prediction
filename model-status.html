@@ -99,10 +99,55 @@ a { color: var(--accent); }
 </div>
 
 <ul>
-<li><strong>The gene-knowledge models are above every published baseline on validation and test (run of 2026-11-19): 0.500 / 0.485 with cell tokens against 0.355 / 0.395 for the Kebabci classifier, paired difference +0.145 [+0.090, +0.205] / +0.090 [+0.038, +0.145].</strong></li>
+<li><strong>The gene-knowledge models are above every published baseline on validation and test (Table 1; run of 2026-11-19): 0.500 / 0.485 with cell tokens against 0.355 / 0.395 for the Kebabci classifier, paired difference +0.145 [+0.090, +0.205] / +0.090 [+0.038, +0.145].</strong></li>
 <li>The cell tokens and the GeneEffect pretraining add nothing: the model without cell tokens is the highest row, and the early stop of the pretraining keeps the untrained model.</li>
-<li>By row set, the model with cell tokens scores 0.782 on its training lines, 0.518 / 0.514 on seen pairs of unseen lines and 0.475 / 0.354 on new pairs, where it is not above the Kebabci classifier on test (0.330 / 0.411).</li>
-<li>The score does not yet read the line: the same weights with the line's input replaced by the training-side mean score 0.509 / 0.498 on all pairs (paired difference −0.009 [−0.034, +0.020] / −0.013 [−0.048, +0.018]).</li>
+</ul>
+
+<h2>Where the result holds: seen and unseen lines and pairs</h2>
+<p>Every validation and test line is an unseen line. A pair is seen when the same study labelled it in a training line; else it is new. Each row set is ranked inside it in each screen. Where no training line called a pair SL, an SL call is new in the held-out line, and the training labels cannot rank the set.</p>
+
+<div class="wrap">
+<table>
+<caption><strong>Table 2.</strong> Recall in the top 10% by row set on the multi-study SL benchmark, mean over lines. Training lines: one value, in sample. Unseen lines: validation / test. Higher is better; best model in bold. — : the model has no score for every training row. A training line has no unseen pair. Source: <a href="results/sl_embedding_seed0/summary.html">run record</a>, Tables 3 and 4.</caption>
+<thead><tr><th>Model</th><th class="n">Seen lines, seen pairs (training) ↑</th><th class="n">Unseen lines, seen pairs ↑</th><th class="n">Unseen lines, new pairs ↑</th><th class="n">Unseen lines, seen pairs that no training line called SL ↑</th></tr></thead>
+<tbody>
+<tr class="ours"><td>Ours: gene-knowledge, cell-set model (Figure 2)</td><td class="n">0.782</td><td class="n">0.518 / 0.514</td><td class="n">0.475 / 0.354</td><td class="n"><b>0.388</b> / <b>0.375</b></td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model without cell tokens</td><td class="n"><b>0.898</b></td><td class="n"><b>0.529</b> / <b>0.525</b></td><td class="n">0.472 / 0.403</td><td class="n">0.366 / 0.347</td></tr>
+<tr class="ours"><td>Ours: gene-knowledge, cell-set model with CellNet</td><td class="n">0.883</td><td class="n">0.501 / 0.507</td><td class="n"><b>0.483</b> / 0.426</td><td class="n">0.334 / 0.276</td></tr>
+<tr class="ours"><td>Ours: logistic regression on predicted GeneEffect after a gene&#x27;s loss</td><td class="n">0.407</td><td class="n">0.364 / 0.359</td><td class="n">0.419 / <b>0.534</b></td><td class="n">0.216 / 0.232</td></tr>
+<tr><td>Kebabci 2026 paralog classifier</td><td class="n">—</td><td class="n">0.355 / 0.412</td><td class="n">0.330 / 0.411</td><td class="n">0.229 / 0.303</td></tr>
+<tr><td>KG4SL</td><td class="n">—</td><td class="n">0.374 / 0.368</td><td class="n">0.310 / 0.323</td><td class="n">0.290 / 0.226</td></tr>
+<tr><td>De Kegel 2021 paralog classifier</td><td class="n">—</td><td class="n">0.281 / 0.302</td><td class="n">0.293 / 0.392</td><td class="n">0.170 / 0.206</td></tr>
+<tr><td>Control: gene mean GeneEffect of the two genes (reads no line)</td><td class="n">0.318</td><td class="n">0.353 / 0.292</td><td class="n">0.329 / 0.382</td><td class="n">0.409 / 0.261</td></tr>
+<tr><td>Random score</td><td class="n">0.093</td><td class="n">0.101 / 0.119</td><td class="n">0.224 / 0.220</td><td class="n">0.071 / 0.095</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Does the score read the line?</h2>
+<p>The finished weights are scored again with each line's input replaced; no model is refitted. A score that reads the line must fall when the input is taken away or exchanged.</p>
+
+<div class="wrap">
+<table>
+<caption><strong>Table 3.</strong> Recall in the top 10% on all pairs with the line's input replaced, and the paired difference of the line's own input minus the row (mean over lines, 95% bootstrap interval over lines). Higher recall is better; a difference above zero means that the line's own input helps. Source: run record, Tables 1 and 6.</caption>
+<thead><tr><th>Line input</th><th class="n">Recall, validation ↑</th><th class="n">Recall, test ↑</th><th class="n">Own input minus this row, validation</th><th class="n">Own input minus this row, test</th></tr></thead>
+<tbody>
+<tr class="group"><td colspan="5">Gene-knowledge, cell-set model (Figure 2)</td></tr>
+<tr><td>The line's own expression and cells</td><td class="n">0.500</td><td class="n">0.485</td><td class="n">—</td><td class="n">—</td></tr>
+<tr><td>Context-ablated: the training-side mean expression, no cells</td><td class="n">0.509</td><td class="n">0.498</td><td class="n">−0.009 [−0.034, +0.020]</td><td class="n">−0.013 [−0.048, +0.018]</td></tr>
+<tr><td>Another line's expression and cells</td><td class="n">0.447</td><td class="n">0.496</td><td class="n">+0.054 [+0.005, +0.120]</td><td class="n">−0.011 [−0.042, +0.015]</td></tr>
+<tr class="group"><td colspan="5">Gene-knowledge model without cell tokens</td></tr>
+<tr><td>The line's own expression</td><td class="n">0.508</td><td class="n">0.501</td><td class="n">—</td><td class="n">—</td></tr>
+<tr><td>Context-ablated: the training-side mean expression</td><td class="n">0.460</td><td class="n">0.485</td><td class="n">+0.049 [+0.014, +0.088]</td><td class="n">+0.016 [−0.012, +0.045]</td></tr>
+<tr><td>Another line's expression</td><td class="n">0.456</td><td class="n">0.491</td><td class="n">+0.053 [+0.001, +0.131]</td><td class="n">+0.010 [−0.010, +0.031]</td></tr>
+</tbody>
+</table>
+</div>
+
+<ul>
+<li><strong>The recall falls by a third from the training lines to seen pairs of unseen lines, and again to new pairs, most on test.</strong> On new pairs the model with cell tokens is not above the Kebabci classifier on test (0.354 against 0.411), and our logistic regression is the highest row there (Table 2).</li>
+<li><strong>The model does not only copy the training lines' calls:</strong> on the pairs that no training line called SL it is above random and above each published baseline (against the Kebabci classifier the interval is above zero on validation only). But the gene mean GeneEffect, which reads no line, scores about the same on validation (Table 2).</li>
+<li><strong>The score is a score of the gene pair.</strong> With the line's input taken away the model with cell tokens scores the same; the model without cell tokens gains from its line input on validation only (Table 3).</li>
 </ul>
 
 <h2>Stage one: GeneEffect in the SL held-out lines</h2>
@@ -110,7 +155,7 @@ a { color: var(--accent); }
 
 <div class="wrap">
 <table>
-<caption><strong>Table 2.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect; each reader is fitted on the SL split's training side. Pearson and Spearman: higher is better. MSE: lower is better. Ceiling from the two-screen row, with independent noise of equal size in each screen: Pearson and Spearman √r, MSE half the two-screen MSE.</caption>
+<caption><strong>Table 4.</strong> Stage-one metrics on the 11 SL test lines with GeneEffect; each reader is fitted on the SL split's training side. Pearson and Spearman: higher is better. MSE: lower is better. Ceiling from the two-screen row, with independent noise of equal size in each screen: Pearson and Spearman √r, MSE half the two-screen MSE.</caption>
 <thead><tr><th>Model</th><th class="n">Whole-line Pearson ↑</th><th class="n">MSE ↓</th><th class="n">Per-line residual Spearman ↑</th></tr></thead>
 <tbody>
 <tr class="ours"><td>Our best: linear expression model, wider gene space (SL protocol §13)</td><td class="n">0.9197</td><td class="n">0.0301</td><td class="n">0.1965</td></tr>
