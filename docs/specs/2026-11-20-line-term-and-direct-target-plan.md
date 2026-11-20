@@ -17,7 +17,10 @@ own expression, Tx1-3B's contextual gene embedding, and PIE's predicted change a
 [SL protocol §18](../04-sl-ranking-protocol.md) and the [plan of 2026-11-19](2026-11-19-embedding-transfer-plan.md);
 its results are in the [run record](../../results/sl_embedding_seed0/summary.html).
 
-Date: 2026-11-20. Status: not started.
+Date: 2026-11-20. Status: run on 2026-11-20 (SL protocol §19, [record](../../results/sl_line_term_seed0/summary.html)): the
+direct target gives stage two trained weights and the score now changes with the line; the gain over the residual
+target holds on validation only; the line term and the cell tokens add nothing. The line term's base was changed
+after the first runs (§3).
 
 ## 1. Question
 
