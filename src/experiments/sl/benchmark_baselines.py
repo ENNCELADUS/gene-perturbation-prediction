@@ -126,7 +126,10 @@ NAMES = {
             ("_mean_input", ", context-ablated (the fit lines' mean input)"),
             ("_other_line", " on another line's input"),
             ("_line_term", " with the line term"),
-            ("_line_term_other_line", " with the line term on another line's input"),
+            (
+                "_line_term_other_line",
+                ", the model and the line term on another line's input",
+            ),
         )
     },
     # the PIE editor (configs/sl/pie_editor.yaml): PIE's predicted profile after A's
