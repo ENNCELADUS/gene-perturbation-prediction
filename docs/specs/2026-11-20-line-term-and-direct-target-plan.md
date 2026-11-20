@@ -65,7 +65,8 @@ s(c, A, B) = p(A, B) + D(c, A, B) − mean over r in R of D(r, A, B)
   score of the chosen phase.
 - `D(r, A, B)`: the line head, a second MLP. It reads the pair features of the pair in line `r` (the same features the
   pair head reads) and the gene-in-line features of A and B in line `r` (§4).
-- `R`: the SL training lines. At a training step `R` is a draw of `line_term.reference_lines` of them.
+- `R`: the SL training lines with training rows (genetic screens with both classes). At a training step `R` is a
+  draw of `line_term.reference_lines` of them.
 - The line term trains last, with binary cross-entropy on `s`. Only the line head and its input projections train, so
   `p` stays fixed.
 - The line term is a deviation from the training lines' mean, so the gene pair alone cannot fill it. The line's gain
@@ -558,7 +559,7 @@ git commit -m "feat(sl): the line term trains last as a deviation from the train
   share of the cells that hold it (genes,).
 - Produces: `fit_components(vectors: np.ndarray, components: int) -> tuple[np.ndarray, np.ndarray]` in
   `gene_in_line.py`: the centre (panel,) and an orthonormal basis (panel, components) of the vectors.
-- Produces: the command `hpc/run.sh sl-gene-in-line CONFIG --steps tx1_gene|pie_change [--shard I/N] [--device cuda]`
+- Produces: the command `hpc/run.sh sl-gene-in-line CONFIG --steps tx1_gene|pie_change [--shard I/N]`
   and the caches `<out>/tx1_gene/` and `<out>/pie_change/` in the format of §4.
 - Config `configs/sl/gene_in_line.yaml`: `kind: sl_gene_in_line`, `seed: 0`,
   `joint: configs/revision/frozen_huber.yaml` (its `paths.tx1_model_dir`, `paths.basal_raw_umi` and

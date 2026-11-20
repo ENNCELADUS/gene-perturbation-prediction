@@ -7,7 +7,9 @@ the PIE root of ``sl.pie_pass``).
 
 Each cache is ``<out>/<step>/genes.json`` (the gene axis: the sorted genes of the label
 table) and ``<out>/<step>/<ModelID>.npy`` (genes x width, float16, a NaN row where the
-line has no value for the gene). A line whose file exists is skipped."""
+line has no value for the gene). ``tx1_gene`` skips a line whose file exists;
+``pie_change`` writes every line again when one line's file is missing, so that all
+lines are in one basis of components."""
 
 from __future__ import annotations
 
@@ -93,6 +95,14 @@ def fit_components(
     return centre, vectors_of[:, ::-1][:, :components].astype(np.float32)
 
 
+def var_rows(symbols: pd.Series, genes: Sequence[str]) -> np.ndarray:
+    """The first ``var`` row of each axis gene's symbol (NaN where there is none)."""
+    # the axis holds the upper-cased DepMap symbols (C10ORF105), var the source case
+    upper = symbols.astype(str).str.upper().to_numpy()
+    row = pd.Series(np.arange(len(upper)), index=upper)
+    return row[~row.index.duplicated()].reindex(list(genes)).to_numpy()
+
+
 def tx1_gene(
     config: Mapping[str, Any],
     genes: Sequence[str],
@@ -101,7 +111,8 @@ def tx1_gene(
 ) -> None:
     """Per line of this shard: the mean Tx1-3B embedding of each axis gene over at
     most ``tx1.max_cells`` cells, then the share of those cells that hold it
-    (genes x 2,561). The axis gene takes the first ``var`` row of its symbol."""
+    (genes x 2,561). The axis gene takes the first ``var`` row of its upper-cased
+    symbol."""
     import time
 
     from src.data.basal import symbol_column
@@ -140,9 +151,7 @@ def tx1_gene(
         start = time.monotonic()
         mean, share = encoder(source)
         elapsed = time.monotonic() - start
-        symbols = source.var[symbol_column(source.var)].astype(str).to_numpy()
-        row = pd.Series(np.arange(len(symbols)), index=symbols)
-        at = row[~row.index.duplicated()].reindex(list(genes)).to_numpy()
+        at = var_rows(source.var[symbol_column(source.var)], genes)
         values = np.full((len(genes), EMBEDDING_WIDTH + 1), np.nan, np.float32)
         on = ~np.isnan(at)
         take = at[on].astype(np.int64)
@@ -172,14 +181,15 @@ def pie_change(
     gene, in ``pie.components`` components fitted on a seeded sample of at most
     ``pie.sample`` (line, gene) vectors of the lines with role ``train``. The change
     files are read one at a time; every lost gene of ``genes.parquet`` must have
-    one, so that an unfinished PIE pass does not read as genes without a value."""
+    one, so that an unfinished PIE pass does not read as genes without a value. When
+    every line's file exists, nothing is done; when one is missing, every line is
+    written again, because a new fit can give other components (a sign can change)."""
     root = Path(config["pie"]["root"])
     out = Path(config["out"]) / "pie_change"
     open_cache(out, genes)
     lines = pd.read_parquet(root / "lines.parquet")
     model_ids = [str(m) for m in lines.index]
-    todo = [i for i, m in enumerate(model_ids) if not (out / f"{m}.npy").is_file()]
-    if not todo:
+    if all((out / f"{m}.npy").is_file() for m in model_ids):
         return
     lost = pd.read_parquet(root / "genes.parquet")
     lost = [str(g) for g in lost.index[lost["lost"]]]
@@ -228,7 +238,7 @@ def pie_change(
                     f"{files[gene]}: {change.shape[0]} rows, {len(model_ids)} PIE lines"
                 )
             values[:, k] = (change - centre) @ basis
-    for i in todo:
+    for i in range(len(model_ids)):
         write_npy(out / f"{model_ids[i]}.npy", as_float16(values[i], model_ids[i]))
     write_json(
         out / "report.json",

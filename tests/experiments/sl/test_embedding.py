@@ -350,6 +350,14 @@ def test_gene_in_line_features_align_scale_on_the_fit_lines_and_fail_closed(
     assert not out[:, 2:].any()  # a gene off the cache's axis, and the zero row
     with pytest.raises(FileNotFoundError, match="L4"):
         embedding.read_in_line(tmp_path, ["L1", "L4"], ["A"], fit=["L1"])
+    huge = tmp_path / "huge"
+    huge.mkdir()
+    (huge / "genes.json").write_text(json.dumps(["A", "B"]))
+    for name, values in (("L1", [[0.0], [np.nan]]), ("L2", [[1.0], [np.nan]])):
+        np.save(huge / f"{name}.npy", np.array(values, np.float16))
+    np.save(huge / "L3.npy", np.array([[60000.0], [np.nan]], np.float16))
+    with pytest.raises(ValueError, match="huge"):  # (60000 - 0.5) / 0.5 > float16
+        embedding.read_in_line(huge, ["L1", "L3"], ["A", "B"], fit=["L1", "L2"])
 
 
 def test_own_expression_is_the_lines_value_of_the_gene():
@@ -358,6 +366,9 @@ def test_own_expression_is_the_lines_value_of_the_gene():
     assert out.shape == (2, 3, 2)
     assert out[:, 0].tolist() == [[-1.0, 1.0], [0.5, 1.0]]
     assert not out[:, 1:].any()  # B is not an expression gene; the zero row
+    frame.loc["L1", "A"] = 1.0e6
+    with pytest.raises(ValueError, match="the expression"):
+        embedding.own_expression(frame, ["L2", "L1"], ["A", "B"])
 
 
 def test_the_config_loads_and_a_missing_key_is_refused(tmp_path: Path):

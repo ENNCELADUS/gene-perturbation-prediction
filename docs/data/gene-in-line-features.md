@@ -39,5 +39,8 @@ it reads a cache (`read_in_line`).
   SL validation or test lines are among the 42 is not recorded.
 - `pie_change` stops when a lost gene of PIE's `genes.parquet` has no change file (an incomplete PIE pass). An axis
   gene that is not a lost gene is a NaN row in every line. A labelled line that PIE does not have gets no file.
+- `tx1_gene` skips a line whose file exists. `pie_change` does nothing when every line's file exists; when one is
+  missing, it fits the components again and writes every line, so that all lines are in one basis (a new fit can
+  change the sign of a component).
 - The fit of the PIE components holds about 11 GB in memory (the float32 sample of 200,000 x 6,523 and its centred
   copy).

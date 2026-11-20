@@ -48,6 +48,6 @@ line_term:
   patience: 5
   learning_rate: 1.0e-3
   own_expression: true
-  # PIE's predicted change after the gene's loss (hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml)
+  # PIE's predicted change after the gene's loss (hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps pie_change)
   gene_in_line:
     pie_change: data/sl_gene_in_line/v1/pie_change
