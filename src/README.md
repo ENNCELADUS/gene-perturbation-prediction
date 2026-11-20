@@ -69,7 +69,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `response_mlp`: STATE-free response model.
 - `stage_one`: Stage-one architecture arms (PIE stage-one design §3.3; protocol §16) and the per-gene reader (protocol §18).
 - `state`: STATE driven by ESM2 perturbation tokens on log-space basal HVG cells (2000 genes in STATE's own order, through its released 2000->328 basal encoder); Tx1 embeddings never reach STATE, only the GeneEffect head's context.
-- `tx1`: Tx1-3B (Tahoe-x1) loaded from its released safetensors without flash-attn, and its basal-cell ``EncoderFn``.
+- `tx1`: Tx1-3B (Tahoe-x1) loaded from its released safetensors without flash-attn, its basal-cell ``EncoderFn``, and its encoder of each gene's mean contextual embedding.
 
 ### `training/`
 
@@ -180,6 +180,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `conditional`: The modular SL backbone (SL protocol §11, §12): the reader of a linear model config (the default linear expression model, or the buffer-aware reader with the partner block) fitted on the SL split's training side, the conditional score (B's predicted change when A is lost, read from each line's edited rows), its context-ablated version, a logistic head, the partner flag and the stage-one ceiling of two DepMap screens; optionally each line read in its own genes and co-detection inputs of the head (SL protocol §13).
 - `pie_editor`: The PIE editor of the SL backbone (SL protocol §14): PIE's predicted profile after A's loss, moved to the raw pseudo-bulk's unit and through the reader's normalisation and bridge, in place of the simple edit; PIE's profile of another line (one seeded permutation of the lines) and the measured Perturb-seq profiles of the reference lines as controls; scores for the harness.
 - `pie_pass`: PIE's side of the PIE editor, in ``.venv-pie``: the PIE root's tables for the screened SL lines, the frozen PIE's predicted change after each lost gene, the measured Perturb-seq changes, the masked re-score and PIE's own-task measurement against the other lines' mean response.
+- `gene_in_line`: The gene-in-line caches of the SL model's line term: for each gene of the SL labels in each line, Tx1-3B's mean contextual embedding and the share of cells that hold the gene, and PIE's predicted change after the gene's loss in components fitted on the SL training lines.
 - `paris`: Python port of PARIS (`third_party/paris`): random forests of each dependency gene's GeneEffect on the expression of the training-side lines; with `sl_split`, it scores the held-out rows of the multi-study SL benchmark (selected pair's importance, else 0), in shards that `--merge` joins.
 - `slidr`: Python port of SLIdR (`third_party/slidr`): per lineage of the training-side lines, the rank-sum test of a gene's GeneEffect in the lines with a driver altered against the wild-type lines; it scores the held-out rows of the multi-study SL benchmark by the held line's lineage.
 - `stage_two`: Stage two, first run (SL protocol §10): a PARIS head and a viability-embedding head, scored per held-out line and screen of the SL screen benchmark against their controls.

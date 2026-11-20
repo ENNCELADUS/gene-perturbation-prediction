@@ -183,7 +183,9 @@ def build_encoder(model_dir: Path, batch_size: int, max_length: int):
     if not torch.cuda.is_available():
         raise RuntimeError("A CUDA GPU is required to run the Tx1 input probe")
     install_padding_metadata_fallback()
-    model, vocab, collator_config, load_report = load_local_safetensors(model_dir)
+    model, vocab, collator_config, load_report = load_local_safetensors(
+        model_dir, gene_embeddings=False
+    )
     trainer = Trainer(model=model, device="gpu")
 
     def encode(adata: ad.AnnData) -> np.ndarray:

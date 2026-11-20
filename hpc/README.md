@@ -25,6 +25,7 @@ prints every command's arguments.
 | `sl-embedding` | the gene-knowledge, cell-set SL model: GeneEffect pretraining, then the pair head on gene-in-line embeddings (`sl.embedding`) | one GPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-pie-pass`, `sl-pie-editor` | the PIE editor of the SL backbone: PIE's profile changes, then the scores (`sl.pie_pass`, `sl.pie_editor`) | PIE on GPUs (`.venv-pie`); the editor on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-gene-in-line` | the gene-in-line caches of the SL line term: Tx1-3B's gene embeddings, PIE's predicted changes (`sl.gene_in_line`) | Tx1-3B on GPUs; PIE on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 
 GPU use, measured on 30838 in October 2026 (one H20 per job unless noted; SM is `nvidia-smi dmon`'s busy share):
 
@@ -474,6 +475,20 @@ CUDA_VISIBLE_DEVICES=1 setsid nohup hpc/run.sh sl-embedding configs/sl/embedding
 # the line-input controls of a run that finished before 2026-11-20 (a later run writes them itself)
 CUDA_VISIBLE_DEVICES=0 hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id embedding_seed0 --line-input-controls
 hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_embedding_seed0_v3
+```
+
+`sl-gene-in-line` (`src.experiments.sl.gene_in_line`) writes the gene-in-line caches of the line term
+([card](../docs/data/gene-in-line-features.md)) under `data/sl_gene_in_line/v1/`: `tx1_gene` (Tx1-3B's mean
+contextual embedding of each gene and the share of cells that hold it, at most 256 cells of each SL line, one process
+for each GPU) and `pie_change` (PIE's predicted changes from `sl-pie-pass`, in 64 components fitted on the SL
+training lines, CPU). A line whose file exists is skipped:
+
+```bash
+for i in 0 1 2 3; do
+  CUDA_VISIBLE_DEVICES=$i setsid nohup hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps tx1_gene \
+    --shard $i/4 > outputs/launches/gene_in_line_tx1_$i.log 2>&1 < /dev/null &
+done
+hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps pie_change
 ```
 
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw
