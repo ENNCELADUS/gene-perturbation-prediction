@@ -10,6 +10,12 @@ cells in its own way, and a pair head on the gene-in-line embeddings.
     s(c, A, B) = head([V_A + V_B ; |V_A - V_B| ; V_A * V_B ;
                        u_A * u_B * sum_i w_i t_i^2 ; combinatorial])
     w_i      ~ alpha_Ai alpha_Bi, normalised over the cells
+    e_g      = sum over gene-in-line sources n of E_n(x_g[n])
+    l(c, A, B) = line_head([phi(c, A, B) ; e_A + e_B ; |e_A - e_B| ; e_A * e_B])
+
+``phi`` is the input of the pair head (``features``). The line term ``l`` reads the
+gene-in-line features ``x_g`` of the two genes in the line; the line head ends in a
+zero layer, so the untrained line term is 0.
 
 ``z`` is the scaled GeneEffect stage one trains on; the pair head reads ``V`` and the
 cell tokens, never ``z``. The cells' weights are normalised over the cells alone, so
@@ -48,6 +54,7 @@ class GeneLineModel(nn.Module):
         cell_dim: int,
         hidden: int,
         head_hidden: int,
+        gene_in_line: Mapping[str, int],
     ) -> None:
         super().__init__()
         self.source_names = tuple(sources)
@@ -72,11 +79,27 @@ class GeneLineModel(nn.Module):
         self.head = nn.Sequential(
             nn.Linear(4 * WIDTH + 1, head_hidden), nn.GELU(), nn.Linear(head_hidden, 1)
         )
+        self.line_head = _zero_last(
+            nn.Sequential(
+                nn.Linear(7 * WIDTH + 1, head_hidden),
+                nn.GELU(),
+                nn.Linear(head_hidden, 1),
+            )
+        )
+        self.in_line = nn.ModuleDict(
+            {name: nn.Linear(width, WIDTH) for name, width in gene_in_line.items()}
+        )
 
     def backbone(self) -> list[nn.Parameter]:
-        """Every parameter but the pair head's: what stage one trains."""
-        head = {id(p) for p in self.head.parameters()}
-        return [p for p in self.parameters() if id(p) not in head]
+        """Every parameter but those of the pair head, the line head and the
+        gene-in-line maps: what stage one trains."""
+        heads = {id(p) for p in self.head.parameters()}
+        heads |= {id(p) for p in self.line_parameters()}
+        return [p for p in self.parameters() if id(p) not in heads]
+
+    def line_parameters(self) -> list[nn.Parameter]:
+        """The parameters of the line head and the gene-in-line maps."""
+        return [*self.line_head.parameters(), *self.in_line.parameters()]
 
     def gene_vectors(self) -> Tensor:
         """``u`` for every gene, then one zero row: index -1 is a gene without a
@@ -119,7 +142,7 @@ class GeneLineModel(nn.Module):
         """``z`` (lines, genes)."""
         return self.embed(u, mean, cells, mask).sum(-1)
 
-    def pair(
+    def features(
         self,
         u_a: Tensor,
         u_b: Tensor,
@@ -128,10 +151,11 @@ class GeneLineModel(nn.Module):
         cells: Tensor | None,
         mask: Tensor | None,
     ) -> Tensor:
-        """SL logits of rows (A, B) of one line: ``u_a``, ``u_b`` (rows, width),
-        ``combinatorial`` (rows,), the line's ``mean`` token (width,), its ``cells``
-        (k, width) and their ``mask`` (k,). The same for (A, B) and (B, A); a zero
-        ``u_a`` leaves gene B's embedding alone; without cells the cell term is 0."""
+        """The pair features ``phi`` (rows, 4 * width + 1) of rows (A, B) of one
+        line: ``u_a``, ``u_b`` (rows, width), ``combinatorial`` (rows,), the line's
+        ``mean`` token (width,), its ``cells`` (k, width) and their ``mask`` (k,).
+        The same for (A, B) and (B, A); a zero ``u_a`` leaves gene B's embedding
+        alone; without cells the cell term is 0."""
         h_a = h_b = mean.unsqueeze(0)
         cell = torch.zeros_like(u_a)
         if cells is not None and bool(mask.any()):
@@ -149,4 +173,40 @@ class GeneLineModel(nn.Module):
              combinatorial.unsqueeze(-1).to(v_a.dtype)],
             dim=-1,
         )  # fmt: skip
+        return phi
+
+    def pair(
+        self,
+        u_a: Tensor,
+        u_b: Tensor,
+        combinatorial: Tensor,
+        mean: Tensor,
+        cells: Tensor | None,
+        mask: Tensor | None,
+    ) -> Tensor:
+        """SL logits (rows,) of rows (A, B) of one line: the pair head on
+        ``features``."""
+        phi = self.features(u_a, u_b, combinatorial, mean, cells, mask)
         return self.head(phi).squeeze(-1)
+
+    def line_term(
+        self,
+        u_a: Tensor,
+        u_b: Tensor,
+        combinatorial: Tensor,
+        in_line_a: Mapping[str, Tensor],
+        in_line_b: Mapping[str, Tensor],
+        mean: Tensor,
+        cells: Tensor | None,
+        mask: Tensor | None,
+    ) -> Tensor:
+        """The line term (rows,) of rows (A, B) of one line. ``in_line_a[name]``
+        (rows, width of ``name``) holds the gene-in-line features of gene A; the
+        other arguments are those of ``features``. The same for (A, B) and (B, A)."""
+        e_a, e_b = torch.zeros_like(u_a), torch.zeros_like(u_b)
+        for name, project in self.in_line.items():
+            e_a = e_a + project(in_line_a[name])
+            e_b = e_b + project(in_line_b[name])
+        phi = self.features(u_a, u_b, combinatorial, mean, cells, mask)
+        psi = torch.cat([phi, e_a + e_b, (e_a - e_b).abs(), e_a * e_b], dim=-1)
+        return self.line_head(psi).squeeze(-1)

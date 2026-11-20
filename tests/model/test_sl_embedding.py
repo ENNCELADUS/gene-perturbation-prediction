@@ -21,6 +21,7 @@ def model(seed: int = 0) -> GeneLineModel:
         cell_dim=CELL,
         hidden=16,
         head_hidden=16,
+        gene_in_line={"own": 3},
     )
     # a trained state: the zero layers and the deviation are no longer zero
     for parameter in (built.mean_token[-1].weight, built.cell_token[-1].weight,
@@ -42,6 +43,7 @@ def test_untrained_model_predicts_the_gene_mean():
     fresh = GeneLineModel(
         {"text": (torch.randn(GENES, 5), torch.ones(GENES, dtype=torch.bool))},
         expression_dim=EXPRESSION, cell_dim=CELL, hidden=16, head_hidden=16,
+        gene_in_line={},
     )  # fmt: skip
     expression, cells, mask = inputs()
     mean, tokens = fresh.tokens(expression, cells)
@@ -55,7 +57,9 @@ def test_gene_vectors_end_with_a_zero_row_and_backbone_leaves_the_head_out():
     assert u.shape == (GENES + 1, WIDTH) and torch.all(u[-1] == 0)
     head = {id(p) for p in built.head.parameters()}
     assert head and not head & {id(p) for p in built.backbone()}
-    assert len(built.backbone()) + len(head) == len(list(built.parameters()))
+    assert len(built.backbone()) + len(head) + len(built.line_parameters()) == len(
+        list(built.parameters())
+    )
 
 
 def test_cell_order_and_cell_count_do_not_change_the_embedding():
@@ -121,3 +125,31 @@ def test_pair_score_stays_finite_when_two_genes_read_different_cells():
         u_a, u_b, torch.ones(1, dtype=torch.bool), torch.zeros(WIDTH), cells, mask
     )
     assert torch.isfinite(score).all()
+
+
+def test_line_term_starts_at_zero_and_is_the_same_for_both_orders():
+    built = model()
+    expression, cells, mask = inputs(lines=1)
+    u = built.gene_vectors()
+    a, b = torch.tensor([0, 2, -1, 5]), torch.tensor([1, 4, 3, 5])
+    flag = torch.tensor([True, True, False, True])
+    mean, tokens = built.tokens(expression, cells)
+    own = torch.randn(GENES + 1, 3)
+    line = (mean[0], tokens[0], mask[0])
+    start = built.line_term(u[a], u[b], flag, {"own": own[a]}, {"own": own[b]}, *line)
+    assert start.shape == (4,) and torch.all(start == 0)
+    torch.nn.init.normal_(built.line_head[-1].weight, std=0.5)
+    forward = built.line_term(u[a], u[b], flag, {"own": own[a]}, {"own": own[b]}, *line)
+    backward = built.line_term(
+        u[b], u[a], flag, {"own": own[b]}, {"own": own[a]}, *line
+    )
+    assert forward.abs().sum() > 0 and torch.allclose(forward, backward, atol=1e-5)
+    other = built.line_term(u[a], u[b], flag, {"own": own[b]}, {"own": own[b]}, *line)
+    assert not torch.allclose(forward, other)  # the gene-in-line features are read
+    no_cells = built.line_term(
+        u[a], u[b], flag, {"own": own[a]}, {"own": own[b]}, mean[0], None, None
+    )
+    assert torch.isfinite(no_cells).all()
+    with_line = {id(p) for p in built.line_parameters()}
+    assert with_line and not with_line & {id(p) for p in built.backbone()}
+    assert not with_line & {id(p) for p in built.head.parameters()}
