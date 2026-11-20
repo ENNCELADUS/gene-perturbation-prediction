@@ -75,6 +75,11 @@ a { color: var(--accent); }
 <h2>Stage two: SL ranking</h2>
 <p>Recall in the top 10%: the SL pairs that a model ranks in a screen's top 10%, divided by the smaller of the screen's SL pairs and its top-10% places, so a perfect ranking gives 1. It is averaged over screens, then studies, then held-out lines. Random gives about 0.10, more in screens with over 10% SL pairs. Seed 0, one run per model; validation selects, test is scored once.</p>
 
+<figure style="margin:0;display:grid;gap:6px">
+<img src="results/sl_embedding_seed0/figures/all_pairs.svg" alt="Dot chart of recall in the top 10% on all pairs: the three gene-knowledge models are near 0.5 on validation and test, every other model is at or below 0.4." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff">
+<figcaption class="muted"><strong>Figure 3.</strong> Recall in the top 10% on all pairs; higher is better. Orange diamond: validation lines. Blue circle: test lines. The values beside three rows are validation / test.</figcaption>
+</figure>
+
 <div class="wrap">
 <table>
 <caption><strong>Table 1.</strong> Recall in the top 10% and AUROC (random 0.5) on the multi-study SL benchmark (17 validation lines, 16 test lines; measured GeneEffect 12 and 11). Higher is better. Rows are ranked by test recall. Best value in bold; a perfect ranking gives 1.</caption>
@@ -104,7 +109,12 @@ a { color: var(--accent); }
 </ul>
 
 <h2>Where the result holds: seen and unseen lines and pairs</h2>
-<p>Every validation and test line is an unseen line. A pair is seen when the same study labelled it in a training line; else it is new. Each row set is ranked inside it in each screen. Where no training line called a pair SL, an SL call is new in the held-out line, and the training labels cannot rank the set.</p>
+<p>A pair is seen when the same study labelled it in a training line; else it is new. Every validation and test line is an unseen line.</p>
+
+<figure style="margin:0;display:grid;gap:6px">
+<img src="results/sl_embedding_seed0/figures/row_sets.svg" alt="Four dot charts of recall in the top 10%: the gene-knowledge models score 0.78 to 0.90 on the training lines, about 0.52 on seen pairs of unseen lines, less on new pairs, and about 0.37 on seen pairs that no training line called SL." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff">
+<figcaption class="muted"><strong>Figure 4.</strong> Recall in the top 10% on the training lines (grey square, in sample) and on three sets of pairs of the unseen lines; higher is better. Orange diamond: validation lines. Blue circle: test lines.</figcaption>
+</figure>
 
 <div class="wrap">
 <table>
@@ -125,7 +135,12 @@ a { color: var(--accent); }
 </div>
 
 <h2>Does the score read the line?</h2>
-<p>The finished weights are scored again with each line's input replaced; no model is refitted. A score that reads the line must fall when the input is taken away or exchanged.</p>
+<p>The finished weights are scored again with each line's input replaced; no model is refitted.</p>
+
+<figure style="margin:0;display:grid;gap:6px">
+<img src="results/sl_embedding_seed0/figures/line_input.svg" alt="Four interval charts of the paired difference between a model and the same weights with the line input replaced; most intervals include zero." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff">
+<figcaption class="muted"><strong>Figure 5.</strong> Each model minus the same weights with the line's input replaced: the paired difference in recall in the top 10% with its 95% interval over lines. Orange diamond: validation lines. Blue circle: test lines. An interval to the right of zero means that the line's own input helps.</figcaption>
+</figure>
 
 <div class="wrap">
 <table>
@@ -145,9 +160,9 @@ a { color: var(--accent); }
 </div>
 
 <ul>
-<li><strong>The recall falls by a third from the training lines to seen pairs of unseen lines, and again to new pairs, most on test.</strong> On new pairs the model with cell tokens is not above the Kebabci classifier on test (0.354 against 0.411), and our logistic regression is the highest row there (Table 2).</li>
-<li><strong>The model does not only copy the training lines' calls:</strong> on the pairs that no training line called SL it is above random and above each published baseline (against the Kebabci classifier the interval is above zero on validation only). But the gene mean GeneEffect, which reads no line, scores about the same on validation (Table 2).</li>
-<li><strong>The score is a score of the gene pair.</strong> With the line's input taken away the model with cell tokens scores the same; the model without cell tokens gains from its line input on validation only (Table 3).</li>
+<li><strong>The recall falls from the training lines to seen pairs of unseen lines, and again to new pairs</strong> (Figure 4).</li>
+<li><strong>The model does not only copy the training lines' calls:</strong> it is above the published baselines on the pairs that no training line called SL. The gene mean GeneEffect, which reads no line, is near it on validation (Figure 4, right).</li>
+<li><strong>The score is a score of the gene pair:</strong> with the line's input taken away, the model with cell tokens scores the same (Figure 5).</li>
 </ul>
 
 <h2>Stage one: GeneEffect in the SL held-out lines</h2>
