@@ -20,12 +20,13 @@ the `docs/data/` card before using a dataset. Results live in `results/`.
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.
 
-## Current state (2026-11-19)
+## Current state (2026-11-20)
 
 Replace this section on every update; history lives in `results/` and the protocol.
 
-- **Stage two**: modular SL backbone, buffer-aware head 0.394 / 0.361 < training SL fraction. Three modules of the [plan](docs/specs/2026-11-12-pie-and-single-cell-plan.md) ran, all null: PIE's profile as the editor (SL protocol §14, [record](results/sl_pie_editor_seed0/README.md); below the simple edit, equal to another line's profile; 66 of 86 lines had no context text),
-  own-gene space and co-detection (§13, [record](results/sl_single_cell_inputs_seed0/README.md)). The labels hold a small line-specific signal (§15). Built, not run: the gene-knowledge, cell-set model (§18, [plan](docs/specs/2026-11-19-embedding-transfer-plan.md)): GeneEffect pretraining without the SL lines, then a pair head on gene-in-line embeddings (`hpc/run.sh sl-embedding`).
+- **Stage two**: the gene-knowledge, cell-set model (SL protocol §18, [record](results/sl_embedding_seed0/summary.html), [plan](docs/specs/2026-11-19-embedding-transfer-plan.md), `hpc/run.sh sl-embedding`) scores 0.500 / 0.485 (val / test), above every published baseline (against Kebabci +0.145 [+0.084, +0.203] / +0.090 [+0.037, +0.147]). Without cell tokens it scores 0.508 / 0.501: Tx1 and CellNet cell tokens add nothing, and GeneEffect pretraining adds nothing (the early stop keeps the untrained model; the whole model then trains on the SL labels). The gain is on pairs that the training lines labelled the same way; it is not shown on new pairs (test), and where the label differs the model ranks by the training label (AUROC 0.32 / 0.28), so the score does not yet follow the line.
+  Earlier: modular SL backbone, buffer-aware head 0.394 / 0.361 < training SL fraction. Three modules of the [plan](docs/specs/2026-11-12-pie-and-single-cell-plan.md) ran, all null: PIE's profile as the editor (SL protocol §14, [record](results/sl_pie_editor_seed0/README.md); below the simple edit, equal to another line's profile; 66 of 86 lines had no context text),
+  own-gene space and co-detection (§13, [record](results/sl_single_cell_inputs_seed0/README.md)). The labels hold a small line-specific signal (§15).
 - **Multi-study SL benchmark** ([card](docs/data/sl-benchmark.html), [model status](model-status.html)): labels in `data/sl_studies/benchmark_v2` (H20);
   headline = recall in the top 10% of genetic two-class screens, over min(SL pairs, top places) so the ceiling is 1,
   averaged over screens, studies, then lines (77 lines, 44/17/16, placed by hand). 2026-11-13 (run `_v3`), val / test:

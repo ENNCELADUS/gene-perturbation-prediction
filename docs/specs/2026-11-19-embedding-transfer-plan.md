@@ -1,6 +1,8 @@
 # Plan: stage one as pretraining, stage two on the deep model's embeddings
 
-Date: 2026-11-19. Status: built (SL protocol §18), not run. This plan follows the goal set on 2026-11-19 (blueprint §5):
+Date: 2026-11-19. Status: run on 2026-11-19 (SL protocol §18,
+[record](../../results/sl_embedding_seed0/summary.html)): above the published baselines on all pairs; the pretraining and
+the cell tokens add nothing. This plan follows the goal set on 2026-11-19 (blueprint §5):
 the result that counts is SL ranking in held-out lines. Stage one is pretraining. Its GeneEffect accuracy is reported
 and is no bar. Stage two reads the deep model's embeddings, not its predicted GeneEffect. It is a plan, not a
 protocol. The study asks one question of one architecture (§3): can a deep model beat the baselines on SL?
