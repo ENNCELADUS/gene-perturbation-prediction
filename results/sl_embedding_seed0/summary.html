@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gene-Knowledge SL Model</title>
+<style>
+/* Layout: one reading column, a verdict ledger up top, then one section per stage with paper-style tables. */
+:root {
+  --bg: #f6f7f5;
+  --surface: #ffffff;
+  --ink: #1b2420;
+  --muted: #5b6862;
+  --rule: #d5dbd7;
+  --accent: #1f5f73;
+  --accent-soft: #e3eef1;
+  --neg: #9a3b2c;
+  --neg-soft: #f6e6e2;
+  --pos: #2e6b3f;
+  --pos-soft: #e3f0e6;
+  --flat: #6d6420;
+  --flat-soft: #f2efd9;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121715; --surface: #1a211e; --ink: #e3e9e5; --muted: #9aa8a1; --rule: #2f3a35;
+    --accent: #7fbfd1; --accent-soft: #1d3138; --neg: #e59a8b; --neg-soft: #3a2420;
+    --pos: #8fcf9f; --pos-soft: #1f3325; --flat: #d8cb7a; --flat-soft: #34301a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121715; --surface: #1a211e; --ink: #e3e9e5; --muted: #9aa8a1; --rule: #2f3a35;
+  --accent: #7fbfd1; --accent-soft: #1d3138; --neg: #e59a8b; --neg-soft: #3a2420;
+  --pos: #8fcf9f; --pos-soft: #1f3325; --flat: #d8cb7a; --flat-soft: #34301a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 980px; margin: 0 auto; display: grid; gap: 48px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 2.1rem; }
+h2 { font-size: 1.5rem; padding-bottom: 6px; border-bottom: 1px solid var(--rule); }
+h3 { font-size: 1.1rem; }
+p { margin: 0; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font: 0.86em var(--mono); background: var(--accent-soft); padding: 1px 4px; border-radius: 3px; }
+section { display: grid; gap: 18px; min-width: 0; }
+section > *, header > * { min-width: 0; }
+.eyebrow { font: 600 0.72rem/1 var(--body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 12px; }
+.meta { color: var(--muted); font-size: 0.88rem; }
+
+/* verdict ledger */
+.ledger { display: grid; border-top: 1px solid var(--rule); }
+.ledger > div {
+  display: grid; grid-template-columns: 11rem 7.5rem 1fr; gap: 16px; align-items: baseline;
+  padding: 12px 0; border-bottom: 1px solid var(--rule);
+}
+.ledger .what { font-weight: 600; }
+.chip { justify-self: start; font: 600 0.72rem/1 var(--body); letter-spacing: 0.04em; padding: 5px 8px; border-radius: 3px; white-space: nowrap; }
+.chip.neg { color: var(--neg); background: var(--neg-soft); }
+.chip.pos { color: var(--pos); background: var(--pos-soft); }
+.chip.flat { color: var(--flat); background: var(--flat-soft); }
+.chip.next { color: var(--accent); background: var(--accent-soft); }
+@media (max-width: 640px) {
+  .ledger > div { grid-template-columns: 1fr; gap: 6px; }
+}
+
+/* tables */
+figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+figcaption { font-size: 0.88rem; color: var(--muted); max-width: 80ch; }
+figcaption b { color: var(--ink); }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--rule); }
+th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 15rem; }
+thead th { font-weight: 600; color: var(--muted); font-size: 0.78rem; vertical-align: bottom; border-bottom: 1.5px solid var(--ink); }
+tbody tr:last-child td { border-bottom: none; }
+tr.group td { font-style: italic; color: var(--muted); background: var(--bg); padding-top: 8px; }
+td.l { text-align: left; }
+.neg-n { color: var(--neg); }
+.reading { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; max-width: 80ch; }
+.reading li { padding-left: 14px; border-left: 2px solid var(--rule); }
+ol.next { margin: 0; padding-left: 1.3rem; display: grid; gap: 8px; max-width: 80ch; }
+.sources { font-size: 0.86rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+
+.nl { font-weight: 400; color: var(--muted); font-size: 0.72rem; }
+thead th { white-space: normal; min-width: 4.2rem; }
+
+/* report tables */
+.wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+caption { caption-side: top; text-align: left; padding: 10px 10px 8px; font-size: 0.88rem; color: var(--muted); max-width: 90ch; }
+code { overflow-wrap: anywhere; }
+main > * { min-width: 0; }
+ul.plain { margin: 0; padding-left: 1.2rem; display: grid; gap: 6px; max-width: 80ch; }
+</style>
+</head>
+<body>
+<main>
+<header>
+<p class="eyebrow">Stage two · SL benchmark</p>
+<h1>The Gene-Knowledge, Cell-Set Model on the SL Benchmark</h1>
+<p class="meta">Runs <code>embedding_seed0</code>, <code>embedding_mean_token_seed0</code>,
+<code>embedding_cellnet_seed0</code> and <code>embedding_mean_token_slow_stage_one_seed0</code>, scored by
+<code>benchmark_embedding_seed0</code>, on the H20 (ports 30838 and 30757), seed 0, 2026-11-19. Model and training:
+<a href="../../docs/04-sl-ranking-protocol.md">SL protocol</a> §18. Reasons:
+<a href="../../docs/specs/2026-11-19-embedding-transfer-plan.md">plan</a>.</p>
+<div class="ledger">
+<div><span class="what">SL against the baselines</span><span class="chip pos">ABOVE</span><span>Recall in the top 10%
+is 0.500 validation / 0.485 test, against 0.355 / 0.395 for the best published baseline. Every interval against a
+baseline is above zero on all pairs (Table 2).</span></div>
+<div><span class="what">Cell tokens</span><span class="chip flat">NO GAIN</span><span>The model without cell tokens
+scores 0.508 / 0.501. Tx1-3B and CellNet cell tokens do not raise it (Table 2).</span></div>
+<div><span class="what">GeneEffect pretraining</span><span class="chip flat">NO GAIN</span><span>The early stop keeps
+the untrained model in all four runs (Table 7). The SL result comes from the training of the whole model on the SL
+labels.</span></div>
+<div><span class="what">A score that follows the line</span><span class="chip neg">NOT SHOWN</span><span>On pairs whose
+label differs from the training lines the model is below the baselines, and on new pairs the test difference is not
+above zero (Tables 3 and 4).</span></div>
+</div>
+</header>
+<section>
+<h2>Question</h2>
+<p class="prose">Can a deep model beat the baselines on SL ranking in held-out cell lines? This is the experiment of
+the plan (§4): one architecture, one config, seed 0. Stage one is pretraining on GeneEffect and its accuracy is no
+aim. Stage two reads the model's gene-in-line embeddings, not its predicted GeneEffect.</p>
+</section>
+<section>
+<h2>Benchmark</h2>
+<ul class="plain">
+<li>Labels: <code>data/sl_studies/benchmark_v2</code> on the H20
+(<a href="../../docs/data/sl-benchmark.html">card</a>). The SL split
+(<code>configs/benchmarks/cell_line_sl_split.json</code>) places 77 lines by hand: 44 training, 17 validation and 16
+test. Rows: 1,420,001 training, 255,286 validation and 288,470 test.</li>
+<li>A screen is the set of pairs that one study tested in one line with one method. The headline uses the genetic
+screens with both classes: recall in the top 10% of each screen, over the smaller of its SL pairs and its top-10%
+places, averaged over screens, then studies, then lines.</li>
+<li>Every held-out line enters a model only through its basal expression and cells. Negatives are tested and not
+called; they are not true negatives.</li>
+<li>The harness report's Table 1 header gives 15 / 13 held-out lines. That is the line count of one control. The
+models are averaged over 17 / 16 lines (<a href="host/benchmark_all_lines_summary.csv">summary</a>).</li>
+</ul>
+</section>
+<section>
+<h2>Rows</h2>
+<ul class="plain">
+<li><b>Gene-knowledge, cell-set model (Tx1-3B cell tokens)</b>: the model of the plan. A gene vector from three frozen
+sources (function text, ESM C 600M protein, STRING space) plus a free deviation; a line as a mean token (an MLP over
+its mean expression) and one token for each cell (a linear map of the cell's frozen Tx1-3B embedding); each gene
+weights the cells in its own way; a pair head on the gene-in-line embeddings of the two genes.</li>
+<li><b>Gene-knowledge model without cell tokens</b>: the same model and training, every line on its mean token
+alone. The difference from the full model is what the cells add.</li>
+<li><b>Gene-knowledge, cell-set model with CellNet's cell embeddings</b>: the same model with another frozen cell
+encoder (CellNet, arXiv:2610.21943) for the same cells.</li>
+<li><b>Stage one at a tenth of the learning rate</b>: the model without cell tokens, with a slower pretraining. It
+is no harness row, because its SL scores are equal to those of the model without cell tokens (Table 6).</li>
+<li><b>Backbone head on the buffer-aware reader's terms</b>: the project's earlier stage-two model, a logistic head
+on predicted GeneEffect terms (SL protocol §12).</li>
+<li><b>Published baselines</b>: KG4SL, Cilantro-SL, PARIS, SLIdR, De Kegel 2021, Kebabci 2026 and MiT4SL, as in the
+<a href="../sl_study_benchmark/summary.html">baseline record</a>. Rows that score only part of the held-out pairs
+give the other pairs one fill score.</li>
+<li><b>Controls and references</b>: stage one's predicted GeneEffect, pan-essentiality, measured GeneEffect, the
+labels (the ceiling) and a random score.</li>
+</ul>
+</section>
+<section>
+<h2>What ran</h2>
+<p class="prose">Each run is <code>hpc/run.sh sl-embedding &lt;config&gt;</code> on one GPU: stage one on the
+GeneEffect of 928 lines without an SL label (366 with cells), with the early stop on the 47 SL training lines with
+GeneEffect; then stage two on the 1,146,517 rows of the 44 SL training lines, first the pair head on the frozen
+model, then the whole model with the GeneEffect loss at weight 1. Validation recall in the top 10% selects the epoch
+and the phase. Outputs: <code>outputs/sl/embedding/&lt;run&gt;/</code> and
+<code>outputs/sl/benchmark_baselines/benchmark_embedding_seed0/</code>. Copied reports:
+<a href="host/benchmark_results.md">harness</a> (<a href="host/benchmark_run_config.json">config</a>,
+<a href="host/benchmark_all_lines_summary.csv">AUROC and AUPRC of every row</a>),
+<a href="host/embedding_seed0.md">full model</a>, <a href="host/embedding_mean_token_seed0.md">without cell
+tokens</a>, <a href="host/embedding_cellnet_seed0.md">CellNet</a>,
+<a href="host/embedding_mean_token_slow_stage_one_seed0.md">slower stage one</a>, each with its
+<code>_metrics.json</code>; <a href="host/line_input_check.md">line-input check</a>
+(<a href="host/line_input_check.py">script</a>);
+<a href="host/linear_model_conditional_buffer_seed0.md">linear expression model</a>. The score tables,
+<code>best.pt</code>, <code>lines.csv</code> and <code>lists.csv</code> stay on the H20.</p>
+<div class="wrap"><table><caption>Steps and finish times (UTC). — : not recorded.</caption>
+<thead><tr><th>Step</th><th>Port</th><th>Code</th><th>Finished (UTC)</th></tr></thead><tbody>
+<tr><td>Gene sources: function text, ESM C 600M, STRING space (17,787 genes)</td><td>—</td><td>—</td><td>2026-11-19 20:28</td></tr>
+<tr><td>Model without cell tokens (<code>configs/sl/embedding_mean_token.yaml</code>)</td><td>30757</td><td><code>6325dfc</code></td><td>2026-11-19 20:33</td></tr>
+<tr><td>CellNet embeddings of the cells of 454 lines</td><td>30757</td><td>—</td><td>2026-11-19 20:44</td></tr>
+<tr><td>CellNet variant (<code>configs/sl/embedding_cellnet.yaml</code>)</td><td>30757</td><td><code>db8a96e</code></td><td>2026-11-19 20:48</td></tr>
+<tr><td>Slower stage one (<code>configs/sl/embedding_mean_token_slow_stage_one.yaml</code>)</td><td>30757</td><td><code>bee1bcc</code></td><td>2026-11-19 20:48</td></tr>
+<tr><td>Tx1-3B embeddings of the 22 SL lines that had none</td><td>30838</td><td>—</td><td>2026-11-19 21:54</td></tr>
+<tr><td>Full model (<code>configs/sl/embedding.yaml</code>)</td><td>30838</td><td><code>bee1bcc</code></td><td>2026-11-19 23:05</td></tr>
+<tr><td>Harness (<code>hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml</code>)</td><td>30838</td><td><code>bee1bcc</code></td><td>2026-11-19 23:18</td></tr>
+<tr><td>Line-input check of the model without cell tokens</td><td>30838</td><td><code>bee1bcc</code></td><td>2026-11-20 05:40</td></tr>
+</tbody></table></div>
+</section>
+<section>
+<h2>Results: SL</h2>
+<p class="prose">Recall in the top 10% is the share of a screen's SL pairs that a model ranks in the screen's top
+10%, over the smaller of the SL pairs and the top-10% places. The baselines' scores are those of the run of
+2026-11-13, read again by this harness run.</p>
+<div class="wrap"><table><caption>Table 1. The multi-study SL benchmark, all pairs, mean over held-out lines (17 validation, 16 test; each line: the mean over its studies of the mean over their genetic screens with both classes). Recall in the top 10% (a perfect ranking gives 1, a random one about 0.10), AUROC (random 0.5) and AUPRC over the positive rate (random 1). Higher is better. Best model in bold; the controls are not ranked. Validation selected each model's epoch and phase; test was scored once.</caption><thead><tr>
+<th>Model</th>
+<th>Recall, validation</th>
+<th>Recall, test</th>
+<th>AUROC, validation</th>
+<th>AUROC, test</th>
+<th>AUPRC over positive rate, validation</th>
+<th>AUPRC over positive rate, test</th>
+</tr></thead><tbody>
+<tr class="group"><td colspan="7">This run</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>0.500</td><td>0.485</td><td>0.787</td><td>0.774</td><td>20.0</td><td>7.9</td></tr>
+<tr><td>Gene-knowledge model without cell tokens</td><td><b>0.508</b></td><td><b>0.501</b></td><td><b>0.789</b></td><td><b>0.776</b></td><td>17.5</td><td><b>8.5</b></td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings</td><td>0.486</td><td>0.473</td><td>0.783</td><td>0.766</td><td>9.8</td><td>8.0</td></tr>
+<tr class="group"><td colspan="7">Earlier model of this project</td></tr>
+<tr><td>Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>0.394</td><td>0.361</td><td>0.743</td><td>0.716</td><td>5.1</td><td>4.2</td></tr>
+<tr class="group"><td colspan="7">Published baselines</td></tr>
+<tr><td>Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>0.355</td><td>0.395</td><td>0.656</td><td>0.664</td><td>5.7</td><td>6.4</td></tr>
+<tr><td>KG4SL</td><td>0.367</td><td>0.338</td><td>0.689</td><td>0.653</td><td>3.4</td><td>3.0</td></tr>
+<tr><td>De Kegel 2021 paralog classifier</td><td>0.281</td><td>0.293</td><td>0.656</td><td>0.665</td><td>3.3</td><td>3.9</td></tr>
+<tr><td>PARIS</td><td>0.220</td><td>0.213</td><td>0.573</td><td>0.573</td><td><b>33.9</b></td><td>2.8</td></tr>
+<tr><td>MiT4SL</td><td>0.154</td><td>0.138</td><td>0.589</td><td>0.556</td><td>1.6</td><td>1.4</td></tr>
+<tr><td>Cilantro-SL</td><td>0.123</td><td>0.134</td><td>0.507</td><td>0.510</td><td>1.2</td><td>1.2</td></tr>
+<tr><td>SLIdR</td><td>0.095</td><td>0.115</td><td>0.483</td><td>0.498</td><td>1.0</td><td>1.0</td></tr>
+<tr class="group"><td colspan="7">Controls and references</td></tr>
+<tr><td>Stage one&#x27;s predicted GeneEffect (linear expression model)</td><td>0.381</td><td>0.298</td><td>0.730</td><td>0.683</td><td>4.6</td><td>3.6</td></tr>
+<tr><td>Pan-essentiality (gene mean GeneEffect)</td><td>0.380</td><td>0.297</td><td>0.728</td><td>0.679</td><td>4.5</td><td>3.5</td></tr>
+<tr><td>Measured GeneEffect (reference, 12 / 11 lines with GeneEffect)</td><td>0.425</td><td>0.296</td><td>0.737</td><td>0.639</td><td>7.5</td><td>3.9</td></tr>
+<tr><td>Labels as the score (check: the ceiling)</td><td>1.000</td><td>1.000</td><td>1.000</td><td>1.000</td><td>96.3</td><td>396.5</td></tr>
+<tr><td>Random score (check)</td><td>0.102</td><td>0.124</td><td>0.496</td><td>0.519</td><td>1.1</td><td>1.2</td></tr>
+</tbody></table></div>
+<div class="wrap"><table><caption>Table 2. All pairs. Paired difference in recall in the top 10% (model minus control), mean over lines, with a 95% bootstrap interval over lines and the line count. Higher is better.</caption><thead><tr>
+<th>Model − control</th>
+<th>Validation</th>
+<th>Test</th>
+</tr></thead><tbody>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Gene-knowledge model without cell tokens</td><td>-0.008 [-0.029, +0.013] (17)</td><td>-0.016 [-0.053, +0.015] (16)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge model without cell tokens</td><td>-0.023 [-0.056, +0.005] (17)</td><td>-0.028 [-0.072, +0.006] (16)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>-0.014 [-0.037, +0.008] (17)</td><td>-0.012 [-0.044, +0.018] (16)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>+0.145 [+0.084, +0.203] (17)</td><td>+0.090 [+0.037, +0.147] (16)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − KG4SL</td><td>+0.133 [+0.059, +0.211] (17)</td><td>+0.147 [+0.072, +0.227] (16)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>+0.106 [+0.051, +0.165] (17)</td><td>+0.124 [+0.059, +0.193] (16)</td></tr>
+</tbody></table></div>
+<div class="wrap"><table><caption>Table 3. Recall in the top 10% for each stratum and subset of held-out pairs, ranked inside it in each screen, mean over lines (validation / test). Higher is better. A stratum with many SL pairs has a high random level: see the random score. Held-out rows: seen pair, label agrees 303,670; seen pair, label differs 8,164; new pair 231,745; partner pairs 81,657; no gene a dependency alone 286,650.</caption><thead><tr>
+<th>Model</th>
+<th>Seen pair, label agrees with the training lines</th>
+<th>Seen pair, label differs from the training lines</th>
+<th>New pair, both genes seen</th>
+<th>Partner pairs</th>
+<th>No gene a dependency alone</th>
+</tr></thead><tbody>
+<tr class="group"><td colspan="6">This run</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>0.673 / 0.749</td><td>0.320 / 0.423</td><td>0.475 / 0.354</td><td>0.455 / 0.471</td><td>0.544 / 0.497</td></tr>
+<tr><td>Gene-knowledge model without cell tokens</td><td>0.725 / 0.820</td><td>0.263 / 0.346</td><td>0.472 / 0.403</td><td>0.512 / 0.560</td><td>0.556 / 0.552</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings</td><td>0.671 / 0.809</td><td>0.297 / 0.342</td><td>0.483 / 0.426</td><td>0.430 / 0.547</td><td>0.544 / 0.497</td></tr>
+<tr class="group"><td colspan="6">Earlier model of this project</td></tr>
+<tr><td>Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>0.537 / 0.552</td><td>0.392 / 0.440</td><td>0.419 / 0.534</td><td>0.356 / 0.346</td><td>0.431 / 0.376</td></tr>
+<tr class="group"><td colspan="6">Published baselines</td></tr>
+<tr><td>Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>0.399 / 0.547</td><td>0.441 / 0.518</td><td>0.330 / 0.411</td><td>0.483 / 0.485</td><td>0.439 / 0.416</td></tr>
+<tr><td>KG4SL</td><td>0.538 / 0.579</td><td>0.431 / 0.432</td><td>0.310 / 0.323</td><td>0.370 / 0.365</td><td>0.378 / 0.364</td></tr>
+<tr><td>De Kegel 2021 paralog classifier</td><td>0.359 / 0.458</td><td>0.499 / 0.496</td><td>0.293 / 0.392</td><td>0.338 / 0.313</td><td>0.331 / 0.320</td></tr>
+<tr><td>PARIS</td><td>0.251 / 0.275</td><td>0.482 / 0.432</td><td>0.322 / 0.402</td><td>0.260 / 0.275</td><td>0.207 / 0.236</td></tr>
+<tr><td>MiT4SL</td><td>0.135 / 0.200</td><td>0.555 / 0.552</td><td>0.148 / 0.270</td><td>0.130 / 0.161</td><td>0.185 / 0.151</td></tr>
+<tr><td>Cilantro-SL</td><td>0.129 / 0.139</td><td>0.545 / 0.574</td><td>0.174 / 0.222</td><td>0.126 / 0.143</td><td>0.133 / 0.145</td></tr>
+<tr><td>SLIdR</td><td>0.103 / 0.107</td><td>0.571 / 0.638</td><td>0.161 / 0.259</td><td>0.091 / 0.134</td><td>0.108 / 0.120</td></tr>
+<tr class="group"><td colspan="6">Controls and references</td></tr>
+<tr><td>Stage one&#x27;s predicted GeneEffect (linear expression model)</td><td>0.411 / 0.335</td><td>0.586 / 0.581</td><td>0.325 / 0.314</td><td>0.301 / 0.323</td><td>0.389 / 0.279</td></tr>
+<tr><td>Pan-essentiality (gene mean GeneEffect)</td><td>0.412 / 0.337</td><td>0.586 / 0.632</td><td>0.329 / 0.382</td><td>0.294 / 0.299</td><td>0.376 / 0.285</td></tr>
+<tr><td>Measured GeneEffect (reference, 12 / 11 lines with GeneEffect)</td><td>0.472 / 0.286</td><td>0.628 / 0.667</td><td>0.281 / 0.416</td><td>0.374 / 0.268</td><td>0.381 / 0.232</td></tr>
+<tr><td>Labels as the score (check: the ceiling)</td><td>1.000 / 1.000</td><td>1.000 / 1.000</td><td>1.000 / 1.000</td><td>1.000 / 1.000</td><td>1.000 / 1.000</td></tr>
+<tr><td>Random score (check)</td><td>0.129 / 0.121</td><td>0.477 / 0.512</td><td>0.224 / 0.220</td><td>0.172 / 0.092</td><td>0.105 / 0.118</td></tr>
+</tbody></table></div>
+<div class="wrap"><table><caption>Table 4. Each stratum and subset of the held-out pairs. Paired difference in recall in the top 10% (model minus control), mean over lines, with a 95% bootstrap interval over lines and the line count. Higher is better.</caption><thead><tr>
+<th>Model − control</th>
+<th>Validation</th>
+<th>Test</th>
+</tr></thead><tbody>
+<tr class="group"><td colspan="3">Seen pair, label agrees with the training lines</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Gene-knowledge model without cell tokens</td><td>-0.052 [-0.130, +0.005] (15)</td><td>-0.071 [-0.176, -0.002] (12)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge model without cell tokens</td><td>-0.054 [-0.137, +0.008] (15)</td><td>-0.011 [-0.032, +0.007] (12)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>-0.002 [-0.046, +0.046] (15)</td><td>+0.060 [-0.008, +0.170] (12)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>+0.274 [+0.160, +0.393] (15)</td><td>+0.202 [+0.061, +0.313] (12)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − KG4SL</td><td>+0.135 [+0.024, +0.236] (15)</td><td>+0.170 [+0.031, +0.294] (12)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>+0.136 [-0.065, +0.278] (15)</td><td>+0.197 [+0.074, +0.295] (12)</td></tr>
+<tr class="group"><td colspan="3">Seen pair, label differs from the training lines</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Gene-knowledge model without cell tokens</td><td>+0.058 [+0.002, +0.117] (15)</td><td>+0.077 [+0.037, +0.115] (13)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge model without cell tokens</td><td>+0.034 [-0.011, +0.084] (15)</td><td>-0.004 [-0.063, +0.044] (13)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>-0.023 [-0.109, +0.070] (15)</td><td>-0.082 [-0.137, -0.033] (13)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>-0.121 [-0.215, -0.024] (15)</td><td>-0.094 [-0.265, +0.033] (13)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − KG4SL</td><td>-0.110 [-0.236, +0.012] (15)</td><td>-0.009 [-0.158, +0.122] (13)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>-0.072 [-0.164, +0.004] (15)</td><td>-0.017 [-0.127, +0.081] (13)</td></tr>
+<tr class="group"><td colspan="3">New pair, both genes seen</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Gene-knowledge model without cell tokens</td><td>+0.002 [-0.027, +0.032] (8)</td><td>-0.049 [-0.171, +0.075] (10)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge model without cell tokens</td><td>+0.010 [-0.045, +0.079] (8)</td><td>+0.023 [-0.214, +0.308] (10)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>+0.008 [-0.040, +0.083] (8)</td><td>+0.072 [-0.125, +0.330] (10)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>+0.145 [+0.013, +0.287] (8)</td><td>-0.057 [-0.194, +0.074] (10)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − KG4SL</td><td>+0.165 [+0.009, +0.430] (8)</td><td>+0.031 [-0.162, +0.213] (10)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>+0.056 [-0.144, +0.343] (8)</td><td>-0.180 [-0.421, +0.027] (10)</td></tr>
+<tr class="group"><td colspan="3">Partner pairs</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Gene-knowledge model without cell tokens</td><td>-0.057 [-0.138, +0.003] (16)</td><td>-0.089 [-0.229, +0.025] (15)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge model without cell tokens</td><td>-0.082 [-0.156, -0.024] (16)</td><td>-0.013 [-0.182, +0.126] (15)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>-0.025 [-0.058, +0.005] (16)</td><td>+0.076 [-0.005, +0.176] (15)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>-0.028 [-0.149, +0.076] (16)</td><td>-0.014 [-0.095, +0.055] (15)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − KG4SL</td><td>+0.085 [-0.063, +0.207] (16)</td><td>+0.107 [-0.010, +0.202] (15)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>+0.099 [+0.047, +0.153] (16)</td><td>+0.125 [+0.026, +0.200] (15)</td></tr>
+<tr class="group"><td colspan="3">No gene a dependency alone</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Gene-knowledge model without cell tokens</td><td>-0.012 [-0.048, +0.022] (12)</td><td>-0.056 [-0.100, -0.013] (11)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge model without cell tokens</td><td>-0.012 [-0.055, +0.030] (12)</td><td>-0.055 [-0.113, -0.010] (11)</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings − Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>-0.000 [-0.046, +0.052] (12)</td><td>+0.000 [-0.046, +0.045] (11)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Kebabci 2026 paralog classifier on stage one&#x27;s predicted GeneEffect</td><td>+0.105 [+0.042, +0.169] (12)</td><td>+0.081 [-0.002, +0.174] (11)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − KG4SL</td><td>+0.166 [+0.046, +0.285] (12)</td><td>+0.133 [+0.030, +0.234] (11)</td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens) − Backbone head on the buffer-aware reader&#x27;s terms (SL protocol §12)</td><td>+0.113 [+0.056, +0.170] (12)</td><td>+0.121 [+0.043, +0.202] (11)</td></tr>
+</tbody></table></div>
+<div class="wrap"><table><caption>Table 5. The finished model without cell tokens, scored again with another line input (no model is refitted; no intervals). Recall in the top 10% and AUROC, mean over lines. Higher is better.</caption><thead><tr>
+<th>Line input, pairs</th>
+<th>Validation recall in the top 10%</th>
+<th>Validation AUROC</th>
+<th>Validation lines</th>
+<th>Test recall in the top 10%</th>
+<th>Test AUROC</th>
+<th>Test lines</th>
+</tr></thead><tbody>
+<tr><td>The line&#x27;s own input, all pairs</td><td>0.5085</td><td>0.7887</td><td>17</td><td>0.5008</td><td>0.7760</td><td>16</td></tr>
+<tr><td>The fit lines&#x27; mean input, all pairs</td><td>0.4599</td><td>0.7852</td><td>17</td><td>0.4847</td><td>0.7761</td><td>16</td></tr>
+<tr><td>The input of another SL line (seeded permutation), all pairs</td><td>0.4866</td><td>0.7768</td><td>17</td><td>0.4902</td><td>0.7721</td><td>16</td></tr>
+<tr><td>The line&#x27;s own input, seen pairs whose label agrees with the training lines (303,670 held-out rows)</td><td>0.7254</td><td>0.8585</td><td>15</td><td>0.8198</td><td>0.9143</td><td>12</td></tr>
+<tr><td>The fit lines&#x27; mean input, seen pairs whose label agrees with the training lines</td><td>0.6478</td><td>0.8483</td><td>15</td><td>0.7718</td><td>0.8985</td><td>12</td></tr>
+<tr><td>The line&#x27;s own input, seen pairs whose label differs from the training lines (8,164 held-out rows)</td><td>0.2628</td><td>0.2433</td><td>15</td><td>0.3461</td><td>0.2785</td><td>13</td></tr>
+<tr><td>The fit lines&#x27; mean input, seen pairs whose label differs from the training lines</td><td>0.3376</td><td>0.2986</td><td>15</td><td>0.4396</td><td>0.3364</td><td>13</td></tr>
+<tr><td>The line&#x27;s own input, new pairs, both genes seen (231,745 held-out rows)</td><td>0.4723</td><td>0.7963</td><td>8</td><td>0.4033</td><td>0.6523</td><td>10</td></tr>
+<tr><td>The fit lines&#x27; mean input, new pairs, both genes seen</td><td>0.2958</td><td>0.6591</td><td>8</td><td>0.3286</td><td>0.6203</td><td>10</td></tr>
+</tbody></table></div>
+</section>
+<section>
+<h2>Results: training</h2>
+<div class="wrap"><table><caption>Table 6. Stage two: validation recall in the top 10% of each phase at its best epoch; the chosen phase in bold, with the recall of that state on the training lines (in sample).</caption><thead><tr>
+<th>Run</th>
+<th>Phase</th>
+<th>GeneEffect loss weight</th>
+<th>Best epoch / epochs run</th>
+<th>Validation</th>
+<th>Training lines</th>
+</tr></thead><tbody>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>head on the frozen stage-one model</td><td>—</td><td>1 / 6</td><td>0.1092</td><td></td></tr>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>whole model trained</td><td>1</td><td>2 / 7</td><td><b>0.5003</b></td><td>0.782</td></tr>
+<tr><td>Gene-knowledge model without cell tokens</td><td>head on the frozen stage-one model</td><td>—</td><td>1 / 6</td><td>0.1092</td><td></td></tr>
+<tr><td>Gene-knowledge model without cell tokens</td><td>whole model trained</td><td>1</td><td>6 / 11</td><td><b>0.5085</b></td><td>0.898</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings</td><td>head on the frozen stage-one model</td><td>—</td><td>1 / 6</td><td>0.1092</td><td></td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings</td><td>whole model trained</td><td>1</td><td>4 / 9</td><td><b>0.4859</b></td><td>0.883</td></tr>
+<tr><td>Gene-knowledge model without cell tokens, stage one at a tenth of the learning rate</td><td>head on the frozen stage-one model</td><td>—</td><td>1 / 6</td><td>0.1092</td><td></td></tr>
+<tr><td>Gene-knowledge model without cell tokens, stage one at a tenth of the learning rate</td><td>whole model trained</td><td>1</td><td>6 / 11</td><td><b>0.5085</b></td><td>0.898</td></tr>
+</tbody></table></div>
+<div class="wrap"><table><caption>Table 7. Stage one: the GeneEffect loss on the 47 SL training lines with GeneEffect (out of sample; lower is better) at each epoch; epoch 0 is the untrained model. The kept epoch is in bold. Last column: the training loss at the last epoch.</caption><thead><tr>
+<th>Run</th>
+<th>Epoch 0</th>
+<th>Epoch 1</th>
+<th>Epoch 2</th>
+<th>Epoch 3</th>
+<th>Training loss, epoch 3</th>
+</tr></thead><tbody>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td><b>1.0503</b></td><td>1.0725</td><td>1.0734</td><td>1.0749</td><td>0.8682</td></tr>
+<tr><td>Gene-knowledge model without cell tokens</td><td><b>1.0503</b></td><td>1.0518</td><td>1.0531</td><td>1.0552</td><td>0.8646</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings</td><td><b>1.0503</b></td><td>1.0595</td><td>1.0581</td><td>1.0584</td><td>0.8627</td></tr>
+<tr><td>Gene-knowledge model without cell tokens, stage one at a tenth of the learning rate</td><td><b>1.0503</b></td><td>1.0521</td><td>1.0513</td><td>1.0523</td><td>0.9296</td></tr>
+</tbody></table></div>
+</section>
+<section>
+<h2>Results: stage one</h2>
+<p class="prose">The GeneEffect that each model predicts for the SL lines after its training, beside the linear
+expression model that the earlier stage-two models read.</p>
+<div class="wrap"><table><caption>Table 8. Stage-one numbers on the SL lines with GeneEffect (12 validation, 11 test; out of sample for stage one): the predicted GeneEffect as a residual over the training gene mean. Higher is better. They decide nothing.</caption><thead><tr>
+<th>Model</th>
+<th>per-line residual Spearman,<br>validation</th>
+<th>per-line residual Spearman,<br>test</th>
+<th>per-gene residual Spearman,<br>validation</th>
+<th>per-gene residual Spearman,<br>test</th>
+<th>residual skill score,<br>validation</th>
+<th>residual skill score,<br>test</th>
+<th>whole-line Pearson,<br>validation</th>
+<th>whole-line Pearson,<br>test</th>
+</tr></thead><tbody>
+<tr><td>Gene-knowledge, cell-set model (Tx1-3B cell tokens)</td><td>0.0329</td><td>0.0347</td><td>0.0228</td><td>0.0293</td><td>-0.0510</td><td>-0.0822</td><td>0.9206</td><td>0.9101</td></tr>
+<tr><td>Gene-knowledge model without cell tokens</td><td>0.0442</td><td>0.0595</td><td>0.0433</td><td>0.0539</td><td>-0.0068</td><td>-0.0118</td><td>0.9239</td><td>0.9154</td></tr>
+<tr><td>Gene-knowledge, cell-set model with CellNet&#x27;s cell embeddings</td><td>0.0327</td><td>0.0848</td><td>0.0183</td><td>0.0633</td><td>-0.0260</td><td>-0.0171</td><td>0.9225</td><td>0.9150</td></tr>
+<tr><td>Gene mean of the fit lines (what the untrained model predicts)</td><td>-0.0530</td><td>-0.0213</td><td>—</td><td>—</td><td>-0.0121</td><td>-0.0080</td><td>0.9235</td><td>0.9162</td></tr>
+<tr><td>Linear expression model fitted on the SL split's training side (SL protocol §12)</td><td>0.1834</td><td>0.1944</td><td>0.1707</td><td>0.1567</td><td>0.0295</td><td>0.0271</td><td>0.9269</td><td>0.9195</td></tr>
+</tbody></table></div>
+</section>
+<section>
+<h2>Reading</h2>
+<ul class="reading">
+<li><b>The model is above every published baseline on all pairs.</b> It scores 0.500 / 0.485 (validation / test);
+the Kebabci classifier scores 0.355 / 0.395 and KG4SL 0.367 / 0.338 (Table 1). The paired differences are +0.145
+[+0.084, +0.203] / +0.090 [+0.037, +0.147] against Kebabci and +0.106 [+0.051, +0.165] / +0.124 [+0.059, +0.193]
+against the project's earlier head (Table 2).</li>
+<li><b>The cells add nothing.</b> The model without cell tokens is the highest row (0.508 / 0.501). The full model
+minus that model is −0.008 [−0.029, +0.013] / −0.016 [−0.053, +0.015], and CellNet's cell tokens give −0.023 /
+−0.028 (Table 2).</li>
+<li><b>GeneEffect pretraining adds nothing.</b> In all four runs the loss on the SL training lines is lowest at
+epoch 0, also at a tenth of the learning rate, so the untrained model is kept (Table 7). Its embeddings are zero,
+thus the head on the frozen model is at the random level (0.109) and the result comes from the training of the whole
+model on the SL labels (Table 6).</li>
+<li><b>The gain is on pairs that the training lines labelled in the same way.</b> There the model scores 0.673 /
+0.749 against 0.399 / 0.547 for Kebabci (Table 3). On new pairs the difference from Kebabci is +0.145 [+0.013,
++0.287] on validation and −0.057 [−0.194, +0.074] on test, and the project's earlier head is higher on test (0.534
+against 0.354, Table 4: −0.180 [−0.421, +0.027]).</li>
+<li><b>The model does not follow the line where the label changes.</b> On seen pairs whose label differs from the
+training lines its AUROC is 0.32 / 0.28, below 0.5: it ranks by the label of the training lines. Its recall there
+is below Kebabci (−0.121 [−0.215, −0.024] / −0.094 [−0.265, +0.033], Table 4).</li>
+<li><b>The Tx1 cell tokens move the score between those two strata, not above the baselines.</b> Against the model
+without cell tokens the full model is higher where the label differs (+0.058 [+0.002, +0.117] / +0.077 [+0.037,
++0.115]) and lower where it agrees (−0.052 [−0.130, +0.005] / −0.071 [−0.176, −0.002], Table 4). The full model also
+fits the training lines less (recall 0.782 against 0.898, Table 6). This run cannot separate a reading of the line
+from a weaker fit to the training labels.</li>
+<li><b>The line input matters most on new pairs.</b> With the fit lines' mean input in place of the line's own, the
+model without cell tokens falls from 0.508 / 0.501 to 0.460 / 0.485 on all pairs and from 0.472 / 0.403 to 0.296 /
+0.329 on new pairs; where the label differs it rises (Table 5). This check refits no model and has no intervals.</li>
+<li><b>Stage one, for the record:</b> the per-line residual Spearman of the model's GeneEffect is 0.033 / 0.035,
+against 0.183 / 0.194 for the linear expression model (Table 8). It decides nothing.</li>
+</ul>
+</section>
+</main>
+</body>
+</html>

@@ -48,21 +48,46 @@ a { color: var(--accent); }
 <h1>SL benchmark: our models against the baselines</h1>
 <figure style="margin:0;display:grid;gap:6px">
 <img src="docs/Two-Stage%20Synthetic-Lethal%20Prediction%20Pipeline.svg" alt="Two-stage pipeline: a linear expression model predicts GeneEffect from the line's basal profile; a logistic regression scores each gene pair from the predicted GeneEffect change when one gene's expression is set low." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff">
-<figcaption class="muted"><strong>Figure 1.</strong> The two-stage model.</figcaption>
+<figcaption class="muted"><strong>Figure 1.</strong> The two-stage model on predicted GeneEffect (the logistic-regression row of Table 1).</figcaption>
+</figure>
+<figure style="margin:0;display:grid;gap:6px">
+<svg viewBox="0 0 860 224" role="img" aria-label="The gene-knowledge, cell-set model: a gene encoder and a line encoder feed a gene-specific reading; its gene-in-line embedding gives GeneEffect by a sum and the SL score by a pair head." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;font:12px var(--sans)">
+<defs><marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+<g fill="none" stroke="var(--muted)" stroke-width="1.2">
+<rect x="8" y="30" width="100" height="44" rx="4"/><rect x="8" y="150" width="100" height="44" rx="4"/>
+<rect x="148" y="14" width="236" height="76" rx="4"/><rect x="148" y="134" width="236" height="76" rx="4"/>
+<rect x="434" y="74" width="170" height="76" rx="4" fill="var(--ours)"/>
+<rect x="664" y="14" width="188" height="60" rx="4"/><rect x="664" y="150" width="188" height="60" rx="4" fill="var(--ours)"/>
+<g marker-end="url(#tip)"><path d="M108 52H148"/><path d="M108 172H148"/><path d="M384 52H409V96H434"/><path d="M384 172H409V128H434"/><path d="M604 112H634V44H664"/><path d="M604 112H634V180H664"/></g>
+</g>
+<g fill="var(--fg)" text-anchor="middle">
+<text x="58" y="56">Gene g</text><text x="58" y="176">Cells of line c</text>
+<text x="266" y="38" font-weight="600">Gene encoder</text><text x="266" y="56">function text + ESM C protein</text><text x="266" y="74">+ STRING network + free vector</text>
+<text x="266" y="158" font-weight="600">Line encoder</text><text x="266" y="176">mean token (MLP on mean expression)</text><text x="266" y="194">+ one token per cell (Tx1-3B)</text>
+<text x="519" y="98" font-weight="600">Gene-specific reading</text><text x="519" y="116">each gene weights</text><text x="519" y="134">the line's cells</text>
+<text x="519" y="170" fill="var(--muted)">gene-in-line embedding</text>
+<text x="758" y="40">Sum of the embedding</text><text x="758" y="58">GeneEffect (pretraining)</text>
+<text x="758" y="176" font-weight="600">Pair head on genes A and B</text><text x="758" y="194">SL score in line c</text>
+</g>
+</svg>
+<figcaption class="muted"><strong>Figure 2.</strong> The gene-knowledge, cell-set model (SL protocol §18; <a href="results/sl_embedding_seed0/summary.html">run record</a>). The pair head reads the embedding, not the predicted GeneEffect.</figcaption>
 </figure>
 <h2>Stage two: SL ranking</h2>
 <p>Recall in the top 10%: the SL pairs that a model ranks in a screen's top 10%, divided by the smaller of the screen's SL pairs and its top-10% places, so a perfect ranking gives 1. It is averaged over screens, then studies, then held-out lines. Random gives about 0.10, more in screens with over 10% SL pairs. Seed 0, one run per model; validation selects, test is scored once.</p>
 
 <div class="wrap">
 <table>
-<caption><strong>Table 1.</strong> Recall in the top 10% and AUROC (random 0.5) on the multi-study SL benchmark (validation 15 lines, test 13 lines). Higher is better. Rows are ranked by test recall. Best value in bold; a perfect ranking gives 1.</caption>
+<caption><strong>Table 1.</strong> Recall in the top 10% and AUROC (random 0.5) on the multi-study SL benchmark (17 validation lines, 16 test lines; measured GeneEffect 12 and 11). Higher is better. Rows are ranked by test recall. Best value in bold; a perfect ranking gives 1.</caption>
 <thead><tr><th>Model</th><th>What it reads</th><th class="n">Recall, validation ↑</th><th class="n">Recall, test ↑</th><th class="n">AUROC, validation ↑</th><th class="n">AUROC, test ↑</th></tr></thead>
 <tbody>
-<tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralog features with stage one's predicted GeneEffect</td><td class="n">0.355</td><td class="n"><b>0.395</b></td><td class="n">0.66</td><td class="n">0.66</td></tr>
-<tr class="ours"><td>Ours: logistic regression on predicted GeneEffect after a gene's loss</td><td class="what">For each gene, the change in its predicted GeneEffect when the other gene's expression is set low; both genes' predicted GeneEffect and expression</td><td class="n">0.394</td><td class="n">0.361</td><td class="n"><b>0.74</b></td><td class="n"><b>0.72</b></td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model without cell tokens</td><td class="what">Gene vectors from function text, protein and network sources; the line's mean expression; a pair head on the gene-in-line embeddings</td><td class="n"><b>0.508</b></td><td class="n"><b>0.501</b></td><td class="n"><b>0.79</b></td><td class="n"><b>0.78</b></td></tr>
+<tr class="ours"><td>Ours: gene-knowledge, cell-set model (Figure 2)</td><td class="what">The same, with one token for each cell of the line (Tx1-3B embedding)</td><td class="n">0.500</td><td class="n">0.485</td><td class="n">0.79</td><td class="n">0.77</td></tr>
+<tr class="ours"><td>Ours: gene-knowledge, cell-set model with CellNet</td><td class="what">The same, with CellNet's embedding of each cell</td><td class="n">0.486</td><td class="n">0.473</td><td class="n">0.78</td><td class="n">0.77</td></tr>
+<tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralog features with stage one's predicted GeneEffect</td><td class="n">0.355</td><td class="n">0.395</td><td class="n">0.66</td><td class="n">0.66</td></tr>
+<tr class="ours"><td>Ours: logistic regression on predicted GeneEffect after a gene's loss</td><td class="what">For each gene, the change in its predicted GeneEffect when the other gene's expression is set low; both genes' predicted GeneEffect and expression</td><td class="n">0.394</td><td class="n">0.361</td><td class="n">0.74</td><td class="n">0.72</td></tr>
 <tr><td>KG4SL</td><td class="what">Knowledge graph, trained on the training lines</td><td class="n">0.367</td><td class="n">0.338</td><td class="n">0.69</td><td class="n">0.65</td></tr>
 <tr><td>Kebabci 2026, measured GeneEffect (reference)</td><td class="what">Same classifier on DepMap's measured GeneEffect</td><td class="n">0.296</td><td class="n">0.304</td><td class="n">0.62</td><td class="n">0.62</td></tr>
-<tr><td>Control: measured GeneEffect</td><td class="what">DepMap, lines with GeneEffect</td><td class="n"><b>0.425</b></td><td class="n">0.296</td><td class="n"><b>0.74</b></td><td class="n">0.64</td></tr>
+<tr><td>Control: measured GeneEffect</td><td class="what">DepMap, lines with GeneEffect</td><td class="n">0.425</td><td class="n">0.296</td><td class="n">0.74</td><td class="n">0.64</td></tr>
 <tr><td>De Kegel 2021 paralog classifier</td><td class="what">Released scores</td><td class="n">0.281</td><td class="n">0.293</td><td class="n">0.66</td><td class="n">0.66</td></tr>
 <tr><td>PARIS</td><td class="what">Random-forest dependency pairs (Python port)</td><td class="n">0.219</td><td class="n">0.213</td><td class="n">0.57</td><td class="n">0.57</td></tr>
 <tr><td>MiT4SL</td><td class="what">Cell-line-specific graph model</td><td class="n">0.154</td><td class="n">0.138</td><td class="n">0.59</td><td class="n">0.56</td></tr>
@@ -74,7 +99,9 @@ a { color: var(--accent); }
 </div>
 
 <ul>
-<li><strong>On test, our best model (0.361) is second to the Kebabci classifier on stage one's predicted GeneEffect (0.395), and above all other published baselines. On test AUROC it is first (0.72).</strong></li>
+<li><strong>The gene-knowledge models are above every published baseline on validation and test (run of 2026-11-19): 0.500 / 0.485 with cell tokens against 0.355 / 0.395 for the Kebabci classifier, paired difference +0.145 [+0.084, +0.203] / +0.090 [+0.037, +0.147].</strong></li>
+<li>The cell tokens and the GeneEffect pretraining add nothing: the model without cell tokens is the highest row, and the early stop of the pretraining keeps the untrained model.</li>
+<li>The gain is on pairs that the training lines labelled in the same way. It is not shown on new pairs on test, and the score does not yet follow the line where the label differs.</li>
 </ul>
 
 <h2>Stage one: GeneEffect in the SL held-out lines</h2>
@@ -86,6 +113,7 @@ a { color: var(--accent); }
 <thead><tr><th>Model</th><th class="n">Whole-line Pearson ↑</th><th class="n">MSE ↓</th><th class="n">Per-line residual Spearman ↑</th></tr></thead>
 <tbody>
 <tr class="ours"><td>Our best: linear expression model, wider gene space (SL protocol §13)</td><td class="n">0.9197</td><td class="n">0.0301</td><td class="n">0.1965</td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model without cell tokens, after its SL training (SL protocol §18)</td><td class="n">0.9154</td><td class="n">0.0315</td><td class="n">0.0595</td></tr>
 <tr><td>Ceiling: a perfect model against one measured screen (estimate)</td><td class="n">0.9283</td><td class="n">0.0277</td><td class="n">0.6054</td></tr>
 <tr><td>Two DepMap screens of one line (8 test lines)</td><td class="n">0.8618</td><td class="n">0.0553</td><td class="n">0.3665</td></tr>
 </tbody>

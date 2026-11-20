@@ -1,0 +1,244 @@
+{
+  "run_id": "embedding_seed0",
+  "counts": {
+    "fit_lines": 928,
+    "fit_lines_with_cells": 366,
+    "stop_lines": 47,
+    "sl_lines_left_out": 74,
+    "patient_mates_left_out": 12,
+    "cells": 652399,
+    "genes": 17787,
+    "expression_genes": 6523,
+    "gene_source_coverage": {
+      "gene_text": 17607,
+      "esmc_600m": 17708,
+      "string_space": 17503
+    },
+    "rows": {
+      "train": 1420001,
+      "val": 255286,
+      "test": 288470,
+      "rows_line_not_in_split": 493764,
+      "rows_gene_without_score": 373626
+    },
+    "training_rows": 1146517
+  },
+  "sl": {
+    "test": {
+      "lines": 16,
+      "recall_top10": 0.4851482240614424,
+      "auroc": 0.7738761321676049,
+      "auprc_lift": 7.938622169863611
+    },
+    "train": {
+      "lines": 44,
+      "recall_top10": 0.7818305079471138,
+      "auroc": 0.9276788439290822,
+      "auprc_lift": 640.0748960482617
+    },
+    "val": {
+      "lines": 17,
+      "recall_top10": 0.5003482187904055,
+      "auroc": 0.786846111686773,
+      "auprc_lift": 19.99238481856937
+    }
+  },
+  "stage_one": {
+    "train": {
+      "lines": 47,
+      "line_spearman": 0.010948493927802732,
+      "line_spearman_scored": 47,
+      "selective_spearman": 0.004304092904559116,
+      "selective_spearman_scored": 4540,
+      "within_gene_r2": -0.26932748522386674,
+      "aupr_lift": 0.06428221816918836,
+      "residual_pearson": 0.0021405422643010767,
+      "absolute_pearson": 0.8891695054821,
+      "rmse": 0.2034539133310318,
+      "calibration_slope": 0.01732334509790563,
+      "top_recall": 0.003191489361702128,
+      "predictable_genes": 133
+    },
+    "val": {
+      "lines": 12,
+      "line_spearman": 0.03286595027015391,
+      "line_spearman_scored": 12,
+      "selective_spearman": 0.02280161835227915,
+      "selective_spearman_scored": 4540,
+      "within_gene_r2": -0.05097367099732519,
+      "aupr_lift": 0.1470864827539679,
+      "residual_pearson": 0.025986062100850957,
+      "absolute_pearson": 0.9205857867100912,
+      "rmse": 0.16962352395057678,
+      "calibration_slope": 0.12029894705386227,
+      "top_recall": 0.004166666666666667,
+      "predictable_genes": 928
+    },
+    "test": {
+      "lines": 11,
+      "line_spearman": 0.03466528162836528,
+      "line_spearman_scored": 11,
+      "selective_spearman": 0.02931818181818181,
+      "selective_spearman_scored": 4540,
+      "within_gene_r2": -0.0822091256056332,
+      "aupr_lift": 0.1525795657714098,
+      "residual_pearson": 0.037739556506522214,
+      "absolute_pearson": 0.9101206429860708,
+      "rmse": 0.18325430154800415,
+      "calibration_slope": 0.14565087981160685,
+      "top_recall": 0.0,
+      "predictable_genes": 1026
+    }
+  },
+  "stage_one_base": {
+    "train": {
+      "lines": 47,
+      "line_spearman": -0.051681025565857526,
+      "line_spearman_scored": 47,
+      "selective_spearman": null,
+      "selective_spearman_scored": 0,
+      "within_gene_r2": -0.011051578821085206,
+      "aupr_lift": 0.0,
+      "residual_pearson": null,
+      "absolute_pearson": 0.9095532131790658,
+      "rmse": 0.18209537863731384,
+      "calibration_slope": null,
+      "top_recall": 0.0,
+      "predictable_genes": 0
+    },
+    "val": {
+      "lines": 12,
+      "line_spearman": -0.052986481576047274,
+      "line_spearman_scored": 12,
+      "selective_spearman": null,
+      "selective_spearman_scored": 0,
+      "within_gene_r2": -0.012081138578112549,
+      "aupr_lift": 0.0,
+      "residual_pearson": null,
+      "absolute_pearson": 0.9234637490240112,
+      "rmse": 0.16665588319301605,
+      "calibration_slope": null,
+      "top_recall": 0.0,
+      "predictable_genes": 0
+    },
+    "test": {
+      "lines": 11,
+      "line_spearman": -0.021269402970260098,
+      "line_spearman_scored": 11,
+      "selective_spearman": null,
+      "selective_spearman_scored": 0,
+      "within_gene_r2": -0.007973166937356835,
+      "aupr_lift": 0.0,
+      "residual_pearson": null,
+      "absolute_pearson": 0.9161689136626939,
+      "rmse": 0.1771554797887802,
+      "calibration_slope": null,
+      "top_recall": 0.0,
+      "predictable_genes": 0
+    }
+  },
+  "stage_one_history": [
+    {
+      "epoch": 0,
+      "train_loss": null,
+      "stop_loss": 1.050328016281128
+    },
+    {
+      "epoch": 1,
+      "train_loss": 0.9838175773620605,
+      "stop_loss": 1.0725008249282837
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.8995519280433655,
+      "stop_loss": 1.0733755826950073
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.868200957775116,
+      "stop_loss": 1.074904441833496
+    }
+  ],
+  "phases": [
+    {
+      "phase": "frozen",
+      "geneeffect_weight": null,
+      "val_recall_top10": 0.10920889030470524,
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 0.6931926608085632,
+          "val_recall_top10": 0.10920889030470524
+        },
+        {
+          "epoch": 2,
+          "train_loss": 0.693157434463501,
+          "val_recall_top10": 0.10920889030470524
+        },
+        {
+          "epoch": 3,
+          "train_loss": 0.6931576132774353,
+          "val_recall_top10": 0.10920889030470524
+        },
+        {
+          "epoch": 4,
+          "train_loss": 0.693156898021698,
+          "val_recall_top10": 0.10920889030470524
+        },
+        {
+          "epoch": 5,
+          "train_loss": 0.6931582689285278,
+          "val_recall_top10": 0.10920889030470524
+        },
+        {
+          "epoch": 6,
+          "train_loss": 0.6931596398353577,
+          "val_recall_top10": 0.10920889030470524
+        }
+      ]
+    },
+    {
+      "phase": "trained further",
+      "geneeffect_weight": 1.0,
+      "val_recall_top10": 0.5003482187904055,
+      "history": [
+        {
+          "epoch": 1,
+          "train_loss": 1.5855532884597778,
+          "val_recall_top10": 0.4958466435788116
+        },
+        {
+          "epoch": 2,
+          "train_loss": 1.3269416093826294,
+          "val_recall_top10": 0.5003482187904055
+        },
+        {
+          "epoch": 3,
+          "train_loss": 1.2582294940948486,
+          "val_recall_top10": 0.47464083686752023
+        },
+        {
+          "epoch": 4,
+          "train_loss": 1.2357220649719238,
+          "val_recall_top10": 0.46398719175359876
+        },
+        {
+          "epoch": 5,
+          "train_loss": 1.1813708543777466,
+          "val_recall_top10": 0.4841392434966191
+        },
+        {
+          "epoch": 6,
+          "train_loss": 1.1562918424606323,
+          "val_recall_top10": 0.4441356666859249
+        },
+        {
+          "epoch": 7,
+          "train_loss": 1.1349561214447021,
+          "val_recall_top10": 0.4627625751584323
+        }
+      ]
+    }
+  ],
+  "chosen_phase": 1
+}

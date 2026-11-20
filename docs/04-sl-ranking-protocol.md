@@ -693,4 +693,47 @@ gene-in-line embeddings, not its predicted GeneEffect. A better GeneEffect is no
   its pretraining data.
 - **Not in these runs.** A context-ablated row, a row without pretraining and any other ablation of a module; a
   perturbation model or perturbation data. The full model's run stops if a line with cells has no Tx1 cache.
-- **Result.** Not run yet.
+- **Runs** (2026-11-19, seed 0, one GPU each, about two minutes of training): `embedding_seed0` (H20 port 30838, code
+  `bee1bcc`), `embedding_mean_token_seed0` (port 30757, `6325dfc`), `embedding_cellnet_seed0` (port 30757, `db8a96e`)
+  and `embedding_mean_token_slow_stage_one_seed0` (`configs/sl/embedding_mean_token_slow_stage_one.yaml`: stage one
+  at a learning rate of 1e-4; port 30757, `bee1bcc`), then the harness run `benchmark_embedding_seed0`.
+  [Record](../results/sl_embedding_seed0/summary.html).
+- **Result.** Recall in the top 10%, AUROC and AUPRC over the positive rate, in that order, mean over lines (17
+  validation, 16 test):
+
+  | Model | Validation | Test |
+  | --- | --- | --- |
+  | Gene-knowledge, cell-set model (Tx1-3B cell tokens) | 0.500, 0.787, 20.0 | 0.485, 0.774, 7.9 |
+  | Gene-knowledge model without cell tokens | **0.508**, 0.789, 17.5 | **0.501**, 0.776, 8.5 |
+  | Gene-knowledge, cell-set model with CellNet's cell embeddings | 0.486, 0.783, 9.8 | 0.473, 0.766, 8.0 |
+  | Backbone head on the buffer-aware reader's terms (§12) | 0.394, 0.743, 5.1 | 0.361, 0.716, 4.2 |
+  | Kebabci 2026 paralog classifier on stage one's predicted GeneEffect | 0.355, 0.656, 5.7 | 0.395, 0.664, 6.4 |
+  | KG4SL | 0.367, 0.689, 3.4 | 0.338, 0.653, 3.0 |
+
+  Paired differences in recall of the full model, 95% line bootstrap, validation | test: against Kebabci +0.145
+  [+0.084, +0.203] | +0.090 [+0.037, +0.147]; against KG4SL +0.133 [+0.059, +0.211] | +0.147 [+0.072, +0.227]; against
+  the backbone head +0.106 [+0.051, +0.165] | +0.124 [+0.059, +0.193]; against the model without cell tokens −0.008
+  [−0.029, +0.013] | −0.016 [−0.053, +0.015]. CellNet's variant against the model without cell tokens: −0.023 [−0.056,
+  +0.005] | −0.028 [−0.072, +0.006]. By stratum, the full model against Kebabci: seen pairs whose label agrees with the
+  training lines +0.274 [+0.160, +0.393] | +0.202 [+0.061, +0.313]; seen pairs whose label differs −0.121 [−0.215,
+  −0.024] | −0.094 [−0.265, +0.033], with an AUROC of 0.32 | 0.28; new pairs +0.145 [+0.013, +0.287] | −0.057 [−0.194,
+  +0.074]. Stage one: in all four runs the loss on the SL training lines is lowest at epoch 0 (1.0503, then 1.0725 for
+  the full model and 1.0521 at the lower learning rate), so the untrained model is kept; the head on that frozen model
+  scores 0.109 on validation, and the phase that trains the whole model is chosen. The slower stage one thus gives the
+  scores of the model without cell tokens. Stage-one numbers of the full model on the SL lines with GeneEffect: per-line
+  residual Spearman 0.033 validation (12 lines), 0.035 test (11 lines); the linear expression model gives 0.183, 0.194.
+- **Line-input check** (the finished model without cell tokens, scored again; no model refitted, no intervals;
+  `results/sl_embedding_seed0/host/line_input_check.py`). With the fit lines' mean input in place of the line's own:
+  0.460 | 0.485 on all pairs (0.508 | 0.501 with its own input); 0.296 | 0.329 on new pairs (0.472 | 0.403); 0.338 |
+  0.440 on seen pairs whose label differs (0.263 | 0.346). With the input of another SL line: 0.487 | 0.490.
+- **Reading.** A deep model is above every published baseline on all pairs, and every interval against a baseline is
+  above zero. The gain does not come from the parts that the plan set out to test. GeneEffect pretraining gives
+  nothing: the untrained model is kept, its embeddings are zero, and the result comes from the training of the whole
+  model on the SL labels. The cells give nothing: the model without cell tokens is the highest row. The gain is on
+  pairs that the training lines labelled in the same way. On new pairs it is not shown on test, and on pairs whose
+  label differs from the training lines the model ranks by the training lines' label (AUROC below 0.5). Against the
+  model without cell tokens, the Tx1 cell tokens are higher where the label differs (+0.058 [+0.002, +0.117] | +0.077
+  [+0.037, +0.115]) and lower where it agrees (−0.052 [−0.130, +0.005] | −0.071 [−0.176, −0.002]), with a weaker fit to
+  the training lines (training recall 0.782 against 0.898); these runs cannot separate a reading of the line from that
+  weaker fit. The line input changes the ranking most on new pairs. Thus the score does not yet follow the line
+  (§8): the open parts are a stage one that learns something that transfers to the SL lines, and new pairs.
