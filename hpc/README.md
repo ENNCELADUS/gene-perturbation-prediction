@@ -494,18 +494,20 @@ hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps pie_change
 
 The study of the direct GeneEffect target and the line term (SL protocol §19) is four `sl-embedding` runs, one GPU
 each, then the harness. A config with a `line_term` section also writes `scores/embedding_line_term.parquet` (the
-model with the line term) and `scores/embedding_line_term_other_line.parquet` (the line term read in another line).
+model's own score in the line plus the line term) and `scores/embedding_line_term_other_line.parquet` (the model and
+the line term read in another line). The run ids end in `_seed0_v2`: the `_seed0` runs of 2026-11-20 added the
+line term to the pair score on the mean input.
 `embedding_direct_pie_change` and `embedding_direct_tx1_gene` read the caches above, so those caches come first:
 
 ```bash
 i=0
 for NAME in embedding_direct embedding_direct_mean_token embedding_direct_pie_change embedding_direct_tx1_gene; do
-  CUDA_VISIBLE_DEVICES=$i setsid nohup hpc/run.sh sl-embedding configs/sl/$NAME.yaml --run-id ${NAME}_seed0 \
-    > outputs/launches/${NAME}_seed0.log 2>&1 < /dev/null &
+  CUDA_VISIBLE_DEVICES=$i setsid nohup hpc/run.sh sl-embedding configs/sl/$NAME.yaml --run-id ${NAME}_seed0_v2 \
+    > outputs/launches/${NAME}_seed0_v2.log 2>&1 < /dev/null &
   i=$((i + 1))
 done
 # when the four runs have finished
-hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0
+hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0_v2
 ```
 
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw

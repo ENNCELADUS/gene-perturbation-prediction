@@ -27,24 +27,25 @@ mean token alone. ``cell_embeddings`` names the cache of the cells' embeddings
 The line term (config section ``line_term``; ``null`` for none) trains last, on the
 chosen phase. The score of a row (line c, pair A, B) is
 
-    s(c, A, B) = p(A, B) + D(c, A, B) - mean over r in R of D(r, A, B)
+    s(c, A, B) = f(c, A, B) + D(c, A, B) - mean over r in R of D(r, A, B)
 
-``p``: the pair head on the mean input (the fit lines' mean expression, no cells).
-``D(r, A, B)``: the line head on the pair read in line r (its tokens) and on the
-gene-in-line features of A and B in line r (the line's own expression with
-``own_expression``, and the caches of ``gene_in_line``). ``R``: the SL training lines;
-at a training step, a draw of ``reference_lines`` of them. Only the line head and its
-input maps train, so ``p`` does not change, and the gene pair alone cannot fill the
-line term. Validation recall in the top 10% of ``s`` selects the epoch
-(``max_epochs``, ``patience``, ``learning_rate``).
+``f(c, A, B)``: the model's own score, the pair head of the chosen phase read in line
+c (``pair_scores``). ``D(r, A, B)``: the line head on the pair read in line r (its
+tokens) and on the gene-in-line features of A and B in line r (the line's own
+expression with ``own_expression``, and the caches of ``gene_in_line``). ``R``: the SL
+training lines with training rows (genetic screens with both classes); at a training
+step, a draw of ``reference_lines`` of them. ``f`` and ``D`` of a line read the same
+tokens. Only the line head and its input maps train, so ``f`` does not change, and
+the gene pair alone cannot fill the line term. Validation recall in the top 10% of
+``s`` selects the epoch (``max_epochs``, ``patience``, ``learning_rate``).
 
 Outputs: ``scores/embedding.parquet`` for the benchmark harness (``extra_scores``);
 the line-input controls ``scores/embedding_mean_input.parquet`` (the fit lines' mean
 input) and ``scores/embedding_other_line.parquet`` (another line's input); with a line
 term, ``scores/embedding_line_term.parquet`` (``s``) and
-``scores/embedding_line_term_other_line.parquet`` (``s`` with ``D`` read in another
-line); ``predictions.parquet`` (the model's GeneEffect of the SL lines), ``best.pt``,
-``metrics.json`` and ``results.md``."""
+``scores/embedding_line_term_other_line.parquet`` (``s`` with ``f`` and ``D`` read in
+another line); ``predictions.parquet`` (the model's GeneEffect of the SL lines),
+``best.pt``, ``metrics.json`` and ``results.md``."""
 
 from __future__ import annotations
 
@@ -442,13 +443,6 @@ def pair_scores(
     return out.numpy().astype(np.float64)
 
 
-def mean_tokens(model: GeneLineModel, data: Data) -> Tokens:
-    """The tokens of the mean input: the fit lines' mean expression (zero on the
-    scaled expression) and no cells."""
-    mean, _ = model.tokens(torch.zeros_like(data.expression[:1]), None)
-    return mean[0], None, None
-
-
 def other_lines(data: Data, config: Mapping[str, Any]) -> dict[int, int]:
     """Each benchmark line's other line: the next one in a seeded order, never the
     line itself."""
@@ -467,9 +461,12 @@ def line_input_controls(
     genes alone; ``other_line``, the expression and cells of another benchmark line
     (the next one in a seeded order, never the line itself)."""
     every = np.arange(len(data.rows))
-    mean, other = mean_tokens(model, data), other_lines(data, config)
+    mean, _ = model.tokens(torch.zeros_like(data.expression[:1]), None)
+    other = other_lines(data, config)
     return {
-        "mean_input": pair_scores(model, data, pairs, every, config, lambda _: mean),
+        "mean_input": pair_scores(
+            model, data, pairs, every, config, lambda line: (mean[0], None, None)
+        ),
         "other_line": pair_scores(
             model, data, pairs, every, config,
             lambda line: one_line(model, data, other[line], None, None),
@@ -596,6 +593,23 @@ def line_term_of(
     return model.line_term(u[a], u[b], combinatorial, of(a), of(b), *tokens)
 
 
+def line_score(
+    model: GeneLineModel,
+    data: Data,
+    u: Tensor,
+    a: Tensor,
+    b: Tensor,
+    combinatorial: Tensor,
+    line: int,
+    tokens: Tokens,
+) -> Tensor:
+    """``f + D`` (rows,) of the pairs read in ``line``: the model's own score (the
+    pair head, no gradient) and the line term, on the same ``tokens``."""
+    with torch.no_grad():
+        f = model.pair(u[a], u[b], combinatorial, *tokens)
+    return f + line_term_of(model, data, u, a, b, combinatorial, line, tokens)
+
+
 @torch.no_grad()
 def line_term_scores(
     model: GeneLineModel,
@@ -605,12 +619,13 @@ def line_term_scores(
     config: Mapping[str, Any],
     read: Callable[[int], int] | None = None,
 ) -> np.ndarray:
-    """The score ``s = p + D(c) - mean over R of D(r)`` of each row position in
-    ``rows``, with every cell of each line: ``p``, the pair head on the mean input;
-    ``D(c)``, the line term in the row's line ``c``; ``R``, the SL training lines.
-    ``read(line)`` names the line whose tokens and gene-in-line features stand in
-    for ``line``; ``p`` and ``R`` do not change with it. ``p`` and the mean over
-    ``R`` depend on the pair alone, so each distinct pair gets them once."""
+    """The score ``s = f(c) + D(c) - mean over R of D(r)`` of each row position in
+    ``rows``, with every cell of each line: ``f(c)``, the model's own score (the
+    pair head) in the row's line ``c``; ``D(c)``, the line term in ``c``; ``R``, the
+    SL training lines with training rows. ``read(line)`` names the line whose tokens
+    and gene-in-line features stand in for ``line`` in ``f`` and ``D``; ``R`` does
+    not change with it. The mean over ``R`` depends on the pair alone, so each
+    distinct pair gets it once."""
     u = model.gene_vectors()
     chunk = int(config["eval"]["rows_per_chunk"])
     at = torch.tensor(rows, device=data.device)
@@ -619,7 +634,6 @@ def line_term_scores(
         dim=0,
         return_inverse=True,
     )
-    mean = mean_tokens(model, data)
     reference = [(r, one_line(model, data, r, None, None)) for r in sorted(pairs.draws)]
     shared = torch.empty(len(unique), device=data.device)
     for start in range(0, len(unique), chunk):
@@ -629,10 +643,8 @@ def line_term_scores(
             line_term_of(model, data, u, a, b, combinatorial, r, tokens)
             for r, tokens in reference
         ]
-        shared[start : start + chunk] = model.pair(
-            u[a], u[b], combinatorial, *mean
-        ) - torch.stack(deviations).mean(0)
-    out = shared[inverse]
+        shared[start : start + chunk] = torch.stack(deviations).mean(0)
+    out = -shared[inverse]
     line_of = pairs.line[at]
     for line in line_of.unique().tolist():
         source = line if read is None else read(line)
@@ -641,7 +653,7 @@ def line_term_scores(
         for start in range(0, len(mine), chunk):
             part = mine[start : start + chunk]
             row = at[part]
-            out[part] += line_term_of(
+            out[part] += line_score(
                 model, data, u, pairs.a[row], pairs.b[row], pairs.combinatorial[row],
                 source, tokens,
             )  # fmt: skip
@@ -655,7 +667,8 @@ def line_term_loss(
     config: Mapping[str, Any],
     generator: torch.Generator,
 ) -> Tensor:
-    """Binary cross-entropy of ``s`` at one step: the rows of ``step_rows``; ``R``,
+    """Binary cross-entropy of ``s`` at one step: the rows of ``step_rows``, with
+    ``f`` and ``D`` of a row's line on the same drawn tokens; ``R``,
     ``line_term.reference_lines`` SL training lines drawn with replacement, one
     draw for the step."""
     cells = config["cells"]
@@ -676,18 +689,17 @@ def line_term_loss(
     at = torch.cat([part for _, part, _ in steps])
     a, b, combinatorial = pairs.a[at], pairs.b[at], pairs.combinatorial[at]
     own = torch.cat([
-        line_term_of(model, data, u, pairs.a[part], pairs.b[part],
-                     pairs.combinatorial[part], line, tokens)
+        line_score(model, data, u, pairs.a[part], pairs.b[part],
+                   pairs.combinatorial[part], line, tokens)
         for line, part, tokens in steps
     ])  # fmt: skip
     deviations = [
         line_term_of(model, data, u, a, b, combinatorial, r, tokens)
         for r, tokens in reference
     ]
-    p = model.pair(u[a], u[b], combinatorial, *mean_tokens(model, data))
     # every line has rows_per_line rows: the mean over rows weighs each line equally
     return F.binary_cross_entropy_with_logits(
-        p + own - torch.stack(deviations).mean(0), pairs.label[at]
+        own - torch.stack(deviations).mean(0), pairs.label[at]
     )
 
 
@@ -1109,8 +1121,8 @@ def controls_named(controls: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
 
 def rescore(config: Mapping[str, Any], run_id: str, device: str) -> Path:
     """The line-input controls of a finished run, from its ``best.pt``; no training.
-    With a line term, also the line term on another line's input (the line term
-    leaves the backbone and the pair head as they were)."""
+    With a line term, also the model and the line term on another line's input (the
+    line term leaves the backbone and the pair head as they were)."""
     run_dir = Path(config["output_root"]) / config["task"] / run_id
     data, _, _ = load_data(config, torch.device(device))
     model = build_model(config, data)
@@ -1211,16 +1223,18 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         models = (("Gene-knowledge, cell-set model", sl),
                   ("The model on the mean input", line_sl["mean_input"]),
                   ("The model with the line term", line_sl["line_term"]),
-                  ("The line term on another line's input",
+                  ("The model and the line term on another line's input",
                    line_sl["line_term_other_line"]))  # fmt: skip
         columns = [(m, s) for m in names for s in ("val", "test")]
         best = {c: max(table[c[1]][c[0]] for _, table in models) for c in columns}
         line_table = [
             "**Table 2.** The line term on the multi-study SL benchmark, mean over "
-            "lines. The score with the line term is the pair score on the mean input "
-            "plus the line term's deviation from its mean over the SL training lines. "
-            "The last row reads the line term with another line's tokens and "
-            "gene-in-line features (no refit). Higher is better; the best of each "
+            "lines. The score with the line term is the model's score in the line "
+            "plus the line term's deviation from its mean over the SL training lines "
+            "with training rows. The last row reads the model and the line term with "
+            "another line's tokens and gene-in-line features (no refit). The model on "
+            "the mean input is the context-ablated reference. Higher is better; the "
+            "best of each "
             "column is in bold. Validation selected the epoch; test was scored once.",
             "",
             "| Model |" + "".join(

@@ -8,7 +8,7 @@ line's single cells add to that change in unseen lines.
 **Architecture:** Two changes to the model of SL protocol §18. Stage one trains on GeneEffect itself, not on its
 difference from the training gene mean, so the untrained model can no longer be the checkpoint that validation
 selects. The SL score gets a line term: a second head whose output is a deviation from its mean over the SL training
-lines, added to the pair score on the mean input. The line term reads gene-in-line features from caches: the gene's
+lines, added to the model's own score in the line. The line term reads gene-in-line features from caches: the gene's
 own expression, Tx1-3B's contextual gene embedding, and PIE's predicted change after the gene's loss.
 
 **Tech Stack:** Python 3.11–3.12, PyTorch, pandas, `uv`, pytest, ruff; Tx1-3B (`tahoe_x1`) and PIE outputs on the H20.
@@ -58,19 +58,22 @@ started from the untrained model.
 **The line term.** The SL score of a row (line `c`, pair A, B) becomes
 
 ```text
-s(c, A, B) = p(A, B) + D(c, A, B) − mean over r in R of D(r, A, B)
+s(c, A, B) = f(c, A, B) + D(c, A, B) − mean over r in R of D(r, A, B)
 ```
 
-- `p(A, B)`: the pair head on the mean input (the fit lines' mean expression, no cells). It is the context-ablated
-  score of the chosen phase.
+- `f(c, A, B)`: the model's own score, the pair head of the chosen phase read in line `c`. At a training step `f` and
+  `D` of the row's line read the same drawn tokens; at scoring, all the line's cells.
 - `D(r, A, B)`: the line head, a second MLP. It reads the pair features of the pair in line `r` (the same features the
   pair head reads) and the gene-in-line features of A and B in line `r` (§4).
 - `R`: the SL training lines with training rows (genetic screens with both classes). At a training step `R` is a
   draw of `line_term.reference_lines` of them.
 - The line term trains last, with binary cross-entropy on `s`. Only the line head and its input projections train, so
-  `p` stays fixed.
+  `f` stays fixed.
 - The line term is a deviation from the training lines' mean, so the gene pair alone cannot fill it. The line's gain
-  is `s − p`.
+  is `s − f`.
+- Changed on 2026-11-20 after the first runs: the base was the pair score on the mean input; that score is weak for a
+  model that reads the line (recall in the top 10% of 0.466 / 0.430 against 0.553 / 0.496 for the model with Tx1-3B
+  cell tokens), and the line term on it scored 0.288 / 0.279.
 
 ## 4. Gene-in-line features
 
@@ -89,8 +92,9 @@ value reads zeros and a presence flag of 0.
 
 ## 5. Rows of the study
 
-One config each, seed 0, run id `<config name>_seed0`. Every run writes five score tables: the model, its two
-line-input controls, the model with the line term, and the line term on another line's input.
+One config each, seed 0, run id `<config name>_seed0_v2` (the `_seed0` runs of 2026-11-20 used the old base, the pair
+score on the mean input). Every run writes five score tables: the model, its two line-input controls, the model with
+the line term, and the model and the line term on another line's input.
 
 | Config (`configs/sl/`) | Cell tokens | Gene-in-line features |
 | --- | --- | --- |
@@ -106,7 +110,8 @@ The rows with the residual target are the finished runs `embedding_seed0`, `embe
 
 - Recall in the top 10%, AUROC and AUPRC over the positive rate, on all pairs, validation and test. Validation
   selects; test is scored once.
-- The line's gain: the model with the line term minus `p`, and minus itself on another line's input.
+- The line's gain: the model with the line term minus the model without it (`f`), minus the context-ablated model,
+  and minus itself on another line's input.
 - What the pretraining on the direct target adds: `embedding_direct` and `embedding_direct_mean_token` minus the
   finished runs of 2026-11-19 with the same inputs.
 - What the cells add: a row with Tx1-3B cell tokens minus the same row without cell tokens; the Tx1-3B gene-level row
