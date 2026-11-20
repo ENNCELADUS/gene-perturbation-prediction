@@ -94,10 +94,17 @@ NAMES = {
     # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding)
     "embedding": "Gene-knowledge, cell-set model (pair head on gene-in-line "
     "embeddings, pretrained on GeneEffect)",
+    "embedding_mean_input": "Gene-knowledge, cell-set model, context-ablated (the fit "
+    "lines' mean input, no cells)",
+    "embedding_other_line": "Gene-knowledge, cell-set model on another line's input",
     "embedding_cellnet": "Gene-knowledge, cell-set model with CellNet's cell "
     "embeddings in place of Tx1's",
     "embedding_mean_token": "Gene-knowledge model without cell tokens (each line "
     "reads its mean token alone)",
+    "embedding_mean_token_mean_input": "Gene-knowledge model without cell tokens, "
+    "context-ablated (the fit lines' mean input)",
+    "embedding_mean_token_other_line": "Gene-knowledge model without cell tokens on "
+    "another line's input",
     # the PIE editor (configs/sl/pie_editor.yaml): PIE's predicted profile after A's
     # loss in place of the simple edit; 0 outside the rows the simple edit covers,
     # or (pie_all) outside the rows PIE can edit
@@ -133,11 +140,18 @@ STRATA = {
     "seen_flip": "Seen pair, label differs from the training lines",
     "new_pair": "New pair, both genes seen",
 }
-#: Subsets of held-out rows, reported as the strata are. A partner pair: A is a
-#: paralog or complex co-member of B (or, for a pair, B of A), from the ``partner``
+#: Subsets of held-out rows, reported as the strata are. The seen pairs by what the
+#: same study's training lines called them (``training_calls``): no label of the
+#: held-out line is read, so inside "never" and "always" the training SL fraction is
+#: constant and a ranking can come only from the line or the genes. A partner pair: A
+#: is a paralog or complex co-member of B (or, for a pair, B of A), from the ``partner``
 #: column of a score table. No dependency alone: the measured GeneEffect of gene B
 #: (and of gene A for a pair) is at or above ``DEPENDENCY`` (lines with GeneEffect).
 SUBSETS = {
+    "seen": "Seen pair",
+    "seen_never": "Seen pair, no training line called it SL",
+    "seen_mixed": "Seen pair, the training lines differ",
+    "seen_always": "Seen pair, every training line called it SL",
     "partner": "Partner pairs",
     "no_dependency_alone": "No gene a dependency alone",
 }
@@ -200,22 +214,38 @@ def benchmark_rows(
     return rows.reset_index(drop=True), dropped
 
 
+def training_rate(training: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
+    """The pair's hit rate over the same study's training lines; NaN for a pair never
+    labelled there."""
+    keys = ["study_id", "gene_a", "gene_b"]
+    rate = training.groupby(keys)["label"].mean()
+    return rate.reindex(pd.MultiIndex.from_frame(rows[keys])).to_numpy()
+
+
 def pair_identity(training: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
     """The pair's hit rate over the same study's training lines; a pair never
     labelled there scores the study's training hit rate, so it ties."""
-    keys = ["study_id", "gene_a", "gene_b"]
-    rate = training.groupby(keys)["label"].mean()
     fill = training.groupby("study_id")["label"].mean()
-    scored = rate.reindex(pd.MultiIndex.from_frame(rows[keys])).to_numpy()
+    scored = training_rate(training, rows)
     return np.where(np.isnan(scored), rows["study_id"].map(fill).to_numpy(), scored)
+
+
+def training_calls(training: pd.DataFrame, rows: pd.DataFrame) -> dict[str, np.ndarray]:
+    """The seen pairs of ``rows`` (SUBSETS keys) by the calls of the same study's
+    training lines: any, never SL, both ways, always SL."""
+    rate = training_rate(training, rows)
+    return {
+        "seen": ~np.isnan(rate),
+        "seen_never": rate == 0,
+        "seen_mixed": (rate > 0) & (rate < 1),
+        "seen_always": rate == 1,
+    }
 
 
 def strata(training: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray:
     """The stratum of each row (STRATA keys; ``unseen_gene`` is not reported). Gene A
     of an anchor list is one gene or drug for the whole list, so only gene B counts."""
-    keys = ["study_id", "gene_a", "gene_b"]
-    rate = training.groupby(keys)["label"].mean()
-    rate = rate.reindex(pd.MultiIndex.from_frame(rows[keys])).to_numpy()
+    rate = training_rate(training, rows)
     genes = set(training["gene_a"]) | set(training["gene_b"])
     seen_genes = rows["gene_b"].isin(genes) & (
         (rows["design"] == "anchor") | rows["gene_a"].isin(genes)
@@ -544,6 +574,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     # every row set reported: all rows, each stratum, each subset
     masks = {"all": np.ones(len(held), dtype=bool)}
     masks |= {k: (held["stratum"] == k).to_numpy() for k in STRATA if k != "all"}
+    masks |= training_calls(training, held)
     if partner is not None:
         masks["partner"] = partner
     masks["no_dependency_alone"] = no_dependency_alone(effects, held)
@@ -622,6 +653,9 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     write_parquet(run_dir / "scores.parquet", scores.drop(columns="row"))
     lists.to_csv(run_dir / "lists.csv", index=False)
     lines.to_csv(run_dir / "lines.csv", index=False)
+    pd.DataFrame(results).drop(columns=["interval", "minus_pair_identity"]).to_csv(
+        run_dir / "summary.csv", index=False
+    )
     write_json(run_dir / "metrics.json", metrics)
     write_text(run_dir / "results.md", results_markdown(metrics))
     return run_dir
@@ -670,7 +704,7 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         low, high = row["interval"]
         return f"{row['minus_pair_identity']:+.3f} [{low:+.3f}, {high:+.3f}]"
 
-    n = {split: rows[(split, "pair_identity")]["lines"] for split in SIDES}
+    n = {split: rows[(split, "random")]["lines"] for split in SIDES}
     lines = [
         f"# SL benchmark baselines: {metrics['run_id']}",
         "",
@@ -713,8 +747,9 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         *covered_table(metrics["covered"]),
         *paired_table(metrics["paired_differences"]),
         *agreement_lines(metrics["label_agreement"]),
-        "Other line groups, AUROC and AUPRC are in `metrics.json`; each line in "
-        "`lines.csv`; each screen, the non-genetic ones included, in `lists.csv`.",
+        "AUROC and AUPRC of each row set and line group are in `summary.csv`; each "
+        "line in `lines.csv`; each screen, the non-genetic ones included, in "
+        "`lists.csv`.",
     ]  # fmt: skip
     return "\n".join(lines) + "\n"
 

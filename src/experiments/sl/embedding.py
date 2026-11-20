@@ -32,7 +32,7 @@ import argparse
 import copy
 import logging
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -62,6 +62,8 @@ from src.training.stage_one_trainer import masked_mse
 log = logging.getLogger(__name__)
 
 SCORER = "embedding"
+#: One line's mean token, cell tokens and the cells' mask (``one_line``).
+Tokens = tuple[Tensor, Tensor | None, Tensor | None]
 SECTIONS = {
     "model": {"hidden", "head_hidden"},
     "cells": {"per_step", "dropout"},
@@ -376,15 +378,21 @@ def pair_scores(
     pairs: PairRows,
     rows: np.ndarray,
     config: Mapping[str, Any],
+    tokens_of: Callable[[int], Tokens] | None = None,
 ) -> np.ndarray:
-    """The SL logit of each row position in ``rows``, with every cell of its line."""
+    """The SL logit of each row position in ``rows``, with every cell of its line;
+    ``tokens_of`` gives a line other tokens than its own (``line_input_controls``)."""
     u = model.gene_vectors()
     chunk = int(config["eval"]["rows_per_chunk"])
     at = torch.tensor(rows, device=data.device)
     out = torch.empty(len(at))
     line_of = pairs.line[at]
+
+    def own(line: int) -> Tokens:
+        return one_line(model, data, line, None, None)
+
     for line in line_of.unique().tolist():
-        tokens = one_line(model, data, line, None, None)
+        tokens = (tokens_of or own)(line)
         mine = torch.nonzero(line_of == line).squeeze(1)
         for start in range(0, len(mine), chunk):
             part = at[mine[start : start + chunk]]
@@ -392,6 +400,31 @@ def pair_scores(
                 u[pairs.a[part]], u[pairs.b[part]], pairs.combinatorial[part], *tokens
             ).cpu()
     return out.numpy().astype(np.float64)
+
+
+@torch.no_grad()
+def line_input_controls(
+    model: GeneLineModel, data: Data, pairs: PairRows, config: Mapping[str, Any]
+) -> dict[str, np.ndarray]:
+    """The SL logit of every row with the line's input replaced (no refit):
+    ``mean_input``, the fit lines' mean expression and no cells, so the score reads the
+    genes alone; ``other_line``, the expression and cells of another benchmark line
+    (the next one in a seeded order, never the line itself)."""
+    every = np.arange(len(data.rows))
+    mean, _ = model.tokens(torch.zeros_like(data.expression[:1]), None)
+    order = np.random.default_rng(int(config["seed"])).permutation(
+        np.unique(data.rows["line"])
+    )
+    other = dict(zip(order.tolist(), np.roll(order, 1).tolist()))
+    return {
+        "mean_input": pair_scores(
+            model, data, pairs, every, config, lambda line: (mean[0], None, None)
+        ),
+        "other_line": pair_scores(
+            model, data, pairs, every, config,
+            lambda line: one_line(model, data, other[line], None, None),
+        ),
+    }  # fmt: skip
 
 
 def fit_pairs(
@@ -492,6 +525,7 @@ def train(
         "phases": phases,
         "chosen": chosen,
         "scores": pair_scores(model, data, pairs, every, config),
+        "controls": line_input_controls(model, data, pairs, config),
     }
 
 
@@ -725,6 +759,35 @@ def load_data(
     return data, base, counts_record
 
 
+def write_scores(
+    run_dir: Path, rows: pd.DataFrame, scores: Mapping[str, np.ndarray]
+) -> None:
+    """One harness score table per name: ``scores/<name>.parquet``."""
+    (run_dir / "scores").mkdir(exist_ok=True)
+    for name, score in scores.items():
+        table = rows[KEYS].assign(score=score).drop_duplicates(KEYS)
+        staging = run_dir / "scores" / f".{name}.parquet.tmp"
+        table.to_parquet(staging, index=False)
+        os.replace(staging, run_dir / "scores" / f"{name}.parquet")
+
+
+def controls_named(controls: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+    return {f"{SCORER}_{name}": score for name, score in controls.items()}
+
+
+def rescore(config: Mapping[str, Any], run_id: str, device: str) -> Path:
+    """The line-input controls of a finished run, from its ``best.pt``; no training."""
+    run_dir = Path(config["output_root"]) / config["task"] / run_id
+    data, _, _ = load_data(config, torch.device(device))
+    model = build_model(config, data)
+    model.load_state_dict(
+        torch.load(run_dir / "best.pt", map_location=device)["weights"]
+    )
+    controls = line_input_controls(model, data, pair_rows(data), config)
+    write_scores(run_dir, data.rows, controls_named(controls))
+    return run_dir
+
+
 def run(config: Mapping[str, Any], run_id: str, device: str) -> Path:
     run_dir = Path(config["output_root"]) / config["task"] / run_id
     if (run_dir / "metrics.json").exists():
@@ -739,11 +802,8 @@ def run(config: Mapping[str, Any], run_id: str, device: str) -> Path:
     torch.save({"weights": model.state_dict(), "config": jsonable(config)},
                run_dir / "best.pt")  # fmt: skip
     rows = data.rows
-    (run_dir / "scores").mkdir(exist_ok=True)
-    table = rows[KEYS].assign(score=result["scores"]).drop_duplicates(KEYS)
-    staging = run_dir / "scores" / f".{SCORER}.parquet.tmp"
-    table.to_parquet(staging, index=False)
-    os.replace(staging, run_dir / "scores" / f"{SCORER}.parquet")
+    write_scores(run_dir, rows, {SCORER: result["scores"]})
+    write_scores(run_dir, rows, controls_named(result["controls"]))
     sides = {s: sorted(set(rows.loc[rows["split"] == s, "model_id"]))
              for s in ("train", "val", "test")}  # fmt: skip
     labelled = [m for group in sides.values() for m in group
@@ -861,11 +921,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--device", default="cuda" if torch.cuda.is_available() else "cpu"
     )
+    parser.add_argument(
+        "--line-input-controls",
+        action="store_true",
+        help="score a finished run again with each line's input replaced; no training",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
     )
-    out = run(load_config(args.config), args.run_id, args.device)
+    step = rescore if args.line_input_controls else run
+    out = step(load_config(args.config), args.run_id, args.device)
     print(f"gene-knowledge, cell-set model: {out}", flush=True)
     return 0
 
