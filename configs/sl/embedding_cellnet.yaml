@@ -1,6 +1,7 @@
 # The gene-knowledge, cell-set model with CellNet's cell embeddings in place of Tx1-3B's (SL protocol §18):
 # configs/sl/embedding.yaml with another `cell_embeddings` cache (hpc/cellnet/embed_lines.py; CellNet,
 # arXiv:2610.21943, 768 wide). `hpc/run.sh sl-embedding configs/sl/embedding_cellnet.yaml --run-id ID` (one GPU).
+# The run of 2026-11-19 used the residual target (code at db8a96e); the present code trains on GeneEffect itself.
 kind: sl_embedding
 seed: 0
 output_root: outputs/sl

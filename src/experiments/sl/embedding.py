@@ -2,11 +2,13 @@
 §18; docs/specs/2026-11-19-embedding-transfer-plan.md). One model
 (``src/model/sl_embedding.py``), two stages:
 
-1. Stage one, pretraining: the GeneEffect residual ``(GeneEffect - m_g) / sigma_g`` of
-   the fit lines, which are the labelled training-side lines without any SL label (and
-   not of an SL line's patient). ``m_g`` and ``sigma_g`` are fitted on them. The epoch
-   kept has the lowest loss on the SL training lines with GeneEffect, which are out of
-   sample. Thus the model reads every SL line, training or held out, out of sample.
+1. Stage one, pretraining: GeneEffect itself of the fit lines, which are the labelled
+   training-side lines without any SL label (and not of an SL line's patient), on one
+   scale for every gene: ``(GeneEffect - centre) / scale``, with the mean and the SD of
+   all the fit lines' values (``target_scale``). Thus the untrained model predicts one
+   value for every gene, and a trained epoch can lower the loss. The epoch kept has
+   the lowest loss on the SL training lines with GeneEffect, which are out of sample.
+   Thus the model reads every SL line, training or held out, out of sample.
 2. Stage two: the pair head on the frozen stage-one model, then the whole model with
    the GeneEffect loss kept at each weight of ``stage_two.geneeffect_weights``. Rows
    are the SL training lines' genetic screens with both classes, drawn as the benchmark
@@ -113,7 +115,8 @@ class Data:
     rows: pd.DataFrame
     sources: dict[str, tuple[Tensor, Tensor]]
     m_g: np.ndarray
-    sigma_g: np.ndarray
+    centre: float
+    scale: float
 
     @property
     def device(self) -> torch.device:
@@ -543,13 +546,13 @@ def sl_metrics(rows: pd.DataFrame, score: np.ndarray, top_k: int) -> dict[str, A
 def geneeffect_table(
     model: GeneLineModel, data: Data, lines: Sequence[str], config: Mapping[str, Any]
 ) -> pd.DataFrame:
-    """The model's GeneEffect of ``lines`` (lines x genes): ``m_g + z sigma_g``."""
+    """The model's GeneEffect of ``lines`` (lines x genes): ``centre + z scale``."""
     position = {m: i for i, m in enumerate(data.lines)}
     z = predict_dependency(
         model, data, torch.tensor([position[m] for m in lines]), config
     ).numpy()
     return pd.DataFrame(
-        data.m_g + z * data.sigma_g, index=list(lines), columns=data.genes
+        data.centre + z * data.scale, index=list(lines), columns=data.genes
     )
 
 
@@ -664,6 +667,14 @@ def stage_one_lines(
     )
 
 
+def target_scale(labelled: pd.DataFrame) -> tuple[float, float]:
+    """The mean and the SD (``ddof=0``) of every finite GeneEffect value of
+    ``labelled`` (lines x genes): one centre and one scale for every gene."""
+    values = labelled.to_numpy(np.float64)
+    values = values[np.isfinite(values)]
+    return float(values.mean()), float(values.std())
+
+
 def load_data(
     config: Mapping[str, Any], device: torch.device
 ) -> tuple[Data, Any, dict[str, Any]]:
@@ -708,11 +719,10 @@ def load_data(
     expression = (expression - centre) / scale.where(scale > 0, 1.0)
     labelled = base.gene_effect.reindex(index=[*fit, *stop], columns=genes)
     m_g = labelled.loc[fit].mean(axis=0)
-    sigma_g = labelled.loc[fit].std(axis=0, ddof=0)
-    sigma_g = sigma_g.where(sigma_g > 0, 1.0)
+    target_centre, target_sd = target_scale(labelled.loc[fit])
     targets = torch.full((len(lines), len(genes)), torch.nan)
     targets[[position[m] for m in labelled.index]] = torch.tensor(
-        ((labelled - m_g) / sigma_g).to_numpy(np.float32)
+        ((labelled - target_centre) / target_sd).to_numpy(np.float32)
     )
     cache = config["cell_embeddings"]
     cells, counts = read_cells(
@@ -741,7 +751,8 @@ def load_data(
             for name, (v, p) in read_sources(config["gene_sources"], genes).items()
         },
         m_g=m_g.to_numpy(np.float64),
-        sigma_g=sigma_g.to_numpy(np.float64),
+        centre=target_centre,
+        scale=target_sd,
     )
     counts_record = {
         "fit_lines": len(fit),
@@ -817,7 +828,7 @@ def run(config: Mapping[str, Any], run_id: str, device: str) -> Path:
         "stage_one": stage_one_metrics(
             predicted, base.gene_effect, base.definitions, sides
         ),
-        # the gene mean of the fit lines alone (z = 0): what the model starts from
+        # the gene mean of the fit lines alone: the reference row of the report
         "stage_one_base": stage_one_metrics(
             predicted * 0 + data.m_g, base.gene_effect, base.definitions, sides
         ),
@@ -867,8 +878,8 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         + " / ".join(str(one[s]["lines"]) for s in ("val", "test"))
         + " lines, validation / test; out of sample for stage one), as every "
         "stage-one reader is scored: the predicted GeneEffect as a residual over the "
-        "training gene mean. The second row is the fit lines' gene mean alone, which "
-        "the untrained model predicts. Higher is better. They decide nothing.",
+        "training gene mean. The second row is the fit lines' gene mean alone. Higher "
+        "is better. They decide nothing.",
         "",
         "| Model |" + "".join(f" {name}, {s} |" for _, name in keys
                               for s in ("validation", "test")),
@@ -892,7 +903,8 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
           for phase in metrics["phases"]),
         "",
         "**Table 4.** Stage one: the GeneEffect loss on the SL training lines (out of "
-        "sample; lower is better). Epoch 0 is the untrained model.",
+        "sample; lower is better). Epoch 0 is the untrained model, which predicts one "
+        "value for every gene.",
         "",
         "| Epoch | Training loss | Loss on the SL training lines |",
         "| ---: | ---: | ---: |",
