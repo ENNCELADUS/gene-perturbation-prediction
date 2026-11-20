@@ -31,7 +31,7 @@ Usage: hpc/run.sh all CONFIG [--run-id ID] [--gpus 0,1,2,3]
        hpc/run.sh sl-codetection JOINT_CONFIG LABELS SL_SPLIT   (co-detection of each SL pair in the screened lines' cells, CPU)
        hpc/run.sh sl-pie-pass CONFIG --steps tables|pass|measured|rescore|own_task [--shard I/N] [--device cuda]   (PIE's profile changes for the PIE editor, GPU, .venv-pie)
        hpc/run.sh sl-pie-editor CONFIG --run-id ID   (the SL backbone with the PIE editor, CPU)
-       hpc/run.sh sl-gene-in-line CONFIG --steps tx1_gene|pie_change [--shard I/N] [--device cuda]   (the gene-in-line caches of the SL line term: Tx1-3B on a GPU, PIE on CPU)
+       hpc/run.sh sl-gene-in-line CONFIG --steps tx1_gene|pie_change [--shard I/N]   (the gene-in-line caches of the SL line term, one step for each call: Tx1-3B on a GPU, PIE on CPU)
        hpc/run.sh cell-states CONFIG --steps fit,project,inputs|report   (cell-state telemetry, CPU; fit runs STATES_PYTHON, scVI on a GPU)
        hpc/run.sh pie-precompute CONFIG --steps states|assemble_states --set NAME[,NAME]|ALL [--shard I/N]   (frozen PIE on state inputs, GPU)
 PYTHON_BIN overrides the H20 .venv-tx1/bin/python environment; pie-reproduce,

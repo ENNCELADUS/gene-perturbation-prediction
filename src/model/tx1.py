@@ -147,12 +147,17 @@ def gene_sums(
     """For each token id of ``wanted`` (genes,): the sum of its embedding over the
     cells whose sequence holds it (genes, width) and the number of those cells
     (genes,). ``gene_ids``: (cells, sequence); ``gene_emb``: (cells, sequence,
-    width). A token is in a cell's sequence at most once."""
+    width). A wanted token twice in one cell's sequence (two ``var`` rows of one
+    Ensembl ID) raises ``ValueError``: its count would exceed the cells."""
     unique, inverse = torch.unique(wanted, return_inverse=True)
     flat = gene_ids.reshape(-1).to(unique.dtype)
     position = torch.searchsorted(unique, flat).clamp(max=len(unique) - 1)
     hit = unique[position] == flat
     position = position[hit]
+    cell = torch.arange(gene_ids.shape[0], device=flat.device)
+    cell = cell.repeat_interleave(gene_ids.shape[1])[hit]
+    if torch.unique(cell * len(unique) + position).numel() < position.numel():
+        raise ValueError("a wanted token is twice in one cell's sequence")
     width = gene_emb.shape[-1]
     sums = torch.zeros(len(unique), width, device=gene_emb.device).index_add_(
         0, position, gene_emb.reshape(-1, width)[hit].float()

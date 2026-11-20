@@ -47,3 +47,14 @@ def test_gene_sums_add_each_gene_over_the_cells_that_hold_it():
     sums, counts = gene_sums(ids, emb, torch.tensor([3, 9, 4]))
     assert counts.tolist() == [2, 1, 0]
     assert sums.tolist() == [[8.0, 10.0], [8.0, 9.0], [0.0, 0.0]]
+    sums, counts = gene_sums(ids, emb, torch.tensor([3, -1, 9, 3]))
+    assert counts.tolist() == [2, 0, 1, 2]
+    assert sums.tolist() == [[8.0, 10.0], [0.0, 0.0], [8.0, 9.0], [8.0, 10.0]]
+
+
+def test_gene_sums_refuse_a_token_twice_in_one_cell():
+    from src.model.tx1 import gene_sums
+
+    ids = torch.tensor([[3, 3, 0], [3, 9, 0]])
+    with np.testing.assert_raises(ValueError):
+        gene_sums(ids, torch.zeros(2, 3, 2), torch.tensor([3, 9]))

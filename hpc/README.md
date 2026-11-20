@@ -481,7 +481,7 @@ hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id benchmark_e
 ([card](../docs/data/gene-in-line-features.md)) under `data/sl_gene_in_line/v1/`: `tx1_gene` (Tx1-3B's mean
 contextual embedding of each gene and the share of cells that hold it, at most 256 cells of each SL line, one process
 for each GPU) and `pie_change` (PIE's predicted changes from `sl-pie-pass`, in 64 components fitted on the SL
-training lines, CPU). A line whose file exists is skipped:
+training lines, CPU). Each call runs one step. A line whose file exists is skipped:
 
 ```bash
 for i in 0 1 2 3; do

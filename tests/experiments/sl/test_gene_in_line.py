@@ -24,33 +24,45 @@ def test_the_config_loads_and_an_unknown_step_is_refused():
         gene_in_line.main(["configs/sl/gene_in_line.yaml", "--steps", "cellnet"])
 
 
-def test_pie_change_writes_each_pie_line_in_components(tmp_path):
-    import json
-
+def pie_root(path, held_out_value=None):
+    """A PIE root of two training lines and one validation line; two lost genes
+    with change files, one gene that is not lost."""
     import pandas as pd
 
-    root = tmp_path / "pie_root"
-    (root / "pie" / "change").mkdir(parents=True)
+    (path / "pie" / "change").mkdir(parents=True)
     lines = pd.DataFrame(
         {"role": ["train", "train", "val"]},
         index=pd.Index(["ACH-1", "ACH-2", "ACH-3"], name="model_id"),
     )
-    lines.to_parquet(root / "lines.parquet")
+    lines.to_parquet(path / "lines.parquet")
+    genes = pd.DataFrame(
+        {"lost": [True, False, True]},
+        index=pd.Index(["ATM", "BRCA1", "C1ORF1"], name="gene"),
+    )
+    genes.to_parquet(path / "genes.parquet")
     rng = np.random.default_rng(0)
     for gene in ("ATM", "C1ORF1"):
-        np.save(
-            root / "pie" / "change" / f"{gene}.npy",
-            rng.normal(size=(3, 5)).astype(np.float16),
-        )
-    config = {
+        change = rng.normal(size=(3, 5))
+        if held_out_value is not None:
+            change[2] = held_out_value
+        np.save(path / "pie" / "change" / f"{gene}.npy", change.astype(np.float16))
+    return {
         "seed": 0,
-        "out": str(tmp_path / "out"),
-        "pie": {"root": str(root), "components": 2, "sample": 3},
+        "out": str(path / "out"),
+        "pie": {"root": str(path), "components": 2, "sample": 3},
     }
-    genes = ["ATM", "BRCA1", "C1orf1"]
-    gene_in_line.pie_change(config, genes, ["ACH-1", "ACH-9"])
+
+
+GENES = ["ATM", "BRCA1", "C1orf1"]
+
+
+def test_pie_change_writes_each_pie_line_in_components(tmp_path):
+    import json
+
+    config = pie_root(tmp_path)
+    gene_in_line.pie_change(config, GENES, ["ACH-1", "ACH-9"])
     cache = tmp_path / "out" / "pie_change"
-    assert json.loads((cache / "genes.json").read_text()) == genes
+    assert json.loads((cache / "genes.json").read_text()) == GENES
     values = np.load(cache / "ACH-3.npy")
     assert values.shape == (3, 2) and values.dtype == np.float16
     assert np.isfinite(values[[0, 2]]).all() and np.isnan(values[1]).all()
@@ -58,3 +70,27 @@ def test_pie_change_writes_each_pie_line_in_components(tmp_path):
     assert report["sample"] == 3 and report["labelled_lines_without_pie"] == ["ACH-9"]
     with pytest.raises(ValueError, match="gene axis"):
         gene_in_line.pie_change(config, ["ATM"], [])
+
+
+def test_pie_change_fits_its_components_on_the_training_lines_only(tmp_path):
+    for name, value in (("plain", None), ("extreme", 1000.0)):
+        gene_in_line.pie_change(pie_root(tmp_path / name, value), GENES, [])
+    for model_id in ("ACH-1", "ACH-2"):
+        plain, extreme = (
+            np.load(tmp_path / name / "out" / "pie_change" / f"{model_id}.npy")
+            for name in ("plain", "extreme")
+        )
+        np.testing.assert_array_equal(plain, extreme)
+
+
+def test_pie_change_refuses_an_unfinished_pie_pass(tmp_path):
+    config = pie_root(tmp_path)
+    (tmp_path / "pie" / "change" / "C1ORF1.npy").unlink()
+    with pytest.raises(FileNotFoundError, match="1 lost genes"):
+        gene_in_line.pie_change(config, GENES, [])
+
+
+def test_a_value_outside_the_float16_range_is_refused():
+    assert gene_in_line.as_float16(np.array([1.0, np.nan]), "ACH-1").dtype == np.float16
+    with pytest.raises(ValueError, match="ACH-1"):
+        gene_in_line.as_float16(np.array([1.0e6]), "ACH-1")
