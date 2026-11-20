@@ -1,6 +1,6 @@
 # configs/sl/embedding_direct.yaml with PIE's predicted change after the gene's loss as a gene-in-line feature of the
 # line term (SL protocol §19). Needs the pie_change cache of configs/sl/gene_in_line.yaml.
-# `hpc/run.sh sl-embedding configs/sl/embedding_direct_pie_change.yaml --run-id embedding_direct_pie_change_seed0` (one GPU).
+# `hpc/run.sh sl-embedding configs/sl/embedding_direct_pie_change.yaml --run-id embedding_direct_pie_change_seed0_v2` (one GPU).
 # Plan: docs/specs/2026-11-20-line-term-and-direct-target-plan.md.
 kind: sl_embedding
 seed: 0

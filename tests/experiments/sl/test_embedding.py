@@ -195,21 +195,30 @@ def test_line_term_is_a_deviation_from_the_training_lines():
     pairs = embedding.pair_rows(data)
     every = np.arange(len(data.rows))
     torch.nn.init.normal_(model.mean_token[-1].weight, std=0.5)
-    on_mean = embedding.line_input_controls(model, data, pairs, LINE_CONFIG)[
-        "mean_input"
-    ]
-    # an untrained line head gives 0: the score is the pair score on the mean input
+    model_scores = embedding.pair_scores(model, data, pairs, every, LINE_CONFIG)
+    controls = embedding.line_input_controls(model, data, pairs, LINE_CONFIG)
+    assert not np.allclose(
+        model_scores, controls["mean_input"]
+    )  # the model reads the line
+    # an untrained line head gives 0: the score is the model's own score in the line
     start = embedding.line_term_scores(model, data, pairs, every, LINE_CONFIG)
-    assert np.allclose(start, on_mean, atol=1e-5)
+    assert np.allclose(start, model_scores, atol=1e-5)
+    # read in another line, the model's score is the other-line control
+    other = embedding.other_lines(data, LINE_CONFIG)
+    moved = embedding.line_term_scores(
+        model, data, pairs, every, LINE_CONFIG, other.__getitem__
+    )
+    assert np.allclose(moved, controls["other_line"], atol=1e-5)
     torch.nn.init.normal_(model.line_head[-1].weight, std=0.5)
     own = embedding.line_term_scores(model, data, pairs, every, LINE_CONFIG)
-    assert np.isfinite(own).all() and not np.allclose(own, on_mean)
+    assert np.isfinite(own).all() and not np.allclose(own, model_scores)
     # a line head whose input is the same in every line gives no deviation
     data.expression[:] = data.expression[0]
     data.offsets[:] = 0  # no line has a cell
     data.in_line["own"][:] = data.in_line["own"][0]
     same = embedding.line_term_scores(model, data, pairs, every, LINE_CONFIG)
-    assert np.allclose(same, on_mean, atol=1e-4)
+    base = embedding.pair_scores(model, data, pairs, every, LINE_CONFIG)
+    assert np.allclose(same, base, atol=1e-4)
 
 
 def test_line_term_scores_follow_the_definition_row_by_row():
@@ -222,10 +231,13 @@ def test_line_term_scores_follow_the_definition_row_by_row():
     pairs = embedding.pair_rows(data)
     rows = np.array([0, 1, 5, 400, len(data.rows) - 1])
     got = embedding.line_term_scores(model, data, pairs, rows, LINE_CONFIG)
-    assert np.isfinite(got).all()
+    other = embedding.other_lines(data, LINE_CONFIG)
+    got_other = embedding.line_term_scores(
+        model, data, pairs, rows, LINE_CONFIG, other.__getitem__
+    )
+    assert np.isfinite(got).all() and np.isfinite(got_other).all()
     with torch.no_grad():
         u = model.gene_vectors()
-        mean = model.tokens(torch.zeros(1, data.expression.shape[1]), None)[0][0]
 
         def features(line: int, gene: int) -> dict[str, torch.Tensor]:
             at = int(data.in_line_at[line])
@@ -240,14 +252,19 @@ def test_line_term_scores_follow_the_definition_row_by_row():
                 u[[a]], u[[b]], c, features(line, a), features(line, b), *tokens
             )[0]
 
+        def score(line: int, a: int, b: int, c: torch.Tensor) -> torch.Tensor:
+            tokens = embedding.one_line(model, data, line, None, None)
+            return model.pair(u[[a]], u[[b]], c, *tokens)[0]
+
         for k, i in enumerate(rows):
             a, b, c = int(pairs.a[i]), int(pairs.b[i]), pairs.combinatorial[[i]]
-            p = model.pair(u[[a]], u[[b]], c, mean, None, None)[0]
             reference = torch.stack(
                 [deviation(r, a, b, c) for r in sorted(pairs.draws)]
             ).mean()
-            want = p + deviation(int(pairs.line[i]), a, b, c) - reference
-            assert abs(got[k] - float(want)) < 1e-5
+            for line, value in ((int(pairs.line[i]), got[k]),
+                                (other[int(pairs.line[i])], got_other[k])):  # fmt: skip
+                want = score(line, a, b, c) + deviation(line, a, b, c) - reference
+                assert abs(value - float(want)) < 1e-5
 
 
 def test_the_line_term_trains_alone_and_train_reports_it():
@@ -259,6 +276,7 @@ def test_the_line_term_trains_alone_and_train_reports_it():
     assert set(line) == {"val_recall_top10", "history", "scores", "other_line"}
     assert np.isfinite(line["scores"]).all()
     assert not np.allclose(line["scores"], line["other_line"])
+    assert not np.allclose(line["scores"], result["scores"])
     assert not np.allclose(line["scores"], result["controls"]["mean_input"])
     before = copy.deepcopy(model.state_dict())
     state, _, history = embedding.fit_line_term(

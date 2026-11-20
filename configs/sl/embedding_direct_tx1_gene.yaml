@@ -1,6 +1,6 @@
 # configs/sl/embedding_direct.yaml with Tx1-3B's gene embeddings as a gene-in-line feature of the line term (SL
 # protocol §19). Needs the tx1_gene cache of configs/sl/gene_in_line.yaml.
-# `hpc/run.sh sl-embedding configs/sl/embedding_direct_tx1_gene.yaml --run-id embedding_direct_tx1_gene_seed0` (one GPU).
+# `hpc/run.sh sl-embedding configs/sl/embedding_direct_tx1_gene.yaml --run-id embedding_direct_tx1_gene_seed0_v2` (one GPU).
 # Plan: docs/specs/2026-11-20-line-term-and-direct-target-plan.md.
 kind: sl_embedding
 seed: 0

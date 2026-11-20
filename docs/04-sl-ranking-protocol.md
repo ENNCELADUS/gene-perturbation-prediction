@@ -805,20 +805,23 @@ parts of §18. All other parts of §18 stay.
 - **The line term.** The SL score of a row (line `c`, pair A, B) is
 
   ```text
-  s(c, A, B) = p(A, B) + D(c, A, B) − mean over r in R of D(r, A, B)
+  s(c, A, B) = f(c, A, B) + D(c, A, B) − mean over r in R of D(r, A, B)
   ```
 
-  - `p(A, B)`: the pair head of the chosen phase on the mean input (the fit lines' mean expression, no cells). It is
-    the context-ablated score of that phase.
+  - `f(c, A, B)`: the model's own score, the pair head of the chosen phase read in line `c` (its tokens, all its cells
+    at scoring). At a training step, `f` and `D` of the row's line read the same drawn tokens.
   - `D(r, A, B)`: the line head, a second MLP. It reads the pair head's input for the pair in line `r` and the
     gene-in-line features of A and B in line `r`. Its last layer starts at zero, so the untrained line term is 0.
   - `R`: the SL training lines with training rows (genetic screens with both classes). At a training step, `R` is a
     draw of `line_term.reference_lines` of them, with replacement. At scoring, `R` is all of them, with all their cells.
   - The line term trains last, on the chosen phase, with binary cross-entropy on `s` and the rows of stage two. Only
-    the line head and its input projections train, so `p` does not change. Validation recall in the top 10% of `s`
+    the line head and its input projections train, so `f` does not change. Validation recall in the top 10% of `s`
     selects the epoch (`line_term.max_epochs`, `patience`, `learning_rate`).
   - The line term is a deviation from the SL training lines' mean. Thus the gene pair alone cannot fill it. The
-    line's gain is `s − p`.
+    line's gain is `s − f`.
+  - Changed on 2026-11-20 after the first runs: the base was the pair score on the mean input; that score is weak for
+    a model that reads the line (recall in the top 10% of 0.466 / 0.430 against 0.553 / 0.496 for the model with
+    Tx1-3B cell tokens), and the line term on it scored 0.288 / 0.279.
 - **Gene-in-line features.** Each source gives one vector for each (line, gene). A linear projection takes it to
   width 32, the sources are summed to `e_g`, and the line head reads `[e_A + e_B ; |e_A − e_B| ; e_A ⊙ e_B]`.
   - *Own expression* (`line_term.own_expression`): the line's scaled bridged pseudo-bulk value of the gene and a
@@ -834,7 +837,8 @@ parts of §18. All other parts of §18 stay.
     centred and scaled on every SL training line with benchmark rows. A gene without a value reads zeros and a
     presence flag of 0. The run stops if a line with benchmark rows has no file in a cache, or if a scaled value is
     outside the float16 range.
-- **Rows of the study.** One config each, seed 0, run id `<config name>_seed0`. The configs are
+- **Rows of the study.** One config each, seed 0, run id `<config name>_seed0_v2` (the `_seed0` runs of 2026-11-20
+  used the old base, the pair score on the mean input). The configs are
   `configs/sl/embedding.yaml` with a `line_term` section (8 reference lines, at most 30 epochs, patience 5, learning
   rate 1e-3, own expression on):
 
@@ -850,8 +854,8 @@ parts of §18. All other parts of §18 stay.
 - **Outputs.** Each run writes five score tables under `outputs/sl/embedding/<run id>/scores/`:
   `embedding.parquet` (the model of the chosen phase), `embedding_mean_input.parquet` and
   `embedding_other_line.parquet` (the line-input controls of §18), `embedding_line_term.parquet` (`s`) and
-  `embedding_line_term_other_line.parquet` (`s` with `D` read in another line, the next one in a seeded order; `p`
-  and `R` do not change). `metrics.json` has two keys for the line term: `sl_line_term` (SL metrics of `mean_input`,
+  `embedding_line_term_other_line.parquet` (`s` with `f` and `D` read in another line, the next one in a seeded order;
+  `R` does not change). `metrics.json` has two keys for the line term: `sl_line_term` (SL metrics of `mean_input`,
   `line_term` and `line_term_other_line`) and `line_term` (the validation recall and the history of each epoch).
   Both are null without a line term. `results.md` reports the line term in its own SL table and after the phases of stage two. A `best.pt` written before
   this change has no line head and does not load; the finished runs keep their score tables.

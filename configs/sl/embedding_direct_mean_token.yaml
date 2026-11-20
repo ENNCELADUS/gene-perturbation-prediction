@@ -1,6 +1,6 @@
 # configs/sl/embedding_direct.yaml without cell tokens (SL protocol §19): every line reads its mean token alone.
 # The difference from embedding_direct is what the cells add.
-# `hpc/run.sh sl-embedding configs/sl/embedding_direct_mean_token.yaml --run-id embedding_direct_mean_token_seed0` (one GPU).
+# `hpc/run.sh sl-embedding configs/sl/embedding_direct_mean_token.yaml --run-id embedding_direct_mean_token_seed0_v2` (one GPU).
 # Plan: docs/specs/2026-11-20-line-term-and-direct-target-plan.md.
 kind: sl_embedding
 seed: 0

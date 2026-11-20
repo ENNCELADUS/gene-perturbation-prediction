@@ -1,9 +1,9 @@
 # The direct GeneEffect target and the line term (SL protocol §19;
 # docs/specs/2026-11-20-line-term-and-direct-target-plan.md) beside the finished runs of 2026-11-19 (residual
 # target; their stage two started from the untrained model) and the published baselines. The four runs are
-# `hpc/run.sh sl-embedding configs/sl/<config>.yaml --run-id <config>_seed0` for embedding_direct,
+# `hpc/run.sh sl-embedding configs/sl/<config>.yaml --run-id <config>_seed0_v2` for embedding_direct,
 # embedding_direct_mean_token, embedding_direct_pie_change and embedding_direct_tx1_gene.
-# `hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0` (CPU).
+# `hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0_v2` (CPU).
 kind: sl_benchmark_baselines
 seed: 0
 output_root: outputs/sl
@@ -29,27 +29,28 @@ extra_scores:
   embedding_mean_token_mean_input: outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding_mean_input.parquet
   embedding_mean_token_other_line: outputs/sl/embedding/embedding_mean_token_seed0/scores/embedding_other_line.parquet
   # the four runs of SL protocol §19: the model, its two line-input controls, the model with the line
-  # term (s) and the line term read in another line
-  direct: outputs/sl/embedding/embedding_direct_seed0/scores/embedding.parquet
-  direct_mean_input: outputs/sl/embedding/embedding_direct_seed0/scores/embedding_mean_input.parquet
-  direct_other_line: outputs/sl/embedding/embedding_direct_seed0/scores/embedding_other_line.parquet
-  direct_line_term: outputs/sl/embedding/embedding_direct_seed0/scores/embedding_line_term.parquet
-  direct_line_term_other_line: outputs/sl/embedding/embedding_direct_seed0/scores/embedding_line_term_other_line.parquet
-  direct_mean_token: outputs/sl/embedding/embedding_direct_mean_token_seed0/scores/embedding.parquet
-  direct_mean_token_mean_input: outputs/sl/embedding/embedding_direct_mean_token_seed0/scores/embedding_mean_input.parquet
-  direct_mean_token_other_line: outputs/sl/embedding/embedding_direct_mean_token_seed0/scores/embedding_other_line.parquet
-  direct_mean_token_line_term: outputs/sl/embedding/embedding_direct_mean_token_seed0/scores/embedding_line_term.parquet
-  direct_mean_token_line_term_other_line: outputs/sl/embedding/embedding_direct_mean_token_seed0/scores/embedding_line_term_other_line.parquet
-  direct_pie_change: outputs/sl/embedding/embedding_direct_pie_change_seed0/scores/embedding.parquet
-  direct_pie_change_mean_input: outputs/sl/embedding/embedding_direct_pie_change_seed0/scores/embedding_mean_input.parquet
-  direct_pie_change_other_line: outputs/sl/embedding/embedding_direct_pie_change_seed0/scores/embedding_other_line.parquet
-  direct_pie_change_line_term: outputs/sl/embedding/embedding_direct_pie_change_seed0/scores/embedding_line_term.parquet
-  direct_pie_change_line_term_other_line: outputs/sl/embedding/embedding_direct_pie_change_seed0/scores/embedding_line_term_other_line.parquet
-  direct_tx1_gene: outputs/sl/embedding/embedding_direct_tx1_gene_seed0/scores/embedding.parquet
-  direct_tx1_gene_mean_input: outputs/sl/embedding/embedding_direct_tx1_gene_seed0/scores/embedding_mean_input.parquet
-  direct_tx1_gene_other_line: outputs/sl/embedding/embedding_direct_tx1_gene_seed0/scores/embedding_other_line.parquet
-  direct_tx1_gene_line_term: outputs/sl/embedding/embedding_direct_tx1_gene_seed0/scores/embedding_line_term.parquet
-  direct_tx1_gene_line_term_other_line: outputs/sl/embedding/embedding_direct_tx1_gene_seed0/scores/embedding_line_term_other_line.parquet
+  # term (s) and the model and the line term read in another line; run ids end in _seed0_v2 (the _seed0 runs
+  # of 2026-11-20 added the line term to the pair score on the mean input)
+  direct: outputs/sl/embedding/embedding_direct_seed0_v2/scores/embedding.parquet
+  direct_mean_input: outputs/sl/embedding/embedding_direct_seed0_v2/scores/embedding_mean_input.parquet
+  direct_other_line: outputs/sl/embedding/embedding_direct_seed0_v2/scores/embedding_other_line.parquet
+  direct_line_term: outputs/sl/embedding/embedding_direct_seed0_v2/scores/embedding_line_term.parquet
+  direct_line_term_other_line: outputs/sl/embedding/embedding_direct_seed0_v2/scores/embedding_line_term_other_line.parquet
+  direct_mean_token: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding.parquet
+  direct_mean_token_mean_input: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_mean_input.parquet
+  direct_mean_token_other_line: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_other_line.parquet
+  direct_mean_token_line_term: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term.parquet
+  direct_mean_token_line_term_other_line: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term_other_line.parquet
+  direct_pie_change: outputs/sl/embedding/embedding_direct_pie_change_seed0_v2/scores/embedding.parquet
+  direct_pie_change_mean_input: outputs/sl/embedding/embedding_direct_pie_change_seed0_v2/scores/embedding_mean_input.parquet
+  direct_pie_change_other_line: outputs/sl/embedding/embedding_direct_pie_change_seed0_v2/scores/embedding_other_line.parquet
+  direct_pie_change_line_term: outputs/sl/embedding/embedding_direct_pie_change_seed0_v2/scores/embedding_line_term.parquet
+  direct_pie_change_line_term_other_line: outputs/sl/embedding/embedding_direct_pie_change_seed0_v2/scores/embedding_line_term_other_line.parquet
+  direct_tx1_gene: outputs/sl/embedding/embedding_direct_tx1_gene_seed0_v2/scores/embedding.parquet
+  direct_tx1_gene_mean_input: outputs/sl/embedding/embedding_direct_tx1_gene_seed0_v2/scores/embedding_mean_input.parquet
+  direct_tx1_gene_other_line: outputs/sl/embedding/embedding_direct_tx1_gene_seed0_v2/scores/embedding_other_line.parquet
+  direct_tx1_gene_line_term: outputs/sl/embedding/embedding_direct_tx1_gene_seed0_v2/scores/embedding_line_term.parquet
+  direct_tx1_gene_line_term_other_line: outputs/sl/embedding/embedding_direct_tx1_gene_seed0_v2/scores/embedding_line_term_other_line.parquet
   buffer_head: outputs/sl/conditional/conditional_buffer_seed0/scores/head.parquet
   buffer_head_ablated: outputs/sl/conditional/conditional_buffer_seed0/scores/head_ablated.parquet
   kg4sl: outputs/sl/kg4sl/seed0/scores.parquet

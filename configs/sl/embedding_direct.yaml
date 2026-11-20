@@ -1,7 +1,7 @@
 # The gene-knowledge, cell-set model on the direct GeneEffect target, with the line term (SL protocol §19): stage one
 # trains on GeneEffect itself; the line head reads the line's own expression of each gene. Else as
 # configs/sl/embedding.yaml.
-# `hpc/run.sh sl-embedding configs/sl/embedding_direct.yaml --run-id embedding_direct_seed0` (one GPU).
+# `hpc/run.sh sl-embedding configs/sl/embedding_direct.yaml --run-id embedding_direct_seed0_v2` (one GPU).
 # Plan: docs/specs/2026-11-20-line-term-and-direct-target-plan.md.
 kind: sl_embedding
 seed: 0
