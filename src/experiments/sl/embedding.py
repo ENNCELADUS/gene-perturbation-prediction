@@ -131,6 +131,7 @@ def build_model(config: Mapping[str, Any], data: Data) -> GeneLineModel:
         cell_dim=data.cells.shape[1],
         hidden=int(config["model"]["hidden"]),
         head_hidden=int(config["model"]["head_hidden"]),
+        gene_in_line={},
     ).to(data.device)
 
 
