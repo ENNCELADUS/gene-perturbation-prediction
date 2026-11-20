@@ -2,6 +2,7 @@
 # in configs/sl/embedding_mean_token.yaml's run the GeneEffect loss on the SL training lines was lowest for the
 # untrained model, so stage one gave stage two nothing. This run tests if a slower stage one finds a better point.
 # `hpc/run.sh sl-embedding configs/sl/embedding_mean_token_slow_stage_one.yaml --run-id ID` (one GPU).
+# The run of 2026-11-19 used the residual target (code at bee1bcc); the present code trains on GeneEffect itself.
 kind: sl_embedding
 seed: 0
 output_root: outputs/sl

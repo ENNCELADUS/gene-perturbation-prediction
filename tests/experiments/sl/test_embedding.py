@@ -83,9 +83,18 @@ def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray]:
         sources={"knowledge": (torch.tensor(knowledge, dtype=torch.float32),
                                torch.tensor(present))},
         m_g=np.zeros(30),
-        sigma_g=np.ones(30),
+        centre=0.0,
+        scale=1.0,
     )  # fmt: skip
     return data, z
+
+
+def test_the_target_is_geneeffect_itself_on_one_scale():
+    frame = pd.DataFrame(
+        {"A": [0.0, -2.0], "B": [1.0, 1.0], "C": [np.nan, 3.0]}, index=["L1", "L2"]
+    )
+    centre, scale = embedding.target_scale(frame)
+    assert np.isclose(centre, 0.6) and np.isclose(scale, 2.64**0.5)
 
 
 def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
@@ -96,6 +105,10 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
     history = result["stage_one"]
     assert history[0]["epoch"] == 0 and history[0]["train_loss"] is None
     assert min(r["stop_loss"] for r in history) < 0.5 * history[0]["stop_loss"]
+    # the kept checkpoint is a trained one, so the frozen head reads embeddings (on an
+    # untrained model it reads a constant, and its recall is about 0.1)
+    assert min(history, key=lambda r: r["stop_loss"])["epoch"] >= 1
+    assert result["phases"][0]["val_recall_top10"] > 0.2
     phases = result["phases"]
     assert [p["phase"] for p in phases] == ["frozen", "trained further"]
     assert result["chosen"] == int(np.argmax([p["val_recall_top10"] for p in phases]))

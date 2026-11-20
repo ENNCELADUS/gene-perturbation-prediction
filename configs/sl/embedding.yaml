@@ -4,6 +4,7 @@
 # then the whole model. Validation recall in the top 10% selects; test is scored once.
 # `hpc/run.sh sl-embedding configs/sl/embedding.yaml --run-id ID` (one GPU); then
 # `hpc/run.sh sl-baselines configs/sl/benchmark_embedding.yaml --run-id ID` reads its scores/.
+# The run of 2026-11-19 used the residual target (code at bee1bcc); the present code trains on GeneEffect itself.
 kind: sl_embedding
 seed: 0
 output_root: outputs/sl
