@@ -5,6 +5,7 @@ lines' pairs above random, and the inputs' readers fail closed."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +28,7 @@ CONFIG = {
                   "backbone_learning_rate": 1.0e-3, "weight_decay": 0.0,
                   "geneeffect_weights": [1.0]},
     "eval": {"rows_per_chunk": 64, "genes_per_chunk": 16},
+    "line_term": None,
 }  # fmt: skip
 SIDES = {"train": 8, "val": 4, "test": 4}
 
@@ -91,6 +93,8 @@ def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray, np.ndarray]:
         m_g=measured[fit].mean(axis=0),
         centre=centre,
         scale=scale,
+        in_line={},
+        in_line_at=torch.full((len(lines),), -1),
     )  # fmt: skip
     return data, z + offset, offset
 
@@ -216,6 +220,38 @@ def test_gene_sources_align_to_the_genes_and_cells_need_their_cache(tmp_path: Pa
         embedding.read_cells(tmp_path, ["L1", "L3"], {"L1"})
     cells, counts = embedding.read_cells(None, ["L1", "L3"], {"L1"})  # no cell tokens
     assert cells.shape == (0, 1) and counts.tolist() == [0, 0]
+
+
+def test_gene_in_line_features_align_scale_on_the_fit_lines_and_fail_closed(
+    tmp_path: Path,
+):
+    (tmp_path / "genes.json").write_text(json.dumps(["B", "A", "X"]))
+    nan = [np.nan, np.nan]
+    for name, values in (
+        ("L1", [[1.0, 10.0], [3.0, 30.0], nan]),
+        ("L2", [[3.0, 30.0], [5.0, 50.0], [9.0, 90.0]]),
+        ("L3", [[5.0, 50.0], nan, [0.0, 0.0]]),
+    ):
+        np.save(tmp_path / f"{name}.npy", np.array(values, np.float16))
+    out = embedding.read_in_line(
+        tmp_path, ["L1", "L2", "L3"], ["A", "B", "Y"], fit=["L1", "L2"]
+    )
+    assert out.shape == (3, 4, 3) and out.dtype == np.float16
+    root = 2**0.5  # the fit lines' values of the model's genes: 3, 1, 5, 3
+    assert np.allclose(out[:, 0, 0], [0, root, 0], atol=1e-3)  # A; L3 has no value
+    assert np.allclose(out[:, 1, 0], [-root, 0, root], atol=1e-3)  # B
+    assert out[:, :, 2].tolist() == [[1, 1, 0, 0], [1, 1, 0, 0], [0, 1, 0, 0]]
+    assert not out[:, 2:].any()  # a gene off the cache's axis, and the zero row
+    with pytest.raises(FileNotFoundError, match="L4"):
+        embedding.read_in_line(tmp_path, ["L1", "L4"], ["A"], fit=["L1"])
+
+
+def test_own_expression_is_the_lines_value_of_the_gene():
+    frame = pd.DataFrame({"A": [0.5, -1.0], "C": [2.0, 3.0]}, index=["L1", "L2"])
+    out = embedding.own_expression(frame, ["L2", "L1"], ["A", "B"])
+    assert out.shape == (2, 3, 2)
+    assert out[:, 0].tolist() == [[-1.0, 1.0], [0.5, 1.0]]
+    assert not out[:, 1:].any()  # B is not an expression gene; the zero row
 
 
 def test_the_config_loads_and_a_missing_key_is_refused(tmp_path: Path):
