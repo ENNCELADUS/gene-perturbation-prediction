@@ -716,7 +716,7 @@ Expected: FAIL (no such config).
   says.
 - `benchmark_line_term.yaml`: a copy of `benchmark_embedding.yaml`. `extra_scores` keeps the baselines and the three
   finished runs' tables, and adds the five tables of each of the four runs
-  (`outputs/sl/embedding/<config name>_seed0/scores/embedding*.parquet`). `paired_differences`: for each prefix `P`,
+  (`outputs/sl/embedding/<config name>_seed0_v2/scores/embedding*.parquet`). `paired_differences`: for each prefix `P`,
   `[P_line_term, P_mean_input]`, `[P_line_term, P_line_term_other_line]` and `[P_line_term, P]`; then
   `[direct, direct_mean_token]`, `[direct_line_term, direct_mean_token_line_term]`,
   `[direct_pie_change_line_term, direct_line_term]`, `[direct_tx1_gene_line_term, direct_line_term]`,
@@ -764,8 +764,8 @@ Expected: the H20 checkout is at the commit of Task 6.
 
 ```bash
 for name in embedding_direct embedding_direct_mean_token; do
-  CUDA_VISIBLE_DEVICES=$GPU setsid nohup hpc/run.sh sl-embedding configs/sl/$name.yaml --run-id ${name}_seed0 \
-    > outputs/launches/${name}_seed0.log 2>&1 < /dev/null &
+  CUDA_VISIBLE_DEVICES=$GPU setsid nohup hpc/run.sh sl-embedding configs/sl/$name.yaml --run-id ${name}_seed0_v2 \
+    > outputs/launches/${name}_seed0_v2.log 2>&1 < /dev/null &
 done   # one free GPU index in $GPU for each run
 ```
 
@@ -799,13 +799,13 @@ Expected: one `.npy` for each SL-split line with a labelled row under `data/sl_g
 
 ```bash
 for name in embedding_direct_pie_change embedding_direct_tx1_gene; do
-  CUDA_VISIBLE_DEVICES=$GPU setsid nohup hpc/run.sh sl-embedding configs/sl/$name.yaml --run-id ${name}_seed0 \
-    > outputs/launches/${name}_seed0.log 2>&1 < /dev/null &
+  CUDA_VISIBLE_DEVICES=$GPU setsid nohup hpc/run.sh sl-embedding configs/sl/$name.yaml --run-id ${name}_seed0_v2 \
+    > outputs/launches/${name}_seed0_v2.log 2>&1 < /dev/null &
 done
-hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0
+hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0_v2
 ```
 
-Expected: the harness writes its results under `outputs/sl/benchmark_baselines/benchmark_line_term_seed0/`.
+Expected: the harness writes its results under `outputs/sl/benchmark_baselines/benchmark_line_term_seed0_v2/`.
 
 - [ ] **Step 6: Write the record and update the docs**
 

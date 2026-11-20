@@ -711,7 +711,7 @@ def fit_line_term(
     generator: torch.Generator,
 ) -> tuple[dict[str, Tensor], float, list[dict[str, Any]]]:
     """The line term from the model's present weights. Only the line head and the
-    gene-in-line maps train, so ``p`` does not change. Returns the weights,
+    gene-in-line maps train, so ``f`` does not change. Returns the weights,
     validation recall in the top 10% of ``line_term_scores`` and history of the best
     epoch; the model is left at its last epoch."""
     term, train = config["line_term"], config["stage_two"]
