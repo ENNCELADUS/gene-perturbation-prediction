@@ -881,7 +881,11 @@ parts of §18. All other parts of §18 stay.
   In these runs one SL training line, ACH-000696, had no Tx1-3B gene-level value and degenerate Tx1-3B cell
   embeddings: its raw file lists Ensembl IDs with a version suffix, which Tx1-3B's vocabulary does not hold
   ([card](data/gene-in-line-features.md)). It is one of the 53 SL training lines of the feature scaling. Its
-  Tx1-3B caches were encoded again on 2026-11-23 (code `842c283`); later runs read the repaired values.
+  Tx1-3B caches were encoded again on 2026-11-23 (code `842c283`), and the three runs that read them were trained
+  again (`_seed0_v3`, harness `benchmark_cache_repair_seed0`; the run without cell tokens, trained again, gives the
+  same scores to the last digit). No conclusion changes: the model scores 0.553 / 0.499, each new − old difference is
+  inside ±0.02 (intervals across zero except the mean-input control on validation, −0.009), and the model minus the same weights on the mean input is +0.100 / +0.069
+  ([record](../results/sl_line_term_seed0/summary.html), Table 11).
 - **Not in this study.** CellNet's gene-level outputs, in-silico deletion with Tx1-3B, adapter training of Tx1-3B,
   and any other foundation model.
 - **Runs** (seed 0, 2026-11-20, [record](../results/sl_line_term_seed0/summary.html)). Caches on H20 port 30838:
