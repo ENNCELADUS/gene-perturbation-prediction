@@ -72,9 +72,7 @@ def main() -> int:
             model_id=model_id,
             var_ensembl_col=args.ensembl_column,
         )
-        # Ensembl IDs without their version suffix (some deposits list ENSG...5)
-        ids = source.var_names.str.split(".").str[0].to_numpy()
-        x, genes = combine_duplicates(source.X, ids)
+        x, genes = combine_duplicates(source.X, source.var_names.to_numpy())
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = target.with_name("embeddings.npy.partial")
         out = np.lib.format.open_memmap(

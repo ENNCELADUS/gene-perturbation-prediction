@@ -110,6 +110,10 @@ def read_basal_source(
         ensembl_ids = adata.var.index.astype(str).to_numpy()
     else:
         raise ValueError(f"{source_path}: var has no {var_ensembl_col!r} column/index")
+    # Tx1-3B's vocabulary has no versioned ID; ENSG...5 would get the padding token
+    ensembl_ids = (
+        pd.Index(ensembl_ids).str.replace(r"\.\d+$", "", regex=True).to_numpy()
+    )
     require_raw_counts(adata.X, f"{model_id} basal source {source_path}")
     adata.var.index = ensembl_ids
     adata.var["ensembl_id"] = ensembl_ids

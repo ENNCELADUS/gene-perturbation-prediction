@@ -96,6 +96,17 @@ def test_encode_lines_writes_selected_raw_cells(tmp_path):
     assert list(obs.index) == list(seen[0].obs_names)
 
 
+def test_basal_source_drops_the_ensembl_version(tmp_path):
+    path = _source(tmp_path / "a.h5ad", "ACH-1")
+    adata = ad.read_h5ad(path)
+    adata.var["ensembl_id"] = [f"ENSG{i:011d}.5" for i in range(4)]
+    adata.write_h5ad(path)
+    source = read_basal_source(path, model_id="ACH-1", var_ensembl_col="ensembl_id")
+    expected = [f"ENSG{i:011d}" for i in range(4)]
+    assert list(source.var_names) == expected
+    assert list(source.var["ensembl_id"]) == expected
+
+
 def test_basal_source_must_be_raw_counts_of_its_line(tmp_path):
     with pytest.raises(ValueError, match="integer"):
         read_basal_source(
