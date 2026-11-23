@@ -5,8 +5,7 @@
 lines, 275 MB, about 2 minutes on the CPU (code `15a754f`). `tx1_gene`: 86 lines, at most 256 cells each, 11 GB, 21 to
 41 s for each line on one H20, about 13 minutes on four (code `d9d2950`); a line has a value for about 10,000 to 13,000
 of the 25,861 names of the axis. Run record: [`results/sl_line_term_seed0/summary.html`](../../results/sl_line_term_seed0/summary.html).
-A first `tx1_gene` cache with a case-sensitive symbol match is beside it as `tx1_gene_case_sensitive_15a754f`; no run
-reads it.
+On 2026-11-23 the `tx1_gene` file of ACH-000696 was encoded again (code `842c283`, see the known limits).
 
 **Role.** The line term of the gene-knowledge, cell-set SL model reads one vector for each (line, gene) from each
 cache (`line_term.gene_in_line` of an SL embedding config; plan `docs/specs/2026-11-20-line-term-and-direct-target-plan.md`
@@ -38,12 +37,14 @@ it reads a cache (`read_in_line`).
 
 **Known limits.**
 
-- **One line has no Tx1-3B value.** ACH-000696, an SL training line, lists its Ensembl IDs with a version suffix (`ENSG00000223972.5`). Tx1-3B's
-  vocabulary holds no such ID and gives a missing ID the padding token. Thus this line has no Tx1-3B gene-level
-  value (0 of 25,861), and its Tx1-3B cell embeddings in `data/tx1_basal_embeddings/v2_all/real`, built earlier,
-  come from padding tokens only (their spread across cells is 0.004, against about 0.010 in other lines). It is
-  the only one of the 455 raw files with such IDs. The repair is to remove the suffix in `read_basal_source` and
-  to encode the line again in both caches; it is not done, because it changes a cache that earlier runs read.
+- **One line was encoded again.** ACH-000696, an SL training line, lists its Ensembl IDs with a version suffix
+  (`ENSG00000223972.5`), the only one of the 455 raw files to do so. Tx1-3B's vocabulary holds no such ID and gives a
+  missing ID the padding token, so the first caches of this line came from padding tokens only. Since code
+  `842c283`, `read_basal_source` removes the suffix. On 2026-11-23 the line was encoded again in `tx1_gene/` (11,863
+  of 25,861 genes with a value; 0 before) and in `data/tx1_basal_embeddings/v2_all/{real,shuffled}` (mean spread
+  across cells 0.80 and 0.61; 0.24 and 0.05 before). The same code gives the cached `v2_all/real` values of A549
+  exactly. The runs of 2026-11-20 read the old values. `data/tx1_basal_embeddings/v1` (the joint GeneEffect track)
+  keeps its old values of this line: its other lines come from an older encoder that today's code does not give.
 - A gene has a Tx1-3B value only in the cells whose 2,048-gene sequence holds it. A gene that no cell holds, a gene
   whose Ensembl ID is not in Tx1-3B's vocabulary and a gene that the line's source does not list are NaN rows.
 - PIE was trained on 42 of the project's lines. A549 is one of them, and it is a training line of the SL split. Which
