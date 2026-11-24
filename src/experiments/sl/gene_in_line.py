@@ -264,13 +264,23 @@ def buffer_cache(
 
 def by_symbol(frame: pd.DataFrame, path: Path) -> pd.DataFrame:
     """ModelID x upper-cased symbol of ``SYMBOL (entrez)`` gene columns; the first
-    column of a symbol is kept; a ModelID with two rows raises."""
+    column of a symbol is kept; a ModelID with two rows raises. A column without a
+    symbol (the row number, a bare Ensembl ID) is left out; a file without any gene
+    column raises."""
     from src.data.labels import parse_gene_symbol
 
     frame.index = frame.index.astype(str)
     if not frame.index.is_unique:
         raise ValueError(f"{path}: a ModelID has more than one row")
-    frame = frame.set_axis([parse_gene_symbol(c) for c in frame.columns], axis=1)
+    symbols = {}
+    for column in frame.columns:
+        try:
+            symbols[column] = parse_gene_symbol(column)
+        except ValueError:
+            continue
+    if not symbols:
+        raise ValueError(f"{path}: no SYMBOL (entrez) column")
+    frame = frame[list(symbols)].set_axis(list(symbols.values()), axis=1)
     return frame.loc[:, ~frame.columns.duplicated()].astype(np.float32)
 
 

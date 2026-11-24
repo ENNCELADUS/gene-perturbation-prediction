@@ -282,14 +282,15 @@ LEADING = (
 
 def depmap_world(path):
     """Mutation matrices of the DepMap layout (two sequencings of ACH-1, one the
-    default; TP53 twice in the damaging matrix, the first column kept) and a
-    copy-number matrix with the ModelID as its first column."""
+    default; TP53 twice in the damaging matrix, the first column kept; a row-number
+    column and a bare Ensembl ID, which have no symbol) and a copy-number matrix
+    with the ModelID as its first column."""
     damaging = path / "damaging.csv"
     damaging.write_text(
-        f"{LEADING},ATM (472),Brca1 (672),TP53 (7157),TP53 (999)\n"
-        "CDS-1,ACH-1,MC-1,Yes,Yes,1,0,2,0\n"
-        "CDS-2,ACH-1,MC-2,No,Yes,0,2,0,0\n"
-        "CDS-3,ACH-2,MC-3,Yes,Yes,0,1,0,2\n"
+        f",{LEADING},ATM (472),Brca1 (672),TP53 (7157),TP53 (999),ENSG00000100101\n"
+        "0,CDS-1,ACH-1,MC-1,Yes,Yes,1,0,2,0,5\n"
+        "1,CDS-2,ACH-1,MC-2,No,Yes,0,2,0,0,5\n"
+        "2,CDS-3,ACH-2,MC-3,Yes,Yes,0,1,0,2,5\n"
     )
     hotspot = path / "hotspot.csv"
     hotspot.write_text(
@@ -299,7 +300,9 @@ def depmap_world(path):
         "CDS-3,ACH-2,MC-3,Yes,Yes,0\n"
     )
     copy_number = path / "copy_number.csv"
-    copy_number.write_text(",ATM (472),TP53 (7157)\nACH-1,1.0,0.1\nACH-2,,0.7\n")
+    copy_number.write_text(
+        ",ATM (472),TP53 (7157),ENSG00000100101\nACH-1,1.0,0.1,9\nACH-2,,0.7,9\n"
+    )
     return {
         "out": str(path / "out"),
         "depmap": {
