@@ -25,7 +25,8 @@ mean token alone. ``cell_embeddings`` names the cache of the cells' embeddings
 ``cell_embeddings: null`` no line reads a cell: the same model on the mean token alone.
 
 The line term (config section ``line_term``; ``null`` for none) trains last, on the
-chosen phase. The score of a row (line c, pair A, B) is
+chosen phase; with ``line_term.joint`` it trains with the whole model in each
+whole-model phase of stage two instead. The score of a row (line c, pair A, B) is
 
     s(c, A, B) = f(c, A, B) + D(c, A, B) - mean over r in R of D(r, A, B)
 
@@ -35,17 +36,24 @@ tokens) and on the gene-in-line features of A and B in line r (the line's own
 expression with ``own_expression``, and the caches of ``gene_in_line``). ``R``: the SL
 training lines with training rows (genetic screens with both classes); at a training
 step, a draw of ``reference_lines`` of them. ``f`` and ``D`` of a line read the same
-tokens. Only the line head and its input maps train, so ``f`` does not change, and
-the gene pair alone cannot fill the line term. Validation recall in the top 10% of
-``s`` selects the epoch (``max_epochs``, ``patience``, ``learning_rate``).
+tokens. In the line-term phase only the line head and its input maps train, so ``f``
+does not change, and the gene pair alone cannot fill the line term. Validation recall
+in the top 10% of ``s`` selects the epoch (``max_epochs``, ``patience``,
+``learning_rate``). ``line_term.input`` names what the line head reads: ``model``,
+the pair head's input; ``genes``, the gene vectors of the frozen sources alone, so the
+line term changes with the line only through the gene-in-line features. With
+``line_term.cross_line``, the loss adds ``weight`` times a loss between two training
+lines of one study for one pair, one with the SL call and one without it:
+``softplus(-(s(c+) - s(c-)))``. A score that is the same in every line gives log 2.
 
 Outputs: ``scores/embedding.parquet`` for the benchmark harness (``extra_scores``);
 the line-input controls ``scores/embedding_mean_input.parquet`` (the fit lines' mean
-input) and ``scores/embedding_other_line.parquet`` (another line's input); with a line
-term, ``scores/embedding_line_term.parquet`` (``s``) and
+input) and ``scores/embedding_other_line.parquet`` (another line's input; with
+``eval.other_lines`` above 1 also ``embedding_other_line_2.parquet`` and on, one for
+each other line); with a line term, ``scores/embedding_line_term.parquet`` (``s``) and
 ``scores/embedding_line_term_other_line.parquet`` (``s`` with ``f`` and ``D`` read in
-another line); ``predictions.parquet`` (the model's GeneEffect of the SL lines),
-``best.pt``, ``metrics.json`` and ``results.md``."""
+another line; also ``_2`` and on); ``predictions.parquet`` (the model's GeneEffect of
+the SL lines), ``best.pt``, ``metrics.json`` and ``results.md``."""
 
 from __future__ import annotations
 
@@ -94,10 +102,11 @@ SECTIONS = {
     "stage_two": {"max_epochs", "patience", "steps_per_epoch", "lines_per_step",
                   "rows_per_line", "learning_rate", "backbone_learning_rate",
                   "weight_decay", "geneeffect_weights"},
-    "eval": {"rows_per_chunk", "genes_per_chunk"},
+    "eval": {"rows_per_chunk", "genes_per_chunk", "other_lines"},
 }  # fmt: skip
 LINE_TERM = {"reference_lines", "max_epochs", "patience", "learning_rate",
-             "own_expression", "gene_in_line"}  # fmt: skip
+             "own_expression", "gene_in_line", "joint", "input",
+             "cross_line"}  # fmt: skip
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -112,8 +121,18 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ValueError(f"{path} is a {config['kind']} config")
     for name, keys in SECTIONS.items():
         require_keys(config[name], keys, name)
-    if config["line_term"] is not None:
-        require_keys(config["line_term"], LINE_TERM, "line_term")
+    term = config["line_term"]
+    if term is not None:
+        require_keys(term, LINE_TERM, "line_term")
+        if term["input"] not in ("model", "genes"):
+            raise ValueError(f"line_term.input: model or genes, not {term['input']!r}")
+        if term["cross_line"] is not None:
+            require_keys(
+                term["cross_line"], {"weight", "examples_per_step"},
+                "line_term.cross_line",
+            )  # fmt: skip
+    if int(config["eval"]["other_lines"]) < 1:
+        raise ValueError("eval.other_lines: 1 or more")
     if not config["gene_sources"]:
         raise ValueError("gene_sources: one source or more")
     return config
@@ -154,6 +173,7 @@ class Data:
 
 
 def build_model(config: Mapping[str, Any], data: Data) -> GeneLineModel:
+    term = config["line_term"]
     return GeneLineModel(
         data.sources,
         expression_dim=data.expression.shape[1],
@@ -161,6 +181,7 @@ def build_model(config: Mapping[str, Any], data: Data) -> GeneLineModel:
         hidden=int(config["model"]["hidden"]),
         head_hidden=int(config["model"]["head_hidden"]),
         gene_in_line={name: t.shape[2] for name, t in data.in_line.items()},
+        line_input="model" if term is None else term["input"],
     ).to(data.device)
 
 
@@ -335,10 +356,29 @@ def training_rows(rows: pd.DataFrame) -> np.ndarray:
     ).to_numpy()  # fmt: skip
 
 
+def cross_line_examples(rows: pd.DataFrame) -> list[tuple[np.ndarray, np.ndarray]]:
+    """The cross-line examples of the training rows (``training_rows``): a row with
+    the SL call and a row without it, of one study, design and pair (``gene_a``,
+    ``gene_b``) in two different lines. One entry for each study with an example,
+    studies in sorted order: the row positions (with the call, without it)."""
+    keep = np.flatnonzero(training_rows(rows))
+    keys = ["study_id", "design", "gene_a", "gene_b"]
+    frame = rows.iloc[keep][[*keys, "model_id", "label"]].assign(position=keep)
+    both = frame[frame["label"] == 1].merge(
+        frame[frame["label"] == 0], on=keys, suffixes=("_pos", "_neg")
+    )
+    both = both[both["model_id_pos"] != both["model_id_neg"]]
+    return [
+        (study["position_pos"].to_numpy(), study["position_neg"].to_numpy())
+        for _, study in both.groupby("study_id", sort=True)
+    ]
+
+
 @dataclass
 class PairRows:
-    """Row-level tensors on the device, and each training line's rows with the
-    benchmark's weights as draw rates."""
+    """Row-level tensors on the device, each training line's rows with the
+    benchmark's weights as draw rates, and each study's cross-line examples
+    (``cross_line_examples``; empty without ``line_term.cross_line``)."""
 
     line: Tensor
     a: Tensor
@@ -346,10 +386,23 @@ class PairRows:
     combinatorial: Tensor
     label: Tensor
     draws: dict[int, tuple[Tensor, Tensor]]  # line -> (row positions, rates), CPU
+    cross: list[tuple[Tensor, Tensor]]  # study -> (positions with the call, without)
 
 
-def pair_rows(data: Data) -> PairRows:
+def pair_rows(data: Data, config: Mapping[str, Any]) -> PairRows:
     rows, device = data.rows, data.device
+    term = config["line_term"]
+    cross = []
+    if term is not None and term["cross_line"] is not None:
+        cross = [
+            (torch.from_numpy(p), torch.from_numpy(n))
+            for p, n in cross_line_examples(rows)
+        ]
+        if not cross:
+            raise ValueError(
+                "line_term.cross_line is set, but no study has two training lines "
+                "that differ on a pair: no cross-line example"
+            )
     keep = training_rows(rows)
     chosen = rows[keep]
     positive, negative = soft_weights(chosen, chosen["label"].to_numpy(float))
@@ -367,6 +420,7 @@ def pair_rows(data: Data) -> PairRows:
         ),
         label=torch.tensor(rows["label"].to_numpy(np.float32), device=device),
         draws=draws,
+        cross=cross,
     )
 
 
@@ -443,13 +497,27 @@ def pair_scores(
     return out.numpy().astype(np.float64)
 
 
-def other_lines(data: Data, config: Mapping[str, Any]) -> dict[int, int]:
-    """Each benchmark line's other line: the next one in a seeded order, never the
-    line itself."""
+def other_lines(data: Data, config: Mapping[str, Any]) -> list[dict[int, int]]:
+    """``eval.other_lines`` maps of each benchmark line to another line: map ``k``
+    gives the line ``k + 1`` places before it in a seeded order, so no map gives the
+    line itself and no two maps give the same line."""
     order = np.random.default_rng(int(config["seed"])).permutation(
         np.unique(data.rows["line"])
     )
-    return dict(zip(order.tolist(), np.roll(order, 1).tolist()))
+    count = int(config["eval"]["other_lines"])
+    if count >= len(order):
+        raise ValueError(
+            f"eval.other_lines: {count}, but the benchmark has {len(order)} lines"
+        )
+    return [
+        dict(zip(order.tolist(), np.roll(order, k + 1).tolist())) for k in range(count)
+    ]
+
+
+def other_line_name(k: int) -> str:
+    """The name of the control on map ``k`` of ``other_lines``: ``other_line``, then
+    ``other_line_2``, ``other_line_3``, ..."""
+    return "other_line" if k == 0 else f"other_line_{k + 1}"
 
 
 @torch.no_grad()
@@ -458,20 +526,21 @@ def line_input_controls(
 ) -> dict[str, np.ndarray]:
     """The SL logit of every row with the line's input replaced (no refit):
     ``mean_input``, the fit lines' mean expression and no cells, so the score reads the
-    genes alone; ``other_line``, the expression and cells of another benchmark line
-    (the next one in a seeded order, never the line itself)."""
+    genes alone; ``other_line``, ``other_line_2``, ...: the expression and cells of
+    another benchmark line, one for each map of ``other_lines``."""
     every = np.arange(len(data.rows))
     mean, _ = model.tokens(torch.zeros_like(data.expression[:1]), None)
-    other = other_lines(data, config)
-    return {
+    out = {
         "mean_input": pair_scores(
             model, data, pairs, every, config, lambda line: (mean[0], None, None)
-        ),
-        "other_line": pair_scores(
+        )
+    }
+    for k, other in enumerate(other_lines(data, config)):
+        out[other_line_name(k)] = pair_scores(
             model, data, pairs, every, config,
             lambda line: one_line(model, data, other[line], None, None),
-        ),
-    }  # fmt: skip
+        )  # fmt: skip
+    return out
 
 
 def fit_epochs(
@@ -532,17 +601,21 @@ def fit_pairs(
     config: Mapping[str, Any],
     generator: torch.Generator,
     geneeffect_weight: float | None,
+    with_line_term: bool = False,
 ) -> tuple[dict[str, Tensor], float, list[dict[str, Any]]]:
     """Stage two from the model's present weights. ``geneeffect_weight`` None: the
     stage-one model is frozen and the head alone trains; a number: the whole model
-    trains, with the GeneEffect loss at that weight. Returns the weights, validation
-    recall in the top 10% and history of the best epoch; the model is left at its
-    last epoch."""
+    trains, with the GeneEffect loss at that weight. With ``with_line_term``, the
+    line term trains with the pair head: the loss is ``line_term_loss`` with the
+    gradient into ``f``, and validation reads ``line_term_scores``. Returns the
+    weights, validation recall in the top 10% and history of the best epoch; the
+    model is left at its last epoch."""
     train, one = config["stage_two"], config["stage_one"]
     joint = geneeffect_weight is not None
     for parameter in model.backbone():
         parameter.requires_grad_(joint)
-    groups = [{"params": list(model.head.parameters())}]
+    heads = list(model.head.parameters())
+    groups = [{"params": heads + (model.line_parameters() if with_line_term else [])}]
     if joint:
         groups.append({"params": model.backbone(),
                        "lr": train["backbone_learning_rate"]})  # fmt: skip
@@ -551,7 +624,10 @@ def fit_pairs(
     )
 
     def step() -> Tensor:
-        loss = pair_loss(model, data, pairs, config, generator)
+        if with_line_term:
+            loss = line_term_loss(model, data, pairs, config, generator, train_f=True)
+        else:
+            loss = pair_loss(model, data, pairs, config, generator)
         if joint:
             genes = torch.randperm(len(data.genes), generator=generator)
             lines = torch.randperm(len(data.fit), generator=generator)
@@ -562,18 +638,20 @@ def fit_pairs(
             )  # fmt: skip
         return loss
 
+    scores = line_term_scores if with_line_term else pair_scores
     return fit_epochs(
         model, data, config, optimizer, step,
-        lambda val: pair_scores(model, data, pairs, val, config),
+        lambda val: scores(model, data, pairs, val, config),
         int(train["max_epochs"]), int(train["patience"]),
-        f"stage two, {'whole model' if joint else 'frozen stage one'}",
+        f"stage two, {'whole model' if joint else 'frozen stage one'}"
+        + (" with the line term" if with_line_term else ""),
     )  # fmt: skip
 
 
 def line_term_of(
     model: GeneLineModel,
     data: Data,
-    u: Tensor,
+    line_u: Tensor,
     a: Tensor,
     b: Tensor,
     combinatorial: Tensor,
@@ -582,7 +660,7 @@ def line_term_of(
 ) -> Tensor:
     """``D`` (rows,) of the pairs (``a``, ``b``: gene positions, -1 reads the zero
     row) read in ``line``: the line's ``tokens`` and its gene-in-line features of
-    the two genes."""
+    the two genes. ``line_u`` holds the rows of ``model.line_vectors()``."""
     feature = int(data.in_line_at[line])
     if feature < 0:
         raise ValueError(f"line {data.lines[line]} has no gene-in-line features")
@@ -590,24 +668,28 @@ def line_term_of(
     def of(genes: Tensor) -> dict[str, Tensor]:
         return {n: t[feature, genes].float() for n, t in data.in_line.items()}
 
-    return model.line_term(u[a], u[b], combinatorial, of(a), of(b), *tokens)
+    return model.line_term(line_u[a], line_u[b], combinatorial, of(a), of(b), *tokens)
 
 
 def line_score(
     model: GeneLineModel,
     data: Data,
     u: Tensor,
+    line_u: Tensor,
     a: Tensor,
     b: Tensor,
     combinatorial: Tensor,
     line: int,
     tokens: Tokens,
+    train_f: bool = False,
 ) -> Tensor:
     """``f + D`` (rows,) of the pairs read in ``line``: the model's own score (the
-    pair head, no gradient) and the line term, on the same ``tokens``."""
-    with torch.no_grad():
+    pair head, on the rows ``u`` of ``gene_vectors``; no gradient unless
+    ``train_f``) and the line term (on the rows ``line_u`` of ``line_vectors``), on
+    the same ``tokens``."""
+    with torch.set_grad_enabled(train_f and torch.is_grad_enabled()):
         f = model.pair(u[a], u[b], combinatorial, *tokens)
-    return f + line_term_of(model, data, u, a, b, combinatorial, line, tokens)
+    return f + line_term_of(model, data, line_u, a, b, combinatorial, line, tokens)
 
 
 @torch.no_grad()
@@ -626,7 +708,7 @@ def line_term_scores(
     and gene-in-line features stand in for ``line`` in ``f`` and ``D``; ``R`` does
     not change with it. The mean over ``R`` depends on the pair alone, so each
     distinct pair gets it once."""
-    u = model.gene_vectors()
+    u, line_u = model.gene_vectors(), model.line_vectors()
     chunk = int(config["eval"]["rows_per_chunk"])
     at = torch.tensor(rows, device=data.device)
     unique, inverse = torch.unique(
@@ -640,7 +722,7 @@ def line_term_scores(
         a, b, combinatorial = unique[start : start + chunk].T
         combinatorial = combinatorial.bool()
         deviations = [
-            line_term_of(model, data, u, a, b, combinatorial, r, tokens)
+            line_term_of(model, data, line_u, a, b, combinatorial, r, tokens)
             for r, tokens in reference
         ]
         shared[start : start + chunk] = torch.stack(deviations).mean(0)
@@ -654,8 +736,8 @@ def line_term_scores(
             part = mine[start : start + chunk]
             row = at[part]
             out[part] += line_score(
-                model, data, u, pairs.a[row], pairs.b[row], pairs.combinatorial[row],
-                source, tokens,
+                model, data, u, line_u, pairs.a[row], pairs.b[row],
+                pairs.combinatorial[row], source, tokens,
             )  # fmt: skip
     return out.cpu().numpy().astype(np.float64)
 
@@ -666,14 +748,16 @@ def line_term_loss(
     pairs: PairRows,
     config: Mapping[str, Any],
     generator: torch.Generator,
+    train_f: bool = False,
 ) -> Tensor:
     """Binary cross-entropy of ``s`` at one step: the rows of ``step_rows``, with
     ``f`` and ``D`` of a row's line on the same drawn tokens; ``R``,
     ``line_term.reference_lines`` SL training lines drawn with replacement, one
-    draw for the step."""
+    draw for the step. With ``line_term.cross_line``, plus its ``weight`` times
+    ``cross_line_loss``. ``f`` gets the gradient only with ``train_f``."""
     cells = config["cells"]
     per_line, dropout = int(cells["per_step"]), float(cells["dropout"])
-    u = model.gene_vectors()
+    u, line_u = model.gene_vectors(), model.line_vectors()
     lines = sorted(pairs.draws)
     drawn = torch.randint(
         len(lines), (int(config["line_term"]["reference_lines"]),), generator=generator
@@ -689,18 +773,60 @@ def line_term_loss(
     at = torch.cat([part for _, part, _ in steps])
     a, b, combinatorial = pairs.a[at], pairs.b[at], pairs.combinatorial[at]
     own = torch.cat([
-        line_score(model, data, u, pairs.a[part], pairs.b[part],
-                   pairs.combinatorial[part], line, tokens)
+        line_score(model, data, u, line_u, pairs.a[part], pairs.b[part],
+                   pairs.combinatorial[part], line, tokens, train_f)
         for line, part, tokens in steps
     ])  # fmt: skip
     deviations = [
-        line_term_of(model, data, u, a, b, combinatorial, r, tokens)
+        line_term_of(model, data, line_u, a, b, combinatorial, r, tokens)
         for r, tokens in reference
     ]
     # every line has rows_per_line rows: the mean over rows weighs each line equally
-    return F.binary_cross_entropy_with_logits(
+    loss = F.binary_cross_entropy_with_logits(
         own - torch.stack(deviations).mean(0), pairs.label[at]
     )
+    cross = config["line_term"]["cross_line"]
+    if cross is None:
+        return loss
+    return loss + float(cross["weight"]) * cross_line_loss(
+        model, data, pairs, config, generator, train_f
+    )
+
+
+def cross_line_loss(
+    model: GeneLineModel,
+    data: Data,
+    pairs: PairRows,
+    config: Mapping[str, Any],
+    generator: torch.Generator,
+    train_f: bool,
+) -> Tensor:
+    """The cross-line loss of one step: ``line_term.cross_line.examples_per_step``
+    examples, each from a study drawn evenly and then one of its examples drawn
+    evenly; the mean of ``softplus(-(g+ - g-))``, with ``g = f + D`` of a row in its
+    line. The mean of ``D`` over ``R`` is the same in the two lines, so it is left
+    out. The rows of one line read one draw of its tokens."""
+    cells = config["cells"]
+    per_line, dropout = int(cells["per_step"]), float(cells["dropout"])
+    count = int(config["line_term"]["cross_line"]["examples_per_step"])
+    picked = []
+    for study in torch.randint(len(pairs.cross), (count,), generator=generator):
+        positive, negative = pairs.cross[int(study)]
+        k = int(torch.randint(len(positive), (), generator=generator))
+        picked.append((int(positive[k]), int(negative[k])))
+    at = torch.tensor(picked).T.reshape(-1).to(data.device)  # with the call first
+    u, line_u = model.gene_vectors(), model.line_vectors()
+    line_of = pairs.line[at]
+    g = torch.zeros(len(at), device=data.device)
+    for line in line_of.unique().tolist():
+        mine = torch.nonzero(line_of == line).squeeze(1)
+        rows = at[mine]
+        tokens = one_line(model, data, line, per_line, generator, dropout)
+        g = g.index_put((mine,), line_score(
+            model, data, u, line_u, pairs.a[rows], pairs.b[rows],
+            pairs.combinatorial[rows], line, tokens, train_f,
+        ))  # fmt: skip
+    return F.softplus(-(g[:count] - g[count:])).mean()
 
 
 def fit_line_term(
@@ -736,9 +862,13 @@ def train(
     """Stage one, then stage two's phases; picks the phase with the best validation
     recall in the top 10% (the frozen phase wins a tie). With a ``line_term``
     config, the line term then trains on that phase, and ``model`` is left at its
-    best epoch."""
+    best epoch. With ``line_term.joint``, the line term trains in each whole-model
+    phase instead (the frozen phase is as without it: the untrained line term is
+    0), and no line-term phase follows."""
     generator = torch.Generator().manual_seed(int(config["seed"]))
-    pairs = pair_rows(data)
+    term = config["line_term"]
+    joint = term is not None and term["joint"]
+    pairs = pair_rows(data, config)
     stage_one = fit_dependency(model, data, config, generator)
     phases = []
     frozen, score, history = fit_pairs(model, data, pairs, config, generator, None)
@@ -748,7 +878,7 @@ def train(
     for weight in config["stage_two"]["geneeffect_weights"]:
         model.load_state_dict(frozen)
         state, score, history = fit_pairs(
-            model, data, pairs, config, generator, float(weight)
+            model, data, pairs, config, generator, float(weight), joint
         )
         phases.append({"phase": "trained further", "geneeffect_weight": float(weight),
                        "val_recall_top10": score, "history": history})  # fmt: skip
@@ -764,19 +894,22 @@ def train(
         "controls": line_input_controls(model, data, pairs, config),
         "line_term": None,
     }
-    if config["line_term"] is None:
+    if term is None:
         return result
-    state, score, history = fit_line_term(model, data, pairs, config, generator)
-    model.load_state_dict(state)
-    other = other_lines(data, config)
+    if joint:
+        score, history = phases[chosen]["val_recall_top10"], phases[chosen]["history"]
+    else:
+        state, score, history = fit_line_term(model, data, pairs, config, generator)
+        model.load_state_dict(state)
     result["line_term"] = {
         "val_recall_top10": score,
         "history": history,
         "scores": line_term_scores(model, data, pairs, every, config),
-        "other_line": line_term_scores(
-            model, data, pairs, every, config, other.__getitem__
-        ),
     }
+    for k, other in enumerate(other_lines(data, config)):
+        result["line_term"][other_line_name(k)] = line_term_scores(
+            model, data, pairs, every, config, other.__getitem__
+        )
     return result
 
 
@@ -1129,13 +1262,14 @@ def rescore(config: Mapping[str, Any], run_id: str, device: str) -> Path:
     model.load_state_dict(
         torch.load(run_dir / "best.pt", map_location=device)["weights"]
     )
-    pairs = pair_rows(data)
+    pairs = pair_rows(data, config)
     scores = controls_named(line_input_controls(model, data, pairs, config))
     if config["line_term"] is not None:
-        scores[f"{SCORER}_line_term_other_line"] = line_term_scores(
-            model, data, pairs, np.arange(len(data.rows)), config,
-            other_lines(data, config).__getitem__,
-        )  # fmt: skip
+        for k, other in enumerate(other_lines(data, config)):
+            scores[f"{SCORER}_line_term_{other_line_name(k)}"] = line_term_scores(
+                model, data, pairs, np.arange(len(data.rows)), config,
+                other.__getitem__,
+            )  # fmt: skip
     write_scores(run_dir, data.rows, scores)
     return run_dir
 
@@ -1158,12 +1292,16 @@ def run(config: Mapping[str, Any], run_id: str, device: str) -> Path:
     write_scores(run_dir, rows, controls_named(result["controls"]))
     sl_line_term = line_record = None
     if line_term is not None:
-        line_scores = {"line_term": line_term["scores"],
-                       "line_term_other_line": line_term["other_line"]}  # fmt: skip
+        line_scores = {"line_term": line_term["scores"]} | {
+            f"line_term_{k}": v for k, v in line_term.items()
+            if k.startswith("other_line")
+        }  # fmt: skip
         write_scores(run_dir, rows, controls_named(line_scores))
         # the model on the mean input, with the line term, and the line term on
-        # another line's input
-        with_mean = {"mean_input": result["controls"]["mean_input"]} | line_scores
+        # the first other line's input
+        with_mean = {"mean_input": result["controls"]["mean_input"]} | {
+            k: line_scores[k] for k in ("line_term", "line_term_other_line")
+        }
         sl_line_term = {k: sl_metrics(rows, v, top_k) for k, v in with_mean.items()}
         line_record = {k: line_term[k] for k in ("val_recall_top10", "history")}
     sides = {s: sorted(set(rows.loc[rows["split"] == s, "model_id"]))

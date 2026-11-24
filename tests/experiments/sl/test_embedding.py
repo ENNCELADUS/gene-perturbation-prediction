@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -28,14 +29,22 @@ CONFIG = {
                   "lines_per_step": 4, "rows_per_line": 64, "learning_rate": 1.0e-2,
                   "backbone_learning_rate": 1.0e-3, "weight_decay": 0.0,
                   "geneeffect_weights": [1.0]},
-    "eval": {"rows_per_chunk": 64, "genes_per_chunk": 16},
+    "eval": {"rows_per_chunk": 64, "genes_per_chunk": 16, "other_lines": 1},
     "line_term": None,
 }  # fmt: skip
 SIDES = {"train": 8, "val": 4, "test": 4}
 LINE_CONFIG = CONFIG | {
     "line_term": {"reference_lines": 3, "max_epochs": 4, "patience": 2,
-                  "learning_rate": 1.0e-2, "own_expression": True, "gene_in_line": {}}
+                  "learning_rate": 1.0e-2, "own_expression": True, "gene_in_line": {},
+                  "joint": False, "input": "model", "cross_line": None}
 }  # fmt: skip
+
+CROSS_CONFIG = LINE_CONFIG | {
+    "line_term": LINE_CONFIG["line_term"]
+    | {"cross_line": {"weight": 0.5, "examples_per_step": 32}}
+}
+
+JOINT_CONFIG = CROSS_CONFIG | {"line_term": CROSS_CONFIG["line_term"] | {"joint": True}}
 
 
 def world(seed: int = 0) -> tuple[embedding.Data, np.ndarray, np.ndarray]:
@@ -192,7 +201,7 @@ def test_line_term_is_a_deviation_from_the_training_lines():
     data, *_ = world()
     torch.manual_seed(0)
     model = embedding.build_model(LINE_CONFIG, data)
-    pairs = embedding.pair_rows(data)
+    pairs = embedding.pair_rows(data, LINE_CONFIG)
     every = np.arange(len(data.rows))
     torch.nn.init.normal_(model.mean_token[-1].weight, std=0.5)
     model_scores = embedding.pair_scores(model, data, pairs, every, LINE_CONFIG)
@@ -204,7 +213,7 @@ def test_line_term_is_a_deviation_from_the_training_lines():
     start = embedding.line_term_scores(model, data, pairs, every, LINE_CONFIG)
     assert np.allclose(start, model_scores, atol=1e-5)
     # read in another line, the model's score is the other-line control
-    other = embedding.other_lines(data, LINE_CONFIG)
+    other = embedding.other_lines(data, LINE_CONFIG)[0]
     moved = embedding.line_term_scores(
         model, data, pairs, every, LINE_CONFIG, other.__getitem__
     )
@@ -228,10 +237,10 @@ def test_line_term_scores_follow_the_definition_row_by_row():
     model = embedding.build_model(LINE_CONFIG, data)
     torch.nn.init.normal_(model.mean_token[-1].weight, std=0.5)
     torch.nn.init.normal_(model.line_head[-1].weight, std=0.5)
-    pairs = embedding.pair_rows(data)
+    pairs = embedding.pair_rows(data, LINE_CONFIG)
     rows = np.array([0, 1, 5, 400, len(data.rows) - 1])
     got = embedding.line_term_scores(model, data, pairs, rows, LINE_CONFIG)
-    other = embedding.other_lines(data, LINE_CONFIG)
+    other = embedding.other_lines(data, LINE_CONFIG)[0]
     got_other = embedding.line_term_scores(
         model, data, pairs, rows, LINE_CONFIG, other.__getitem__
     )
@@ -280,7 +289,7 @@ def test_the_line_term_trains_alone_and_train_reports_it():
     assert not np.allclose(line["scores"], result["controls"]["mean_input"])
     before = copy.deepcopy(model.state_dict())
     state, _, history = embedding.fit_line_term(
-        model, data, embedding.pair_rows(data), LINE_CONFIG,
+        model, data, embedding.pair_rows(data, LINE_CONFIG), LINE_CONFIG,
         torch.Generator().manual_seed(1),
     )  # fmt: skip
     moved = {k for k in before if not torch.equal(before[k], state[k])}
@@ -300,10 +309,168 @@ def test_training_reads_only_training_rows_of_two_class_genetic_screens():
     assert set(rows.loc[keep, "split"]) == {"train"}
     assert not keep[one_class.to_numpy()].any() and not keep[treated.to_numpy()].any()
     data.rows = rows
-    draws = embedding.pair_rows(data).draws
+    draws = embedding.pair_rows(data, CONFIG).draws
     assert sorted(draws) == sorted(data.lines.index(f"train{i}") for i in range(2, 8))
     totals = [float(rates.sum()) for _, rates in draws.values()]
     assert np.allclose(totals, totals[0])  # every line weighs the same
+
+
+def test_cross_line_examples_pair_two_lines_of_one_study_for_one_pair():
+    def screen(study, line, rows, split="train"):
+        return [
+            {"split": split, "design": "combinatorial", "condition": HEADLINE,
+             "study_id": study, "list_id": f"{study}:{line}", "model_id": line[:2],
+             "gene_a": a, "gene_b": b, "label": label}
+            for a, b, label in rows
+        ]  # fmt: skip
+
+    records = [
+        *screen("S1", "L1", [("A", "B", 1), ("X1", "Y", 0)]),
+        *screen("S1", "L2", [("A", "B", 0), ("X2", "Y", 1)]),
+        *screen("S1", "L3", [("A", "B", 0), ("X3", "Y", 1)]),
+        # one line, both calls in two screens: never an example with itself
+        *screen("S1", "L4a", [("A", "B", 1), ("X4", "Y", 0)]),
+        *screen("S1", "L4b", [("A", "B", 0), ("X5", "Y", 1)]),
+        # not training rows: a validation line and a screen with one class
+        *screen("S1", "L5", [("A", "B", 0), ("X6", "Y", 1)], split="val"),
+        *screen("S1", "L6", [("A", "B", 0), ("X7", "Y", 0)]),
+        # a study whose lines never differ on a pair
+        *screen("S2", "L1", [("A", "B", 0), ("X8", "Y", 1)]),
+        *screen("S2", "L2", [("A", "B", 0), ("X9", "Y", 1)]),
+    ]
+    rows = pd.DataFrame(records)
+    examples = embedding.cross_line_examples(rows)
+    assert len(examples) == 1  # S2 has no example
+    positive, negative = examples[0]
+    got = {
+        (rows.at[p, "list_id"], rows.at[n, "list_id"])
+        for p, n in zip(positive.tolist(), negative.tolist())
+    }
+    assert got == {
+        ("S1:L1", "S1:L2"), ("S1:L1", "S1:L3"), ("S1:L1", "S1:L4b"),
+        ("S1:L4a", "S1:L2"), ("S1:L4a", "S1:L3"),
+    }  # fmt: skip
+    assert len(positive) == len(got)
+    assert (rows.loc[positive, "gene_a"] == "A").all()
+
+
+def test_a_score_that_ignores_the_line_gives_log_two():
+    data, *_ = world()
+    torch.manual_seed(0)
+    model = embedding.build_model(CROSS_CONFIG, data)  # untrained
+    pairs = embedding.pair_rows(data, CROSS_CONFIG)
+    assert pairs.cross and all(p.dtype == torch.long for p, _ in pairs.cross)
+    loss = embedding.cross_line_loss(
+        model, data, pairs, CROSS_CONFIG, torch.Generator().manual_seed(0), False
+    )
+    assert abs(float(loss.detach()) - math.log(2)) < 1e-6
+
+
+def test_the_cross_line_loss_trains_only_the_line_term_when_the_model_is_frozen():
+    data, *_ = world()
+    torch.manual_seed(0)
+    model = embedding.build_model(CROSS_CONFIG, data)
+    torch.nn.init.normal_(model.mean_token[-1].weight, std=0.5)
+    before = copy.deepcopy(model.state_dict())
+    state, _, history = embedding.fit_line_term(
+        model, data, embedding.pair_rows(data, CROSS_CONFIG), CROSS_CONFIG,
+        torch.Generator().manual_seed(1),
+    )  # fmt: skip
+    moved = {k for k in before if not torch.equal(before[k], state[k])}
+    assert any(k.startswith("line_head.") for k in moved)
+    assert all(k.startswith(("line_head.", "in_line.")) for k in moved)
+    assert history
+
+
+def test_cross_line_without_an_example_is_refused():
+    data, *_ = world()
+    train = data.rows["split"] == "train"
+    # the call depends on the pair alone, so two training lines never differ on it
+    data.rows.loc[train, "label"] = (
+        (data.rows.loc[train, "a"] + data.rows.loc[train, "b"]) % 5 == 0
+    ).astype(int)
+    assert embedding.training_rows(data.rows).any()
+    embedding.pair_rows(data, LINE_CONFIG)  # no cross_line: no example needed
+    with pytest.raises(ValueError, match="cross_line"):
+        embedding.pair_rows(data, CROSS_CONFIG)
+
+
+def test_joint_training_moves_the_model_and_the_line_term_together():
+    data, *_ = world()
+    torch.manual_seed(0)
+    model = embedding.build_model(JOINT_CONFIG, data)
+    before = copy.deepcopy(model.state_dict())
+    state, _, history = embedding.fit_pairs(
+        model, data, embedding.pair_rows(data, JOINT_CONFIG), JOINT_CONFIG,
+        torch.Generator().manual_seed(1), 1.0, with_line_term=True,
+    )  # fmt: skip
+    moved = {k for k in before if not torch.equal(before[k], state[k])}
+    for part in ("line_head.", "head.", "mean_token.", "gene_encoder.", "deviation"):
+        assert any(k.startswith(part) for k in moved), part
+    assert history and all(p.requires_grad for p in model.parameters())
+
+
+def test_joint_training_has_no_separate_line_term_phase(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("fit_line_term runs in joint training")
+
+    monkeypatch.setattr(embedding, "fit_line_term", refuse)
+    data, *_ = world()
+    torch.manual_seed(0)
+    model = embedding.build_model(JOINT_CONFIG, data)
+    result = embedding.train(model, data, JOINT_CONFIG)
+    line = result["line_term"]
+    chosen = result["phases"][result["chosen"]]
+    assert line["history"] == chosen["history"]
+    assert line["val_recall_top10"] == chosen["val_recall_top10"]
+    every = np.arange(len(data.rows))
+    pairs = embedding.pair_rows(data, JOINT_CONFIG)
+    assert np.allclose(
+        line["scores"],
+        embedding.line_term_scores(model, data, pairs, every, JOINT_CONFIG),
+    )
+
+
+def with_other_lines(config: dict, count: int) -> dict:
+    return config | {"eval": config["eval"] | {"other_lines": count}}
+
+
+def test_each_other_line_is_another_line_and_the_first_is_the_old_control():
+    data, *_ = world()
+    maps = embedding.other_lines(data, with_other_lines(CONFIG, 3))
+    assert len(maps) == 3
+    order = np.random.default_rng(0).permutation(np.unique(data.rows["line"]))
+    assert maps[0] == dict(zip(order.tolist(), np.roll(order, 1).tolist()))
+    for line in order.tolist():
+        others = [m[line] for m in maps]
+        assert line not in others and len(set(others)) == 3
+
+
+def test_more_other_lines_than_benchmark_lines_is_refused():
+    data, *_ = world()
+    lines = data.rows["line"].nunique()
+    embedding.other_lines(data, with_other_lines(CONFIG, lines - 1))
+    with pytest.raises(ValueError, match="other_lines"):
+        embedding.other_lines(data, with_other_lines(CONFIG, lines))
+
+
+def test_a_run_writes_one_table_for_each_other_line():
+    data, *_ = world()
+    config = with_other_lines(LINE_CONFIG, 2)
+    torch.manual_seed(0)
+    model = embedding.build_model(config, data)
+    torch.nn.init.normal_(model.mean_token[-1].weight, std=0.5)
+    pairs = embedding.pair_rows(data, config)
+    controls = embedding.line_input_controls(model, data, pairs, config)
+    assert set(controls) == {"mean_input", "other_line", "other_line_2"}
+    assert not np.allclose(controls["other_line"], controls["other_line_2"])
+    result = embedding.train(model, data, config)
+    assert set(result["controls"]) == set(controls)
+    line = result["line_term"]
+    assert set(line) == {
+        "val_recall_top10", "history", "scores", "other_line", "other_line_2"
+    }  # fmt: skip
+    assert not np.allclose(line["other_line"], line["other_line_2"])
 
 
 def test_cell_batch_caps_drops_and_pads():
@@ -412,6 +579,33 @@ def test_the_config_loads_and_a_missing_key_is_refused(tmp_path: Path):
         embedding.load_config(tmp_path / "bad.yaml")
 
 
+def test_a_line_term_without_the_new_keys_is_refused(tmp_path: Path):
+    text = Path("configs/sl/embedding_direct.yaml").read_text()
+    assert (
+        embedding.load_config(Path("configs/sl/embedding_direct.yaml"))["eval"][
+            "other_lines"
+        ]
+        == 1
+    )
+    for line, key in (("  joint: false\n", "joint"), ("  input: model\n", "input"),
+                      ("  cross_line: null\n", "cross_line")):  # fmt: skip
+        assert line in text
+        (tmp_path / "bad.yaml").write_text(text.replace(line, ""))
+        with pytest.raises(ValueError, match=key):
+            embedding.load_config(tmp_path / "bad.yaml")
+    bad = {
+        "input": text.replace("  input: model\n", "  input: cells\n"),
+        "cross_line": text.replace(
+            "  cross_line: null\n", "  cross_line: {weight: 0.5}\n"
+        ),
+        "other_lines": text.replace("other_lines: 1", "other_lines: 0"),
+    }
+    for key, wrong in bad.items():
+        (tmp_path / "bad.yaml").write_text(wrong)
+        with pytest.raises(ValueError, match=key):
+            embedding.load_config(tmp_path / "bad.yaml")
+
+
 def test_the_study_configs_differ_only_where_the_plan_says():
     base = embedding.load_config(Path("configs/sl/embedding_direct.yaml"))
     finished = embedding.load_config(Path("configs/sl/embedding.yaml"))
@@ -421,10 +615,13 @@ def test_the_study_configs_differ_only_where_the_plan_says():
     assert finished["line_term"] is None
     assert base["line_term"] == {
         "reference_lines": 8, "max_epochs": 30, "patience": 5, "learning_rate": 1.0e-3,
-        "own_expression": True, "gene_in_line": {},
+        "own_expression": True, "gene_in_line": {}, "joint": False, "input": "model",
+        "cross_line": None,
     }  # fmt: skip
     changes = {
-        "embedding_direct_mean_token": {("cell_embeddings",): None},
+        # four other-line controls: the reference of the cross-line study (§20)
+        "embedding_direct_mean_token": {("cell_embeddings",): None,
+                                        ("eval", "other_lines"): 4},
         "embedding_direct_pie_change": {("line_term", "gene_in_line"): {
             "pie_change": "data/sl_gene_in_line/v1/pie_change"}},
         "embedding_direct_tx1_gene": {("line_term", "gene_in_line"): {
@@ -446,6 +643,44 @@ def test_the_harness_names_every_table_of_the_study():
     )
     assert set(config["extra_scores"]) <= set(benchmark_baselines.NAMES)
     assert len([k for k in config["extra_scores"] if k.startswith("direct")]) == 20
+
+
+def test_the_cross_line_configs_change_one_thing_for_each_row():
+    """SL protocol §20: each config is the row above with one change."""
+    cache = "data/sl_gene_in_line/v1/"
+    wide = {n: cache + n for n in ("wide_expression", "cell_spread", "paralog_buffer",
+                                   "complex_buffer", "partner_low")}  # fmt: skip
+    dna = {n: cache + n for n in ("depmap_mutation", "depmap_copy_number")}
+    rows = [
+        ("embedding_direct_mean_token", {}),
+        ("cross_line_frozen", {("line_term", "cross_line"): {
+            "weight": 0.5, "examples_per_step": 256}}),
+        ("cross_line_joint", {("line_term", "joint"): True}),
+        ("cross_line_genes_input", {("line_term", "input"): "genes"}),
+        ("cross_line_wide", {("line_term", "own_expression"): False,
+                             ("line_term", "gene_in_line"): wide}),
+        ("cross_line_depmap_dna", {("line_term", "gene_in_line"): wide | dna}),
+    ]  # fmt: skip
+    expected = None
+    for name, change in rows:
+        config = embedding.load_config(Path(f"configs/sl/{name}.yaml"))
+        if expected is not None:
+            for (section, key), value in change.items():
+                expected[section][key] = value
+            assert config == expected, name
+        expected = copy.deepcopy(config)
+
+
+def test_the_harness_names_every_table_of_the_cross_line_study():
+    config = benchmark_baselines.load_config(
+        Path("configs/sl/benchmark_cross_line.yaml")
+    )
+    named = set(config["extra_scores"]) | set(config["scorer_means"])
+    assert named <= set(benchmark_baselines.NAMES)
+    assert set(config["cross_line_ordering"]) <= set(config["extra_scores"]) | {
+        "labels"
+    }
+    assert {n for pair in config["paired_differences"] for n in pair} <= named
 
 
 def test_stage_one_fits_no_sl_line_and_no_line_of_an_sl_lines_patient():

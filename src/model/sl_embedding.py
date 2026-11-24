@@ -15,7 +15,11 @@ cells in its own way, and a pair head on the gene-in-line embeddings.
 
 ``phi`` is the input of the pair head (``features``). The line term ``l`` reads the
 gene-in-line features ``x_g`` of the two genes in the line; the line head ends in a
-zero layer, so the untrained line term is 0.
+zero layer, so the untrained line term is 0. With ``line_input="genes"`` the line head
+reads no line token and no free deviation: ``phi`` is replaced by
+``[u0_A + u0_B ; |u0_A - u0_B| ; u0_A * u0_B ; combinatorial]``, where ``u0_g`` is the
+gene encoder's output without ``r_g`` (``source_vectors``). Then the line term can
+change with the line only through the gene-in-line features.
 
 ``z`` is the scaled GeneEffect stage one trains on; the pair head reads ``V`` and the
 cell tokens, never ``z``. The cells' weights are normalised over the cells alone, so
@@ -55,8 +59,12 @@ class GeneLineModel(nn.Module):
         hidden: int,
         head_hidden: int,
         gene_in_line: Mapping[str, int],
+        line_input: str,
     ) -> None:
         super().__init__()
+        if line_input not in ("model", "genes"):
+            raise ValueError(f"line_input: model or genes, not {line_input!r}")
+        self.line_input = line_input
         self.source_names = tuple(sources)
         for name, (vectors, present) in sources.items():
             self.register_buffer(f"vectors_{name}", vectors.float(), persistent=False)
@@ -81,7 +89,7 @@ class GeneLineModel(nn.Module):
         )
         self.line_head = _zero_last(
             nn.Sequential(
-                nn.Linear(7 * WIDTH + 1, head_hidden),
+                nn.Linear((7 if line_input == "model" else 6) * WIDTH + 1, head_hidden),
                 nn.GELU(),
                 nn.Linear(head_hidden, 1),
             )
@@ -104,10 +112,23 @@ class GeneLineModel(nn.Module):
     def gene_vectors(self) -> Tensor:
         """``u`` for every gene, then one zero row: index -1 is a gene without a
         vector (an anchor that is a drug or outside the gene axis)."""
+        u = self.source_vectors()
+        return u + torch.cat([self.deviation, u.new_zeros(1, WIDTH)])
+
+    def source_vectors(self) -> Tensor:
+        """``u0``, the gene encoder's output without the deviation, for every gene,
+        then one zero row."""
         vectors = {n: getattr(self, f"vectors_{n}") for n in self.source_names}
         present = {n: getattr(self, f"present_{n}") for n in self.source_names}
-        u = self.gene_encoder(vectors, present) + self.deviation
+        u = self.gene_encoder(vectors, present)
         return torch.cat([u, u.new_zeros(1, WIDTH)])
+
+    def line_vectors(self) -> Tensor:
+        """The gene vectors the line head reads: ``gene_vectors`` for the ``model``
+        input, ``source_vectors`` for the ``genes`` input."""
+        return (
+            self.gene_vectors() if self.line_input == "model" else self.source_vectors()
+        )
 
     def tokens(
         self, expression: Tensor, cells: Tensor | None
@@ -200,13 +221,22 @@ class GeneLineModel(nn.Module):
         cells: Tensor | None,
         mask: Tensor | None,
     ) -> Tensor:
-        """The line term (rows,) of rows (A, B) of one line. ``in_line_a[name]``
-        (rows, width of ``name``) holds the gene-in-line features of gene A; the
-        other arguments are those of ``features``. The same for (A, B) and (B, A)."""
+        """The line term (rows,) of rows (A, B) of one line. ``u_a``, ``u_b`` are rows
+        of ``line_vectors``. ``in_line_a[name]`` (rows, width of ``name``) holds the
+        gene-in-line features of gene A; the other arguments are those of
+        ``features``. The ``genes`` input does not read ``mean``, ``cells`` and
+        ``mask``. The same for (A, B) and (B, A)."""
         e_a, e_b = torch.zeros_like(u_a), torch.zeros_like(u_b)
         for name, project in self.in_line.items():
             e_a = e_a + project(in_line_a[name])
             e_b = e_b + project(in_line_b[name])
-        phi = self.features(u_a, u_b, combinatorial, mean, cells, mask)
+        if self.line_input == "model":
+            phi = self.features(u_a, u_b, combinatorial, mean, cells, mask)
+        else:
+            phi = torch.cat(
+                [u_a + u_b, (u_a - u_b).abs(), u_a * u_b,
+                 combinatorial.unsqueeze(-1).to(u_a.dtype)],
+                dim=-1,
+            )  # fmt: skip
         psi = torch.cat([phi, e_a + e_b, (e_a - e_b).abs(), e_a * e_b], dim=-1)
         return self.line_head(psi).squeeze(-1)

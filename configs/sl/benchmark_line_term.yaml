@@ -88,3 +88,7 @@ paired_differences:
   - [direct_mean_token, embedding_mean_token]
   # the model with the line term against Kebabci's paralog classifier on predicted GeneEffect
   - [direct_line_term, kebabci_paralog_predicted]
+# derived scorers: each line's mean over the named scorers (extra_scores keys)
+scorer_means: {}
+# scorers whose cross-line ordering is reported (held-out sides and training lines)
+cross_line_ordering: []

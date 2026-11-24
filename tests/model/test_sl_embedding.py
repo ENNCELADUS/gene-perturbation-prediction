@@ -4,6 +4,7 @@ of the cells do not change the output, and a line without cells reads its mean t
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from src.model.sl_embedding import WIDTH, GeneLineModel
@@ -11,7 +12,7 @@ from src.model.sl_embedding import WIDTH, GeneLineModel
 GENES, EXPRESSION, CELL = 12, 6, 8
 
 
-def model(seed: int = 0) -> GeneLineModel:
+def model(seed: int = 0, line_input: str = "model") -> GeneLineModel:
     torch.manual_seed(seed)
     present = torch.ones(GENES, dtype=torch.bool)
     present[3] = False
@@ -22,6 +23,7 @@ def model(seed: int = 0) -> GeneLineModel:
         hidden=16,
         head_hidden=16,
         gene_in_line={"own": 3},
+        line_input=line_input,
     )
     # a trained state: the zero layers and the deviation are no longer zero
     for parameter in (built.mean_token[-1].weight, built.cell_token[-1].weight,
@@ -43,7 +45,7 @@ def test_untrained_model_predicts_the_gene_mean():
     fresh = GeneLineModel(
         {"text": (torch.randn(GENES, 5), torch.ones(GENES, dtype=torch.bool))},
         expression_dim=EXPRESSION, cell_dim=CELL, hidden=16, head_hidden=16,
-        gene_in_line={},
+        gene_in_line={}, line_input="model",
     )  # fmt: skip
     expression, cells, mask = inputs()
     mean, tokens = fresh.tokens(expression, cells)
@@ -153,3 +155,54 @@ def test_line_term_starts_at_zero_and_is_the_same_for_both_orders():
     with_line = {id(p) for p in built.line_parameters()}
     assert with_line and not with_line & {id(p) for p in built.backbone()}
     assert not with_line & {id(p) for p in built.head.parameters()}
+
+
+def test_the_genes_input_reads_no_line_token_and_no_gene_deviation():
+    built = model(line_input="genes")
+    torch.nn.init.normal_(built.line_head[-1].weight, std=0.5)
+    expression, cells, mask = inputs(lines=1)
+    a, b = torch.tensor([0, 2, -1, 5]), torch.tensor([1, 4, 3, 6])
+    flag = torch.tensor([True, True, False, True])
+    own = torch.randn(GENES + 1, 3)
+    mean, tokens = built.tokens(expression, cells)
+
+    def term(mean: torch.Tensor, own: torch.Tensor) -> torch.Tensor:
+        u = built.line_vectors()
+        return built.line_term(
+            u[a], u[b], flag, {"own": own[a]}, {"own": own[b]}, mean, tokens[0], mask[0]
+        )
+
+    base = term(mean[0], own)
+    assert base.abs().sum() > 0
+    assert torch.allclose(base, term(mean[0] + 3.0, own))  # another mean token
+    with torch.no_grad():
+        built.deviation.add_(1.0)
+    assert torch.allclose(base, term(mean[0], own))  # another gene deviation
+    moved = own.clone()
+    moved[0] += 2.0
+    assert not torch.allclose(base, term(mean[0], moved))  # a gene-in-line feature
+
+
+def test_the_genes_input_is_the_same_for_both_orders_and_reads_a_zero_anchor():
+    built = model(line_input="genes")
+    torch.nn.init.normal_(built.line_head[-1].weight, std=0.5)
+    u = built.line_vectors()
+    assert u.shape == (GENES + 1, WIDTH) and torch.all(u[-1] == 0)
+    a, b = torch.tensor([0, 2, -1, 5]), torch.tensor([1, 4, 3, 6])
+    flag = torch.tensor([True, True, False, True])
+    own = torch.randn(GENES + 1, 3)
+    own[-1] = 0.0
+    mean = torch.randn(WIDTH)
+    forward = built.line_term(
+        u[a], u[b], flag, {"own": own[a]}, {"own": own[b]}, mean, None, None
+    )
+    backward = built.line_term(
+        u[b], u[a], flag, {"own": own[b]}, {"own": own[a]}, mean, None, None
+    )
+    assert torch.isfinite(forward).all()
+    assert torch.allclose(forward, backward, atol=1e-5)
+
+
+def test_an_unknown_line_input_is_refused():
+    with pytest.raises(ValueError, match="line_input"):
+        model(line_input="cells")

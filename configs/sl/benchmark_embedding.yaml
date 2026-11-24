@@ -53,3 +53,7 @@ paired_differences:
   # the context-blind control: the gene mean GeneEffect of the two genes
   - [embedding, pan_essentiality]
   - [embedding_mean_token, pan_essentiality]
+# derived scorers: each line's mean over the named scorers (extra_scores keys)
+scorer_means: {}
+# scorers whose cross-line ordering is reported (held-out sides and training lines)
+cross_line_ordering: []

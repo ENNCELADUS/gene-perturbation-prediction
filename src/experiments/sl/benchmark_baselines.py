@@ -19,7 +19,11 @@ lines, the lines with and without GeneEffect, and the cancer and non-cancer line
 and for each stratum and subset of held-out pairs (STRATA, SUBSETS), ranked inside
 it in each screen. Each (scorer, control) pair of the config's ``paired_differences``
 gets its per-line difference with the same line bootstrap. The training lines are
-scored too, all pairs only and in sample, by every scorer whose table covers them."""
+scored too, all pairs only and in sample, by every scorer whose table covers them.
+Each derived scorer of ``scorer_means`` is a line's mean over its scorers (e.g. one
+model on the input of several other lines). Each scorer of ``cross_line_ordering``
+gets the share of (SL line, not-SL line) examples of one study and gene pair that it
+orders correctly, on each side (``cross_line_ordering``)."""
 
 from __future__ import annotations
 
@@ -132,6 +136,40 @@ NAMES = {
             ),
         )
     },
+    # the cross-line loss and the local gene-in-line data (SL protocol §20), each run
+    # without cell tokens: the score with the line term, the pair head alone, the model
+    # on the mean input, the score read in each of four other lines, and their mean;
+    # then the reference run's score read in its other lines
+    **{
+        f"{run}{suffix}": f"Gene-knowledge model with the cross-line loss, {model}"
+        f"{control}"
+        for run, model in (
+            ("cross_frozen", "line term trained last"),
+            ("cross_joint", "line term trained with the model"),
+            ("cross_genes_input", "line head on the frozen-source gene vectors"),
+            ("cross_wide", "wide expression and buffers of the two genes"),
+            ("cross_depmap_dna", "with DepMap mutations and copy number"),
+        )
+        for suffix, control in (
+            ("", ""),
+            ("_model", ", the pair head alone"),
+            ("_mean_input", ", context-ablated (the fit lines' mean input)"),
+            *(
+                (f"_other_line_{k}", f", on the input of other line {k}")
+                for k in "1234"
+            ),
+            ("_other_lines", ", on another line's input (mean over four lines)"),
+        )
+    },
+    **{
+        f"direct_mean_token_line_term_other_line_{k}": "Gene-knowledge, cell-set "
+        "model, direct GeneEffect target, without cell tokens, the model and the line "
+        f"term on the input of other line {k}"
+        for k in "234"
+    },
+    "direct_mean_token_line_term_other_lines": "Gene-knowledge, cell-set model, direct "
+    "GeneEffect target, without cell tokens, the model and the line term on another "
+    "line's input (mean over four lines)",
     # the PIE editor (configs/sl/pie_editor.yaml): PIE's predicted profile after A's
     # loss in place of the simple edit; 0 outside the rows the simple edit covers,
     # or (pie_all) outside the rows PIE can edit
@@ -193,7 +231,7 @@ def load_config(path: Path) -> dict[str, Any]:
         config,
         {"kind", "seed", "output_root", "task", "labels", "split", "gene_effect",
          "model", "stage_one", "extra_scores", "top_k", "bootstrap",
-         "paired_differences"},
+         "paired_differences", "scorer_means", "cross_line_ordering"},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_benchmark_baselines":
@@ -201,6 +239,19 @@ def load_config(path: Path) -> dict[str, Any]:
     unknown = {n for pair in config["paired_differences"] for n in pair} - set(NAMES)
     if unknown:
         raise ValueError(f"paired_differences names unknown scorers: {sorted(unknown)}")
+    means = config["scorer_means"]
+    unknown = set(means) - set(NAMES)
+    unknown |= {n for members in means.values() for n in members} - set(
+        config["extra_scores"]
+    )
+    if unknown:
+        raise ValueError(f"scorer_means names unknown scorers: {sorted(unknown)}")
+    # a scorer mean has no row scores to order
+    unknown = set(config["cross_line_ordering"]) - (set(NAMES) - set(means))
+    if unknown:
+        raise ValueError(
+            f"cross_line_ordering names unknown scorers: {sorted(unknown)}"
+        )
     return config
 
 
@@ -419,6 +470,96 @@ def line_records(lists: pd.DataFrame) -> pd.DataFrame:
     return lines.reset_index()[columns]
 
 
+def with_scorer_means(
+    lines: pd.DataFrame, means: Mapping[str, Sequence[str]]
+) -> pd.DataFrame:
+    """``lines`` (line_records) and, for each derived scorer of ``means``, each line's
+    mean of its scorers' METRICS; positives, studies and screens of the first listed
+    scorer. A line that one of the scorers lacks has no derived row."""
+    keys = ["split", "model_id"]
+    derived = []
+    for name, members in means.items():
+        chosen = lines[lines["scorer"].isin(members)]
+        values = chosen.groupby(keys).agg(
+            **{m: (m, "mean") for m in METRICS}, scorers=("scorer", "nunique")
+        )
+        values = values[values["scorers"] == len(set(members))].drop(columns="scorers")
+        first = lines[lines["scorer"] == members[0]].set_index(keys)
+        counts = first[["positives", "studies", "screens"]]
+        derived.append(
+            counts.join(values, how="inner").reset_index().assign(scorer=name)
+        )
+    return pd.concat([lines, *derived], ignore_index=True)[list(lines.columns)]
+
+
+def cross_line_ordering(
+    frame: pd.DataFrame, score: np.ndarray, reps: int, seed: int
+) -> dict[str, dict[str, Any]]:
+    """Per split: the share of (line that called the pair SL, line that did not)
+    examples of one study, design and gene pair in which ``score`` is higher in the
+    first line (a tie counts one half), mean over studies, with a 95% interval from
+    resampling each study's gene pairs. Rows: the headline screens with a finite
+    score; a line's value for a pair is its mean score over the study's screens, and
+    a line with both calls for the pair in the study is dropped. A score that is the
+    same in every line gives 0.5. A split without an example has no key."""
+    pair_keys = ["split", "study_id", "design", "gene_a", "gene_b"]
+    keep = (frame["condition"] == HEADLINE).to_numpy() & np.isfinite(score)
+    rows = frame.loc[keep, [*pair_keys, "model_id", "label"]].assign(score=score[keep])
+
+    def both_calls(table: pd.DataFrame) -> pd.DataFrame:
+        calls = table.groupby(pair_keys, sort=False)["label"]
+        return table[(calls.transform("min") == 0) & (calls.transform("max") == 1)]
+
+    cells = (
+        both_calls(rows)
+        .groupby([*pair_keys, "model_id"], sort=False)
+        .agg(low=("label", "min"), high=("label", "max"), least=("score", "min"),
+             most=("score", "max"), score=("score", "mean"))
+    )  # fmt: skip
+    cells = cells[cells["low"] == cells["high"]].reset_index()
+    # equal scores keep their value: their mean can move in the last bit and break a tie
+    cells["score"] = cells["least"].where(
+        cells["least"] == cells["most"], cells["score"]
+    )
+    cells = both_calls(cells.rename(columns={"low": "label"}))
+    # Mann-Whitney: the positives' rank sum (ties at their mean rank) minus its least
+    # value counts the (positive, negative) examples ordered right, ties as one half
+    positive = cells["label"].to_numpy(dtype=np.float64)
+    rank = cells.groupby(pair_keys, sort=False)["score"].rank().to_numpy()
+    groups = (
+        cells[pair_keys]
+        .assign(positives=positive, lines=1, rank_sum=rank * positive)
+        .groupby(pair_keys)
+        .sum()
+    )
+    n = groups["positives"]
+    groups["wins"] = groups["rank_sum"] - n * (n + 1) / 2
+    groups["examples"] = n * (groups["lines"] - n)
+    rng = np.random.default_rng(seed)
+    out = {}
+    for split, side in groups.groupby(level="split"):
+        by_study, draws = {}, []
+        for study, pairs in side.groupby(level="study_id"):
+            wins, examples = pairs["wins"].to_numpy(), pairs["examples"].to_numpy()
+            by_study[study] = {
+                "value": float(wins.sum() / examples.sum()),
+                "examples": int(examples.sum()),
+                "pairs": len(pairs),
+            }
+            picks = (rng.integers(len(wins), size=len(wins)) for _ in range(reps))
+            draws.append([wins[i].sum() / examples[i].sum() for i in picks])
+        low, high = np.quantile(np.mean(draws, axis=0), [0.025, 0.975])
+        out[split] = {
+            "value": float(np.mean([s["value"] for s in by_study.values()])),
+            "interval": [float(low), float(high)],
+            "examples": sum(s["examples"] for s in by_study.values()),
+            "pairs": len(side),
+            "studies": len(by_study),
+            "by_study": by_study,
+        }
+    return out
+
+
 def screen_counts(lists: pd.DataFrame) -> list[dict[str, Any]]:
     """Per split and condition: screens, those with both classes, and positives."""
     one = lists[lists["scorer"] == "pair_identity"]
@@ -613,12 +754,26 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
     groups = line_groups(split_table, non_cancer_lines(Path(config["model"])))
     by_stratum, results, differences = [], [], []
     reps, seed = int(config["bootstrap"]), int(config["seed"])
+    means = config["scorer_means"]
+    train_scorers = scorers_for(training, strict=False)[0]
+    # held-out lines on each side, and the training lines in sample
+    ordering = {
+        name: cross_line_ordering(held, scorers[name], reps, seed)
+        | (
+            cross_line_ordering(training, train_scorers[name], reps, seed)
+            if name in train_scorers
+            else {}
+        )
+        for name in config["cross_line_ordering"]
+    }
     for stratum, mask in masks.items():
         chosen = scores[mask[scores["row"].to_numpy()]]
         if chosen.empty:
             continue
         stratum_lists = list_records(chosen, int(config["top_k"]))
-        stratum_lines = line_records(stratum_lists).assign(stratum=stratum)
+        stratum_lines = with_scorer_means(line_records(stratum_lists), means).assign(
+            stratum=stratum
+        )
         results += [
             row | {"stratum": stratum}
             for row in summary(stratum_lines, groups, reps, seed)
@@ -635,11 +790,12 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
             lists = stratum_lists
     # the training lines, in sample for every fitted scorer: all pairs only
     train_scores, _ = long(
-        training[[*LIST_KEYS, "gene_a", "gene_b", "label"]],
-        scorers_for(training, strict=False)[0],
+        training[[*LIST_KEYS, "gene_a", "gene_b", "label"]], train_scorers
     )
     train_lists = list_records(train_scores, int(config["top_k"]))
-    train_lines = line_records(train_lists).assign(stratum="all")
+    train_lines = with_scorer_means(line_records(train_lists), means).assign(
+        stratum="all"
+    )
     results += [
         row | {"stratum": "all"} for row in summary(train_lines, groups, reps, seed)
     ]
@@ -676,6 +832,7 @@ def run(config: Mapping[str, Any], run_id: str) -> Path:
         "paired_differences": differences,
         "covered": on_covered,
         "label_agreement": label_agreement(rows),
+        "cross_line_ordering": ordering,
     }  # fmt: skip
     write_parquet(run_dir / "scores.parquet", scores.drop(columns="row"))
     lists.to_csv(run_dir / "lists.csv", index=False)
@@ -693,8 +850,9 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
     and test (all lines);
     Table 2, the difference from pair identity; Table 3, each stratum and subset;
     Table 4, each partial scorer on the rows it covers; Table 5, the paired
-    differences named in the config. The other line groups, AUROC, AUPRC and each
-    screen are in metrics.json, lines.csv and lists.csv."""
+    differences named in the config; Table 6, the cross-line ordering of the scorers
+    named in the config. The other line groups, AUROC, AUPRC and each screen are in
+    metrics.json, lines.csv and lists.csv."""
     rows = {
         (r["split"], r["scorer"]): r
         for r in metrics["summary"]
@@ -773,6 +931,7 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         "",
         *covered_table(metrics["covered"]),
         *paired_table(metrics["paired_differences"]),
+        *ordering_table(metrics["cross_line_ordering"]),
         *agreement_lines(metrics["label_agreement"]),
         "AUROC and AUPRC of each row set and line group are in `summary.csv`; each "
         "line in `lines.csv`; each screen, the non-genetic ones included, in "
@@ -830,6 +989,36 @@ def paired_table(differences: Sequence[Mapping[str, Any]]) -> list[str]:
         "| --- | --- | ---: | ---: |",
         *(f"| {NAMES[a]} − {NAMES[b]} | {names[k]} | {cell((a, b, k, 'val'))} | "
           f"{cell((a, b, k, 'test'))} |" for a, b, k in keys),
+        "",
+    ]  # fmt: skip
+
+
+def ordering_table(ordering: Mapping[str, Any]) -> list[str]:
+    """Table 6: each named scorer's cross-line ordering on each side."""
+    if not ordering:
+        return []
+
+    def cell(entry: Mapping[str, Any] | None) -> str:
+        if entry is None:
+            return "—"
+        low, high = entry["interval"]
+        return (
+            f"{entry['value']:.3f} [{low:.3f}, {high:.3f}] "
+            f"({entry['examples']:,}, {entry['studies']})"
+        )
+
+    return [
+        "**Table 6.** Cross-line ordering. Share of (line that called the pair SL, "
+        "line that did not) pairs of one study and gene pair that the score orders "
+        "correctly, mean over studies; 0.5 for a score that is the same in every "
+        "line; training lines are in sample. A 95% bootstrap interval over gene "
+        "pairs, then (examples, studies).",
+        "",
+        "| Model | Training | Validation | Test |",
+        "| --- | ---: | ---: | ---: |",
+        *(f"| {NAMES[name]} | "
+          + " | ".join(cell(sides.get(s)) for s in ("train", "val", "test")) + " |"
+          for name, sides in ordering.items()),
         "",
     ]  # fmt: skip
 

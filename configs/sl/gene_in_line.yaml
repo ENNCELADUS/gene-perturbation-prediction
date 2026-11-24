@@ -3,6 +3,9 @@
 # the gene's loss in 64 components fitted on the SL training lines (pie_change, CPU).
 # `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps tx1_gene --shard I/N` (one process per GPU), then
 # `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps pie_change`.
+# The CPU caches of the line's cells, the gene's partners and DepMap's DNA calls, one call for each step:
+# `hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps STEP` with STEP one of wide_expression, cell_spread,
+# paralog_buffer, complex_buffer, partner_low, depmap_mutation, depmap_copy_number.
 kind: sl_gene_in_line
 seed: 0
 # its paths.tx1_model_dir, paths.basal_raw_umi and preparation.var_ensembl_col
@@ -13,3 +16,12 @@ out: data/sl_gene_in_line/v1
 tx1: {batch_size: 32, max_length: 2048, max_cells: 256, cells_per_pass: 64}
 # the PIE root of hpc/run.sh sl-pie-pass; a seeded sample of training-line vectors fits the components
 pie: {root: data/sl_pie/v1, components: 64, sample: 200000}
+# the cell files of each line: cells/genes.json and cells/<ModelID>.npz (pseudo-bulk, detected share, SD)
+ladder: data/geneeffect_joint/v2/ladder
+# its paths.reference gives the paralog and complex tables of the buffer caches
+linear_model: configs/linear_model/default_linear_model.yaml
+# DepMap's damaging and hotspot mutation matrices and the gene-level log2 copy number
+depmap:
+  damaging: data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixDamaging.csv
+  hotspot: data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixHotspot.csv
+  copy_number: data/sl_dependency_v0/raw/depmap/PortalOmicsCNGeneLog2.csv

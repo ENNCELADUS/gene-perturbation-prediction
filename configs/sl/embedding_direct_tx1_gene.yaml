@@ -39,7 +39,8 @@ stage_two:
   weight_decay: 0.01
   # the GeneEffect loss's weight when the whole model trains; one phase for each
   geneeffect_weights: [1.0]
-eval: {rows_per_chunk: 1024, genes_per_chunk: 2048}
+# other_lines: the number of other benchmark lines whose input each line's score is read on (a control)
+eval: {rows_per_chunk: 1024, genes_per_chunk: 2048, other_lines: 1}
 # the line head on the gene-in-line features: R is a draw of reference_lines SL training lines at each
 # step; own_expression reads the line's own scaled pseudo-bulk value of each gene
 line_term:
@@ -48,6 +49,11 @@ line_term:
   patience: 5
   learning_rate: 1.0e-3
   own_expression: true
+  # joint: the line term trains with the whole model; input: what the line head reads (model or genes);
+  # cross_line: the loss between two training lines of one study for one pair (null: none)
+  joint: false
+  input: model
+  cross_line: null
   # Tx1-3B's mean contextual gene embedding (hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps tx1_gene --shard I/N)
   gene_in_line:
     tx1_gene: data/sl_gene_in_line/v1/tx1_gene

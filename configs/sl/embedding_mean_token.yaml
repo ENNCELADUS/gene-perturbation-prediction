@@ -39,6 +39,7 @@ stage_two:
   weight_decay: 0.01
   # the GeneEffect loss's weight when the whole model trains; one phase for each
   geneeffect_weights: [1.0]
-eval: {rows_per_chunk: 1024, genes_per_chunk: 2048}
+# other_lines: the number of other benchmark lines whose input each line's score is read on (a control)
+eval: {rows_per_chunk: 1024, genes_per_chunk: 2048, other_lines: 1}
 # the line head on the gene-in-line features (null: no line term)
 line_term: null

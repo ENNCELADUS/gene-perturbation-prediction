@@ -1,0 +1,60 @@
+# cross_line_joint.yaml with `line_term.input: genes` (SL protocol §20): the line head reads the gene vectors of the
+# frozen sources and the gene-in-line features only, no line token and no free gene deviation.
+# `hpc/run.sh sl-embedding configs/sl/cross_line_genes_input.yaml --run-id cross_line_genes_input_seed0` (one GPU).
+# Plan: docs/specs/2026-11-24-cross-line-loss-plan.md.
+kind: sl_embedding
+seed: 0
+output_root: outputs/sl
+task: embedding
+# the SL backbone's line input: bridged pseudo-bulk on the SL split's training side
+linear_model: configs/linear_model/default_linear_model.yaml
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+# frozen gene sources (hpc/run.sh gene-sources): function text, protein, network
+gene_sources:
+  gene_text: data/geneeffect_joint/v2/ladder/gene_sources/gene_text.npz
+  esmc_600m: data/geneeffect_joint/v2/ladder/gene_sources/esmc_600m.npz
+  string_space: data/geneeffect_joint/v2/ladder/gene_sources/string_space.npz
+# no cell tokens: every line reads its mean token alone
+cell_embeddings: null
+top_k: 20
+model: {hidden: 256, head_hidden: 64}
+# cells of a line at one training step, and the rate at which a line reads its mean token alone
+cells: {per_step: 256, dropout: 0.25}
+stage_one:
+  max_epochs: 30
+  patience: 3
+  learning_rate: 1.0e-3
+  weight_decay: 0.01
+  lines_per_step: 32
+  genes_per_step: 512
+stage_two:
+  max_epochs: 30
+  patience: 5
+  steps_per_epoch: 200
+  lines_per_step: 4
+  rows_per_line: 1024
+  learning_rate: 1.0e-3
+  backbone_learning_rate: 1.0e-4
+  weight_decay: 0.01
+  # the GeneEffect loss's weight when the whole model trains; one phase for each
+  geneeffect_weights: [1.0]
+# other_lines: the number of other benchmark lines whose input stands in for a line's own in the other-line control
+eval: {rows_per_chunk: 1024, genes_per_chunk: 2048, other_lines: 4}
+# the line head on the gene-in-line features: R is a draw of reference_lines SL training lines at each step
+line_term:
+  reference_lines: 8
+  max_epochs: 30
+  patience: 5
+  learning_rate: 1.0e-3
+  # the line's own scaled bridged pseudo-bulk value of each gene (6,523 genes)
+  own_expression: true
+  # true: the model and the line term train together; false: the line term trains last on the frozen model
+  joint: true
+  # model: the line head reads the pair head's input (line tokens, free gene deviation); genes: the frozen-source
+  # gene vectors and the gene-in-line features only
+  input: genes
+  # the ranking loss between two training lines of one study for the same pair (one called it SL, one did not)
+  cross_line: {weight: 0.5, examples_per_step: 256}
+  # no gene-in-line cache
+  gene_in_line: {}

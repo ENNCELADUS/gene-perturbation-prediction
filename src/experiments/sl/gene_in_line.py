@@ -3,13 +3,17 @@
 ``tx1_gene`` writes Tx1-3B's mean contextual embedding and the share of the line's cells
 that hold the gene (GPU), and ``pie_change`` writes PIE's predicted change of the line's
 profile after the gene's loss, in components fitted on the SL training lines (CPU, from
-the PIE root of ``sl.pie_pass``).
+the PIE root of ``sl.pie_pass``). The CPU steps ``wide_expression``, ``cell_spread``
+(the line's cell file in the ladder), ``paralog_buffer``, ``complex_buffer``,
+``partner_low`` (the partner columns of ``knowledge_features`` on the wide expression),
+``depmap_mutation`` and ``depmap_copy_number`` (DepMap's matrices) write a file of NaN
+rows for a line without the source; a percentile is fitted on the SL training lines.
 
 Each cache is ``<out>/<step>/genes.json`` (the gene axis: the sorted genes of the label
 table) and ``<out>/<step>/<ModelID>.npy`` (genes x width, float16, a NaN row where the
 line has no value for the gene). ``tx1_gene`` skips a line whose file exists;
 ``pie_change`` writes every line again when one line's file is missing, so that all
-lines are in one basis of components."""
+lines are in one basis of components; the other steps write every line on each call."""
 
 from __future__ import annotations
 
@@ -29,14 +33,42 @@ from src.experiments.run_dir import record_step, shard
 
 log = logging.getLogger(__name__)
 
-STEPS: Final[tuple[str, ...]] = ("tx1_gene", "pie_change")
+STEPS: Final[tuple[str, ...]] = (
+    "tx1_gene",
+    "pie_change",
+    "wide_expression",
+    "cell_spread",
+    "paralog_buffer",
+    "complex_buffer",
+    "partner_low",
+    "depmap_mutation",
+    "depmap_copy_number",
+)
+# the columns of ``knowledge_features`` that each buffer cache holds
+BUFFER_COLUMNS: Final[dict[str, list[int]]] = {
+    "paralog_buffer": [1, 2, 3],
+    "complex_buffer": [4],
+    "partner_low": [5],
+}
 
 
 def load_config(path: Path) -> dict[str, Any]:
     config = read_yaml(path)
     require_keys(
         config,
-        {"kind", "seed", "joint", "labels", "split", "out", "tx1", "pie"},
+        {
+            "kind",
+            "seed",
+            "joint",
+            "labels",
+            "split",
+            "out",
+            "tx1",
+            "pie",
+            "ladder",
+            "linear_model",
+            "depmap",
+        },
         "config",
     )
     if config["kind"] != "sl_gene_in_line":
@@ -47,6 +79,7 @@ def load_config(path: Path) -> dict[str, Any]:
         "tx1",
     )
     require_keys(config["pie"], {"root", "components", "sample"}, "pie")
+    require_keys(config["depmap"], {"damaging", "hotspot", "copy_number"}, "depmap")
     return config
 
 
@@ -101,6 +134,202 @@ def var_rows(symbols: pd.Series, genes: Sequence[str]) -> np.ndarray:
     upper = symbols.astype(str).str.upper().to_numpy()
     row = pd.Series(np.arange(len(upper)), index=upper)
     return row[~row.index.duplicated()].reindex(list(genes)).to_numpy()
+
+
+def on_axis(
+    values: np.ndarray, source: Sequence[str], genes: Sequence[str]
+) -> np.ndarray:
+    """Source genes x width on the axis: the first source row of each axis gene's
+    upper-cased symbol, a NaN row where there is none."""
+    at = var_rows(pd.Series(list(source)), genes)
+    out = np.full((len(genes), values.shape[1]), np.nan, np.float32)
+    on = ~np.isnan(at)
+    out[on] = values[at[on].astype(np.int64)]
+    return out
+
+
+def low_threshold(pseudobulk: np.ndarray, train: np.ndarray) -> np.ndarray:
+    """The 10th percentile of each source gene over the training rows."""
+    return np.percentile(pseudobulk[train], 10, axis=0)
+
+
+def read_cell_files(
+    ladder: Path, lines: Sequence[str]
+) -> tuple[list[str], dict[str, dict[str, np.ndarray]]]:
+    """The ladder's source genes and, for each line with a cell file, its five
+    arrays (each over the source genes)."""
+    cells = Path(ladder) / "cells"
+    source = json.loads((cells / "genes.json").read_text())["genes"]
+    files = {m: cells / f"{m}.npz" for m in lines}
+    return source, {
+        m: dict(np.load(path)) for m, path in files.items() if path.is_file()
+    }
+
+
+def split_of(config: Mapping[str, Any]) -> Any:
+    """The SL split of the config; its ``train`` side holds the SL training lines."""
+    from src.data.splits import load_geneeffect_split
+
+    return load_geneeffect_split(Path(config["split"]))
+
+
+def write_cache(
+    out: Path,
+    genes: Sequence[str],
+    lines: Sequence[str],
+    values: Mapping[str, np.ndarray],
+    width: int,
+) -> None:
+    """One file for every line (axis genes x ``width``; a file of NaN rows for a
+    line without the source; a row with a NaN value is a NaN row) and the report."""
+    open_cache(out, genes)
+    with_value = np.zeros(len(genes), bool)
+    for model_id in lines:
+        rows = np.full((len(genes), width), np.nan, np.float32)
+        if model_id in values:
+            rows[:] = values[model_id]
+            rows[~np.isfinite(rows).all(axis=1)] = np.nan
+        with_value |= np.isfinite(rows).all(axis=1)
+        write_npy(out / f"{model_id}.npy", as_float16(rows, model_id))
+    write_json(
+        out / "report.json",
+        {
+            "lines": len(lines),
+            "lines_with_source": sum(m in values for m in lines),
+            "genes_with_value": int(with_value.sum()),
+        },
+    )
+
+
+def wide_expression(
+    config: Mapping[str, Any], genes: Sequence[str], lines: Sequence[str]
+) -> None:
+    """Per line with a cell file: the pseudo-bulk ``log1p(CP10K)`` of each axis gene
+    and a silenced flag (1.0 at or below the gene's 10th percentile over the SL
+    training lines with a cell file)."""
+    source, cells = read_cell_files(Path(config["ladder"]), lines)
+    pseudobulk = np.stack([c["pseudobulk"] for c in cells.values()])
+    low = low_threshold(pseudobulk, np.isin(list(cells), split_of(config).train))
+    values = {
+        m: on_axis(np.column_stack([p, p <= low]), source, genes)
+        for m, p in zip(cells, pseudobulk, strict=True)
+    }
+    write_cache(Path(config["out"]) / "wide_expression", genes, lines, values, 2)
+
+
+def cell_spread(
+    config: Mapping[str, Any], genes: Sequence[str], lines: Sequence[str]
+) -> None:
+    """Per line with a cell file: the share of its cells that detect each axis gene
+    and the gene's SD minus its depth-expected SD."""
+    source, cells = read_cell_files(Path(config["ladder"]), lines)
+    values = {
+        m: on_axis(
+            np.column_stack([c["detected"], c["sd"] - c["sd_expected"]]), source, genes
+        )
+        for m, c in cells.items()
+    }
+    write_cache(Path(config["out"]) / "cell_spread", genes, lines, values, 2)
+
+
+def buffer_cache(
+    config: Mapping[str, Any], genes: Sequence[str], lines: Sequence[str], step: str
+) -> None:
+    """Per line with a cell file: the ``BUFFER_COLUMNS[step]`` columns of
+    ``knowledge_features`` of each axis gene on the lines' pseudo-bulk (paralog
+    minimum, sum and closest; complex mean; share of partners at or below their 10th
+    percentile over the SL training lines), with the linear model's reference."""
+    from src.linear_model.gene_features import knowledge_features, partner_index
+    from src.linear_model.reference import load_reference
+
+    split = split_of(config)
+    source, cells = read_cell_files(Path(config["ladder"]), lines)
+    pseudobulk = np.stack([c["pseudobulk"] for c in cells.values()])
+    low = low_threshold(pseudobulk, np.isin(list(cells), split.train))
+    reference = load_reference(
+        Path(read_yaml(Path(config["linear_model"]))["paths"]["reference"]),
+        blocked={*split.val, *split.test},
+        drop=True,
+    )
+    index = partner_index(genes, [g.upper() for g in source], reference)
+    features = knowledge_features(pseudobulk, index, low)[:, :, BUFFER_COLUMNS[step]]
+    write_cache(
+        Path(config["out"]) / step,
+        genes,
+        lines,
+        dict(zip(cells, features, strict=True)),
+        len(BUFFER_COLUMNS[step]),
+    )
+
+
+def by_symbol(frame: pd.DataFrame, path: Path) -> pd.DataFrame:
+    """ModelID x upper-cased symbol of ``SYMBOL (entrez)`` gene columns; the first
+    column of a symbol is kept; a ModelID with two rows raises."""
+    from src.data.labels import parse_gene_symbol
+
+    frame.index = frame.index.astype(str)
+    if not frame.index.is_unique:
+        raise ValueError(f"{path}: a ModelID has more than one row")
+    frame = frame.set_axis([parse_gene_symbol(c) for c in frame.columns], axis=1)
+    return frame.loc[:, ~frame.columns.duplicated()].astype(np.float32)
+
+
+def read_mutation_matrix(path: Path) -> pd.DataFrame:
+    """A DepMap mutation matrix (one row for each sequencing, five leading columns)
+    as ModelID x symbol, from the rows with ``IsDefaultEntryForModel == "Yes"``."""
+    frame = pd.read_csv(path, low_memory=False)
+    frame = frame.loc[frame["IsDefaultEntryForModel"] == "Yes"].set_index("ModelID")
+    leading = [
+        "SequencingID",
+        "ModelConditionID",
+        "IsDefaultEntryForModel",
+        "IsDefaultEntryForMC",
+    ]
+    return by_symbol(frame.drop(columns=leading), path)
+
+
+def read_copy_number(path: Path) -> pd.DataFrame:
+    """DepMap's gene-level copy number (first column the ModelID) as ModelID x
+    symbol."""
+    return by_symbol(pd.read_csv(path, index_col=0), path)
+
+
+def depmap_mutation(
+    config: Mapping[str, Any], genes: Sequence[str], lines: Sequence[str]
+) -> None:
+    """Per line in both mutation matrices: the damaging and the hotspot call of
+    each axis gene of the damaging matrix; a gene outside the hotspot matrix has
+    hotspot 0."""
+    damaging = read_mutation_matrix(Path(config["depmap"]["damaging"]))
+    hotspot = read_mutation_matrix(Path(config["depmap"]["hotspot"]))
+    hotspot = hotspot.reindex(columns=damaging.columns, fill_value=0.0)
+    both = set(damaging.index) & set(hotspot.index)
+    values = {
+        m: on_axis(
+            np.column_stack([damaging.loc[m], hotspot.loc[m]]), damaging.columns, genes
+        )
+        for m in lines
+        if m in both
+    }
+    write_cache(Path(config["out"]) / "depmap_mutation", genes, lines, values, 2)
+
+
+def depmap_copy_number(
+    config: Mapping[str, Any], genes: Sequence[str], lines: Sequence[str]
+) -> None:
+    """Per line in the copy-number matrix: the stored ``log2(relative copy number +
+    1)`` of each axis gene and a deep-loss flag (a log2 copy-number ratio below
+    -0.8)."""
+    copy_number = read_copy_number(Path(config["depmap"]["copy_number"]))
+    values = {}
+    for m in lines:
+        if m in copy_number.index:
+            value = copy_number.loc[m].to_numpy()
+            deep_loss = 2.0**value - 1 < 2.0**-0.8
+            values[m] = on_axis(
+                np.column_stack([value, deep_loss]), copy_number.columns, genes
+            )
+    write_cache(Path(config["out"]) / "depmap_copy_number", genes, lines, values, 2)
 
 
 def tx1_gene(
@@ -267,10 +496,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     config = load_config(args.config)
     genes, lines = axis_and_lines(config)
-    if args.steps == "tx1_gene":
-        tx1_gene(config, genes, lines, args.shard)
-    else:
-        pie_change(config, genes, lines)
+    steps = {
+        "tx1_gene": lambda: tx1_gene(config, genes, lines, args.shard),
+        "pie_change": lambda: pie_change(config, genes, lines),
+        "wide_expression": lambda: wide_expression(config, genes, lines),
+        "cell_spread": lambda: cell_spread(config, genes, lines),
+        **{
+            step: lambda step=step: buffer_cache(config, genes, lines, step)
+            for step in BUFFER_COLUMNS
+        },
+        "depmap_mutation": lambda: depmap_mutation(config, genes, lines),
+        "depmap_copy_number": lambda: depmap_copy_number(config, genes, lines),
+    }
+    steps[args.steps]()
     log.info("%s: done", args.steps)
     return 0
 

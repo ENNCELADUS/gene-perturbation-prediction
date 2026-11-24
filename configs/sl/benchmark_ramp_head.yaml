@@ -29,3 +29,7 @@ paired_differences:
   - [ramp_head, buffer_head]
   - [ramp_head, ramp_head_ablated]
   - [buffer_head, buffer_head_ablated]
+# derived scorers: each line's mean over the named scorers (extra_scores keys)
+scorer_means: {}
+# scorers whose cross-line ordering is reported (held-out sides and training lines)
+cross_line_ordering: []
