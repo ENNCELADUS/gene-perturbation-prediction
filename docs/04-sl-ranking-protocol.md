@@ -996,3 +996,9 @@ score `s = f + D − mean over R of D` are those of §19.
   deferred part of the design (§7 there).
 - **Limits.** The line-specific part of the labels repeats at 0.35 to 0.39 inside one study (§16), which bounds the
   ordering; its top value is not measured. One seed.
+- **Runs** (seed 0, 2026-11-24, code `edce9c3`, H20 port 30838). The seven cache steps ran on CPU (about 6 s for
+  each cell-file step); their counts are in the [card](data/gene-in-line-features.md): every one of the 86 labelled
+  lines has a cell file, 79 have DepMap mutation calls and 65 have DepMap copy number. The reference run's four
+  other-line controls were written from its `best.pt`. The five runs were started with `--device cpu`, because
+  every GPU of both containers was in use by another project; the harness run `benchmark_cross_line_seed0` starts
+  when the five runs have finished. No result yet.

@@ -7,7 +7,10 @@ lines, 275 MB, about 2 minutes on the CPU (code `15a754f`). `tx1_gene`: 86 lines
 of the 25,861 names of the axis. Run record: [`results/sl_line_term_seed0/summary.html`](../../results/sl_line_term_seed0/summary.html).
 On 2026-11-23 the `tx1_gene` file of ACH-000696 was encoded again (code `842c283`, see the known limits).
 The seven CPU caches from `wide_expression` to `depmap_copy_number` were added on 2026-11-24 (spec
-`docs/specs/2026-11-24-context-specific-sl-architecture-design.md` §5.4). They are not built yet.
+`docs/specs/2026-11-24-context-specific-sl-architecture-design.md` §5.4). They were built on the H20 on 2026-11-24 (code `edce9c3`), each for the 86 labelled lines. Lines with the
+source / genes with a value in at least one line: `wide_expression` 86 / 18,905; `cell_spread` 86 / 18,905;
+`paralog_buffer` 86 / 12,550; `complex_buffer` 86 / 4,848; `partner_low` 86 / 14,604; `depmap_mutation` 79 / 17,851;
+`depmap_copy_number` 65 / 18,416. A DepMap column without a gene symbol (the row number, a bare Ensembl ID) is left out.
 
 **Role.** The line term of the gene-knowledge, cell-set SL model reads one vector for each (line, gene) from each
 cache (`line_term.gene_in_line` of an SL embedding config; plan `docs/specs/2026-11-20-line-term-and-direct-target-plan.md`
