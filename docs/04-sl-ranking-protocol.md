@@ -935,3 +935,64 @@ parts of §18. All other parts of §18 stay.
   scores 0.425 (0.464 without cell tokens) on validation, against 0.109 in §18. The score now changes with the line.
   The all-pairs gain over the residual target holds on validation and not on test. A line term on gene-in-line
   features of the cells adds nothing; cell tokens add nothing. One seed.
+
+## 20. The cross-line loss and local gene-in-line data (2026-11-24)
+
+`src/model/sl_embedding.py`, `src/experiments/sl/embedding.py`, `src/experiments/sl/gene_in_line.py`,
+`src/experiments/sl/benchmark_baselines.py`, the five configs below, `configs/sl/benchmark_cross_line.yaml`;
+the [design](specs/2026-11-24-context-specific-sl-architecture-design.md) (§5, §6) gives the reasons and the
+[plan](specs/2026-11-24-cross-line-loss-plan.md) the code changes. The question: does a loss that the gene pair
+alone cannot lower make the score follow the line, and does that hold in unseen lines? The model, stage one and the
+score `s = f + D − mean over R of D` are those of §19.
+
+- **The cross-line loss** (`line_term.cross_line: {weight, examples_per_step}`, `null` for none). An example is two
+  SL training lines of one study with a training row for the same pair and design: one line called the pair SL
+  (`c⁺`), the other did not (`c⁻`). The loss is `softplus(−[s(c⁺) − s(c⁻)])`; the mean over `R` is the same in the
+  two lines and cancels, so it is computed on `f + D`. A score that is the same in every line gives `log 2` on every
+  example. A step draws `examples_per_step` examples, each from a study drawn evenly; the loss is added to the
+  binary cross-entropy on `s` at `weight`. The run stops if no study has an example.
+- **Two training modes** (`line_term.joint`). `false`: the line term trains last on the frozen model, as in §19.
+  `true`: in the phase that trains the whole model, the score is `s` and the model, the pair head and the line term
+  train together on the binary cross-entropy, the cross-line loss and the GeneEffect loss; no separate line-term
+  phase follows. Validation recall in the top 10% of `s` selects the epoch and the phase.
+- **What the line head reads** (`line_term.input`). `model`: the pair head's input (the line's tokens and the free
+  gene deviation `r_g`) and the gene-in-line features, as in §19. `genes`: the gene vectors of the frozen sources
+  alone (the gene encoder's output without `r_g`) and the gene-in-line features,
+  `[u⁰_A + u⁰_B ; |u⁰_A − u⁰_B| ; u⁰_A ⊙ u⁰_B ; combinatorial ; e_A + e_B ; |e_A − e_B| ; e_A ⊙ e_B]`, so the
+  deviation must go through features of the two genes in the line. The reason is §19's record: a line term with
+  capacity fitted the training lines.
+- **New gene-in-line caches** (`hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps <step>`, CPU;
+  [card](data/gene-in-line-features.md)). Each is read as §19's caches are: columns scaled on the SL training lines
+  with benchmark rows, one presence flag for each (line, gene). `wide_expression`: `log1p(CP10K)` of the line's
+  pseudo-bulk over the 19,277 source genes without the bridge, and a flag for a value at or below the gene's 10th
+  percentile over the SL training lines. `cell_spread`: the share of the line's cells that detect the gene, and its
+  SD minus the depth-expected SD. `paralog_buffer`, `complex_buffer`, `partner_low`: the partner columns of the
+  linear model's `knowledge_features` on the wide expression. `depmap_mutation`: DepMap's damaging and hotspot
+  mutation values. `depmap_copy_number`: DepMap's `log2(relative copy number + 1)` and a flag for a log2 ratio
+  below −0.8. A line without the source has a file of absent rows. The mean token still reads the 6,523 bridged
+  genes.
+- **Measures added to the harness.**
+  - *The other-line control over four lines* (`eval.other_lines: 4`, harness `scorer_means`): the score is read in
+    the input of each of four seeded other benchmark lines, and the control's metrics are the mean over the four.
+  - *Cross-line ordering* (harness `cross_line_ordering`): over the examples as above with both lines on one side
+    (training, validation or test), the share with `s(c⁺) > s(c⁻)` (a tie counts one half), mean over studies, with
+    an interval from resampling gene pairs inside each study. A score that is the same in every line gives exactly
+    0.5. Both lines are held out because a training line's score is in sample. The table also gives the number of
+    examples and studies on each side.
+- **Rows of the study.** One config each, seed 0, run id `<config>_seed0`, without cell tokens; each row is the row
+  above with one change:
+
+  | Config (`configs/sl/`) | The change |
+  | --- | --- |
+  | `embedding_direct_mean_token.yaml` (finished, §19) | the reference |
+  | `cross_line_frozen.yaml` | the cross-line loss (weight 0.5, 256 examples at a step); the line term trains last |
+  | `cross_line_joint.yaml` | `joint: true` |
+  | `cross_line_genes_input.yaml` | `input: genes` |
+  | `cross_line_wide.yaml` | the wide caches in place of the bridged own expression (the scRNA-only row) |
+  | `cross_line_depmap_dna.yaml` | DepMap mutations and copy number (the multi-omic row) |
+
+- **Not in this study.** The 36 bulk-only lines with a two-class genetic screen as training lines (32 labelled, 4
+  unlabelled bulk lines of the split; `benchmark_rows` drops them), Tx1-3B cell tokens, the ramp target, and every
+  deferred part of the design (§7 there).
+- **Limits.** The line-specific part of the labels repeats at 0.35 to 0.39 inside one study (§16), which bounds the
+  ordering; its top value is not measured. One seed.

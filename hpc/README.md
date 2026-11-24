@@ -25,7 +25,7 @@ prints every command's arguments.
 | `sl-embedding` | the gene-knowledge, cell-set SL model: GeneEffect pretraining, then the pair head on gene-in-line embeddings, then the line term (`sl.embedding`) | one GPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-slidr` | SLIdR, ported to Python, scores for `sl-baselines` (`sl.slidr`) | CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 | `sl-pie-pass`, `sl-pie-editor` | the PIE editor of the SL backbone: PIE's profile changes, then the scores (`sl.pie_pass`, `sl.pie_editor`) | PIE on GPUs (`.venv-pie`); the editor on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
-| `sl-gene-in-line` | the gene-in-line caches of the SL line term: Tx1-3B's gene embeddings, PIE's predicted changes (`sl.gene_in_line`) | Tx1-3B on GPUs; PIE on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
+| `sl-gene-in-line` | the gene-in-line caches of the SL line term: Tx1-3B's gene embeddings, PIE's predicted changes, wide expression, spread over cells, paralog and complex buffers, DepMap mutations and copy number (`sl.gene_in_line`) | Tx1-3B on GPUs; the others on CPU | [SL benchmark baselines](#sl-benchmark-baselines) |
 
 GPU use, measured on 30838 in October 2026 (one H20 per job unless noted; SM is `nvidia-smi dmon`'s busy share):
 
@@ -508,6 +508,29 @@ for NAME in embedding_direct embedding_direct_mean_token embedding_direct_pie_ch
 done
 # when the four runs have finished
 hpc/run.sh sl-baselines configs/sl/benchmark_line_term.yaml --run-id benchmark_line_term_seed0_v2
+```
+
+The study of the cross-line loss and the local gene-in-line data (SL protocol §20) is seven CPU cache steps, the
+other-line controls of the finished reference run, five `sl-embedding` runs (one GPU each), then the harness. With
+`eval.other_lines: N` a run writes one score table for each other line (`embedding_other_line.parquet`,
+`embedding_other_line_2.parquet`, ...; the same for `embedding_line_term_other_line`). `cross_line_wide` and
+`cross_line_depmap_dna` read the new caches, so the caches come first:
+
+```bash
+for STEP in wide_expression cell_spread paralog_buffer complex_buffer partner_low depmap_mutation depmap_copy_number; do
+  OMP_NUM_THREADS=16 hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps $STEP
+done
+# the reference run's four other-line controls, from its best.pt (no training)
+CUDA_VISIBLE_DEVICES=0 hpc/run.sh sl-embedding configs/sl/embedding_direct_mean_token.yaml \
+  --run-id embedding_direct_mean_token_seed0_v2 --line-input-controls
+i=0
+for NAME in cross_line_frozen cross_line_joint cross_line_genes_input cross_line_wide cross_line_depmap_dna; do
+  CUDA_VISIBLE_DEVICES=$((i % 4)) setsid nohup hpc/run.sh sl-embedding configs/sl/$NAME.yaml --run-id ${NAME}_seed0 \
+    > outputs/launches/${NAME}_seed0.log 2>&1 < /dev/null &
+  i=$((i + 1))
+done
+# when the five runs have finished
+hpc/run.sh sl-baselines configs/sl/benchmark_cross_line.yaml --run-id benchmark_cross_line_seed0
 ```
 
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw
