@@ -85,7 +85,7 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
 ## Architecture rules
 
 - `data` and `model` never import `training`, `eval` or `experiments`. Each track's commands live in
-  `src/experiments/{joint,linear_model,stage_one,states}`, retired ones in `historical/`. Tests mirror `src`; shared synthetic
+  `src/experiments/{joint,linear_model,sl,stage_one,states}`; retired code is removed (cite `git show <sha>:<path>`). Tests mirror `src`; shared synthetic
   worlds live in `tests/fixtures/`.
 - **Expression space.** Everything except Tx1's input is log space: whole-library `normalize_total` to a recorded target `T`,
   `log1p`, then STATE's HVG slice. Tx1 reads raw UMI, not CPM.

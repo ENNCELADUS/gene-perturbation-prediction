@@ -703,11 +703,11 @@ linear model on all labelled lines beat the linear model on the single-cell trai
 selective Spearman, bridged input), and the chosen config (expression components only) scored
 0.223 on validation and 0.223 on test against 0.130 and 0.121 for the Tx1 context-PCA ridge.
 Gene-level blocks did not survive the bridge (median per-gene bridge correlation 0.43). The
-bridge-remedy run (2026-10-04, `configs/linear_model/bridge_remedies.yaml`,
+bridge-remedy run (2026-10-04, `configs/linear_model/bridge_remedies.yaml`, removed; `git show 0c46652:<path>`,
 [record](../results/bridge_remedies_seed0/README.md)) found no remedy above the reference on
 validation, but it fitted gene-level blocks on the components-only penalty pick, and on bulk
 input they add +0.0125 at components penalty 1. Its rerun over the full penalty grid
-(`configs/linear_model/bridge_remedies_penalty_grid.yaml`, same record) puts the affine bridge with
+(`configs/linear_model/bridge_remedies_penalty_grid.yaml`, removed; `git show 0c46652:<path>`, same record) puts the affine bridge with
 all gene-level blocks at components penalty 1 and gene penalty 10 at 0.2300 validation / 0.2352 test,
 +0.0068 [0.0011, 0.0129] and +0.0125 [0.0049, 0.0187] over components alone; no remedy beats the
 affine bridge on validation. The follow-ups on that row (2026-10-07,
@@ -907,7 +907,7 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals.
   out-of-fold export leaves on the training lines, added to the export; gains over the linear model alone and, for fractions,
   over means at the same penalty.
 - **Cilantro-SL's input reductions** are a bridge remedy of §10, `rank_value`
-  (`configs/linear_model/cilantro_encodings.yaml`, `hpc/run.sh linear-model`): values divided by each gene's training-side
+  (`configs/linear_model/cilantro_encodings.yaml`, removed; `git show 0c46652:<path>`): values divided by each gene's training-side
   nonzero median and ranked within the line (rank alone, rank with the top 2,048, and the same top 2,048 keeping their
   expression), applied to bulk and pseudo-bulk before the affine bridge.
 - **Reading** (the design's §6, not code): flat scores from 50 to 100 cells up and split-half reliability above the

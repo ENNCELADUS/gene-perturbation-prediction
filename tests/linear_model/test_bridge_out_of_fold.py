@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import importlib
 from dataclasses import replace
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.linear_model.bridge import bridge_diagnostics, fit_bridge, oof_bridged
 from src.linear_model.remedies import affine
@@ -42,21 +40,10 @@ def test_affine_remedy_and_diagnostics():
     assert 0.5 < report["median"] <= 1.0
 
 
-@pytest.mark.parametrize(
-    ("kind", "setting"),
-    [
-        ("affine", {}),
-        ("contrastive", {"pseudo_components": 2, "bulk_components": 1}),
-        ("gating", {"threshold": 0.3}),
-        ("noise_matched", {}),
-        ("denoise", {"rank": 4}),
-        ("rank_value", {"encoding": "rank_value", "top_k": 5}),
-    ],
-)
-def test_oof_rows_never_read_their_own_folds_bulk(kind, setting):
-    """Out-of-fold rows stand in for unseen queries, so nothing a remedy learns
+def test_oof_rows_never_read_their_own_folds_bulk():
+    """Out-of-fold rows stand in for unseen queries, so nothing the bridge learns
     for them may read the held fold's bulk RNA."""
-    build = importlib.import_module(f"src.linear_model.remedies.{kind}").build
+    build, setting = affine.build, {}
     b = base()
     held = [m for m in b.paired if b.folds[m] == 0]
     bulk = b.bulk.copy()

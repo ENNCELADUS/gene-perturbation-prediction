@@ -57,7 +57,6 @@ Direct entry points, `python -m src.<module>` from the repository root (`.venv-t
 | `data.builders.build_extra_bulk_lines`, `build_cell_line_geneeffect_226_split`, `build_sl_screen_benchmark`, `build_sl_study_benchmark`, `build_sl_split`, `build_pc9_hela_basal` | tracked membership files and benchmarks | their cards: [bulk lines](../docs/data/extra-bulk-lines-26q1.md), [226](../docs/data/cell-line-geneeffect-226.md), [SL benchmark](../docs/data/sl-benchmark.html) |
 | `data.builders.build_context_reference`, `build_state_programs` | the linear model's reference tables and pinned cell-state programs (on the Mac) | [context-generalization design](../docs/specs/2026-10-04-context-generalization-design.md), [noise-diagnosis design](../docs/specs/2026-10-12-noise-diagnosis-design.md) |
 | `data.builders.prepare_kinker_umi_h5ad`, `prepare_cell_line_atlas_raw_umi`, `materialize_exp13_original47_raw_umi`, `bootstrap_exp13_uniprot_cache`, `build_exp13_esm2_universe`, `precompute_esm2_embeddings` | the 226 benchmark's raw-UMI basal h5ad and ESM2 table | [226 card](../docs/data/cell-line-geneeffect-226.md), [Tx1 input record](../results/exp13_stage0/README.md) |
-| `experiments.historical.*` | retired probes and builders, kept runnable | [historical README](../src/experiments/historical/README.md) |
 
 ## The `all` command
 
@@ -218,8 +217,7 @@ the training lines' genetic pairs, with each line's own label (SL when half or m
 probability of each held-out (line, pair) to `benchmark/scores.parquet`. A pair whose genes are not both in the line's
 top 2,048 tokens gets 0.5, so these pairs tie. `--gene-subset 200 --epochs 2` makes a smoke run (`benchmark_smoke`, 5 min).
 
-The port's coverage report (step 0, CPU only) runs in the project environment:
-`.venv-tx1/bin/python -m src.experiments.historical.cilantro_coverage --out outputs/cilantro_coverage/<id>`.
+The port's coverage report (step 0) was `src/experiments/historical/cilantro_coverage.py` (removed; `git show 0c46652:<path>`).
 
 ## The PIE harness
 
@@ -673,8 +671,8 @@ OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 hpc/run.sh sl-target-
 ## The `linear-model` command
 
 `hpc/run.sh linear-model CONFIG [--run-id <id>] [--experiments A,B]` runs the experiment runner of the linear model
-([protocol §10](../docs/03-geneeffect-protocol.md#10-linear-model); `configs/linear_model/bridge_remedies.yaml`).
-The run id defaults to a timestamp, and the route needs no GPU. The config lists experiments, each a bridge remedy
+([protocol §10](../docs/03-geneeffect-protocol.md#10-linear-model); `configs/linear_model/default_linear_model.yaml`).
+The run id defaults to a timestamp, and the route needs no GPU. The config lists experiments, each a bridge kind (only `affine` is left)
 with its settings and block sets; the runner first prepares pseudo-bulk into `prepared_root` (summing the raw UMI of
 each line's basal cells; the one step that reads raw data; the prepared root of `all` is reused), then for every
 setting builds the bridged inputs, fits the linear model for every block set and penalty, and scores validation and test
@@ -715,11 +713,9 @@ directory is refused, so a rerun needs a new run id.
 finished section is skipped, so a rerun with the same run id resumes. The first section that needs them prepares
 `noise/subsamples.parquet` and `noise/programs/` under `prepared_root` from every line's raw cells (CPU, 16 processes);
 Sections run in the order `--sections` lists them, so the two that read no raw cells go first. `deposit_swap` first needs
-the second-deposit builds (Extra single-cell lines, below). The Cilantro-SL encodings run through `linear-model`:
+the second-deposit builds (Extra single-cell lines, below).
 
 ```bash
-OMP_NUM_THREADS=32 nohup hpc/run.sh linear-model configs/linear_model/cilantro_encodings.yaml \
-  --run-id cilantro_encodings_20261012 > outputs/launches/cilantro_encodings_20261012.log 2>&1 &
 OMP_NUM_THREADS=32 nohup hpc/run.sh linear-model-noise configs/linear_model/noise_diagnosis.yaml --run-id noise_20261012 \
   --sections learning_curve,deposit_confound,cell_sampling,cell_states > outputs/launches/noise_20261012.log 2>&1 &
 ```

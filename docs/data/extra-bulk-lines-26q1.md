@@ -38,7 +38,7 @@ cross-fitting fold. The file is a pinned list, not a rule recomputed from labels
 
 **Haematopoietic lineages.** 133 of the labelled lines are haematopoietic. They are kept in
 the first run. The `training_side.exclude_lineages` key of a linear model config drops lineages from the
-training side (`Lymphoid` and `Myeloid` in `configs/linear_model/bridge_remedies.yaml`; Model.csv
+training side (`Lymphoid` and `Myeloid` in `configs/linear_model/default_linear_model.yaml`; Model.csv
 `OncotreeLineage`). Validation and test hold no haematopoietic line, and the first runs showed that
 keeping them lowered the bridged score ([record](../../results/linear_model_seed0/README.md)). On the
 final split the rule covers every training-side line, single-cell training lines included

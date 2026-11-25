@@ -2,7 +2,7 @@
 
 One line per module, from its header. Commands are in [`hpc/README.md`](../hpc/README.md), rules in
 [`CLAUDE.md`](../CLAUDE.md). `data` and `model` never import `training`, `eval` or `experiments`; each research
-track's commands live in `experiments/<track>/`, retired ones in `experiments/historical/`.
+track's commands live in `experiments/<track>/`. Retired scripts are removed from the tree; the docs that cite them give `git show <sha>:<path>`.
 
 ### `data/`
 
@@ -92,8 +92,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 
 ### `linear_model/`
 
-- `alignment`: Celligner's contrastive PCA on paired profiles.
-- `bridge`: The per-gene affine bridge from quantile-normalised pseudo-bulk to bulk, and what every bridge remedy shares.
+- `bridge`: The per-gene affine bridge from quantile-normalised pseudo-bulk to bulk, and what the bridge kinds share.
 - `folds`: Patient-grouped, seeded folds of training-side lines.
 - `gene_features`: Features of gene g in line c.
 - `noise`: Statistics of the noise diagnosis.
@@ -107,12 +106,7 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 
 ### `linear_model/remedies/`
 
-- `affine`: The reference bridge.
-- `contrastive`: Contrastive-PCA remedy.
-- `denoise`: Low-rank denoising.
-- `gating`: Reliability gating.
-- `noise_matched`: Noise-matched fitting.
-- `rank_value`: Cilantro-SL's input reductions as a bridge remedy.
+- `affine`: The reference bridge, the only kind left (the other remedies of protocol §10 are removed; `git show 0c46652:src/linear_model/remedies/`).
 
 ### `experiments/`
 
@@ -194,11 +188,3 @@ track's commands live in `experiments/<track>/`, retired ones in `experiments/hi
 - `state_telemetry`: The cell-state telemetry CLI (protocol §17).
 - `telemetry`: A cell-state telemetry run.
 - `vocabularies`: The state vocabularies.
-
-### `experiments/historical/`
-
-- `audit_tx1_basal_batch`: Historical audit of basal-source confounding.
-- `build_sl_context_benchmark`: Historical builder of the context_screen_v2 SL pair-context benchmark (retired card ``docs/data/sl-context-screen.md`` at 9318ede) from the integrated raw table, its only pair-label input; the tracked split contract supplies context identities and registration evidence, never labels.
-- `cilantro_coverage`: Historical pre-GPU audit of the context screen's coverage by Cilantro-SL.
-- `prepare_kinker_cpm_h5ad`: Historical builder of per-line Kinker/scCCLE processed-CPM h5ads for a CPM sensitivity analysis, superseded by raw-UMI preparation; every artifact marks the matrix as non-raw and the standard Tx1 raw-count contract as blocked.
-- `stage0_tx1_input_probe`: Historical probe of whether Tx1-3B encodes a CPM-rescaled cell as it encodes the raw counts underneath it, with the collator's unseeded gene subsampling (``_sample``, ``torch.randperm``) isolated by seeding each arm just before its forward pass.

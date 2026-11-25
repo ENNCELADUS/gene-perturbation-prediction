@@ -52,7 +52,7 @@ def base(seed=0):
     )
 
 
-CONFIG = yaml.safe_load(Path("configs/linear_model/bridge_remedies.yaml").read_text())
+CONFIG = yaml.safe_load(Path(__file__).with_name("linear_model.yaml").read_text())
 TARGETS = GENES[:8]
 
 
