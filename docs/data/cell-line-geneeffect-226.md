@@ -4,9 +4,9 @@
 input of the [final split](cell-line-geneeffect-split.md), which adds the 208 single-cell extras
 to its training lines and is what every fit reads; validation and test are this split's. Before
 then it was the only split, used by the final run of the historical staged GeneEffect protocol
-(Exp13, result: `results/exp13_stage2_full/README.md`, removed; `git show f35133a:<path>`) and by the seed-0 run of the
+(Exp13, result: `results/exp13_stage2_full/README.md`, removed with the history of `results/`) and by the seed-0 run of the
 [GeneEffect protocol](../03-geneeffect-protocol.md), whose test has been observed once
-(result: `results/joint_geneeffect_seed0/README.md`, removed; `git show f35133a:<path>`).
+(result: `results/joint_geneeffect_seed0/README.md`, removed with the history of `results/`).
 
 ## Fixed split
 

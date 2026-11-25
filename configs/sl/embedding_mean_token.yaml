@@ -1,7 +1,7 @@
 # The gene-knowledge, cell-set model without its cell tokens (SL protocol §18): configs/sl/embedding.yaml with
 # `cell_embeddings: null`, so every line reads its mean token alone. The difference from the full model is what the
 # cells add. `hpc/run.sh sl-embedding configs/sl/embedding_mean_token.yaml --run-id ID` (one GPU).
-# The run of 2026-11-19 used the residual target (code at 6325dfc); the present code trains on GeneEffect itself.
+# The run of 2026-11-19 used the residual target (code at ad355ee); the present code trains on GeneEffect itself.
 kind: sl_embedding
 seed: 0
 output_root: outputs/sl

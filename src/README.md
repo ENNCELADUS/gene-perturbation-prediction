@@ -106,7 +106,7 @@ track's commands live in `experiments/<track>/`. Retired scripts are removed fro
 
 ### `linear_model/remedies/`
 
-- `affine`: The reference bridge, the only kind left (the other remedies of protocol §10 are removed; `git show 0c46652:src/linear_model/remedies/`).
+- `affine`: The reference bridge, the only kind left (the other remedies of protocol §10 are removed; `git show a313239:src/linear_model/remedies/`).
 
 ### `experiments/`
 

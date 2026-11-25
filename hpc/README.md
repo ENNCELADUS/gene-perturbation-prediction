@@ -217,7 +217,7 @@ the training lines' genetic pairs, with each line's own label (SL when half or m
 probability of each held-out (line, pair) to `benchmark/scores.parquet`. A pair whose genes are not both in the line's
 top 2,048 tokens gets 0.5, so these pairs tie. `--gene-subset 200 --epochs 2` makes a smoke run (`benchmark_smoke`, 5 min).
 
-The port's coverage report (step 0) was `src/experiments/historical/cilantro_coverage.py` (removed; `git show 0c46652:<path>`).
+The port's coverage report (step 0) was `src/experiments/historical/cilantro_coverage.py` (removed; `git show a313239:<path>`).
 
 ## The PIE harness
 
@@ -827,7 +827,7 @@ PCA or ST responses. It fits a shared diagonal GMM64 on equal numbers of cells f
 each labeled training line (seed 0), then a standardized 68-feature context vector
 and independent Ridge(alpha=1) per gene. Both standardizers and the GMM are train-only.
 The frozen settings and comparison boundaries are in the
-design (`docs/specs/2026-09-07-tx1-gmm-ridge-design.md`, removed; `git show 1694f5c:<path>`).
+design (`docs/specs/2026-09-07-tx1-gmm-ridge-design.md`, removed; `git show e6852ac:<path>`).
 
 ```bash
 uv run python -m src.experiments.joint.tx1_gmm_ridge fit --config configs/geneeffect_joint.yaml --out-dir outputs/baselines/tx1_gmm_seed0

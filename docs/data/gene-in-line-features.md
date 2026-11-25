@@ -2,12 +2,12 @@
 
 **Status:** built on the H20 on 2026-11-20 under `data/sl_gene_in_line/v1/` (`src/experiments/sl/gene_in_line.py`,
 `configs/sl/gene_in_line.yaml`). `pie_change`: 86 lines, 64 components fitted on 200,000 vectors of the 53 SL training
-lines, 275 MB, about 2 minutes on the CPU (code `15a754f`). `tx1_gene`: 86 lines, at most 256 cells each, 11 GB, 21 to
-41 s for each line on one H20, about 13 minutes on four (code `d9d2950`); a line has a value for about 10,000 to 13,000
+lines, 275 MB, about 2 minutes on the CPU (code `d4d1784`). `tx1_gene`: 86 lines, at most 256 cells each, 11 GB, 21 to
+41 s for each line on one H20, about 13 minutes on four (code `f6e242f`); a line has a value for about 10,000 to 13,000
 of the 25,861 names of the axis. Run record: [`results/sl_line_term_seed0/summary.html`](../../results/sl_line_term_seed0/summary.html).
-On 2026-11-23 the `tx1_gene` file of ACH-000696 was encoded again (code `842c283`, see the known limits).
+On 2026-11-23 the `tx1_gene` file of ACH-000696 was encoded again (code `63f5010`, see the known limits).
 The seven CPU caches from `wide_expression` to `depmap_copy_number` were added on 2026-11-24 (spec
-`docs/specs/2026-11-24-context-specific-sl-architecture-design.md` §5.4). They were built on the H20 on 2026-11-24 (code `edce9c3`), each for the 86 labelled lines. Lines with the
+`docs/specs/2026-11-24-context-specific-sl-architecture-design.md` §5.4). They were built on the H20 on 2026-11-24 (code `b2de0c9`), each for the 86 labelled lines. Lines with the
 source / genes with a value in at least one line: `wide_expression` 86 / 18,905; `cell_spread` 86 / 18,905;
 `paralog_buffer` 86 / 12,550; `complex_buffer` 86 / 4,848; `partner_low` 86 / 14,604; `depmap_mutation` 79 / 17,851;
 `depmap_copy_number` 65 / 18,416. A DepMap column without a gene symbol (the row number, a bare Ensembl ID) is left out.
@@ -66,7 +66,7 @@ it reads a cache (`read_in_line`).
 - **One line was encoded again.** ACH-000696, an SL training line, lists its Ensembl IDs with a version suffix
   (`ENSG00000223972.5`), the only one of the 455 raw files to do so. Tx1-3B's vocabulary holds no such ID and gives a
   missing ID the padding token, so the first caches of this line came from padding tokens only. Since code
-  `842c283`, `read_basal_source` removes the suffix. On 2026-11-23 the line was encoded again in `tx1_gene/` (11,863
+  `63f5010`, `read_basal_source` removes the suffix. On 2026-11-23 the line was encoded again in `tx1_gene/` (11,863
   of 25,861 genes with a value; 0 before) and in `data/tx1_basal_embeddings/v2_all/{real,shuffled}` (mean spread
   across cells 0.80 and 0.61; 0.24 and 0.05 before). The same code gives the cached `v2_all/real` values of A549
   exactly. The runs of 2026-11-20 read the old values. `data/tx1_basal_embeddings/v1` (the joint GeneEffect track)

@@ -361,7 +361,7 @@ WORLDS = {"default": (make_inputs, 2), "ragged": (make_ragged_inputs, 3)}
 @pytest.mark.parametrize("world", sorted(WORLDS))
 def test_matches_reference_fold_files(tmp_path, world):
     """Fold files agree with those of the one-condition-at-a-time implementation
-    (commit f3ece57), recorded as ``REFERENCE`` digests."""
+    (commit 807fadc), recorded as ``REFERENCE`` digests."""
     make, epochs = WORLDS[world]
     inputs = make()
     _, out_dir = run(tmp_path, epochs=epochs, inputs=inputs)
@@ -511,7 +511,7 @@ def test_cli_modes(tmp_path, monkeypatch):
 
 
 # Digests (``fold_digest``) of the fold files written by the one-condition-at-a-time
-# implementation at commit f3ece57 on the worlds of ``WORLDS``, 9 significant digits.
+# implementation at commit 807fadc on the worlds of ``WORLDS``, 9 significant digits.
 REFERENCE = json.loads(
     """{
 "default/global_mean_effect__ACH-000971":

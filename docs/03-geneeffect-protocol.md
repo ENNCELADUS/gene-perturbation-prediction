@@ -242,7 +242,7 @@ last of at most 30 epochs, stepped per update. Training, cell-collation and proj
 seeds are all 0. Settings are fixed in `configs/geneeffect_joint.yaml`;
 `configs/revision/` holds one config per objective with STATE frozen, `configs/correction/`
 the single-cell correction's objective screen (§12). The loop follows the
-joint-training design (`docs/specs/2026-09-06-modular-joint-training-design.md`, removed; `git show 1694f5c:<path>`), with
+joint-training design (`docs/specs/2026-09-06-modular-joint-training-design.md`, removed; `git show e6852ac:<path>`), with
 response wiring, basal path and validation splits from the expression-space design and head, objectives,
 learning rates, schedule and selection from the revision design.
 
@@ -432,7 +432,7 @@ Joint Huber improves on gene-mean by only 0.0773%, while residual correlations t
 context baselines. Response validation loss fell 45.57% from epoch 1 to 8 without
 sustained GeneEffect validation improvement. This establishes a working training and
 evaluation path, not a context-modelling advantage
-(full result: `results/joint_geneeffect_seed0/README.md`, removed; `git show f35133a:<path>`).
+(full result: `results/joint_geneeffect_seed0/README.md`, removed with the history of `results/`).
 
 The best model to date is the selected seed-0 joint backbone, frozen, read out by a
 residual head that adds an explicit gene-specific context slope to the §4 head:
@@ -573,7 +573,7 @@ context ridge by at least +0.02 residual Pearson with an interval excluding 0 at
 to §9.3's one config, one seed, test reported for every run.)
 
 The readout objective and selection plan (`docs/specs/2026-09-10-readout-objective-and-selection-design.md`,
-removed; `git show 1694f5c:<path>`) on the frozen backbone remains the follow-up for objective, selection and context
+removed; `git show e6852ac:<path>`) on the frozen backbone remains the follow-up for objective, selection and context
 representation; the response model re-enters the feature path only once it beats no-change
 on a held-out anchor.
 
@@ -703,11 +703,11 @@ linear model on all labelled lines beat the linear model on the single-cell trai
 selective Spearman, bridged input), and the chosen config (expression components only) scored
 0.223 on validation and 0.223 on test against 0.130 and 0.121 for the Tx1 context-PCA ridge.
 Gene-level blocks did not survive the bridge (median per-gene bridge correlation 0.43). The
-bridge-remedy run (2026-10-04, `configs/linear_model/bridge_remedies.yaml`, removed; `git show 0c46652:<path>`,
+bridge-remedy run (2026-10-04, `configs/linear_model/bridge_remedies.yaml`, removed; `git show a313239:<path>`,
 [record](../results/bridge_remedies_seed0/README.md)) found no remedy above the reference on
 validation, but it fitted gene-level blocks on the components-only penalty pick, and on bulk
 input they add +0.0125 at components penalty 1. Its rerun over the full penalty grid
-(`configs/linear_model/bridge_remedies_penalty_grid.yaml`, removed; `git show 0c46652:<path>`, same record) puts the affine bridge with
+(`configs/linear_model/bridge_remedies_penalty_grid.yaml`, removed; `git show a313239:<path>`, same record) puts the affine bridge with
 all gene-level blocks at components penalty 1 and gene penalty 10 at 0.2300 validation / 0.2352 test,
 +0.0068 [0.0011, 0.0129] and +0.0125 [0.0049, 0.0187] over components alone; no remedy beats the
 affine bridge on validation. The follow-ups on that row (2026-10-07,
@@ -718,7 +718,7 @@ data-selected genes' gain is spread over thousands of features. The **default li
 affine bridge with expression components at penalty 1 and data-selected genes at gene penalty 10:
 0.2290 validation / 0.2338 test (`configs/linear_model/default_linear_model.yaml`). On the 226 split rebuilt
 with A549 in test it scored 0.2302 / 0.2318 (run `default_linear_model_resplit_20261012`,
-record: `results/default_linear_model_rerun_seed0/README.md`, removed; `git show f35133a:<path>`). On the **final split** (run
+record: `results/default_linear_model_rerun_seed0/README.md`, removed with the history of `results/`). On the **final split** (run
 `default_linear_model_final_split_20261012`, [record](../results/final_split_seed0/README.md)), whose definitions fit on
 377 labelled training lines (4,323 selective genes), it scores **0.2045 validation / 0.2025 test**: the change is the
 metric's, since on the same genes it is −0.0014 [−0.0030, 0.0003] on validation against the 226 split's linear model. There
@@ -907,7 +907,7 @@ on that run's metric; gains carry 95% paired line-bootstrap intervals.
   out-of-fold export leaves on the training lines, added to the export; gains over the linear model alone and, for fractions,
   over means at the same penalty.
 - **Cilantro-SL's input reductions** are a bridge remedy of §10, `rank_value`
-  (`configs/linear_model/cilantro_encodings.yaml`, removed; `git show 0c46652:<path>`): values divided by each gene's training-side
+  (`configs/linear_model/cilantro_encodings.yaml`, removed; `git show a313239:<path>`): values divided by each gene's training-side
   nonzero median and ranked within the line (rank alone, rank with the top 2,048, and the same top 2,048 keeping their
   expression), applied to bulk and pseudo-bulk before the affine bridge.
 - **Reading** (the design's §6, not code): flat scores from 50 to 100 cells up and split-half reliability above the

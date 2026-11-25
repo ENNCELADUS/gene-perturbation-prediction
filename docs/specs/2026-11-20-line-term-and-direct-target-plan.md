@@ -241,8 +241,8 @@ Expected: FAIL (`target_scale` is not defined; `Data` has no `centre`).
   predicts"); Table 4's caption says "Epoch 0 is the untrained model, which predicts one value for every gene."
 - The module docstring's stage-one text: the new target.
 - Each finished config gets the comment
-  `# The run of 2026-11-19 used the residual target (code at bee1bcc); the present code trains on GeneEffect itself.`
-  (`embedding_mean_token.yaml`: `6325dfc`; `embedding_cellnet.yaml`: `db8a96e`).
+  `# The run of 2026-11-19 used the residual target (code at 232b4f0); the present code trains on GeneEffect itself.`
+  (`embedding_mean_token.yaml`: `ad355ee`; `embedding_cellnet.yaml`: `64dbc5c`).
 
 - [ ] **Step 5: Run the tests to see them pass**
 

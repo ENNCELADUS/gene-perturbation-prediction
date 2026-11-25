@@ -71,7 +71,7 @@ predictor. Neither outcome estimates a double-knockout interaction phenotype.
 
 The [tracked split](../configs/benchmarks/context_screen_v2_split.json) and
 [basal registry](../configs/benchmarks/context_screen_v2_basal_registry.json)
-are the authorities. The retired data card (`docs/data/sl-context-screen.md` at 9318ede) documents source
+are the authorities. The retired data card (`docs/data/sl-context-screen.md` at 2171e54) documents source
 filters, label inference and artifact provenance. The benchmark is this project's own
 proposal, built from screen-level pair labels in named cell lines; the Feng 2024 SL
 benchmark is not used.
@@ -160,7 +160,7 @@ improving one task is not evidence of improving the other.
 
 The completed seed-0 `best.pt` is diagnostic evidence only: it beats the context-blind
 gene mean by 0.0773% Huber and trails the Tx1 context-PCA ridge on residual
-correlation (result: `results/joint_geneeffect_seed0/README.md`, removed; `git show f35133a:<path>`). It neither supplies
+correlation (result: `results/joint_geneeffect_seed0/README.md`, removed with the history of `results/`). It neither supplies
 the required SL exclusions nor the inner-fold models of §5, and its 226-line test set was
 observed once on 2026-09-07 (§8). Inner fits that
 exclude a response anchor need an explicit eligible-anchor configuration; the fixed
@@ -548,7 +548,7 @@ screen score repeat?
   level removed; and the repeat of the line-specific part, the correlation between the two studies of a pair's
   deviation from its mean over the shared lines (two shared lines or more, 12 study pairs). Bootstrap over pairs,
   2,000 draws. Each is given for the rank and for the SL call.
-- **Result** (run `line_specificity_seed0_v2`, H20 port 30838, code `feb9e0e`, 9 s on 224 cores; outputs in
+- **Result** (run `line_specificity_seed0_v2`, H20 port 30838, code `901bd09`, 9 s on 224 cores; outputs in
   `outputs/sl/line_specificity/line_specificity_seed0_v2/` on the host). Mean over the study pairs:
 
   | Value | Same line | Another line | Same-line advantage | Repeat of the line-specific part |
@@ -583,7 +583,7 @@ model trains on.
 - **Inside one study.** Harle's count matrix (Table S3) gives a score for each replicate, the same difference of LFCs;
   a replicate's SL calls are as many of its lowest scores as the line has SL calls. The mean of a line's replicate
   scores agrees with Harle's published score at Spearman 0.734 (output check).
-- **Result** (run `target_options_seed0_v2`, H20 port 30838, code `6d74075`, 63 s; outputs in
+- **Result** (run `target_options_seed0_v2`, H20 port 30838, code `0667a08`, 63 s; outputs in
   `outputs/sl/target_options/target_options_seed0_v2/` on the host). Repeat of the line-specific part, 95% bootstrap
   over gene pairs:
 
@@ -618,7 +618,7 @@ model trains on.
   `1 − target`; the benchmark's weighting stays (every line equal, then its studies, its screens and the two classes of
   a screen). The penalty is chosen on validation recall in the top 10% of the calls, as before. Only the training
   target changes: validation and test read the labels as built.
-- **Runs** (H20 port 30838, code `c111597`, CPU, 100 threads each, 9 min): `conditional_buffer_call_seed0` and
+- **Runs** (H20 port 30838, code `9652bb6`, CPU, 100 threads each, 9 min): `conditional_buffer_call_seed0` and
   `conditional_buffer_ramp_seed0`, then `benchmark_ramp_head_seed0`. The rerun of the head on the calls reproduces
   §12's row (0.394 / 0.361).
 - **Result.** Recall in the top 10%, AUROC and AUPRC over the positive rate, in that order, mean over lines (17
@@ -708,11 +708,11 @@ gene-in-line embeddings, not its predicted GeneEffect. A better GeneEffect is no
   line input; a perturbation model or perturbation data. The full model's run stops if a line with cells has no Tx1
   cache.
 - **Runs** (seed 0, one GPU each, about two minutes of training). 2026-11-19: `embedding_seed0` (H20 port 30838, code
-  `bee1bcc`), `embedding_mean_token_seed0` (port 30757, `6325dfc`), `embedding_cellnet_seed0` (port 30757, `db8a96e`)
+  `232b4f0`), `embedding_mean_token_seed0` (port 30757, `ad355ee`), `embedding_cellnet_seed0` (port 30757, `64dbc5c`)
   and `embedding_mean_token_slow_stage_one_seed0` (`configs/sl/embedding_mean_token_slow_stage_one.yaml`: stage one
-  at a learning rate of 1e-4; port 30757, `bee1bcc`). 2026-11-20: the line-input controls of the full model and of
-  the model without cell tokens (port 30838, `e4e7344`), then the harness run `benchmark_embedding_seed0_v3`
-  (`39f1f26`). [Record](../results/sl_embedding_seed0/summary.html).
+  at a learning rate of 1e-4; port 30757, `232b4f0`). 2026-11-20: the line-input controls of the full model and of
+  the model without cell tokens (port 30838, `5500c8d`), then the harness run `benchmark_embedding_seed0_v3`
+  (`2d57c51`). [Record](../results/sl_embedding_seed0/summary.html).
 - **Result, all pairs.** Recall in the top 10%, AUROC and AUPRC over the positive rate, in that order, mean over lines
   (17 validation, 16 test):
 
@@ -881,7 +881,7 @@ parts of §18. All other parts of §18 stay.
   In these runs one SL training line, ACH-000696, had no Tx1-3B gene-level value and degenerate Tx1-3B cell
   embeddings: its raw file lists Ensembl IDs with a version suffix, which Tx1-3B's vocabulary does not hold
   ([card](data/gene-in-line-features.md)). It is one of the 53 SL training lines of the feature scaling. Its
-  Tx1-3B caches were encoded again on 2026-11-23 (code `842c283`), and the three runs that read them were trained
+  Tx1-3B caches were encoded again on 2026-11-23 (code `63f5010`), and the three runs that read them were trained
   again (`_seed0_v3`, harness `benchmark_cache_repair_seed0`; the run without cell tokens, trained again, gives the
   same scores to the last digit). No conclusion changes: the model scores 0.553 / 0.499, each new − old difference is
   inside ±0.02 (intervals across zero except the mean-input control on validation, −0.009), and the model minus the same weights on the mean input is +0.100 / +0.069
@@ -889,11 +889,11 @@ parts of §18. All other parts of §18 stay.
 - **Not in this study.** CellNet's gene-level outputs, in-silico deletion with Tx1-3B, adapter training of Tx1-3B,
   and any other foundation model.
 - **Runs** (seed 0, 2026-11-20, [record](../results/sl_line_term_seed0/summary.html)). Caches on H20 port 30838:
-  `pie_change` (code `15a754f`; 86 lines, 64 components fitted on 200,000 vectors of the 53 SL training lines) and
-  `tx1_gene` (code `d9d2950`; 86 lines, at most 256 cells each, four GPUs, about 30 s for each line). Runs on port
-  30757, code `880fb7e`, one GPU each: `embedding_direct_seed0_v2`, `embedding_direct_mean_token_seed0_v2`,
+  `pie_change` (code `d4d1784`; 86 lines, 64 components fitted on 200,000 vectors of the 53 SL training lines) and
+  `tx1_gene` (code `f6e242f`; 86 lines, at most 256 cells each, four GPUs, about 30 s for each line). Runs on port
+  30757, code `4ad7dd4`, one GPU each: `embedding_direct_seed0_v2`, `embedding_direct_mean_token_seed0_v2`,
   `embedding_direct_pie_change_seed0_v2`, `embedding_direct_tx1_gene_seed0_v2`; then the harness run
-  `benchmark_line_term_seed0_v2`. The two `_seed0` runs (code `15a754f`) used the first base of the line term.
+  `benchmark_line_term_seed0_v2`. The two `_seed0` runs (code `d4d1784`) used the first base of the line term.
 - **Result, all pairs.** Recall in the top 10%, validation / test, mean over lines (17 / 16):
 
   | Model | Model | On the mean input | On another line's input | With the line term |
@@ -996,7 +996,7 @@ score `s = f + D − mean over R of D` are those of §19.
   deferred part of the design (§7 there).
 - **Limits.** The line-specific part of the labels repeats at 0.35 to 0.39 inside one study (§16), which bounds the
   ordering; its top value is not measured. One seed.
-- **Runs** (seed 0, 2026-11-24, code `edce9c3`, H20 port 30838). The seven cache steps ran on CPU (about 6 s for
+- **Runs** (seed 0, 2026-11-24, code `b2de0c9`, H20 port 30838). The seven cache steps ran on CPU (about 6 s for
   each cell-file step); their counts are in the [card](data/gene-in-line-features.md): every one of the 86 labelled
   lines has a cell file, 79 have DepMap mutation calls and 65 have DepMap copy number. The reference run's four
   other-line controls were written from its `best.pt`. The five runs were started with `--device cpu`, because

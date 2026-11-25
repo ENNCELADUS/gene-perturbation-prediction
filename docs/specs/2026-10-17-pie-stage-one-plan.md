@@ -10,7 +10,7 @@ on `feat/stage-one` (protocol §16), Task 3 run and reported 2026-10-22
 
 At approval (checked 2026-10-17 17:56 UTC) Task 2's frozen-PIE pass was assembled (17,607 genes × 1,036 lines) with
 the gene sources, context text, cells, mean channel and summaries; only the last Tx1 shard (1/16) was running, and
-`feat/ladder-inputs` was unmerged (host at `c219707`, laptop 2 commits ahead). The project rules are CLAUDE.md's.
+`feat/ladder-inputs` was unmerged (host at `9fe3751`, laptop 2 commits ahead). The project rules are CLAUDE.md's.
 
 ## Waves
 
