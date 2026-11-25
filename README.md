@@ -36,7 +36,7 @@ Running the pipeline needs the raw single-cell data, DepMap labels and model wei
 - [`docs/03-geneeffect-protocol.md`](docs/03-geneeffect-protocol.md) and [`docs/04-sl-ranking-protocol.md`](docs/04-sl-ranking-protocol.md): the executable protocols and their rules. [`docs/specs/`](docs/specs/): live designs and plans.
 - [`docs/data/`](docs/data/): one card per dataset; read it before using the data.
 - [`src/README.md`](src/README.md): one line per module. [`hpc/README.md`](hpc/README.md): every command, run on the H20 host.
-- [`results/`](results/): one record per finished run (`summary.html`; older runs have a `README.md`), and the [status page](results/status.html).
+- [`results/`](results/) (local only, not tracked): one record per finished run (`summary.html`; older runs have a `README.md`), and the [status page](results/status.html).
 - [`CLAUDE.md`](CLAUDE.md): rules and the current state, for coding agents.
 
 ## Data roles

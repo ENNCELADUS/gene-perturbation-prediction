@@ -13,7 +13,7 @@ score that changes with the cell line and holds in unseen lines, not only a diff
 `docs/02-literature-review.md` is the extended related work; `docs/03-geneeffect-protocol.md` is the executable protocol of the implemented
 GeneEffect track (its §11 holds the rules) and `docs/04-sl-ranking-protocol.md` the separate SL-pair protocol built on it (its §8 holds the rules; superseded in part by the 2026-10-09 blueprint). The current expression space,
 STATE wiring and `all` run follow `docs/specs/2026-10-02-expression-space-and-all-pipeline-design.md`. Read
-the `docs/data/` card before using a dataset. Results live in `results/`.
+the `docs/data/` card before using a dataset. Results live in `results/`, on the local Mac only (untracked since 2026-11-25).
 
 Name every model, head, arm, variant, run and stage by what it is ("shared MLP head", "the seed-0 joint backbone"), never by a
 bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it once in parentheses at first use.

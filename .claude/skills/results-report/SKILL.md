@@ -29,8 +29,7 @@ records written before 2026-10-29 stay as they are.
   the user asks.
 
 **Location.** `results/<run>/` holds `summary.html`, `figures/*.svg` and the copied host report it reads
-(`results.md`, small JSON or CSV). Both pages are committed and pushed with the change; the repo is public, so put
-nothing in them that `results/` would not already hold.
+(`results.md`, small JSON or CSV). `results/` is gitignored (since 2026-11-25): the pages stay on the local Mac and are not committed.
 
 **Build.** Load the `artifact-design` skill for its design rules, then write the page as a local, self-contained file.
 Never publish it with the Artifact tool or upload it anywhere. Because nothing wraps it, the file carries its own

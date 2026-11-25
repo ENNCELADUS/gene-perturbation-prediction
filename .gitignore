@@ -63,12 +63,6 @@ wheels/
 !docs/report/tables/*.csv
 # The original lines' manifest (the 226 builder and the original-47 materializer read it).
 !configs/benchmarks/provenance/phase_a_tx1_20260724/cell_line_manifest.csv
-# Curated P1 diagnostic evidence (small comparison tables and summaries, source-of-truth for results)
-!results/p1_response_pathway_diagnostics/evidence/**
-# PIE reproduction comparison tables (small, the record of results/pie_reproduction/)
-!results/pie_reproduction/*.csv
-# Copied host tables of the multi-study SL benchmark run page (small)
-!results/sl_study_benchmark/host/*.csv
 /outputs/
 data/**/features
 data/**/interim
@@ -138,7 +132,8 @@ archive/
 MANIFEST.md
 refine-logs/
 docs/superpowers
-results/literature-review-2026-07
+# Run records stay on the local machine only (since 2026-11-25)
+/results/
 docs/literature/
 docs/notes/
 graphify-out/
