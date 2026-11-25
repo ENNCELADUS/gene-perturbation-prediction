@@ -12,6 +12,14 @@ source / genes with a value in at least one line: `wide_expression` 86 / 18,905;
 `paralog_buffer` 86 / 12,550; `complex_buffer` 86 / 4,848; `partner_low` 86 / 14,604; `depmap_mutation` 79 / 17,851;
 `depmap_copy_number` 65 / 18,416. A DepMap column without a gene symbol (the row number, a bare Ensembl ID) is left out.
 
+**Two cache roots since 2026-11-25.** `data/sl_gene_in_line/v2` is the root that the code writes now; `v1` keeps
+the caches as the runs up to 2026-11-24 read them. The difference is one rule. Under `v1`, a gene's 10th percentile
+was over all SL training lines with a cell file, and a gene that one of those lines does not measure had no
+percentile: its silenced flag was 0 in every line and it did not count as a low partner (5,032 of the 18,905 genes
+with a value could have the flag). Under `v2` the percentile is over the training lines that measure the gene. The
+silenced flag of `wide_expression` and the value of `partner_low` differ between the roots; every other value is
+the same. `tx1_gene` and `pie_change` of `v2` are links to `v1`.
+
 Since 2026-11-25 the CPU steps from `wide_expression` on also write the split file's bulk-only lines with a labelled
 row (37 lines; SL protocol §21). Such a line has no cell file. Its `wide_expression` is its DepMap bulk RNA
 (`bulk_expression` in the config, `log2(TPM + 1)`), mapped onto the pseudo-bulk gene by gene: a least-squares line
@@ -67,7 +75,7 @@ lines, of lines with the source and of genes with a value in at least one line.
 
 **Fit rule.** The PIE components (centre and basis) are fitted on a seeded sample of at most 200,000 (line, gene)
 vectors of the lines with role `train` only. The 10th percentiles of `wide_expression` and `partner_low` are fitted on
-the SL training lines (the `train` side of the SL split) that have a cell file. The model centres and scales each column on the SL training lines when
+the SL training lines (the `train` side of the SL split) that have a cell file and measure the gene. The model centres and scales each column on the SL training lines when
 it reads a cache (`read_in_line`).
 
 **Known limits.**

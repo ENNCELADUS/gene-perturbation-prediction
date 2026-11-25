@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import warnings
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final
@@ -153,8 +154,11 @@ def on_axis(
 
 
 def low_threshold(pseudobulk: np.ndarray, train: np.ndarray) -> np.ndarray:
-    """The 10th percentile of each source gene over the training rows."""
-    return np.percentile(pseudobulk[train], 10, axis=0)
+    """The 10th percentile of each source gene over the training rows that measure
+    it (NaN for a gene that no training row measures)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # a gene without a value
+        return np.nanpercentile(pseudobulk[train], 10, axis=0)
 
 
 def read_cell_files(

@@ -153,10 +153,12 @@ NAMES = {
             ("cross_genes_input", "line head on the frozen-source gene vectors"),
             ("cross_wide", "wide expression and buffers of the two genes"),
             ("cross_depmap_dna", "with DepMap mutations and copy number"),
-            # SL protocol §21: the wide row with one change each
-            ("cross_80_lines", "wide row with the bulk-RNA training lines"),
-            ("cross_wide_token", "wide row with the wide mean token"),
-            ("cross_pair_in_line", "wide row with the pair-in-line features"),
+            # SL protocol §21: the wide row on the v2 caches (the silenced flag on
+            # every measured gene), then that row with one change each
+            ("cross_wide_v2", "wide row on the v2 caches"),
+            ("cross_80_lines", "v2 wide row with the bulk-RNA training lines"),
+            ("cross_wide_token", "v2 wide row with the wide mean token"),
+            ("cross_pair_in_line", "v2 wide row with the pair-in-line features"),
         )
         for suffix, control in (
             ("", ""),

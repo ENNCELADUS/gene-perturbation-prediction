@@ -725,8 +725,16 @@ def test_stage_one_fits_no_sl_line_and_no_line_of_an_sl_lines_patient():
 
 
 def test_the_context_rows_change_one_thing_from_the_wide_row():
-    """SL protocol §21: each config is ``cross_line_wide`` with one change."""
-    wide = embedding.load_config(Path("configs/sl/cross_line_wide.yaml"))
+    """SL protocol §21: the wide row on the v2 caches, then each config is that row
+    with one change."""
+    old = embedding.load_config(Path("configs/sl/cross_line_wide.yaml"))
+    wide = embedding.load_config(Path("configs/sl/cross_line_wide_v2.yaml"))
+    caches = old["line_term"]["gene_in_line"]
+    assert wide["line_term"]["gene_in_line"] == {
+        n: p.replace("/v1/", "/v2/") for n, p in caches.items()
+    }
+    old["line_term"]["gene_in_line"] = wide["line_term"]["gene_in_line"]
+    assert old == wide
     assert wide["space_measured_share"] is None and not wide["bulk_training_lines"]
     assert wide["line_term"]["pair_in_line"] is False
     for name, keys, value in (
@@ -751,8 +759,9 @@ def test_the_harness_names_every_table_of_the_context_rows():
     own = {"labels", "random", "stage_one", "pan_essentiality", "measured_geneeffect"}
     assert set(config["cross_line_ordering"]) <= set(config["extra_scores"]) | own
     assert {n for pair in config["paired_differences"] for n in pair} <= named
+    assert ["cross_wide_v2", "cross_wide"] in config["paired_differences"]
     for run in ("cross_80_lines", "cross_wide_token", "cross_pair_in_line"):
-        assert [run, "cross_wide"] in config["paired_differences"]
+        assert [run, "cross_wide_v2"] in config["paired_differences"]
         assert [run, f"{run}_other_lines"] in config["paired_differences"]
 
 

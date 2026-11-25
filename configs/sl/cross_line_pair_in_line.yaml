@@ -1,4 +1,4 @@
-# cross_line_wide.yaml with the pair-in-line features in the line head (SL protocol §21; design
+# cross_line_wide_v2.yaml with the pair-in-line features in the line head (SL protocol §21; design
 # docs/specs/2026-11-24-context-specific-sl-architecture-design.md §5.4, §7.1 item 5): for the pair in the line, the
 # expression of each gene's paralogs other than the pair's other gene, the state of the paralogs and complex
 # co-members that the two genes share, and a silenced gene times the model's predicted dependency of the other gene.
@@ -67,8 +67,8 @@ line_term:
   pair_in_line: true
   # gene-in-line caches (docs/data/gene-in-line-features.md)
   gene_in_line:
-    wide_expression: data/sl_gene_in_line/v1/wide_expression
-    cell_spread: data/sl_gene_in_line/v1/cell_spread
-    paralog_buffer: data/sl_gene_in_line/v1/paralog_buffer
-    complex_buffer: data/sl_gene_in_line/v1/complex_buffer
-    partner_low: data/sl_gene_in_line/v1/partner_low
+    wide_expression: data/sl_gene_in_line/v2/wide_expression
+    cell_spread: data/sl_gene_in_line/v2/cell_spread
+    paralog_buffer: data/sl_gene_in_line/v2/paralog_buffer
+    complex_buffer: data/sl_gene_in_line/v2/complex_buffer
+    partner_low: data/sl_gene_in_line/v2/partner_low

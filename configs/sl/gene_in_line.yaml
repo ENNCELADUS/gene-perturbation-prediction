@@ -12,7 +12,11 @@ seed: 0
 joint: configs/revision/frozen_huber.yaml
 labels: data/sl_studies/benchmark_v2/labels.parquet
 split: configs/benchmarks/cell_line_sl_split.json
-out: data/sl_gene_in_line/v1
+# v2 since 2026-11-25: the 10th percentile of a gene is over the SL training lines that measure it. Under v1 a gene
+# that one SL training line does not measure had no percentile, so its silenced flag was 0 in every line and it did
+# not count as a low partner. v1 keeps the caches that the runs up to 2026-11-24 read; tx1_gene and pie_change did
+# not change and are links to v1.
+out: data/sl_gene_in_line/v2
 tx1: {batch_size: 32, max_length: 2048, max_cells: 256, cells_per_pass: 64}
 # the PIE root of hpc/run.sh sl-pie-pass; a seeded sample of training-line vectors fits the components
 pie: {root: data/sl_pie/v1, components: 64, sample: 200000}

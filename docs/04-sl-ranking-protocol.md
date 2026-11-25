@@ -1022,9 +1022,19 @@ score `s = f + D − mean over R of D` are those of §19.
 `src/experiments/sl/embedding.py`, `src/model/sl_embedding.py`, `src/experiments/sl/gene_in_line.py`,
 `src/experiments/sl/target_options.py`, the three configs below, `configs/sl/benchmark_context_rows.yaml`; the
 [design](specs/2026-11-24-context-specific-sl-architecture-design.md) (§5.4, §5.5, §6) gives the reasons. §20 left
-one row of the study and two local changes open. Each is one config here, and each is the wide row of §20
-(`cross_line_wide.yaml`) with one change. The question of each row is the question of §20: does the score order a
-pair between two unseen lines?
+one row of the study and two local changes open. Each is one config here. A defect of the wide caches was found
+first, so the base of the three rows is the wide row of §20 on corrected caches (`cross_line_wide_v2.yaml`), and
+each row is that base with one change. The question of each row is the question of §20: does the score order a pair
+between two unseen lines?
+
+- **The corrected silenced flag** (cache root `data/sl_gene_in_line/v2`, `cross_line_wide_v2.yaml`). The caches of
+  §20 took each gene's 10th percentile over all SL training lines with a cell file, and a gene that one of those
+  lines does not measure got no percentile. Its silenced flag was then 0 in every line, and it did not count as a
+  low partner: 5,032 of the 18,905 genes with a value could have the flag (3.5% of the values had it; 10% is the
+  definition on the training lines). Since 2026-11-25 the percentile is over the training lines that measure the
+  gene (`low_threshold`). The v2 root holds the caches written with it; the v1 root keeps the caches that the runs
+  of §20 read. The expression values and the paralog and complex buffers are the same in the two roots; the
+  silenced flag of `wide_expression` and `partner_low` differ.
 
 - **The bulk-RNA training lines** (`bulk_training_lines: true`, `cross_line_80_lines.yaml`). The split file's
   bulk-only lines (`bulk_labelled`, `bulk_unlabelled`) with a labelled row join stage two's training lines: 37
@@ -1077,8 +1087,9 @@ pair between two unseen lines?
   below one replicate's, and the true top is at or above the value with the mean of two.
 - **Rows.** One config each, seed 0, run id `<config>_seed0`:
 
-  | Config (`configs/sl/`) | The one change against `cross_line_wide.yaml` |
+  | Config (`configs/sl/`) | The one change |
   | --- | --- |
+  | `cross_line_wide_v2.yaml` | against `cross_line_wide.yaml` of §20: the v2 caches (the base of the next rows) |
   | `cross_line_80_lines.yaml` | `bulk_training_lines: true` |
   | `cross_line_wide_token.yaml` | `space_measured_share: 0.5` |
   | `cross_line_pair_in_line.yaml` | `line_term.pair_in_line: true` |

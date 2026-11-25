@@ -431,3 +431,12 @@ def test_the_bulk_only_lines_are_the_split_files_labelled_ones():
     assert gene_in_line.bulk_only_lines(path, split, labelled) == sorted(
         [payload["bulk_labelled"][0], payload["bulk_unlabelled"][0]]
     )
+
+
+def test_a_gene_that_one_training_line_lacks_keeps_its_percentile():
+    pseudobulk = np.array([[1.0, np.nan], [2.0, 4.0], [3.0, 5.0], [9.0, 0.0]])
+    low = gene_in_line.low_threshold(pseudobulk, np.array([True, True, True, False]))
+    np.testing.assert_allclose(low, [1.2, 4.1])
+    only_first = np.array([True, False, False, False])
+    none = gene_in_line.low_threshold(pseudobulk[:, 1:], only_first)
+    assert np.isnan(none).all()  # no training line measures the gene

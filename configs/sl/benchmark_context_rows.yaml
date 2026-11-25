@@ -1,7 +1,7 @@
-# The three rows of SL protocol §21 beside the cross-line study of §20 (configs/sl/benchmark_cross_line.yaml, whose
-# tables this config keeps) and the published baselines: the wide row with the bulk-RNA training lines
-# (cross_line_80_lines), with the wide mean token (cross_line_wide_token) and with the pair-in-line features
-# (cross_line_pair_in_line). Each run: `hpc/run.sh sl-embedding configs/sl/<config>.yaml --run-id <config>_seed0`.
+# The rows of SL protocol §21 beside the cross-line study of §20 (configs/sl/benchmark_cross_line.yaml, whose
+# tables this config keeps) and the published baselines: the wide row on the v2 gene-in-line caches
+# (cross_line_wide_v2), then that row with the bulk-RNA training lines (cross_line_80_lines), with the wide mean
+# token (cross_line_wide_token) and with the pair-in-line features (cross_line_pair_in_line). Each run: `hpc/run.sh sl-embedding configs/sl/<config>.yaml --run-id <config>_seed0`.
 # The harness reads the split's 44 training lines alone: for the run with the bulk-RNA training lines, a held-out pair
 # that only those lines hold is a new pair here (the run's results.md gives the count).
 # `hpc/run.sh sl-baselines configs/sl/benchmark_context_rows.yaml --run-id benchmark_context_rows_seed0` (CPU).
@@ -65,8 +65,15 @@ extra_scores:
   cross_depmap_dna_other_line_2: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_line_term_other_line_2.parquet
   cross_depmap_dna_other_line_3: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_line_term_other_line_3.parquet
   cross_depmap_dna_other_line_4: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_line_term_other_line_4.parquet
-  # the three rows of SL protocol §21, each the wide row with one change: the bulk-RNA training lines, the wide
-  # mean token, the pair-in-line features
+  # the rows of SL protocol §21: the wide row on the v2 caches, then that row with one change each (the bulk-RNA
+  # training lines, the wide mean token, the pair-in-line features)
+  cross_wide_v2: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term.parquet
+  cross_wide_v2_model: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding.parquet
+  cross_wide_v2_mean_input: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_mean_input.parquet
+  cross_wide_v2_other_line_1: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term_other_line.parquet
+  cross_wide_v2_other_line_2: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term_other_line_2.parquet
+  cross_wide_v2_other_line_3: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term_other_line_3.parquet
+  cross_wide_v2_other_line_4: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term_other_line_4.parquet
   cross_80_lines: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding_line_term.parquet
   cross_80_lines_model: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding.parquet
   cross_80_lines_mean_input: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding_mean_input.parquet
@@ -107,6 +114,7 @@ scorer_means:
   cross_genes_input_other_lines: [cross_genes_input_other_line_1, cross_genes_input_other_line_2, cross_genes_input_other_line_3, cross_genes_input_other_line_4]
   cross_wide_other_lines: [cross_wide_other_line_1, cross_wide_other_line_2, cross_wide_other_line_3, cross_wide_other_line_4]
   cross_depmap_dna_other_lines: [cross_depmap_dna_other_line_1, cross_depmap_dna_other_line_2, cross_depmap_dna_other_line_3, cross_depmap_dna_other_line_4]
+  cross_wide_v2_other_lines: [cross_wide_v2_other_line_1, cross_wide_v2_other_line_2, cross_wide_v2_other_line_3, cross_wide_v2_other_line_4]
   cross_80_lines_other_lines: [cross_80_lines_other_line_1, cross_80_lines_other_line_2, cross_80_lines_other_line_3, cross_80_lines_other_line_4]
   cross_wide_token_other_lines: [cross_wide_token_other_line_1, cross_wide_token_other_line_2, cross_wide_token_other_line_3, cross_wide_token_other_line_4]
   cross_pair_in_line_other_lines: [cross_pair_in_line_other_line_1, cross_pair_in_line_other_line_2, cross_pair_in_line_other_line_3, cross_pair_in_line_other_line_4]
@@ -126,6 +134,8 @@ cross_line_ordering:
   - cross_wide_other_line_1
   - cross_depmap_dna
   - cross_depmap_dna_other_line_1
+  - cross_wide_v2
+  - cross_wide_v2_other_line_1
   - cross_80_lines
   - cross_80_lines_other_line_1
   - cross_wide_token
@@ -162,6 +172,8 @@ paired_differences:
   - [cross_wide, cross_wide_mean_input]
   - [cross_depmap_dna, cross_depmap_dna_other_lines]
   - [cross_depmap_dna, cross_depmap_dna_mean_input]
+  - [cross_wide_v2, cross_wide_v2_other_lines]
+  - [cross_wide_v2, cross_wide_v2_mean_input]
   - [cross_80_lines, cross_80_lines_other_lines]
   - [cross_80_lines, cross_80_lines_mean_input]
   - [cross_wide_token, cross_wide_token_other_lines]
@@ -174,6 +186,7 @@ paired_differences:
   - [cross_genes_input, cross_genes_input_model]
   - [cross_wide, cross_wide_model]
   - [cross_depmap_dna, cross_depmap_dna_model]
+  - [cross_wide_v2, cross_wide_v2_model]
   - [cross_80_lines, cross_80_lines_model]
   - [cross_wide_token, cross_wide_token_model]
   - [cross_pair_in_line, cross_pair_in_line_model]
@@ -183,10 +196,11 @@ paired_differences:
   - [cross_genes_input, cross_joint]
   - [cross_wide, cross_genes_input]
   - [cross_depmap_dna, cross_wide]
-  # each row of SL protocol §21 minus the wide row it starts from
-  - [cross_80_lines, cross_wide]
-  - [cross_wide_token, cross_wide]
-  - [cross_pair_in_line, cross_wide]
+  # the wide row on the v2 caches minus the wide row of §20, then each row of SL protocol §21 minus the v2 wide row
+  - [cross_wide_v2, cross_wide]
+  - [cross_80_lines, cross_wide_v2]
+  - [cross_wide_token, cross_wide_v2]
+  - [cross_pair_in_line, cross_wide_v2]
   # against Kebabci's paralog classifier on predicted GeneEffect
   - [cross_frozen, kebabci_paralog_predicted]
   - [cross_joint, kebabci_paralog_predicted]
@@ -196,3 +210,4 @@ paired_differences:
   - [cross_80_lines, kebabci_paralog_predicted]
   - [cross_wide_token, kebabci_paralog_predicted]
   - [cross_pair_in_line, kebabci_paralog_predicted]
+  - [cross_wide_v2, kebabci_paralog_predicted]

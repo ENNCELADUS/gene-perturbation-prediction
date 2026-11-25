@@ -531,23 +531,27 @@ done
 hpc/run.sh sl-baselines configs/sl/benchmark_cross_line.yaml --run-id benchmark_cross_line_seed0_v2
 ```
 
-The three rows of SL protocol §21 are the wide row with one change each: the bulk-RNA training lines
-(`cross_line_80_lines`), the wide mean token (`cross_line_wide_token`) and the pair-in-line features
-(`cross_line_pair_in_line`). The CPU cache steps also write the split file's bulk-only lines with a labelled row
-(bulk RNA mapped onto the pseudo-bulk; `bulk_expression` in the config), so the five wide caches are written again
-first; the files of the other lines do not change. Then three `sl-embedding` runs and the harness:
+The rows of SL protocol §21 are the wide row on the v2 caches (`cross_line_wide_v2`), then that row with one change
+each: the bulk-RNA training lines (`cross_line_80_lines`), the wide mean token (`cross_line_wide_token`) and the
+pair-in-line features (`cross_line_pair_in_line`). The cache root is `data/sl_gene_in_line/v2` since 2026-11-25
+(each gene's 10th percentile is over the SL training lines that measure it); `v1` keeps the caches of the earlier
+runs, and `tx1_gene` and `pie_change` of `v2` are links to `v1`. The CPU cache steps also write the split file's
+bulk-only lines with a labelled row (bulk RNA mapped onto the pseudo-bulk; `bulk_expression` in the config). The
+seven CPU caches first, then four `sl-embedding` runs and the harness:
 
 ```bash
-for STEP in wide_expression cell_spread paralog_buffer complex_buffer partner_low; do
+mkdir -p data/sl_gene_in_line/v2
+for STEP in tx1_gene pie_change; do ln -sfn ../v1/$STEP data/sl_gene_in_line/v2/$STEP; done
+for STEP in wide_expression cell_spread paralog_buffer complex_buffer partner_low depmap_mutation depmap_copy_number; do
   OMP_NUM_THREADS=16 hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps $STEP
 done
 i=0
-for NAME in cross_line_80_lines cross_line_wide_token cross_line_pair_in_line; do
+for NAME in cross_line_wide_v2 cross_line_80_lines cross_line_wide_token cross_line_pair_in_line; do
   CUDA_VISIBLE_DEVICES=$i setsid nohup hpc/run.sh sl-embedding configs/sl/$NAME.yaml --run-id ${NAME}_seed0 \
     > outputs/launches/${NAME}_seed0.log 2>&1 < /dev/null &
   i=$((i + 1))
 done
-# when the three runs have finished
+# when the four runs have finished
 hpc/run.sh sl-baselines configs/sl/benchmark_context_rows.yaml --run-id benchmark_context_rows_seed0
 ```
 
