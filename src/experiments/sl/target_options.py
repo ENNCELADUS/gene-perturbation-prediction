@@ -18,7 +18,10 @@ the line-specific part). No model is read and the benchmark's labels are not cha
 Harle's replicates also give the repeat inside one study, which the label table (one
 merged score for each pair and screen) cannot give: a replicate's score is that same
 difference of LFCs, from the count matrix (Table S3), and its SL calls are as many of
-the lowest scores as the line has SL calls."""
+the lowest scores as the line has SL calls. They also give the cross-line ordering
+(``benchmark_baselines.cross_line_ordering``) that one measurement reaches against
+another (``ordering_ceiling``): the value a score can reach in this study when it
+follows the line as well as a second measurement does."""
 
 from __future__ import annotations
 
@@ -36,6 +39,7 @@ from src.data.io import write_json, write_text
 from src.data.splits import load_geneeffect_split
 from src.experiments.config import read_yaml, require_keys
 from src.experiments.run_dir import bind, number
+from src.experiments.sl.benchmark_baselines import cross_line_ordering
 from src.experiments.sl.line_specificity import COLUMNS, PAIR, analyse, study_cells
 
 #: Controls that cut the genome, so a single loss carries the cutting effect too.
@@ -218,6 +222,45 @@ def published_agreement(labels: pd.DataFrame, replicates: pd.DataFrame) -> float
     )
 
 
+def ordering_ceiling(
+    replicates: pd.DataFrame, sides: Mapping[str, str], reps: int, seed: int
+) -> list[dict[str, Any]]:
+    """The cross-line ordering inside Harle 2025 of one measurement against another:
+    the SL calls of one replicate as the labels and the score of another replicate
+    as the score (each ordered pair of replicates), and the mean of replicates 1 and
+    2 against the calls of replicate 3. A low score is SL, so the score is negated.
+    Each record has the ordering over every line of the study (``all``) and over
+    the lines of each side in ``sides`` (ModelID to side), as
+    ``cross_line_ordering`` gives it."""
+    keys = ["model_id", "design", *PAIR]
+    of = dict(tuple(replicates.groupby("study_id")))
+    single = sorted(study for study in of if "+" not in study)
+    compared = [(a, b) for a in single for b in single if a != b]
+    compared.append((f"{HARLE}|R1+R2", f"{HARLE}|R3"))
+    records = []
+    for scored, called in compared:
+        frame = (
+            of[called]
+            .drop(columns="score")
+            .merge(of[scored][[*keys, "score"]], on=keys, validate="one_to_one")
+        )
+        frame = frame.assign(study_id=HARLE)
+        ordering = {}
+        for split in ("all", frame["model_id"].map(sides)):
+            part = frame.assign(split=split).dropna(subset=["split"])
+            ordering |= cross_line_ordering(
+                part, -part["score"].to_numpy(dtype=np.float64), reps, seed
+            )
+        records.append(
+            {"scored": scored, "called": called}
+            | {
+                side: {k: v for k, v in value.items() if k != "by_study"}
+                for side, value in ordering.items()
+            }
+        )
+    return records
+
+
 def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
     run_dir = Path(config["output_root"]) / config["task"] / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -282,6 +325,12 @@ def run(config: Mapping[str, Any], run_id: str, workers: int) -> Path:
             "studies": common_studies[common_studies["study_id"].isin(SWITCHED)]
             .to_dict("records"),
         },
+        "ordering_ceiling": ordering_ceiling(
+            replicates,
+            {m: s for s in ("train", "val", "test") for m in getattr(split, s)},
+            int(config["bootstrap"]),
+            int(config["seed"]),
+        ),
         "harle": {"weighted_pairs": len(weight),
                   "replicate_lists": int(replicates["list_id"].nunique()),
                   "replicate_mean_against_published": published_agreement(
@@ -320,6 +369,32 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
                 f"{ranged(pooled, 'line_part_repeat')} |"
             )
     common, several = metrics["common_score"], metrics["several_studies"]
+    ceiling = metrics["ordering_ceiling"]
+    sides = (("all", "All lines"), ("train", "Training lines"),
+             ("val", "Validation lines"), ("test", "Test lines"))  # fmt: skip
+
+    def ordered(records: Sequence[Mapping[str, Any]], side: str) -> str:
+        """The mean value over ``records`` (with the range, or the interval of one
+        record) and the examples of one record."""
+        have = [r[side] for r in records if side in r]
+        if not have:
+            return "—"
+        values = [h["value"] for h in have]
+        spread = have[0]["interval"] if len(have) == 1 else [min(values), max(values)]
+        return (
+            f"{number(float(np.mean(values)), 3)} [{number(spread[0], 3)}, "
+            f"{number(spread[1], 3)}] ({have[0]['examples']:,})"
+        )
+
+    ceiling_rows = [
+        f"| {name} | " + " | ".join(ordered(records, s) for s, _ in sides) + " |"
+        for name, records in (
+            ("One replicate's score against another replicate's calls (mean of the "
+             f"{len(ceiling) - 1} ordered pairs of replicates; range)", ceiling[:-1]),
+            ("The mean score of replicates 1 and 2 against replicate 3's calls (95% "
+             "bootstrap over gene pairs)", ceiling[-1:]),
+        )
+    ]  # fmt: skip
     return "\n".join(
         [
             f"# Options for a less noisy SL target ({metrics['run_id']})",
@@ -352,6 +427,19 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
             f"two studies ({number(several['same_line_agreement'], 3)}), the mean of "
             "two agrees with a third at "
             f"{number(several['expected_of_two'], 3)} (Spearman-Brown).",
+            "",
+            "**Table 2.** The cross-line ordering that one measurement reaches "
+            "against another inside Harle 2025: the share of (line with the SL call, "
+            "line without it) examples of one gene pair that the score orders "
+            "correctly, with the calls of one replicate as the labels and the score "
+            "of another measurement as the score. 0.5 is a score that is the same in "
+            "every line; the value is the top of what a model can reach in this "
+            "study against labels with one replicate's noise. In parentheses: the "
+            "examples of the first compared pair. Higher is better.",
+            "",
+            "| Score | " + " | ".join(name for _, name in sides) + " |",
+            "| --- |" + " --- |" * len(sides),
+            *ceiling_rows,
             "",
         ]
     )

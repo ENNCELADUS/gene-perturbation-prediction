@@ -46,6 +46,20 @@ line term changes with the line only through the gene-in-line features. With
 lines of one study for one pair, one with the SL call and one without it:
 ``softplus(-(s(c+) - s(c-)))``. A score that is the same in every line gives log 2.
 
+Three options widen what the model reads of a line (design
+docs/specs/2026-11-24-context-specific-sl-architecture-design.md, §5.4 and §6).
+``space_measured_share``: the mean token reads the bulk genes that at least that share
+of the labelled single-cell training lines measure (an unmeasured value takes the
+training mean), not only the genes that every held-out line measures (``null``).
+``bulk_training_lines``: the split file's bulk-only lines with a labelled row join
+stage two's training lines; such a line reads its DepMap bulk RNA as the mean token's
+input and has no cells, and stage one's fit lines do not change (they hold no line
+with an SL label). ``line_term.pair_in_line``: the line head also reads the
+pair-in-line features (``src.model.sl_embedding.pair_in_line``), from the line's wide
+expression (the ``wide_expression`` gene-in-line cache), the paralog and complex
+tables of the linear model's reference and the model's own predicted dependency of
+each gene in the line (no gradient).
+
 Outputs: ``scores/embedding.parquet`` for the benchmark harness (``extra_scores``);
 the line-input controls ``scores/embedding_mean_input.parquet`` (the fit lines' mean
 input) and ``scores/embedding_other_line.parquet`` (another line's input; with
@@ -86,7 +100,7 @@ from src.experiments.sl.benchmark_baselines import (
 )
 from src.experiments.sl.conditional import KEYS, recall_top10, soft_weights
 from src.linear_model.targets import Definitions, residual_frame
-from src.model.sl_embedding import GeneLineModel
+from src.model.sl_embedding import PAIR_WIDTH, GeneLineModel, pair_in_line
 from src.training.stage_one_trainer import masked_mse
 
 log = logging.getLogger(__name__)
@@ -106,7 +120,7 @@ SECTIONS = {
 }  # fmt: skip
 LINE_TERM = {"reference_lines", "max_epochs", "patience", "learning_rate",
              "own_expression", "gene_in_line", "joint", "input",
-             "cross_line"}  # fmt: skip
+             "cross_line", "pair_in_line"}  # fmt: skip
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -114,7 +128,8 @@ def load_config(path: Path) -> dict[str, Any]:
     require_keys(
         config,
         {"kind", "seed", "output_root", "task", "linear_model", "labels", "split",
-         "gene_sources", "cell_embeddings", "top_k", "line_term", *SECTIONS},
+         "gene_sources", "cell_embeddings", "top_k", "line_term",
+         "space_measured_share", "bulk_training_lines", *SECTIONS},
         "config",
     )  # fmt: skip
     if config["kind"] != "sl_embedding":
@@ -131,6 +146,10 @@ def load_config(path: Path) -> dict[str, Any]:
                 term["cross_line"], {"weight", "examples_per_step"},
                 "line_term.cross_line",
             )  # fmt: skip
+        if term["pair_in_line"] and "wide_expression" not in term["gene_in_line"]:
+            raise ValueError(
+                "line_term.pair_in_line reads the wide_expression gene-in-line cache"
+            )
     if int(config["eval"]["other_lines"]) < 1:
         raise ValueError("eval.other_lines: 1 or more")
     if not config["gene_sources"]:
@@ -149,7 +168,9 @@ class Data:
     gene vector). ``in_line`` holds each source's gene-in-line features (feature
     lines x genes + 1 x width, float16; the last column is the presence flag, the last
     gene row is zero); the feature lines are the lines with benchmark rows, and
-    ``in_line_at`` gives each line's row in them (-1 for a line without rows)."""
+    ``in_line_at`` gives each line's row in them (-1 for a line without rows).
+    ``pair_index`` (``pair_index``; None without ``line_term.pair_in_line``) holds
+    the paralog and partner tables on the gene axis."""
 
     genes: list[str]
     lines: list[str]
@@ -166,6 +187,7 @@ class Data:
     scale: float
     in_line: dict[str, Tensor]
     in_line_at: Tensor
+    pair_index: dict[str, Tensor] | None = None
 
     @property
     def device(self) -> torch.device:
@@ -182,6 +204,7 @@ def build_model(config: Mapping[str, Any], data: Data) -> GeneLineModel:
         head_hidden=int(config["model"]["head_hidden"]),
         gene_in_line={name: t.shape[2] for name, t in data.in_line.items()},
         line_input="model" if term is None else term["input"],
+        pair_in_line=0 if data.pair_index is None else PAIR_WIDTH,
     ).to(data.device)
 
 
@@ -651,6 +674,7 @@ def fit_pairs(
 def line_term_of(
     model: GeneLineModel,
     data: Data,
+    u: Tensor,
     line_u: Tensor,
     a: Tensor,
     b: Tensor,
@@ -660,7 +684,10 @@ def line_term_of(
 ) -> Tensor:
     """``D`` (rows,) of the pairs (``a``, ``b``: gene positions, -1 reads the zero
     row) read in ``line``: the line's ``tokens`` and its gene-in-line features of
-    the two genes. ``line_u`` holds the rows of ``model.line_vectors()``."""
+    the two genes. ``line_u`` holds the rows of ``model.line_vectors()``. With
+    ``data.pair_index``, also the pair-in-line features, from the line's wide
+    expression and the model's predicted dependency of every gene in the line (on
+    the rows ``u`` of ``gene_vectors`` and the same ``tokens``; no gradient)."""
     feature = int(data.in_line_at[line])
     if feature < 0:
         raise ValueError(f"line {data.lines[line]} has no gene-in-line features")
@@ -668,7 +695,24 @@ def line_term_of(
     def of(genes: Tensor) -> dict[str, Tensor]:
         return {n: t[feature, genes].float() for n, t in data.in_line.items()}
 
-    return model.line_term(line_u[a], line_u[b], combinatorial, of(a), of(b), *tokens)
+    pair = line_u.new_zeros(len(a), 0)
+    if data.pair_index is not None:
+        # value, silenced flag, presence; scaled columns (``read_in_line``)
+        wide = data.in_line["wide_expression"][feature].float()
+        mean, cells, mask = tokens
+        with torch.no_grad():
+            z = model.dependency(
+                u, mean[None], None if cells is None else cells[None],
+                None if mask is None else mask[None],
+            )[0]  # fmt: skip
+        pair = pair_in_line(
+            # the scaled flag is above 0 only where the flag is 1
+            a, b, combinatorial, wide[:, 0], (wide[:, 1] > 0).float(),
+            wide[:, -1].bool(), z, **data.pair_index,
+        )  # fmt: skip
+    return model.line_term(
+        line_u[a], line_u[b], combinatorial, of(a), of(b), pair, *tokens
+    )
 
 
 def line_score(
@@ -689,7 +733,7 @@ def line_score(
     the same ``tokens``."""
     with torch.set_grad_enabled(train_f and torch.is_grad_enabled()):
         f = model.pair(u[a], u[b], combinatorial, *tokens)
-    return f + line_term_of(model, data, line_u, a, b, combinatorial, line, tokens)
+    return f + line_term_of(model, data, u, line_u, a, b, combinatorial, line, tokens)
 
 
 @torch.no_grad()
@@ -722,7 +766,7 @@ def line_term_scores(
         a, b, combinatorial = unique[start : start + chunk].T
         combinatorial = combinatorial.bool()
         deviations = [
-            line_term_of(model, data, line_u, a, b, combinatorial, r, tokens)
+            line_term_of(model, data, u, line_u, a, b, combinatorial, r, tokens)
             for r, tokens in reference
         ]
         shared[start : start + chunk] = torch.stack(deviations).mean(0)
@@ -778,7 +822,7 @@ def line_term_loss(
         for line, part, tokens in steps
     ])  # fmt: skip
     deviations = [
-        line_term_of(model, data, line_u, a, b, combinatorial, r, tokens)
+        line_term_of(model, data, u, line_u, a, b, combinatorial, r, tokens)
         for r, tokens in reference
     ]
     # every line has rows_per_line rows: the mean over rows weighs each line equally
@@ -1075,6 +1119,59 @@ def own_expression(
     return out
 
 
+def pair_index(genes: Sequence[str], reference: Any) -> dict[str, np.ndarray]:
+    """The tables of ``pair_in_line`` on ``genes`` (and one last row for "no gene"),
+    from the linear model's reference: ``paralogs`` (genes + 1, k; each gene's
+    paralogs, closest first) and ``partners`` (its paralogs and complex co-members),
+    padded with the last row's position, and ``member`` (genes + 1, genes + 1, bool),
+    the partner relation in both directions."""
+    from src.linear_model.gene_features import partner_index
+
+    index = partner_index(genes, genes, reference)
+    count = len(genes)
+    member = np.zeros((count + 1, count + 1), bool)
+    for gene, partners in enumerate(index.partners):
+        member[gene, partners] = True
+    member |= member.T
+    np.fill_diagonal(member, False)
+
+    def padded(lists: Sequence[np.ndarray]) -> np.ndarray:
+        out = np.full((count + 1, max(1, *map(len, lists))), count)
+        for gene, listed in enumerate(lists):
+            out[gene, : len(listed)] = listed
+        return out
+
+    return {
+        "paralogs": padded(index.paralogs),
+        "partners": padded([np.flatnonzero(row) for row in member[:-1]]),
+        "member": member,
+    }
+
+
+def seen_only_in(rows: pd.DataFrame, lines: Sequence[str]) -> dict[str, int]:
+    """Per held-out side, the rows whose pair (study, ``gene_a``, ``gene_b``) has a
+    training row in ``lines`` and in no other training line: pairs that the model saw
+    in training and that the benchmark harness, which reads the split's training
+    lines alone, counts as new."""
+    keys = ["study_id", "gene_a", "gene_b"]
+    train = rows[rows["split"] == "train"]
+    inside = train["model_id"].isin(set(lines))
+    only = (
+        train.loc[inside, keys]
+        .drop_duplicates()
+        .merge(train.loc[~inside, keys].drop_duplicates(), how="left", indicator=True)
+    )
+    only = pd.MultiIndex.from_frame(only.loc[only["_merge"] == "left_only", keys])
+    return {
+        side: int(
+            pd.MultiIndex.from_frame(rows.loc[rows["split"] == side, keys])
+            .isin(only)
+            .sum()
+        )
+        for side in ("val", "test")
+    }
+
+
 def stage_one_lines(
     split: Any,
     bulk_labelled: Sequence[str],
@@ -1129,25 +1226,36 @@ def load_data(
 ) -> tuple[Data, Any, dict[str, Any]]:
     """The model's inputs on the SL split, the linear-model base they come from (for
     the definitions and GeneEffect) and the counts."""
+    from src.data.depmap import read_depmap_matrix
     from src.data.extra_lines import load_bulk_lines
     from src.data.splits import load_geneeffect_split
     from src.experiments.linear_model.base import base_on
     from src.experiments.linear_model.config import load_linear_model_config
     from src.experiments.sl.benchmark_baselines import benchmark_rows
     from src.experiments.sl.conditional import bridged_rows
+    from src.experiments.sl.gene_in_line import bulk_only_lines
+    from src.linear_model.space import quantile_normalize
 
     split_path = Path(config["split"])
     split = load_geneeffect_split(split_path)
+    share = config["space_measured_share"]
     base = base_on(
         load_linear_model_config(Path(config["linear_model"])),
         split,
         load_bulk_lines(split_path, split),
-        [*split.val, *split.test],
+        [*split.val, *split.test] if share is None else list(split.supervised_train),
         other_split=True,
+        space_share=1.0 if share is None else float(share),
     )
     genes = list(base.definitions.genes)
     labels = pd.read_parquet(config["labels"])
-    rows, dropped = benchmark_rows(labels, split, set(genes))
+    bulk_sl = []
+    if config["bulk_training_lines"]:
+        bulk_sl = bulk_only_lines(
+            split_path, split, set(labels.loc[labels["label"].notna(), "model_id"])
+        )
+    rows, dropped = benchmark_rows(labels, split, set(genes), bulk_sl)
+    bulk_sl = [m for m in bulk_sl if m in set(rows["model_id"])]
     _, bridged, _ = bridged_rows(base)
     with_cells = set(bridged.index)
     fit, stop, left_out = stage_one_lines(
@@ -1161,9 +1269,17 @@ def load_data(
     cell_lines = [m for m in bridged.index
                   if m in set(fit) | set(rows["model_id"])]  # fmt: skip
     bulk_lines = [m for m in fit if m not in with_cells]
-    lines = [*cell_lines, *bulk_lines]
+    lines = [*cell_lines, *bulk_lines, *bulk_sl]
     position = {m: i for i, m in enumerate(lines)}
-    expression = pd.concat([bridged.loc[cell_lines], base.bridge.bulk.loc[bulk_lines]])
+    parts = [bridged.loc[cell_lines], base.bridge.bulk.loc[bulk_lines]]
+    if bulk_sl:
+        # the linear model's training side leaves some lineages out, so these lines'
+        # bulk RNA is read here and normalised as the training side's
+        bulk = read_depmap_matrix(Path(base.config["paths"]["bulk_expression"]))
+        parts.append(
+            quantile_normalize(bulk.loc[bulk_sl, list(bridged.columns)], base.profile)
+        )
+    expression = pd.concat(parts)
     centre, scale = expression.loc[fit].mean(axis=0), expression.loc[fit].std(axis=0)
     expression = (expression - centre) / scale.where(scale > 0, 1.0)
     labelled = base.gene_effect.reindex(index=[*fit, *stop], columns=genes)
@@ -1178,7 +1294,9 @@ def load_data(
         None if cache is None else Path(cache), cell_lines, set(fit)
     )
     total = int(counts.sum())
-    offsets = np.concatenate([[0], np.cumsum(counts), [total] * len(bulk_lines)])
+    offsets = np.concatenate(
+        [[0], np.cumsum(counts), [total] * (len(bulk_lines) + len(bulk_sl))]
+    )
     with_rows = set(rows["model_id"])
     feature_lines = [m for m in lines if m in with_rows]
     in_line = {}
@@ -1191,6 +1309,12 @@ def load_data(
             in_line[name] = read_in_line(Path(path), feature_lines, genes, train)
     in_line_at = torch.full((len(lines),), -1)
     in_line_at[[position[m] for m in feature_lines]] = torch.arange(len(feature_lines))
+    pairs = None
+    if config["line_term"] is not None and config["line_term"]["pair_in_line"]:
+        pairs = {
+            name: torch.from_numpy(table).to(device)
+            for name, table in pair_index(genes, base.reference).items()
+        }
     gene_at = {g: i for i, g in enumerate(genes)}
     rows = rows.assign(
         line=rows["model_id"].map(position),
@@ -1216,6 +1340,7 @@ def load_data(
         scale=target_sd,
         in_line={n: torch.from_numpy(a).to(device) for n, a in in_line.items()},
         in_line_at=in_line_at.to(device),
+        pair_index=pairs,
     )
     counts_record = {
         "fit_lines": len(fit),
@@ -1229,6 +1354,8 @@ def load_data(
         "rows": {s: int((rows["split"] == s).sum()) for s in ("train", "val", "test")}
         | dropped,
         "training_rows": int(training_rows(rows).sum()),
+        "bulk_training_lines": len(bulk_sl),
+        "held_rows_seen_only_in_bulk_training_lines": seen_only_in(rows, bulk_sl),
         "in_line_coverage": {
             n: int(np.count_nonzero(a[:, :, -1])) for n, a in in_line.items()
         },
@@ -1449,7 +1576,14 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         f"lines: {counts['stop_lines']}. Cells: {counts['cells']:,}. Genes: "
         f"{counts['genes']:,}; with each source: "
         + ", ".join(f"{n} {c:,}" for n, c in counts["gene_source_coverage"].items())
-        + f". Stage-two training rows: {counts['training_rows']:,}.",
+        + f". Stage-two training rows: {counts['training_rows']:,}; bulk-RNA "
+        f"training lines: {counts['bulk_training_lines']}; held-out rows (validation "
+        "/ test) of a pair with a training row in those lines only: "
+        + " / ".join(
+            f"{counts['held_rows_seen_only_in_bulk_training_lines'][s]:,}"
+            for s in ("val", "test")
+        )
+        + ".",
         "",
     ]  # fmt: skip
     return "\n".join(lines) + "\n"

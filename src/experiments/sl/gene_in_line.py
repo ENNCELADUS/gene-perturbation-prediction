@@ -8,6 +8,9 @@ the PIE root of ``sl.pie_pass``). The CPU steps ``wide_expression``, ``cell_spre
 ``partner_low`` (the partner columns of ``knowledge_features`` on the wide expression),
 ``depmap_mutation`` and ``depmap_copy_number`` (DepMap's matrices) write a file of NaN
 rows for a line without the source; a percentile is fitted on the SL training lines.
+These CPU steps also write the bulk-only lines of the split file with a labelled row
+(``bulk_only_lines``): such a line has no cell file, so its wide expression is its
+DepMap bulk RNA, mapped gene by gene onto the pseudo-bulk (``wide_profiles``).
 
 Each cache is ``<out>/<step>/genes.json`` (the gene axis: the sorted genes of the label
 table) and ``<out>/<step>/<ModelID>.npy`` (genes x width, float16, a NaN row where the
@@ -67,6 +70,7 @@ def load_config(path: Path) -> dict[str, Any]:
             "pie",
             "ladder",
             "linear_model",
+            "bulk_expression",
             "depmap",
         },
         "config",
@@ -173,15 +177,83 @@ def split_of(config: Mapping[str, Any]) -> Any:
     return load_geneeffect_split(Path(config["split"]))
 
 
+def bulk_only_lines(split_path: Path, split: Any, labelled: set[str]) -> list[str]:
+    """The split file's bulk-only lines (``bulk_labelled``, ``bulk_unlabelled``) among
+    ``labelled`` (the lines with a labelled row): the SL model's bulk-RNA training
+    lines."""
+    from src.data.extra_lines import load_bulk_lines
+
+    extra = load_bulk_lines(Path(split_path), split)
+    return sorted(m for m in (*extra.labelled, *extra.unlabelled) if m in labelled)
+
+
+def fit_bulk_map(
+    bulk: np.ndarray, pseudobulk: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """For each gene (column), the least-squares slope and intercept of the
+    pseudo-bulk on the bulk value over the lines (rows) where both are finite; NaN
+    for a gene without two such lines or with one bulk value in all of them."""
+    both = np.isfinite(bulk) & np.isfinite(pseudobulk)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        count = both.sum(axis=0)
+        mean_x = np.where(both, bulk, 0.0).sum(axis=0) / count
+        mean_y = np.where(both, pseudobulk, 0.0).sum(axis=0) / count
+        x = np.where(both, bulk - mean_x, 0.0)
+        slope = (x * np.where(both, pseudobulk - mean_y, 0.0)).sum(axis=0) / np.square(
+            x
+        ).sum(axis=0)
+    return slope, mean_y - slope * mean_x
+
+
+def wide_profiles(
+    config: Mapping[str, Any], lines: Sequence[str]
+) -> tuple[list[str], dict[str, np.ndarray], np.ndarray, dict[str, int]]:
+    """The wide expression of ``lines`` over the ladder's source genes, each gene's
+    10th percentile over the SL training lines with a cell file among ``lines``, and
+    the counts of the bulk map. A line with a cell file has its pseudo-bulk. A line
+    without one that DepMap's bulk RNA holds has its bulk value mapped onto the
+    pseudo-bulk (``fit_bulk_map`` on the SL split's training lines with a cell file
+    and bulk RNA; a mapped value below 0 is 0). A line with neither has no entry."""
+    from src.data.depmap import read_depmap_matrix
+
+    split = split_of(config)
+    source, cells = read_cell_files(Path(config["ladder"]), lines)
+    profiles = {m: c["pseudobulk"] for m, c in cells.items()}
+    low = low_threshold(
+        np.stack(list(profiles.values())), np.isin(list(cells), split.train)
+    )
+    counts = {"lines_from_bulk": 0, "bulk_map_lines": 0}
+    if len(cells) < len(lines):
+        bulk = read_depmap_matrix(Path(config["bulk_expression"]))
+        bulk = bulk.reindex(columns=[g.upper() for g in source])
+        _, paired = read_cell_files(
+            Path(config["ladder"]), [m for m in split.train if m in bulk.index]
+        )
+        slope, intercept = fit_bulk_map(
+            bulk.loc[list(paired)].to_numpy(),
+            np.stack([c["pseudobulk"] for c in paired.values()]).astype(np.float64),
+        )
+        mapped = {
+            m: np.maximum(intercept + slope * bulk.loc[m].to_numpy(), 0.0)
+            for m in lines
+            if m not in cells and m in bulk.index
+        }
+        profiles |= {m: v.astype(np.float32) for m, v in mapped.items()}
+        counts = {"lines_from_bulk": len(mapped), "bulk_map_lines": len(paired)}
+    return source, profiles, low, counts
+
+
 def write_cache(
     out: Path,
     genes: Sequence[str],
     lines: Sequence[str],
     values: Mapping[str, np.ndarray],
     width: int,
+    counts: Mapping[str, int] | None = None,
 ) -> None:
     """One file for every line (axis genes x ``width``; a file of NaN rows for a
-    line without the source; a row with a NaN value is a NaN row) and the report."""
+    line without the source; a row with a NaN value is a NaN row) and the report
+    (with ``counts``, when given)."""
     open_cache(out, genes)
     with_value = np.zeros(len(genes), bool)
     for model_id in lines:
@@ -197,24 +269,26 @@ def write_cache(
             "lines": len(lines),
             "lines_with_source": sum(m in values for m in lines),
             "genes_with_value": int(with_value.sum()),
-        },
+        }
+        | dict(counts or {}),
     )
 
 
 def wide_expression(
     config: Mapping[str, Any], genes: Sequence[str], lines: Sequence[str]
 ) -> None:
-    """Per line with a cell file: the pseudo-bulk ``log1p(CP10K)`` of each axis gene
-    and a silenced flag (1.0 at or below the gene's 10th percentile over the SL
-    training lines with a cell file)."""
-    source, cells = read_cell_files(Path(config["ladder"]), lines)
-    pseudobulk = np.stack([c["pseudobulk"] for c in cells.values()])
-    low = low_threshold(pseudobulk, np.isin(list(cells), split_of(config).train))
+    """Per line with a wide profile (``wide_profiles``: the pseudo-bulk
+    ``log1p(CP10K)``, or the mapped bulk RNA of a line without a cell file): the value
+    of each axis gene and a silenced flag (1.0 at or below the gene's 10th percentile
+    over the SL training lines with a cell file)."""
+    source, profiles, low, counts = wide_profiles(config, lines)
     values = {
         m: on_axis(np.column_stack([p, p <= low]), source, genes)
-        for m, p in zip(cells, pseudobulk, strict=True)
+        for m, p in profiles.items()
     }
-    write_cache(Path(config["out"]) / "wide_expression", genes, lines, values, 2)
+    write_cache(
+        Path(config["out"]) / "wide_expression", genes, lines, values, 2, counts
+    )
 
 
 def cell_spread(
@@ -235,17 +309,17 @@ def cell_spread(
 def buffer_cache(
     config: Mapping[str, Any], genes: Sequence[str], lines: Sequence[str], step: str
 ) -> None:
-    """Per line with a cell file: the ``BUFFER_COLUMNS[step]`` columns of
-    ``knowledge_features`` of each axis gene on the lines' pseudo-bulk (paralog
-    minimum, sum and closest; complex mean; share of partners at or below their 10th
-    percentile over the SL training lines), with the linear model's reference."""
+    """Per line with a wide profile (``wide_profiles``): the ``BUFFER_COLUMNS[step]``
+    columns of ``knowledge_features`` of each axis gene on the lines' wide expression
+    (paralog minimum, sum and closest; complex mean; share of partners at or below
+    their 10th percentile over the SL training lines), with the linear model's
+    reference."""
     from src.linear_model.gene_features import knowledge_features, partner_index
     from src.linear_model.reference import load_reference
 
     split = split_of(config)
-    source, cells = read_cell_files(Path(config["ladder"]), lines)
-    pseudobulk = np.stack([c["pseudobulk"] for c in cells.values()])
-    low = low_threshold(pseudobulk, np.isin(list(cells), split.train))
+    source, profiles, low, counts = wide_profiles(config, lines)
+    pseudobulk = np.stack(list(profiles.values()))
     reference = load_reference(
         Path(read_yaml(Path(config["linear_model"]))["paths"]["reference"]),
         blocked={*split.val, *split.test},
@@ -257,8 +331,9 @@ def buffer_cache(
         Path(config["out"]) / step,
         genes,
         lines,
-        dict(zip(cells, features, strict=True)),
+        dict(zip(profiles, features, strict=True)),
         len(BUFFER_COLUMNS[step]),
+        counts,
     )
 
 
@@ -506,17 +581,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     config = load_config(args.config)
     genes, lines = axis_and_lines(config)
+    labels = pd.read_parquet(config["labels"], columns=["model_id", "label"])
+    # the CPU caches also hold the bulk-only lines with a labelled row
+    every = [
+        *lines,
+        *bulk_only_lines(
+            Path(config["split"]),
+            split_of(config),
+            set(labels.loc[labels["label"].notna(), "model_id"]),
+        ),
+    ]
     steps = {
         "tx1_gene": lambda: tx1_gene(config, genes, lines, args.shard),
         "pie_change": lambda: pie_change(config, genes, lines),
-        "wide_expression": lambda: wide_expression(config, genes, lines),
-        "cell_spread": lambda: cell_spread(config, genes, lines),
+        "wide_expression": lambda: wide_expression(config, genes, every),
+        "cell_spread": lambda: cell_spread(config, genes, every),
         **{
-            step: lambda step=step: buffer_cache(config, genes, lines, step)
+            step: lambda step=step: buffer_cache(config, genes, every, step)
             for step in BUFFER_COLUMNS
         },
-        "depmap_mutation": lambda: depmap_mutation(config, genes, lines),
-        "depmap_copy_number": lambda: depmap_copy_number(config, genes, lines),
+        "depmap_mutation": lambda: depmap_mutation(config, genes, every),
+        "depmap_copy_number": lambda: depmap_copy_number(config, genes, every),
     }
     steps[args.steps]()
     log.info("%s: done", args.steps)

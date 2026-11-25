@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 from src.experiments.sl import gene_in_line
@@ -22,6 +23,7 @@ def test_the_config_loads_and_an_unknown_step_is_refused():
     assert config["kind"] == "sl_gene_in_line" and config["pie"]["components"] == 64
     assert config["ladder"] == "data/geneeffect_joint/v2/ladder"
     assert set(config["depmap"]) == {"damaging", "hotspot", "copy_number"}
+    assert config["bulk_expression"].endswith("HumanProteinCodingGenes.csv")
     with pytest.raises(SystemExit):
         gene_in_line.main(["configs/sl/gene_in_line.yaml", "--steps", "cellnet"])
 
@@ -132,6 +134,16 @@ PSEUDOBULK = {
     "ACH-4": [-100.0, 7.0, 0.1, 9.0],
 }
 LINES = ["ACH-1", "ACH-2", "ACH-3", "ACH-4", "ACH-5"]
+# DepMap's bulk RNA: for the training lines, twice the pseudo-bulk plus 1 (TP53: one
+# value); the validation line would break that fit; ACH-6 is a bulk-only line and
+# ACH-5 (no cell file) has no bulk RNA
+BULK = {
+    "ACH-1": [3.0, 9.0, 2.0, 7.0],
+    "ACH-2": [5.0, 11.0, 4.0, 7.0],
+    "ACH-3": [7.0, 13.0, 6.0, 7.0],
+    "ACH-4": [50.0, -3.0, 9.0, 1.0],
+    "ACH-6": [3.0, 12.0, 0.0, 7.0],
+}
 
 
 def cell_world(path):
@@ -157,7 +169,15 @@ def cell_world(path):
         "test": ["ACH-5"],
     }
     (path / "split.json").write_text(json.dumps(split))
+    bulk = pd.DataFrame.from_dict(
+        BULK,
+        orient="index",
+        columns=[f"{g.upper()} ({k})" for k, g in enumerate(SOURCE)],
+    )
+    bulk.insert(0, "IsDefaultEntryForModel", "Yes")
+    bulk.rename_axis("ModelID").reset_index().to_csv(path / "bulk.csv", index=False)
     return {
+        "bulk_expression": str(path / "bulk.csv"),
         "seed": 0,
         "out": str(path / "out"),
         "ladder": str(path / "ladder"),
@@ -218,7 +238,11 @@ def test_a_line_without_a_cell_file_gets_nan_rows(tmp_path):
         values = cache_of(config, step, "ACH-5")
         assert values.shape == (len(AXIS), 2) and np.isnan(values).all()
         report = json.loads((tmp_path / "out" / step / "report.json").read_text())
-        assert report == {"lines": 5, "lines_with_source": 4, "genes_with_value": 4}
+        # no line of the bulk matrix lacks a cell file: none is mapped
+        mapped = {"lines_from_bulk": 0, "bulk_map_lines": 3}
+        assert report == {"lines": 5, "lines_with_source": 4, "genes_with_value": 4} | (
+            mapped if step == "wide_expression" else {}
+        )
         assert json.loads((tmp_path / "out" / step / "genes.json").read_text()) == AXIS
 
 
@@ -359,3 +383,51 @@ def test_a_line_without_depmap_data_gets_nan_rows(tmp_path):
         assert np.isnan(cache_of(config, step, "CVCL_0058")).all()
         report = json.loads((tmp_path / "out" / step / "report.json").read_text())
         assert report["lines"] == 3 and report["lines_with_source"] == 2
+
+
+def test_a_bulk_only_line_gets_its_bulk_rna_mapped_onto_the_pseudo_bulk(tmp_path):
+    import json
+
+    config = cell_world(tmp_path)
+    lines = [*LINES, "ACH-6"]
+    gene_in_line.wide_expression(config, AXIS, lines)
+    # the fit on the training lines is pseudo-bulk = (bulk - 1) / 2; a mapped value
+    # below 0 is 0; TP53's bulk value is the same in every training line: no fit
+    np.testing.assert_allclose(
+        cache_of(config, "wide_expression", "ACH-6"),
+        [[1.0, 1], [5.5, 0], [0.0, 1], [np.nan] * 2, [np.nan] * 2],
+        rtol=1e-3,
+    )
+    # the lines with a cell file keep their values, and the percentile its lines
+    np.testing.assert_allclose(
+        cache_of(config, "wide_expression", "ACH-1")[0], [1.0, 1], rtol=1e-3
+    )
+    assert np.isnan(cache_of(config, "wide_expression", "ACH-5")).all()
+    report = json.loads((tmp_path / "out/wide_expression/report.json").read_text())
+    assert report == {"lines": 6, "lines_with_source": 5, "genes_with_value": 4,
+                      "lines_from_bulk": 1, "bulk_map_lines": 3}  # fmt: skip
+    gene_in_line.cell_spread(config, AXIS, lines)
+    assert np.isnan(cache_of(config, "cell_spread", "ACH-6")).all()
+
+
+def test_the_buffer_caches_read_a_bulk_only_lines_mapped_expression(tmp_path):
+    config = buffer_world(tmp_path)
+    gene_in_line.buffer_cache(config, AXIS, [*LINES, "ACH-6"], "paralog_buffer")
+    # ATM's paralogs in ACH-6: BRCA1 5.5 (closest) and C1ORF1 0.0
+    np.testing.assert_allclose(
+        cache_of(config, "paralog_buffer", "ACH-6")[0], [0.0, 5.5, 5.5], rtol=1e-3
+    )
+
+
+def test_the_bulk_only_lines_are_the_split_files_labelled_ones():
+    import json
+    from pathlib import Path
+
+    path = Path("configs/benchmarks/cell_line_sl_split.json")
+    payload = json.loads(path.read_text())
+    split = gene_in_line.split_of({"split": str(path)})
+    labelled = {payload["bulk_labelled"][0], payload["bulk_unlabelled"][0],
+                payload["train"][0], "ACH-none"}  # fmt: skip
+    assert gene_in_line.bulk_only_lines(path, split, labelled) == sorted(
+        [payload["bulk_labelled"][0], payload["bulk_unlabelled"][0]]
+    )

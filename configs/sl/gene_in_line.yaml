@@ -20,6 +20,9 @@ pie: {root: data/sl_pie/v1, components: 64, sample: 200000}
 ladder: data/geneeffect_joint/v2/ladder
 # its paths.reference gives the paralog and complex tables of the buffer caches
 linear_model: configs/linear_model/default_linear_model.yaml
+# DepMap's bulk RNA: the wide expression of a labelled bulk-only line (no cell file), mapped gene by gene onto the
+# pseudo-bulk with a fit on the SL split's training lines that have a cell file and bulk RNA
+bulk_expression: data/sl_dependency_v0/raw/depmap/OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv
 # DepMap's damaging and hotspot mutation matrices and the gene-level log2 copy number
 depmap:
   damaging: data/sl_dependency_v0/raw/depmap/OmicsSomaticMutationsMatrixDamaging.csv

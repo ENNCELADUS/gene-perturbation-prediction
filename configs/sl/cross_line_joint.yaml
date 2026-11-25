@@ -10,6 +10,11 @@ task: embedding
 linear_model: configs/linear_model/default_linear_model.yaml
 labels: data/sl_studies/benchmark_v2/labels.parquet
 split: configs/benchmarks/cell_line_sl_split.json
+# the mean token's genes: null, the bulk genes that every held-out line measures; a share (0.5), the bulk genes that
+# at least that share of the labelled single-cell training lines measure (an unmeasured value takes the training mean)
+space_measured_share: null
+# true: the split file's bulk-only lines with a labelled row join stage two's training lines (bulk RNA, no cells)
+bulk_training_lines: false
 # frozen gene sources (hpc/run.sh gene-sources): function text, protein, network
 gene_sources:
   gene_text: data/geneeffect_joint/v2/ladder/gene_sources/gene_text.npz
@@ -56,5 +61,8 @@ line_term:
   input: model
   # the ranking loss between two training lines of one study for the same pair (one called it SL, one did not)
   cross_line: {weight: 0.5, examples_per_step: 256}
+  # true: the line head also reads the pair-in-line features (the paralogs other than the pair's other gene, the
+  # partners the two genes share, a silenced gene times the other gene's predicted dependency)
+  pair_in_line: false
   # no gene-in-line cache
   gene_in_line: {}

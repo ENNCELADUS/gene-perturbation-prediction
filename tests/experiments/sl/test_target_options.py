@@ -9,6 +9,7 @@ import pytest
 from src.experiments.sl.target_options import (
     harle_replicates,
     interaction,
+    ordering_ceiling,
     replicate_rows,
     with_score,
 )
@@ -77,3 +78,30 @@ def test_with_score_replaces_one_study_and_leaves_gaps_empty():
     out = with_score(labels(), "Harle2025", gi)["score"].to_numpy()
     assert out[:2].tolist() == [-1.0, 2.0] and np.isnan(out[2])
     assert with_score(labels(), "Other", gi)["score"].tolist() == [0.1, 0.2, 0.3]
+
+
+def test_the_ordering_ceiling_scores_one_replicate_against_anothers_calls():
+    """Two lines, one pair: replicate 1 calls it SL in M1 only; replicate 2's score
+    is lower (more SL) in M1, replicate 3's in M2."""
+    rows = []
+    for study, m1, m2, call in (
+        ("Harle2025|R1", -3.0, 0.0, 1.0), ("Harle2025|R2", -2.0, 0.5, 1.0),
+        ("Harle2025|R3", 0.5, -1.0, 0.0), ("Harle2025|R1+R2", -2.5, 0.25, 1.0),
+    ):  # fmt: skip
+        for model_id, score, label in (("M1", m1, call), ("M2", m2, 1.0 - call)):
+            rows.append(
+                {"study_id": study, "list_id": f"{study}|{model_id}",
+                 "model_id": model_id, "design": "combinatorial",
+                 "condition": "genetic", "gene_a": "A", "gene_b": "B",
+                 "score": score, "label": label}
+            )  # fmt: skip
+    records = ordering_ceiling(
+        pd.DataFrame(rows), {"M1": "train", "M2": "train"}, reps=10, seed=0
+    )
+    value = {(r["scored"][-2:], r["called"][-2:]): r["all"]["value"] for r in records}
+    assert len(records) == 7 and records[-1]["scored"] == "Harle2025|R1+R2"
+    assert value[("R2", "R1")] == 1.0 and value[("R1", "R2")] == 1.0
+    # replicate 3 calls M2; replicate 1's score is lower in M1: the wrong order
+    assert value[("R1", "R3")] == 0.0 and value[("R2", "R3")] == 0.0
+    assert records[0]["train"] == records[0]["all"] and "val" not in records[0]
+    assert records[0]["all"]["examples"] == 1 and "by_study" not in records[0]["all"]

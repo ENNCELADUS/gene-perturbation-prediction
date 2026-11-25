@@ -6,6 +6,7 @@ lines' pairs above random, and the inputs' readers fail closed."""
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 import math
 from pathlib import Path
@@ -36,7 +37,8 @@ SIDES = {"train": 8, "val": 4, "test": 4}
 LINE_CONFIG = CONFIG | {
     "line_term": {"reference_lines": 3, "max_epochs": 4, "patience": 2,
                   "learning_rate": 1.0e-2, "own_expression": True, "gene_in_line": {},
-                  "joint": False, "input": "model", "cross_line": None}
+                  "joint": False, "input": "model", "cross_line": None,
+                  "pair_in_line": False}
 }  # fmt: skip
 
 CROSS_CONFIG = LINE_CONFIG | {
@@ -181,7 +183,8 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
         "counts": {"fit_lines": 80, "fit_lines_with_cells": 40, "stop_lines": 8,
                    "sl_lines_left_out": 8, "patient_mates_left_out": 0, "cells": 1,
                    "genes": 30, "gene_source_coverage": {"knowledge": 29},
-                   "training_rows": 1},
+                   "training_rows": 1, "bulk_training_lines": 0,
+                   "held_rows_seen_only_in_bulk_training_lines": {"val": 0, "test": 0}},
         "sl_line_term": None, "line_term": None,
     }  # fmt: skip
     report = embedding.results_markdown(report_metrics)
@@ -258,8 +261,9 @@ def test_line_term_scores_follow_the_definition_row_by_row():
         def deviation(line: int, a: int, b: int, c: torch.Tensor) -> torch.Tensor:
             tokens = embedding.one_line(model, data, line, None, None)
             return model.line_term(
-                u[[a]], u[[b]], c, features(line, a), features(line, b), *tokens
-            )[0]
+                u[[a]], u[[b]], c, features(line, a), features(line, b),
+                torch.zeros(1, 0), *tokens,
+            )[0]  # fmt: skip
 
         def score(line: int, a: int, b: int, c: torch.Tensor) -> torch.Tensor:
             tokens = embedding.one_line(model, data, line, None, None)
@@ -588,7 +592,11 @@ def test_a_line_term_without_the_new_keys_is_refused(tmp_path: Path):
         == 1
     )
     for line, key in (("  joint: false\n", "joint"), ("  input: model\n", "input"),
-                      ("  cross_line: null\n", "cross_line")):  # fmt: skip
+                      ("  cross_line: null\n", "cross_line"),
+                      ("  pair_in_line: false\n", "pair_in_line"),
+                      ("space_measured_share: null\n", "space_measured_share"),
+                      ("bulk_training_lines: false\n", "bulk_training_lines"),
+                      ):  # fmt: skip
         assert line in text
         (tmp_path / "bad.yaml").write_text(text.replace(line, ""))
         with pytest.raises(ValueError, match=key):
@@ -599,6 +607,10 @@ def test_a_line_term_without_the_new_keys_is_refused(tmp_path: Path):
             "  cross_line: null\n", "  cross_line: {weight: 0.5}\n"
         ),
         "other_lines": text.replace("other_lines: 1", "other_lines: 0"),
+        # the pair-in-line features need the wide expression cache
+        "pair_in_line": text.replace(
+            "  pair_in_line: false\n", "  pair_in_line: true\n"
+        ),
     }
     for key, wrong in bad.items():
         (tmp_path / "bad.yaml").write_text(wrong)
@@ -616,7 +628,7 @@ def test_the_study_configs_differ_only_where_the_plan_says():
     assert base["line_term"] == {
         "reference_lines": 8, "max_epochs": 30, "patience": 5, "learning_rate": 1.0e-3,
         "own_expression": True, "gene_in_line": {}, "joint": False, "input": "model",
-        "cross_line": None,
+        "cross_line": None, "pair_in_line": False,
     }  # fmt: skip
     changes = {
         # four other-line controls: the reference of the cross-line study (§20)
@@ -710,3 +722,123 @@ def test_stage_one_fits_no_sl_line_and_no_line_of_an_sl_lines_patient():
         embedding.stage_one_lines(
             split, [], patient, {"S1"}, sl_train=set(), with_geneeffect=labelled
         )
+
+
+def test_the_context_rows_change_one_thing_from_the_wide_row():
+    """SL protocol §21: each config is ``cross_line_wide`` with one change."""
+    wide = embedding.load_config(Path("configs/sl/cross_line_wide.yaml"))
+    assert wide["space_measured_share"] is None and not wide["bulk_training_lines"]
+    assert wide["line_term"]["pair_in_line"] is False
+    for name, keys, value in (
+        ("cross_line_80_lines", ("bulk_training_lines",), True),
+        ("cross_line_wide_token", ("space_measured_share",), 0.5),
+        ("cross_line_pair_in_line", ("line_term", "pair_in_line"), True),
+    ):
+        expected = copy.deepcopy(wide)
+        target = expected
+        for key in keys[:-1]:
+            target = target[key]
+        target[keys[-1]] = value
+        assert embedding.load_config(Path(f"configs/sl/{name}.yaml")) == expected, name
+
+
+def test_the_harness_names_every_table_of_the_context_rows():
+    config = benchmark_baselines.load_config(
+        Path("configs/sl/benchmark_context_rows.yaml")
+    )
+    named = set(config["extra_scores"]) | set(config["scorer_means"])
+    assert named <= set(benchmark_baselines.NAMES)
+    own = {"labels", "random", "stage_one", "pan_essentiality", "measured_geneeffect"}
+    assert set(config["cross_line_ordering"]) <= set(config["extra_scores"]) | own
+    assert {n for pair in config["paired_differences"] for n in pair} <= named
+    for run in ("cross_80_lines", "cross_wide_token", "cross_pair_in_line"):
+        assert [run, "cross_wide"] in config["paired_differences"]
+        assert [run, f"{run}_other_lines"] in config["paired_differences"]
+
+
+def test_the_pair_tables_follow_the_reference():
+    from types import SimpleNamespace
+
+    reference = SimpleNamespace(
+        paralogs=pd.DataFrame({"gene": ["A", "A"], "paralog": ["C", "B"],
+                               "identity": [60.0, 40.0]}),
+        complexes=pd.DataFrame({"complex_id": [1, 1, 2, 2],
+                                "gene": ["A", "D", "B", "D"]}),
+    )  # fmt: skip
+    index = embedding.pair_index(["A", "B", "C", "D"], reference)
+    assert index["paralogs"][0].tolist() == [2, 1]  # closest first
+    assert (index["paralogs"][1:] == 4).all()  # padded with the row of "no gene"
+    member = index["member"]
+    assert member.shape == (5, 5) and (member == member.T).all()
+    assert not member.diagonal().any() and not member[4].any()
+    # B is a paralog of A in the table, so A is a partner of B; D joins A and B
+    assert np.flatnonzero(member[1]).tolist() == [0, 3]
+    assert index["partners"][1].tolist() == [0, 3, 4]
+    assert index["partners"][0].tolist() == [1, 2, 3]
+
+
+def test_the_pair_in_line_features_reach_the_line_term():
+    """With the pair tables, the line head has the wider input and the line term of
+    a pair changes when the line's expression of a paralog of one gene changes."""
+    data, *_ = world()
+    rng = np.random.default_rng(0)
+    wide = np.concatenate([rng.normal(size=(16, 30, 2)), np.ones((16, 30, 1))], axis=2)
+    wide = np.concatenate([wide, np.zeros((16, 1, 3))], axis=1)
+    data.in_line["wide_expression"] = torch.tensor(wide, dtype=torch.float16)
+    from types import SimpleNamespace
+
+    reference = SimpleNamespace(
+        paralogs=pd.DataFrame({"gene": ["G0"], "paralog": ["G2"], "identity": [50.0]}),
+        complexes=pd.DataFrame({"complex_id": [1, 1], "gene": ["G0", "G1"]}),
+    )
+    data.pair_index = {
+        k: torch.from_numpy(v)
+        for k, v in embedding.pair_index(data.genes, reference).items()
+    }
+    config = LINE_CONFIG | {
+        "line_term": LINE_CONFIG["line_term"] | {"pair_in_line": True}
+    }
+    torch.manual_seed(0)
+    model = embedding.build_model(config, data)
+    plain = embedding.build_model(
+        LINE_CONFIG, dataclasses.replace(data, pair_index=None)
+    )
+    assert (
+        model.line_head[0].in_features
+        == plain.line_head[0].in_features + embedding.PAIR_WIDTH
+    )
+    torch.nn.init.normal_(model.mean_token[-1].weight, std=0.5)
+    torch.nn.init.normal_(model.line_head[-1].weight, std=0.5)
+    line = data.lines.index("train0")
+    a, b, flag = torch.tensor([0, 3]), torch.tensor([1, 4]), torch.tensor([True, True])
+
+    def term() -> torch.Tensor:
+        with torch.no_grad():
+            u, tokens = (
+                model.gene_vectors(),
+                embedding.one_line(model, data, line, None, None),
+            )
+            return embedding.line_term_of(
+                model, data, u, model.line_vectors(), a, b, flag, line, tokens
+            )
+
+    before = term()
+    at = int(data.in_line_at[line])
+    data.in_line["wide_expression"][at, 2, 0] += 3.0  # G2, the other paralog of G0
+    after = term()
+    assert before[0] != after[0] and before[1] == after[1]
+    pairs = embedding.pair_rows(data, config)
+    scores = embedding.line_term_scores(model, data, pairs, np.arange(40), config)
+    assert np.isfinite(scores).all()
+
+
+def test_rows_seen_only_in_the_bulk_training_lines_are_counted():
+    rows = pd.DataFrame(
+        {"split": ["train", "train", "train", "val", "val", "test"],
+         "model_id": ["T", "B", "B", "V", "V", "X"], "study_id": "S",
+         "gene_a": ["A", "A", "C", "A", "C", "C"],
+         "gene_b": ["B", "B", "D", "B", "D", "D"]}
+    )  # fmt: skip
+    # (A, B) is also in the training line T; (C, D) is in the bulk line B alone
+    assert embedding.seen_only_in(rows, ["B"]) == {"val": 1, "test": 1}
+    assert embedding.seen_only_in(rows, []) == {"val": 0, "test": 0}

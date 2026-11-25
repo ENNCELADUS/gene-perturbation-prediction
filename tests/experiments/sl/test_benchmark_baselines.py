@@ -460,3 +460,15 @@ def test_a_scorer_mean_of_an_unknown_scorer_is_refused(tmp_path, tail):
     path = write_harness(tmp_path, "paired_differences: []\n" + tail)
     with pytest.raises(ValueError):
         load_config(path)
+
+
+def test_an_extra_training_line_gives_training_rows():
+    frame = labels()
+    split = FixedSplit(train=("T0",), val=(), test=("E0",), unlabeled_train=())
+    kept, dropped = benchmark_rows(frame, split, set(GENES))
+    assert "T1" not in set(kept["model_id"]) and dropped["rows_line_not_in_split"] > 0
+    more, dropped = benchmark_rows(frame, split, set(GENES), ["T1"])
+    assert set(more.loc[more["model_id"] == "T1", "split"]) == {"train"}
+    assert dropped["rows_line_not_in_split"] == int(
+        (~frame["model_id"].isin(["T0", "T1", "E0"]) & frame["label"].notna()).sum()
+    )

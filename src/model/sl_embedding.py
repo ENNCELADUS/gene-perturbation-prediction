@@ -11,7 +11,8 @@ cells in its own way, and a pair head on the gene-in-line embeddings.
                        u_A * u_B * sum_i w_i t_i^2 ; combinatorial])
     w_i      ~ alpha_Ai alpha_Bi, normalised over the cells
     e_g      = sum over gene-in-line sources n of E_n(x_g[n])
-    l(c, A, B) = line_head([phi(c, A, B) ; e_A + e_B ; |e_A - e_B| ; e_A * e_B])
+    l(c, A, B) = line_head([phi(c, A, B) ; e_A + e_B ; |e_A - e_B| ; e_A * e_B ;
+                            p(c, A, B)])
 
 ``phi`` is the input of the pair head (``features``). The line term ``l`` reads the
 gene-in-line features ``x_g`` of the two genes in the line; the line head ends in a
@@ -19,7 +20,9 @@ zero layer, so the untrained line term is 0. With ``line_input="genes"`` the lin
 reads no line token and no free deviation: ``phi`` is replaced by
 ``[u0_A + u0_B ; |u0_A - u0_B| ; u0_A * u0_B ; combinatorial]``, where ``u0_g`` is the
 gene encoder's output without ``r_g`` (``source_vectors``). Then the line term can
-change with the line only through the gene-in-line features.
+change with the line only through the gene-in-line features. ``p`` holds the
+pair-in-line features (``pair_in_line``; none when the model is built without them):
+what the line holds for the pair, not for each gene alone.
 
 ``z`` is the scaled GeneEffect stage one trains on; the pair head reads ``V`` and the
 cell tokens, never ``z``. The cells' weights are normalised over the cells alone, so
@@ -40,6 +43,69 @@ from src.model.stage_one import VIABILITY_WIDTH, GeneEncoder
 WIDTH = VIABILITY_WIDTH
 
 
+#: The width of ``pair_in_line``.
+PAIR_WIDTH = 12
+
+
+def pair_in_line(
+    a: Tensor,
+    b: Tensor,
+    combinatorial: Tensor,
+    value: Tensor,
+    silenced: Tensor,
+    present: Tensor,
+    z: Tensor,
+    paralogs: Tensor,
+    partners: Tensor,
+    member: Tensor,
+) -> Tensor:
+    """The pair-in-line features (rows, ``PAIR_WIDTH``) of rows (A, B) of one line.
+    ``a``, ``b``: gene positions (-1: no gene). Per gene of the line, each (genes +
+    1,) with a last row of zeros for "no gene": its expression ``value``, its
+    ``silenced`` flag (0 or 1), whether the line has the value (``present``, bool)
+    and its predicted dependency ``z``. ``paralogs`` and ``partners`` (genes + 1, k)
+    list each gene's paralogs and its partners (paralogs and complex co-members),
+    padded with the last row's position; ``member`` (genes + 1, genes + 1, bool) is
+    the partner relation, the same in both directions.
+
+    Columns: the largest and the mean expression of each gene's paralogs other than
+    the pair's other gene, as the sum and the absolute difference over the two genes
+    (0-3); the number of the two genes with such a paralog (4); over the partners
+    that A and B share: mean expression, share silenced, mean predicted dependency,
+    and whether there is one (5-8); silenced(A) z(B) + silenced(B) z(A) (9); for an
+    anchor row (A is the anchor): silenced(A) z(B) and z(B) (10-11). A paralog or
+    partner counts only where the line has its value. The same for (A, B) and
+    (B, A) on a combinatorial row."""
+
+    def rest(gene: Tensor, other: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        at = paralogs[gene]
+        ok = present[at] & (at != other[:, None]) & (at != gene[:, None])
+        values = value[at]
+        most = values.masked_fill(~ok, -torch.inf).amax(dim=1)
+        some = ok.any(dim=1)
+        mean = (values * ok).sum(dim=1) / ok.sum(dim=1).clamp(min=1)
+        return torch.where(some, most, 0.0), mean, some.to(values.dtype)
+
+    most_a, mean_a, some_a = rest(a, b)
+    most_b, mean_b, some_b = rest(b, a)
+    at = partners[a]
+    shared = member[b[:, None], at] & present[at]
+    count = shared.sum(dim=1).clamp(min=1)
+
+    def over(values: Tensor) -> Tensor:
+        return (values[at] * shared).sum(dim=1) / count
+
+    anchor = 1.0 - combinatorial.to(value.dtype)
+    return torch.stack(
+        [most_a + most_b, (most_a - most_b).abs(), mean_a + mean_b,
+         (mean_a - mean_b).abs(), some_a + some_b, over(value), over(silenced),
+         over(z), shared.any(dim=1).to(value.dtype),
+         silenced[a] * z[b] + silenced[b] * z[a], anchor * silenced[a] * z[b],
+         anchor * z[b]],
+        dim=1,
+    )  # fmt: skip
+
+
 def _zero_last(module: nn.Sequential) -> nn.Sequential:
     nn.init.zeros_(module[-1].weight)
     nn.init.zeros_(module[-1].bias)
@@ -49,7 +115,8 @@ def _zero_last(module: nn.Sequential) -> nn.Sequential:
 class GeneLineModel(nn.Module):
     """``sources`` maps a gene source to its vectors (genes x dim, zero where absent)
     and presence (genes,), on the model's gene axis; they are fixed inputs, kept as
-    buffers outside the checkpoint."""
+    buffers outside the checkpoint. ``pair_in_line``: the width of the pair-in-line
+    features the line head reads (0 for none)."""
 
     def __init__(
         self,
@@ -60,6 +127,7 @@ class GeneLineModel(nn.Module):
         head_hidden: int,
         gene_in_line: Mapping[str, int],
         line_input: str,
+        pair_in_line: int,
     ) -> None:
         super().__init__()
         if line_input not in ("model", "genes"):
@@ -89,7 +157,10 @@ class GeneLineModel(nn.Module):
         )
         self.line_head = _zero_last(
             nn.Sequential(
-                nn.Linear((7 if line_input == "model" else 6) * WIDTH + 1, head_hidden),
+                nn.Linear(
+                    (7 if line_input == "model" else 6) * WIDTH + 1 + pair_in_line,
+                    head_hidden,
+                ),
                 nn.GELU(),
                 nn.Linear(head_hidden, 1),
             )
@@ -217,15 +288,17 @@ class GeneLineModel(nn.Module):
         combinatorial: Tensor,
         in_line_a: Mapping[str, Tensor],
         in_line_b: Mapping[str, Tensor],
+        pair: Tensor,
         mean: Tensor,
         cells: Tensor | None,
         mask: Tensor | None,
     ) -> Tensor:
         """The line term (rows,) of rows (A, B) of one line. ``u_a``, ``u_b`` are rows
         of ``line_vectors``. ``in_line_a[name]`` (rows, width of ``name``) holds the
-        gene-in-line features of gene A; the other arguments are those of
-        ``features``. The ``genes`` input does not read ``mean``, ``cells`` and
-        ``mask``. The same for (A, B) and (B, A)."""
+        gene-in-line features of gene A; ``pair`` (rows, the model's pair-in-line
+        width; zero columns without them) holds the pair-in-line features; the other
+        arguments are those of ``features``. The ``genes`` input does not read
+        ``mean``, ``cells`` and ``mask``. The same for (A, B) and (B, A)."""
         e_a, e_b = torch.zeros_like(u_a), torch.zeros_like(u_b)
         for name, project in self.in_line.items():
             e_a = e_a + project(in_line_a[name])
@@ -238,5 +311,5 @@ class GeneLineModel(nn.Module):
                  combinatorial.unsqueeze(-1).to(u_a.dtype)],
                 dim=-1,
             )  # fmt: skip
-        psi = torch.cat([phi, e_a + e_b, (e_a - e_b).abs(), e_a * e_b], dim=-1)
+        psi = torch.cat([phi, e_a + e_b, (e_a - e_b).abs(), e_a * e_b, pair], dim=-1)
         return self.line_head(psi).squeeze(-1)

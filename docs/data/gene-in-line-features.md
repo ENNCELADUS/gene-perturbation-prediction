@@ -12,6 +12,15 @@ source / genes with a value in at least one line: `wide_expression` 86 / 18,905;
 `paralog_buffer` 86 / 12,550; `complex_buffer` 86 / 4,848; `partner_low` 86 / 14,604; `depmap_mutation` 79 / 17,851;
 `depmap_copy_number` 65 / 18,416. A DepMap column without a gene symbol (the row number, a bare Ensembl ID) is left out.
 
+Since 2026-11-25 the CPU steps from `wide_expression` on also write the split file's bulk-only lines with a labelled
+row (37 lines; SL protocol §21). Such a line has no cell file. Its `wide_expression` is its DepMap bulk RNA
+(`bulk_expression` in the config, `log2(TPM + 1)`), mapped onto the pseudo-bulk gene by gene: a least-squares line
+for each source gene, fitted on the SL split's training lines that have a cell file and bulk RNA; a mapped value below
+0 is 0, and a gene without a fit (not in the bulk matrix, or one bulk value in every fit line) is absent. The buffer
+caches read that mapped expression; `cell_spread` is absent for these lines. The 10th percentiles stay those of the
+SL training lines with a cell file, so the files of the other lines do not change. `report.json` of
+`wide_expression` and of the buffer caches also gives `lines_from_bulk` and `bulk_map_lines` (the lines of the fit).
+
 **Role.** The line term of the gene-knowledge, cell-set SL model reads one vector for each (line, gene) from each
 cache (`line_term.gene_in_line` of an SL embedding config; plan `docs/specs/2026-11-20-line-term-and-direct-target-plan.md`
 §4). Each vector tells how the gene is in that line.

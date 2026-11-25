@@ -531,6 +531,26 @@ done
 hpc/run.sh sl-baselines configs/sl/benchmark_cross_line.yaml --run-id benchmark_cross_line_seed0_v2
 ```
 
+The three rows of SL protocol §21 are the wide row with one change each: the bulk-RNA training lines
+(`cross_line_80_lines`), the wide mean token (`cross_line_wide_token`) and the pair-in-line features
+(`cross_line_pair_in_line`). The CPU cache steps also write the split file's bulk-only lines with a labelled row
+(bulk RNA mapped onto the pseudo-bulk; `bulk_expression` in the config), so the five wide caches are written again
+first; the files of the other lines do not change. Then three `sl-embedding` runs and the harness:
+
+```bash
+for STEP in wide_expression cell_spread paralog_buffer complex_buffer partner_low; do
+  OMP_NUM_THREADS=16 hpc/run.sh sl-gene-in-line configs/sl/gene_in_line.yaml --steps $STEP
+done
+i=0
+for NAME in cross_line_80_lines cross_line_wide_token cross_line_pair_in_line; do
+  CUDA_VISIBLE_DEVICES=$i setsid nohup hpc/run.sh sl-embedding configs/sl/$NAME.yaml --run-id ${NAME}_seed0 \
+    > outputs/launches/${NAME}_seed0.log 2>&1 < /dev/null &
+  i=$((i + 1))
+done
+# when the three runs have finished
+hpc/run.sh sl-baselines configs/sl/benchmark_context_rows.yaml --run-id benchmark_context_rows_seed0
+```
+
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw
 cells of each SL split line with labelled rows and writes, per line, the co-detection of each of its pairs (real and
 after each gene's counts are permuted across the cells) to `<prepared_root>/codetection/<ModelID>.parquet` (CPU,
@@ -660,7 +680,9 @@ OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 hpc/run.sh sl-line-sp
 `sl-target-options` (`src.experiments.sl.target_options`) uses the same statistics to compare four ways to make the
 training target less noisy: the continuous score against the SL call, the mean of several measurements, a weight
 from each pair's measurement error, and one score definition for all studies. It also reads the raw tables of Ito
-2021, Klingbeil 2024 and Harle 2025 (`raw` in the config); Harle's replicates give the repeat inside one study.
+2021, Klingbeil 2024 and Harle 2025 (`raw` in the config); Harle's replicates give the repeat inside one study,
+and the cross-line ordering that one replicate's score reaches against another replicate's calls (Table 2: the top
+of that harness measure in this study).
 Outputs: `outputs/sl/target_options/<run id>/results.md` and `metrics.json`.
 
 ```bash

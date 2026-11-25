@@ -1016,3 +1016,69 @@ score `s = f + D − mean over R of D` are those of §19.
   other-line controls were written from its `best.pt`. The five runs were started with `--device cpu`, because
   every GPU of both containers was in use by another project; the harness run `benchmark_cross_line_seed0` starts
   when the five runs have finished. No result yet.
+
+## 21. More training lines, a wide mean token and pair-in-line features (2026-11-25)
+
+`src/experiments/sl/embedding.py`, `src/model/sl_embedding.py`, `src/experiments/sl/gene_in_line.py`,
+`src/experiments/sl/target_options.py`, the three configs below, `configs/sl/benchmark_context_rows.yaml`; the
+[design](specs/2026-11-24-context-specific-sl-architecture-design.md) (§5.4, §5.5, §6) gives the reasons. §20 left
+one row of the study and two local changes open. Each is one config here, and each is the wide row of §20
+(`cross_line_wide.yaml`) with one change. The question of each row is the question of §20: does the score order a
+pair between two unseen lines?
+
+- **The bulk-RNA training lines** (`bulk_training_lines: true`, `cross_line_80_lines.yaml`). The split file's
+  bulk-only lines (`bulk_labelled`, `bulk_unlabelled`) with a labelled row join stage two's training lines: 37
+  lines, of which 36 have a genetic screen with both classes (32 labelled, 4 unlabelled; 80 training lines with
+  such a screen in place of 44). They share studies with the single-cell training lines (Flister 2025, Klingbeil
+  2024, Ito 2021, Ebright 2026, Najm 2023, Harle 2025) and add Chan 2025, so they add cross-line examples to those
+  studies. Such a line has no cells.
+  - *The mean token* reads the line's DepMap bulk RNA on the mean token's genes, quantile-normalised to the training
+    side's profile, as stage one's bulk-only fit lines are. 5 of the 36 lines are myeloid lines, which the linear
+    model's training side leaves out, so the runner reads the bulk matrix for these lines itself.
+  - *The wide expression* (`wide_expression`, and the buffer caches on it) is the bulk RNA mapped onto the
+    pseudo-bulk gene by gene: a least-squares line for each gene, fitted on the SL split's training lines that have
+    a cell file and bulk RNA (410 lines); a mapped value below 0 is 0. `cell_spread` is absent. The 10th percentiles
+    stay those of the SL training lines with a cell file, so the caches of the other lines do not change.
+  - *Stage one does not change.* Its fit lines hold no line with an SL label (928 lines), and its early-stop lines
+    are single-cell lines.
+  - *What the row does not show.* The model can tell these lines from the single-cell lines (no spread over cells,
+    another kind of expression), so the row reads as "more lines of another kind", not as a clean sample-size
+    effect. The harness reads the split's 44 training lines alone: a held-out pair that only the bulk-RNA lines
+    hold is a new pair in the harness, and the run's `results.md` gives the count of such rows. Another line's
+    input in the other-line control can be a bulk-RNA line's.
+- **The wide mean token** (`space_measured_share: 0.5`, `cross_line_wide_token.yaml`). The mean token reads the
+  bulk genes that at least half of the labelled single-cell training lines measure in pseudo-bulk (about 18,300),
+  not the 6,523 genes that every held-out line measures (`null`). It is the space of §13
+  (`conditional_wide.yaml`): a value that a line does not measure takes the training mean, the bridge is fitted on
+  the same genes, and stage one's bulk-only fit lines read the same genes of their bulk RNA. Stage one trains again
+  in the run, as in every run.
+- **The pair-in-line features** (`line_term.pair_in_line: true`, `cross_line_pair_in_line.yaml`;
+  `src.model.sl_embedding.pair_in_line`). The gene-in-line features describe each gene alone; these 12 values
+  describe the pair in the line, and the line head reads them beside its other inputs:
+  - the largest and the mean wide expression of each gene's paralogs other than the pair's other gene (for a
+    paralog pair, the buffer that is left when both genes are lost), as the sum and the absolute difference over
+    the two genes, and the number of the two genes that have such a paralog;
+  - over the partners that A and B share (paralogs and CORUM co-members of both): their mean wide expression, the
+    share of them that is silenced, their mean predicted dependency, and whether there is one;
+  - silenced(A) × z(B) + silenced(B) × z(A), where z is the predicted dependency;
+  - for an anchor row (A is the anchor): silenced(A) × z(B) and z(B).
+
+  The expression and the silenced flag are those of the `wide_expression` cache. The paralog and complex tables are
+  the linear model's reference tables (at most 10 paralogs for each gene). The predicted dependency is the model's
+  own stage-one output for the gene in the line, read without a gradient: it is out of sample for every SL line.
+  A partner counts only where the line measures it. The features are the same for (A, B) and (B, A) on a
+  combinatorial row. No STRING partner list is read, and no linear-model GeneEffect (that needs a wide linear model
+  refitted without every SL line).
+- **The top of the cross-line ordering** (`sl-target-options`, Table 2 of its report). Inside Harle 2025, the SL
+  calls of one replicate are the labels and the score of another replicate is the score (the six ordered pairs of
+  replicates), and the mean of replicates 1 and 2 is scored against the calls of replicate 3. The value is the
+  ordering that a second measurement of the same lines reaches: a model that follows the line cannot be expected
+  above it in this study. The benchmark's own calls come from the three replicates together, so their noise is
+  below one replicate's, and the true top is at or above the value with the mean of two.
+- **Rows.** One config each, seed 0, run id `<config>_seed0`:
+
+  | Config (`configs/sl/`) | The one change against `cross_line_wide.yaml` |
+  | --- | --- |
+  | `cross_line_80_lines.yaml` | `bulk_training_lines: true` |
+  | `cross_line_wide_token.yaml` | `space_measured_share: 0.5` |
+  | `cross_line_pair_in_line.yaml` | `line_term.pair_in_line: true` |

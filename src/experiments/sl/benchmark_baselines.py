@@ -153,6 +153,10 @@ NAMES = {
             ("cross_genes_input", "line head on the frozen-source gene vectors"),
             ("cross_wide", "wide expression and buffers of the two genes"),
             ("cross_depmap_dna", "with DepMap mutations and copy number"),
+            # SL protocol §21: the wide row with one change each
+            ("cross_80_lines", "wide row with the bulk-RNA training lines"),
+            ("cross_wide_token", "wide row with the wide mean token"),
+            ("cross_pair_in_line", "wide row with the pair-in-line features"),
         )
         for suffix, control in (
             ("", ""),
@@ -276,11 +280,17 @@ def non_cancer_lines(model: Path) -> set[str]:
 
 
 def benchmark_rows(
-    labels: pd.DataFrame, split: FixedSplit, genes: set[str]
+    labels: pd.DataFrame,
+    split: FixedSplit,
+    genes: set[str],
+    extra_train: Sequence[str] = (),
 ) -> tuple[pd.DataFrame, dict[str, int]]:
     """Labelled rows of split lines whose genes every scorer can read: both genes of a
-    pair, gene B of an anchor list (its anchor may be a drug)."""
-    side = {m: s for s in SIDES for m in getattr(split, s)}
+    pair, gene B of an anchor list (its anchor may be a drug). ``extra_train``: lines
+    outside the split's three sides whose rows are training rows (the SL model's
+    bulk-RNA training lines; the harness itself passes none)."""
+    side = {m: "train" for m in extra_train}
+    side |= {m: s for s in SIDES for m in getattr(split, s)}
     labelled = labels[labels["label"].notna()]
     in_split = labelled["model_id"].isin(side)
     known = labelled["gene_b"].isin(genes) & (
