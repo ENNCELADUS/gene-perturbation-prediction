@@ -950,7 +950,7 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         *ordering_table(metrics["cross_line_ordering"]),
         *metrics_table(rows, metrics["cross_line_ordering"], scorers),
         *agreement_lines(metrics["label_agreement"]),
-        "Every metric of each row set and line group are in `summary.csv`; each "
+        "Every metric of each row set and line group is in `summary.csv`; each "
         "line in `lines.csv`; each screen, the non-genetic ones included, in "
         "`lists.csv`.",
     ]  # fmt: skip
