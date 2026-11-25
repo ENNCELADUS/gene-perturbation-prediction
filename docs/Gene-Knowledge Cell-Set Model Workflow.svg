@@ -1,0 +1,344 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 820" width="2000" height="820" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" fill="#1a1a1a">
+<title>Gene-knowledge, cell-set model</title>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1a1a1a"/></marker>
+  <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a8d93"/></marker>
+  <marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1a1a1a"/></marker>
+  <symbol id="snow" viewBox="-12 -12 24 24">
+    <g stroke="#8a8d93" stroke-width="1.8" stroke-linecap="round" fill="none">
+      <g id="snowarm"><path d="M0,0 V-10 M0,-6 L-3,-9 M0,-6 L3,-9"/></g>
+      <use href="#snowarm" transform="rotate(60)"/><use href="#snowarm" transform="rotate(120)"/>
+      <use href="#snowarm" transform="rotate(180)"/><use href="#snowarm" transform="rotate(240)"/><use href="#snowarm" transform="rotate(300)"/>
+    </g>
+  </symbol>
+  <symbol id="doc" viewBox="0 0 30 38">
+    <path d="M2,2 H20 L28,10 V36 H2 z" fill="#fff" stroke="#444" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M20,2 V10 H28" fill="none" stroke="#444" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M7,16 H23 M7,21 H23 M7,26 H23 M7,31 H18" stroke="#444" stroke-width="1.8"/>
+  </symbol>
+  <symbol id="protein" viewBox="0 0 40 40">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6,30 C2,20 14,18 10,10 C8,5 16,3 18,9 C20,15 28,10 30,5" stroke="#2f5ea8" stroke-width="3.2"/>
+      <path d="M8,36 C14,30 12,24 20,22 C27,20 24,30 32,30 C38,30 36,20 34,16" stroke="#4a78c4" stroke-width="3.2"/>
+      <path d="M4,20 C10,22 16,28 22,26 C28,24 30,14 36,10" stroke="#1d3d73" stroke-width="2"/>
+      <path d="M12,6 C18,14 24,18 28,26 C30,31 26,36 20,36" stroke="#6b93d6" stroke-width="2.2"/>
+    </g>
+  </symbol>
+  <symbol id="net" viewBox="0 0 40 40">
+    <g stroke="#2f5ea8" stroke-width="1.6" fill="none"><path d="M6,14 L22,5 L35,20 L20,35 L6,14 M22,5 L20,35 M6,14 L35,20"/></g>
+    <g fill="#7FA9E3" stroke="#1d3d73" stroke-width="1.4"><circle cx="6" cy="14" r="3.6"/><circle cx="22" cy="5" r="3.6"/><circle cx="35" cy="20" r="3.6"/><circle cx="20" cy="35" r="3.6"/></g>
+  </symbol>
+  <symbol id="cell" viewBox="-20 -20 40 40"><circle r="17" fill="#fff" stroke="currentColor" stroke-width="3"/><circle r="8" fill="currentColor" opacity="0.8"/></symbol>
+  <g id="cells">
+    <use href="#cell" x="-20" y="-58" width="40" height="40" color="#E07A7A"/>
+    <use href="#cell" x="16" y="-48" width="40" height="40" color="#7CB77C"/>
+    <use href="#cell" x="-56" y="-34" width="40" height="40" color="#5E86D6"/>
+    <use href="#cell" x="-20" y="-20" width="40" height="40" color="#9B6FC2"/>
+    <use href="#cell" x="24" y="-14" width="40" height="40" color="#F0A56B"/>
+    <use href="#cell" x="-58" y="6" width="40" height="40" color="#F0A56B"/>
+    <use href="#cell" x="8" y="18" width="40" height="40" color="#5E86D6"/>
+    <use href="#cell" x="-28" y="26" width="40" height="40" color="#7CB77C"/>
+  </g>
+  <linearGradient id="heat" x1="0" x2="1">
+    <stop offset="0" stop-color="#0d2457"/><stop offset="0.45" stop-color="#4f86cf"/><stop offset="1" stop-color="#f4f8fd"/>
+  </linearGradient>
+  <linearGradient id="gauge" x1="0" x2="1">
+    <stop offset="0" stop-color="#8fca8a"/><stop offset="0.5" stop-color="#f2d36b"/><stop offset="1" stop-color="#e2766b"/>
+  </linearGradient>
+  <g id="mini-pipeline">
+    <rect x="0" y="0" width="178" height="175" rx="12" fill="#DCE6F5" stroke="#8FA7C8" stroke-width="2"/>
+    <rect x="10" y="12" width="34" height="34" rx="5" fill="#E6E8EB" stroke="#A6A7AB"/><use href="#doc" x="18" y="17" width="18" height="24"/>
+    <rect x="10" y="56" width="34" height="34" rx="5" fill="#E6E8EB" stroke="#A6A7AB"/><use href="#protein" x="12" y="58" width="30" height="30"/>
+    <use href="#map" transform="translate(56,14) scale(0.44)" fill="#8FB5E7" stroke="#3b6fc0"/>
+    <use href="#map" transform="translate(56,58) scale(0.44)" fill="#8FB5E7" stroke="#3b6fc0"/>
+    <path d="M44,32 H56 M44,76 H56 M91,32 H104 V52 M91,76 H104 V58" stroke="#1a1a1a" stroke-width="1.3" fill="none"/>
+    <circle cx="104" cy="55" r="5" fill="#fff" stroke="#1a1a1a" stroke-width="1.3"/>
+    <rect x="128" y="30" width="12" height="12" fill="#7FA9E3" stroke="#3b6fc0"/>
+    <path d="M134,42 V50 M109,55 H118 M134,55 H142" stroke="#1a1a1a" stroke-width="1.3"/>
+    <g stroke="#3b6fc0" stroke-width="1" fill="#C7DAF4"><rect x="118" y="50" width="8" height="10"/><rect x="126" y="50" width="8" height="10"/><rect x="134" y="50" width="8" height="10"/><rect x="142" y="50" width="8" height="10"/><rect x="150" y="50" width="8" height="10"/><rect x="158" y="50" width="8" height="10"/></g>
+    <use href="#cells" transform="translate(28,125) scale(0.36)"/>
+    <path d="M45,118 H50 V100 V132" stroke="#1a1a1a" stroke-width="1.3" fill="none"/>
+    <g fill="#7FA9E3"><rect x="55" y="112" width="4" height="12"/><rect x="61" y="104" width="4" height="20"/><rect x="67" y="108" width="4" height="16"/><rect x="73" y="116" width="4" height="8"/></g>
+    <use href="#map" transform="translate(83,105.5) scale(0.33)" fill="#8FB5E7" stroke="#3b6fc0"/>
+    <path d="M109.4,119 H123 M128,60 V113" stroke="#1a1a1a" stroke-width="1.3"/>
+    <circle cx="128" cy="119" r="5" fill="#fff" stroke="#1a1a1a" stroke-width="1.3"/>
+    <g stroke="#3b6fc0" stroke-width="1" fill="#C7DAF4"><rect x="138" y="114" width="8" height="10"/><rect x="146" y="114" width="8" height="10"/><rect x="154" y="114" width="8" height="10"/><rect x="162" y="114" width="8" height="10"/></g>
+    <path d="M133,119 H138" stroke="#1a1a1a" stroke-width="1.3"/>
+    <rect x="58" y="142" width="22" height="22" rx="3" fill="#E6E8EB" stroke="#A6A7AB"/><use href="#snow" x="62" y="146" width="14" height="14"/>
+    <path d="M50,135 V153 H56 M80,153 H90" stroke="#1a1a1a" stroke-width="1.3" fill="none"/>
+    <g fill="#7FA9E3" stroke="#3b6fc0"><rect x="92" y="147" width="11" height="11"/><rect x="106" y="147" width="11" height="11"/><rect x="132" y="147" width="11" height="11"/><rect x="146" y="147" width="11" height="11"/></g>
+    <text x="124" y="157" font-size="12" text-anchor="middle">···</text>
+  </g>
+  <path id="map" d="M0,0 L80,18 L80,64 L0,82 z" stroke-width="2" stroke-linejoin="round"/>
+</defs>
+
+<rect width="2000" height="820" fill="#fff"/>
+
+<!-- ============ PANEL A ============ -->
+<g id="panel-a">
+  <text x="25" y="64" font-size="38" font-weight="700">a</text>
+  <text x="75" y="64" font-size="31">Stage 1: gene-in-line embedding (pretrained on GeneEffect)</text>
+  <text transform="translate(50,238) rotate(-90)" font-size="29" text-anchor="middle">Gene g</text>
+  <text transform="translate(50,562) rotate(-90)" font-size="29" text-anchor="middle">Cell line c</text>
+
+  <!-- gene sources (frozen) -->
+  <g id="gene-sources" font-size="23" text-anchor="middle">
+    <rect x="68" y="102" width="180" height="78" rx="10" fill="#E6E8EB" stroke="#A6A7AB" stroke-width="2"/>
+    <use href="#doc" x="80" y="121" width="30" height="38"/>
+    <text x="170" y="138">function</text><text x="170" y="164">text</text>
+    <use href="#snow" x="226" y="105" width="17" height="17"/>
+
+    <rect x="68" y="197" width="180" height="78" rx="10" fill="#E6E8EB" stroke="#A6A7AB" stroke-width="2"/>
+    <use href="#protein" x="74" y="210" width="50" height="52"/>
+    <text x="172" y="232">ESM C</text><text x="172" y="258">600M</text>
+    <use href="#snow" x="226" y="200" width="17" height="17"/>
+
+    <rect x="68" y="292" width="180" height="78" rx="10" fill="#E6E8EB" stroke="#A6A7AB" stroke-width="2"/>
+    <use href="#net" x="76" y="309" width="42" height="42"/>
+    <text x="168" y="339">STRING</text>
+    <use href="#snow" x="226" y="295" width="17" height="17"/>
+  </g>
+
+  <!-- per-source MLPs (trained stage 1) -->
+  <g id="source-mlps" font-size="25" text-anchor="middle">
+    <use href="#map" x="290" y="100" fill="#8FB5E7" stroke="#3b6fc0"/>
+    <text x="330" y="150">MLP</text>
+    <use href="#map" x="290" y="195" fill="#8FB5E7" stroke="#3b6fc0"/>
+    <text x="330" y="245">MLP</text>
+    <use href="#map" x="290" y="289" fill="#8FB5E7" stroke="#3b6fc0"/>
+    <text x="330" y="339">MLP</text>
+  </g>
+  <g stroke="#1a1a1a" stroke-width="2.2" fill="none">
+    <path d="M248,141 H288" marker-end="url(#ah)"/>
+    <path d="M248,236 H288" marker-end="url(#ah)"/>
+    <path d="M248,330 H288" marker-end="url(#ah)"/>
+    <path d="M370,141 H400 Q408,141 408,149 V228 Q408,236 416,236 H439" marker-end="url(#ah)"/>
+    <path d="M370,236 H439" marker-end="url(#ah)"/>
+    <path d="M370,330 H400 Q408,330 408,322 V244 Q408,236 416,236"/>
+  </g>
+
+  <!-- r_g and sum -->
+  <rect x="442" y="125" width="38" height="38" fill="#7FA9E3" stroke="#3b6fc0" stroke-width="2"/>
+  <text x="489" y="151" font-size="26" font-weight="700">r<tspan font-size="18" dy="7">g</tspan></text>
+  <text x="522" y="142" font-size="22">(free per-</text>
+  <text x="522" y="167" font-size="22">gene offset)</text>
+  <path d="M461,163 V214" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <circle cx="461" cy="236" r="20" fill="#E6E8EB" stroke="#1a1a1a" stroke-width="2"/>
+  <path d="M451,236 H471 M461,226 V246" stroke="#1a1a1a" stroke-width="2.4"/>
+  <path d="M481,236 H523" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+
+  <!-- u_g vector -->
+  <text x="530" y="209" font-size="26"><tspan font-weight="700">u<tspan font-size="18" dy="7">g</tspan></tspan><tspan dy="-7" dx="6">(gene vector)</tspan></text>
+  <g stroke="#3b6fc0" stroke-width="1.5">
+    <rect x="525" y="224" width="22.75" height="24" fill="#A9C6EE"/><rect x="547.75" y="224" width="22.75" height="24" fill="#B3CCF0"/>
+    <rect x="570.5" y="224" width="22.75" height="24" fill="#BDD3F2"/><rect x="593.25" y="224" width="22.75" height="24" fill="#C7DAF4"/>
+    <rect x="616" y="224" width="22.75" height="24" fill="#D1E0F6"/><rect x="638.75" y="224" width="22.75" height="24" fill="#DBE7F8"/>
+    <rect x="661.5" y="224" width="22.75" height="24" fill="#E5EEFA"/><rect x="684.25" y="224" width="22.75" height="24" fill="#EFF4FC"/>
+  </g>
+  <path d="M707,236 H758 Q766,236 766,244 V358" stroke="#1a1a1a" stroke-width="2.2" fill="none" marker-end="url(#ah)"/>
+
+  <!-- gene-specific reading -->
+  <path d="M610,256 V312" stroke="#8a8d93" stroke-width="2.2" marker-end="url(#ahg)"/>
+  <text x="610" y="339" font-size="22" text-anchor="middle">α<tspan font-size="16" dy="6">g</tspan><tspan dy="-6" dx="6">(softmax over cells)</tspan></text>
+  <rect x="495" y="352" width="232" height="29" fill="url(#heat)" stroke="#8a8d93" stroke-width="1.2"/>
+  <g stroke="#ffffff" stroke-opacity="0.55" stroke-width="1">
+    <path d="M518.2,352 V381 M541.4,352 V381 M564.6,352 V381 M587.8,352 V381 M611,352 V381 M634.2,352 V381 M657.4,352 V381 M680.6,352 V381 M703.8,352 V381"/>
+  </g>
+  <text x="610" y="409" font-size="24" text-anchor="middle">gene-specific reading</text>
+  <text x="575" y="441" font-size="22" text-anchor="middle">query</text>
+  <path d="M610,420 V471" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+
+  <!-- product and V(g,c) -->
+  <circle cx="766" cy="380" r="20" fill="#E6E8EB" stroke="#1a1a1a" stroke-width="2"/>
+  <circle cx="766" cy="380" r="8" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+  <circle cx="766" cy="380" r="2.6" fill="#1a1a1a"/>
+  <path d="M786,380 H816" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <text x="917" y="295" font-size="29" font-weight="700" text-anchor="middle">V(g,c)</text>
+  <text x="917" y="324" font-size="23" text-anchor="middle">gene-in-line</text>
+  <text x="917" y="350" font-size="23" text-anchor="middle">embedding</text>
+  <rect x="819" y="359" width="198" height="42" rx="9" fill="#fff" stroke="#555" stroke-width="5"/>
+  <g stroke="#3b6fc0" stroke-width="1.5">
+    <rect x="829" y="369" width="22.25" height="22" fill="#8FB5E7"/><rect x="851.25" y="369" width="22.25" height="22" fill="#A0C0EB"/>
+    <rect x="873.5" y="369" width="22.25" height="22" fill="#B1CBEF"/><rect x="895.75" y="369" width="22.25" height="22" fill="#C2D6F3"/>
+    <rect x="918" y="369" width="22.25" height="22" fill="#D3E1F6"/><rect x="940.25" y="369" width="22.25" height="22" fill="#E1EAF8"/>
+    <rect x="962.5" y="369" width="22.25" height="22" fill="#EBF1FA"/><rect x="984.75" y="369" width="22.25" height="22" fill="#F4F8FC"/>
+  </g>
+  <path d="M917,403 V444" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <circle cx="917" cy="465" r="19" fill="#E6E8EB" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="917" y="474" font-size="24" text-anchor="middle">Σ</text>
+  <path d="M917,484 V510" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <rect x="847" y="512" width="140" height="58" rx="9" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="917" y="539" font-size="25" text-anchor="middle"><tspan font-weight="700">z</tspan>(g,c)</text>
+  <text x="917" y="562" font-size="18" text-anchor="middle" fill="#555">prediction</text>
+  <path d="M917,610 V574" stroke="#8a8d93" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#ahg)"/>
+  <rect x="830" y="612" width="175" height="84" rx="10" fill="#fff" stroke="#8a8d93" stroke-width="2" stroke-dasharray="7 5"/>
+  <g font-size="21" text-anchor="middle"><text x="917" y="637" font-weight="700">MSE loss</text><text x="917" y="661">vs standardised</text><text x="917" y="684">GeneEffect</text></g>
+
+  <!-- cell line lane -->
+  <use href="#cells" x="125" y="550"/>
+  <text x="127" y="645" font-size="23" text-anchor="middle">basal</text>
+  <text x="127" y="670" font-size="23" text-anchor="middle">scRNA-seq</text>
+  <path d="M185,525 Q200,525 202,510 Q205,493 225,493 H236" stroke="#1a1a1a" stroke-width="2.2" fill="none" marker-end="url(#ah)"/>
+  <path d="M192,580 Q202,582 204,600 Q206,628 222,628 H234" stroke="#1a1a1a" stroke-width="2.2" fill="none" marker-end="url(#ah)"/>
+
+  <g id="pseudobulk" fill="#7FA9E3" stroke="#3b6fc0" stroke-width="1.5">
+    <path d="M245,458 V529 H332" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+    <rect x="252" y="497" width="11" height="32"/><rect x="266" y="476" width="11" height="53"/>
+    <rect x="280" y="464" width="11" height="65"/><rect x="294" y="483" width="11" height="46"/>
+    <rect x="308" y="515" width="11" height="14"/>
+  </g>
+  <text x="287" y="557" font-size="24" text-anchor="middle">pseudo-bulk</text>
+  <path d="M338,493 H360" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <use href="#map" x="362" y="452" fill="#8FB5E7" stroke="#3b6fc0"/>
+  <text x="402" y="502" font-size="26" text-anchor="middle">MLP</text>
+  <path d="M442,493 H476" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <rect x="479" y="480" width="26" height="26" rx="3" fill="#7FA9E3" stroke="#3b6fc0" stroke-width="2"/>
+  <text x="482" y="535" font-size="25" font-weight="700">t<tspan font-size="17" dy="6" font-weight="400">0</tspan></text>
+  <text x="492" y="561" font-size="22" text-anchor="middle">(mean token)</text>
+  <path d="M505,493 H587" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <circle cx="609" cy="493" r="20" fill="#E6E8EB" stroke="#1a1a1a" stroke-width="2"/>
+  <path d="M599,493 H619 M609,483 V503" stroke="#1a1a1a" stroke-width="2.4"/>
+  <path d="M629,493 H663" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <g stroke="#3b6fc0" stroke-width="1.5">
+    <rect x="665" y="481" width="23" height="24" fill="#A9C6EE"/><rect x="688" y="481" width="23" height="24" fill="#BDD3F2"/>
+    <rect x="711" y="481" width="23" height="24" fill="#D1E0F6"/><rect x="734" y="481" width="23" height="24" fill="#E1EAF8"/>
+    <rect x="757" y="481" width="23" height="24" fill="#EFF4FC"/>
+  </g>
+  <path d="M766,481 V402" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <text x="700" y="533" font-size="25"><tspan font-weight="700">h<tspan font-size="17" dy="6">g</tspan></tspan><tspan dy="-6">(c)</tspan></text>
+
+  <rect x="236" y="586" width="104" height="98" rx="10" fill="#E6E8EB" stroke="#A6A7AB" stroke-width="2"/>
+  <use href="#snow" x="268" y="596" width="40" height="40"/>
+  <use href="#snow" x="317" y="589" width="18" height="18"/>
+  <text x="288" y="668" font-size="23" text-anchor="middle">Tx1-3B</text>
+  <path d="M340,628 H364" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <use href="#map" x="366" y="587" fill="#8FB5E7" stroke="#3b6fc0"/>
+  <text x="404" y="636" font-size="22" text-anchor="middle">Linear</text>
+  <path d="M446,628 H482" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <g fill="#7FA9E3" stroke="#3b6fc0" stroke-width="2">
+    <rect x="485" y="614" width="28" height="28" rx="3"/><rect x="519" y="614" width="28" height="28" rx="3"/><rect x="553" y="614" width="28" height="28" rx="3"/>
+    <rect x="638" y="614" width="28" height="28" rx="3"/><rect x="672" y="614" width="28" height="28" rx="3"/><rect x="706" y="614" width="28" height="28" rx="3"/>
+  </g>
+  <text x="609" y="634" font-size="28" text-anchor="middle">···</text>
+  <path d="M486,606 V598 H732 V606 M609,598 V515" stroke="#1a1a1a" stroke-width="2.2" fill="none" marker-end="url(#ah)"/>
+  <text x="521" y="671" font-size="25" font-weight="700">t<tspan font-size="17" dy="6" font-weight="400">1</tspan></text>
+  <text x="674" y="671" font-size="25" font-weight="700">t<tspan font-size="17" dy="6" font-weight="400">n</tspan></text>
+</g>
+
+<path d="M1043,22 V706" stroke="#c5c9c9" stroke-width="2"/>
+
+<!-- ============ PANEL B ============ -->
+<g id="panel-b">
+  <text x="1070" y="64" font-size="38" font-weight="700">b</text>
+  <text x="1120" y="64" font-size="31">Stage 2: SL pair head</text>
+
+  <use href="#mini-pipeline" x="1090" y="145"/>
+  <use href="#mini-pipeline" x="1090" y="413"/>
+  <text x="1090" y="131" font-size="22">Gene A pipeline (c)</text>
+  <text x="1090" y="622" font-size="22">Gene B pipeline (c)</text>
+
+  <path d="M1086,258 Q1040,370 1086,482" stroke="#555" stroke-width="2.2" fill="none" marker-start="url(#ahs)" marker-end="url(#ahs)"/>
+  <path d="M1136,330 Q1118,368 1136,406" stroke="#555" stroke-width="2.2" fill="none" marker-start="url(#ahs)" marker-end="url(#ahs)"/>
+  <path d="M1238,330 Q1256,368 1238,406" stroke="#555" stroke-width="2.2" fill="none" marker-start="url(#ahs)" marker-end="url(#ahs)"/>
+  <text x="1186" y="362" font-size="25" text-anchor="middle">shared</text>
+  <text x="1186" y="390" font-size="25" text-anchor="middle">weights</text>
+
+  <text x="1274" y="213" font-size="25" font-weight="700">V<tspan font-size="17" dy="6" font-weight="400">A</tspan><tspan dy="-6">, u</tspan><tspan font-size="17" dy="6" font-weight="400">A</tspan></text>
+  <path d="M1268,238 H1340" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <text x="1274" y="544" font-size="25" font-weight="700">V<tspan font-size="17" dy="6" font-weight="400">B</tspan><tspan dy="-6">, u</tspan><tspan font-size="17" dy="6" font-weight="400">B</tspan></text>
+  <path d="M1268,498 H1340" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+
+  <text x="1434" y="178" font-size="25" text-anchor="middle">symmetric</text>
+  <text x="1434" y="206" font-size="25" text-anchor="middle">pair features</text>
+  <rect x="1345" y="220" width="177" height="312" rx="14" fill="#FDCDA4" stroke="#DD9E7F" stroke-width="2.5"/>
+  <path d="M1355,284 H1512 M1355,334 H1512 M1355,384 H1512 M1355,486 H1512" stroke="#DD9E7F" stroke-width="1.8"/>
+  <g text-anchor="middle">
+    <text x="1434" y="263" font-size="26" font-weight="700">V<tspan font-size="17" dy="6" font-weight="400">A</tspan><tspan dy="-6" dx="6">+ V</tspan><tspan font-size="17" dy="6" font-weight="400">B</tspan></text>
+    <text x="1434" y="318" font-size="26">|V<tspan font-size="17" dy="6">A</tspan><tspan dy="-6" dx="6">− V</tspan><tspan font-size="17" dy="6">B</tspan><tspan dy="-6">|</tspan></text>
+    <text x="1434" y="368" font-size="26" font-weight="700">V<tspan font-size="17" dy="6" font-weight="400">A</tspan><tspan dy="-6" dx="6">⊙ V</tspan><tspan font-size="17" dy="6" font-weight="400">B</tspan></text>
+    <text x="1434" y="416" font-size="24">co-attended</text>
+    <text x="1434" y="443" font-size="24">cells</text>
+    <text x="1434" y="473" font-size="22">(w<tspan font-size="15" dy="5">i</tspan><tspan dy="-5" dx="6">∝ α</tspan><tspan font-size="15" dy="5">Ai</tspan><tspan dy="-5">·α</tspan><tspan font-size="15" dy="5">Bi</tspan><tspan dy="-5">)</tspan></text>
+    <text x="1434" y="516" font-size="24">screen type</text>
+  </g>
+
+  <path d="M1522,370 H1550" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+  <use href="#map" x="1552" y="329" fill="#FBB57F" stroke="#DD9E7F"/>
+  <text x="1590" y="379" font-size="25" text-anchor="middle">MLP</text>
+  <path d="M1632,370 H1640" stroke="#1a1a1a" stroke-width="2.2"/>
+
+  <g id="gauge">
+    <path d="M1645,378 A45,45 0 0 1 1735,378" fill="none" stroke="url(#gauge)" stroke-width="12"/>
+    <path d="M1639,378 A51,51 0 0 1 1741,378" fill="none" stroke="#555" stroke-width="1.5"/>
+    <path d="M1690,378 L1718,346" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="1690" cy="378" r="6" fill="#1a1a1a"/>
+  </g>
+  <g text-anchor="middle">
+    <text x="1690" y="411" font-size="24">SL score</text>
+    <text x="1690" y="438" font-size="24"><tspan font-weight="700">s</tspan>(c,A,B)</text>
+    <text x="1690" y="466" font-size="21">same score for</text>
+    <text x="1690" y="491" font-size="21">(A,B) and (B,A)</text>
+  </g>
+  <path d="M1752,370 H1792" stroke="#1a1a1a" stroke-width="2.2" marker-end="url(#ah)"/>
+
+  <rect x="1610" y="560" width="160" height="66" rx="10" fill="#fff" stroke="#8a8d93" stroke-width="2" stroke-dasharray="7 5"/>
+  <text x="1690" y="587" font-size="21" text-anchor="middle" font-weight="700">BCE loss</text>
+  <text x="1690" y="613" font-size="21" text-anchor="middle">vs SL call</text>
+  <path d="M1690,558 V501" stroke="#8a8d93" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#ahg)"/>
+
+  <text x="1083" y="686" font-size="24">Training in two phases:</text>
+  <text x="1083" y="723" font-size="22">① train the head on the frozen model → ② fine-tune everything, keep the GeneEffect loss</text>
+</g>
+
+<!-- ============ PANEL C ============ -->
+<g id="panel-c">
+  <text x="1640" y="64" font-size="38" font-weight="700">c</text>
+  <text x="1688" y="64" font-size="31">Evaluation on</text>
+  <text x="1688" y="103" font-size="31">held-out cell lines</text>
+  <text x="1812" y="153" font-size="24" text-anchor="middle">17 validation / 16 test lines</text>
+  <text x="1812" y="179" font-size="22" text-anchor="middle">(never seen in training)</text>
+  <use href="#cells" transform="translate(1712,243) scale(0.72)"/>
+  <path d="M1752,252 L1790,270" stroke="#8a8d93" stroke-width="2.2" marker-end="url(#ahg)"/>
+
+  <g id="ranked-list">
+    <rect x="1800" y="254" width="116" height="106" fill="#EEF0F2"/>
+    <path d="M1812,258 V492" stroke="#555" stroke-width="2" stroke-dasharray="2 6"/>
+    <g fill="#9a9ca1" stroke="#555" stroke-width="1.3">
+      <rect x="1825" y="258" width="90" height="12"/><rect x="1825" y="274" width="83" height="12"/>
+      <rect x="1825" y="290" width="76" height="12"/><rect x="1825" y="306" width="70" height="12"/>
+      <rect x="1825" y="322" width="63" height="12"/><rect x="1825" y="338" width="56" height="12"/>
+    </g>
+    <g fill="#fff" stroke="#555" stroke-width="1.3">
+      <rect x="1825" y="366" width="46" height="12"/><rect x="1825" y="382" width="40" height="12"/>
+      <rect x="1825" y="398" width="35" height="12"/><rect x="1825" y="414" width="31" height="12"/>
+      <rect x="1825" y="430" width="27" height="12"/><rect x="1825" y="446" width="24" height="12"/>
+      <rect x="1825" y="462" width="21" height="12"/><rect x="1825" y="478" width="18" height="12"/>
+    </g>
+    <path d="M1922,258 Q1932,258 1932,268 V298 Q1932,306 1940,306 Q1932,306 1932,314 V344 Q1932,354 1922,354" stroke="#1a1a1a" stroke-width="2" fill="none"/>
+    <text x="1946" y="300" font-size="25">top</text>
+    <text x="1940" y="332" font-size="25">10%</text>
+  </g>
+  <text x="1785" y="538" font-size="25">· recall in top 10%</text>
+  <text x="1785" y="569" font-size="25">· AUROC</text>
+  <text x="1785" y="600" font-size="25">· AUPRC</text>
+  <text x="1120" y="97" font-size="24">training: 44 lines</text>
+</g>
+
+<!-- ============ LEGEND ============ -->
+<g id="legend" font-size="28">
+  <rect x="0" y="750" width="2000" height="70" fill="#EEF0F2"/>
+  <path d="M0,750 H2000" stroke="#555" stroke-width="2"/>
+  <text x="25" y="797" font-weight="700">Legend:</text>
+  <rect x="200" y="771" width="38" height="36" rx="7" fill="#E6E8EB" stroke="#A6A7AB" stroke-width="2"/>
+  <use href="#snow" x="207" y="777" width="24" height="24"/>
+  <text x="250" y="797">frozen, not trained</text>
+  <rect x="560" y="771" width="38" height="36" rx="7" fill="#C7DAF4" stroke="#3b6fc0" stroke-width="2"/>
+  <text x="610" y="797">trained in stage 1, fine-tuned in stage 2</text>
+  <rect x="1140" y="771" width="38" height="36" rx="7" fill="#FDCDA4" stroke="#DD9E7F" stroke-width="2"/>
+  <text x="1190" y="797">trained in stage 2</text>
+  <path d="M1460,789 H1520" stroke="#1a1a1a" stroke-width="2.5" marker-end="url(#ah)"/>
+  <text x="1532" y="797">data flow</text>
+  <path d="M1720,789 H1780" stroke="#8a8d93" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#ahg)"/>
+  <text x="1792" y="797">training only</text>
+</g>
+</svg>

@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1850 955" width="1850" height="955" role="img" aria-labelledby="t" xml:space="preserve">
+<title id="t">The gene-knowledge, cell-set model</title>
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker>
+</defs>
+<style>
+text{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:16px;fill:#1a1a1a;text-anchor:middle}
+.sm{font-size:14.5px}.xs{font-size:13px}.b{font-weight:700}
+.ttl{font-size:21px;font-weight:700}.h{font-size:19px;font-weight:700}.l{text-anchor:start}.gray{fill:#666}
+.ln{fill:none;stroke:#111;stroke-width:1.8}.dash{stroke-dasharray:6 5}
+.p1{fill:#d6e8fc;stroke:#11253d;stroke-width:2}
+.b1{fill:#c4dbf7;stroke:#3e4d60;stroke-width:1.6}
+.fr{fill:#bcd5f4;stroke:#11253d;stroke-width:1.6}
+.rd{fill:#e4effc;stroke:#3e4d60;stroke-width:1.6}
+.rv{fill:#9fc3ee;stroke:#11253d;stroke-width:2}
+.pr{fill:#e9f1fb;stroke:#151515;stroke-width:1.8}
+.pill{fill:#ebebed;stroke:#9a9ca0;stroke-width:1.2}
+.wb{fill:#f8f8f8;stroke:#151515;stroke-width:1.6}
+.p2{fill:#dff2d9;stroke:#224213;stroke-width:2}
+.b2{fill:#d4ecc3;stroke:#182417;stroke-width:1.6}
+.lr{fill:#c7e6b6;stroke:#1d3112;stroke-width:1.8}
+.ev{fill:#f5f5f5;stroke:#1b1b1c;stroke-width:1.8}
+.evb{fill:#fbfbfb;stroke:#1b1b1c;stroke-width:1.6}
+.lg{fill:#fff;stroke:#333;stroke-width:1.5}
+</style>
+<rect width="1850" height="955" fill="#fff"/>
+
+<!-- Row 1: stage 1 -->
+<g id="stage1-inputs">
+<rect class="wb" x="20" y="80" width="180" height="220" rx="13"/>
+<tex x="110" y="112" size="16">\textbf{Gene} $g$</tex>
+<rect class="pill" x="35" y="130" width="150" height="34" rx="10"/>
+<text class="sm" x="110" y="152">function text</text>
+<rect class="pill" x="35" y="180" width="150" height="34" rx="10"/>
+<text class="sm" x="110" y="202">ESM C 600M protein</text>
+<rect class="pill" x="35" y="230" width="150" height="34" rx="10"/>
+<text class="sm" x="110" y="252">STRING network</text>
+<text class="xs gray" x="110" y="286">frozen; each centred</text>
+
+<rect class="wb" x="20" y="330" width="180" height="185" rx="13"/>
+<text x="110" y="405">Basal scRNA-seq</text>
+<tex x="110" y="427" size="16">of cell line $c$</tex>
+<circle cx="84" cy="455" r="6" fill="#3b7ddb"/><circle cx="110" cy="455" r="6" fill="#3b7ddb"/><circle cx="136" cy="455" r="6" fill="#3b7ddb"/>
+
+<rect class="wb" x="225" y="330" width="170" height="90" rx="10"/>
+<text class="xs" x="310" y="357">Pseudo-bulk of the cells,</text>
+<text class="xs" x="310" y="376">bridged to bulk space</text>
+<text class="xs gray" x="310" y="404">(bulk-only line: bulk RNA)</text>
+<rect class="wb" x="225" y="428" width="170" height="87" rx="10"/>
+<text class="xs" x="310" y="452">Frozen Tx1-3B vector</text>
+<text class="xs" x="310" y="471">of each cell, centred on</text>
+<text class="xs" x="310" y="490">the fit lines’ mean cell</text>
+<path class="ln" d="M200,375 H224" marker-end="url(#ah)"/>
+<path class="ln" d="M200,470 H224" marker-end="url(#ah)"/>
+</g>
+
+<g id="stage1">
+<rect class="p1" x="420" y="20" width="1190" height="500" rx="14"/>
+<text class="ttl l" x="440" y="54">Stage 1: gene-knowledge, cell-set model <tspan class="gray" style="font-size:16px;font-weight:400">(width 32), pretrained on GeneEffect</tspan></text>
+
+<rect class="b1" x="445" y="110" width="210" height="165" rx="10"/>
+<text class="b" x="550" y="140">Gene encoder</text>
+<tex x="550" y="182" size="18">$u_g = \sum_{s} P_s(k_{gs}) + r_g$</tex>
+<tex x="550" y="216" size="13" fill="#666">$P_s$: projection of source $s$</tex>
+<tex x="550" y="238" size="13" fill="#666">$r_g$: free vector per gene,</tex>
+<text class="xs gray" x="550" y="256">zero at the start</text>
+
+<rect class="b1" x="445" y="330" width="210" height="185" rx="10"/>
+<text class="b" x="550" y="352">Line encoder</text>
+<tex x="550" y="378" size="17">$t_0 = \mathrm{MLP}(\text{pseudo-bulk})$</tex>
+<text class="xs gray" x="550" y="396">mean token</text>
+<tex x="550" y="426" size="15">$t_i = \mathrm{Linear}(\mathrm{RMSNorm}(e_i))$</tex>
+<tex x="550" y="447" size="13" fill="#666">$e_i$: Tx1-3B vector of cell $i$</tex>
+<text class="xs gray" x="550" y="465">one token per cell, any number</text>
+<tex x="550" y="498" size="13" fill="#666">bulk-only line: $t_0$ alone</tex>
+
+<!-- gene-specific reading: three steps -->
+<rect class="fr" x="680" y="205" width="710" height="195" rx="10"/>
+<text class="b sm" x="1055" y="228">Gene-specific reading</text>
+
+<rect class="rd" x="700" y="245" width="225" height="130" rx="10"/>
+<text class="b sm" x="812" y="268">Weights on the cells</text>
+<tex x="812" y="304" size="16" v="mid">$\alpha_{gi} = \mathrm{softmax}_i\!\left(\dfrac{(W_q u_g)^{\top} t_i}{\sqrt{32}}\right)$</tex>
+<tex x="812" y="346" size="13" fill="#666">gene $g$'s weight on cell $i$;</tex>
+<text class="xs gray" x="812" y="363">sum 1 over the cells</text>
+
+<rect class="rd" x="960" y="245" width="190" height="130" rx="10"/>
+<tex x="1055" y="268" size="14.5">\textbf{Line seen by gene} $g$</tex>
+<tex x="1055" y="304" size="17" v="mid">$h_g(c) = t_0 + \sum_i \alpha_{gi}\, t_i$</tex>
+<text class="xs gray" x="1055" y="346">mean token plus the</text>
+<text class="xs gray" x="1055" y="363">weighted cell tokens</text>
+
+<rect class="rv" x="1185" y="245" width="190" height="130" rx="10"/>
+<text class="b sm" x="1280" y="268">Gene-in-line embedding</text>
+<tex x="1280" y="304" size="17" v="mid">$V(g,c) = u_g \odot h_g(c)$</tex>
+<text class="xs gray" x="1280" y="346">product entry by entry,</text>
+<text class="xs gray" x="1280" y="363">32 numbers</text>
+
+<!-- gene bus and token bus -->
+<path class="ln" d="M655,192 H1280 V244" marker-end="url(#ah)"/>
+<path class="ln" d="M812,192 V244" marker-end="url(#ah)"/>
+<circle cx="812" cy="192" r="3.5" fill="#111"/>
+<tex x="690" y="184" size="18">$u_g$</tex>
+<path class="ln" d="M655,425 H1055 V376" marker-end="url(#ah)"/>
+<path class="ln" d="M812,425 V376" marker-end="url(#ah)"/>
+<circle cx="812" cy="425" r="3.5" fill="#111"/>
+<tex x="712" y="447" size="18">$t_0, \dots, t_n$</tex>
+
+<path class="ln" d="M925,304 H959" marker-end="url(#ah)"/>
+<path class="ln" d="M1150,304 H1184" marker-end="url(#ah)"/>
+
+<rect class="pr" x="1420" y="260" width="175" height="88" rx="10"/>
+<text class="b sm" x="1507" y="283">Stage 1 output</text>
+<tex x="1507" y="310" size="17">$z(g,c) = \sum_k V_k(g,c)$</tex>
+<text class="xs gray" x="1507" y="333">not read by the pair head</text>
+<path class="ln" d="M1375,304 H1419" marker-end="url(#ah)"/>
+
+<path class="ln" d="M185,147 H444" marker-end="url(#ah)"/>
+<path class="ln" d="M185,197 H444" marker-end="url(#ah)"/>
+<path class="ln" d="M185,247 H444" marker-end="url(#ah)"/>
+<path class="ln" d="M395,375 H444" marker-end="url(#ah)"/>
+<path class="ln" d="M395,470 H444" marker-end="url(#ah)"/>
+</g>
+
+<g id="target">
+<rect class="wb dash" x="1630" y="230" width="205" height="150" rx="10" style="fill:#fff"/>
+<text class="xs b" x="1732" y="252">Target</text>
+<tex x="1732" y="285" size="15" v="mid">$\dfrac{\text{GeneEffect}(g,c) - m_g}{\sigma_g}$</tex>
+<text class="xs" x="1732" y="324">mean squared error;</text>
+<text class="xs" x="1732" y="343">fit lines: no SL label, and</text>
+<text class="xs" x="1732" y="362">no patient-mate with one</text>
+<path class="ln dash" d="M1630,304 H1596" marker-end="url(#ah)"/>
+</g>
+
+<!-- Row 2: stage 2 -->
+<g id="stage2">
+<rect class="wb" x="20" y="820" width="210" height="72" rx="10"/>
+<text class="b sm" x="125" y="843">Screen row</text>
+<tex x="125" y="862" size="13">genes $A$, $B$ in line $c$;</tex>
+<text class="xs" x="125" y="879">screen type; SL call</text>
+
+<rect class="p2" x="260" y="560" width="1005" height="375" rx="14"/>
+<text class="ttl l" x="280" y="594">Stage 2: pair head</text>
+<text class="xs l" x="280" y="628">Binary cross-entropy on the SL call.</text>
+<text class="xs l" x="280" y="646">Rows: the genetic screens of the</text>
+<text class="xs l" x="280" y="664">44 training lines that have both</text>
+<text class="xs l" x="280" y="682">classes; each line, study, screen</text>
+<text class="xs l" x="280" y="700">and class weighted equally.</text>
+<text class="xs l" x="280" y="728">First the head on the frozen</text>
+<text class="xs l" x="280" y="746">model, then the whole model,</text>
+<text class="xs l" x="280" y="764">with the GeneEffect loss kept.</text>
+
+<tex x="645" y="611" size="13" fill="#666">from stage 1, for genes $A$ and $B$</tex>
+<path class="ln" d="M230,856 H549" marker-end="url(#ah)"/>
+
+<rect class="b1" x="550" y="620" width="190" height="48" rx="10"/>
+<tex x="645" y="650" size="18">$V(A,c),\; V(B,c)$</tex>
+<rect class="b1" x="550" y="680" width="190" height="48" rx="10"/>
+<tex x="645" y="710" size="18">$u_A,\; u_B$</tex>
+<rect class="b1" x="550" y="740" width="190" height="80" rx="10"/>
+<tex x="645" y="769" size="14" v="mid">$w_i = \dfrac{\alpha_{Ai}\,\alpha_{Bi}}{\sum_j \alpha_{Aj}\,\alpha_{Bj}}$</tex>
+<tex x="645" y="810" size="13">and cell tokens $t_i$</tex>
+<rect class="b2" x="550" y="832" width="190" height="48" rx="10"/>
+<text class="sm" x="645" y="852">screen type:</text>
+<text class="sm" x="645" y="870">pair or anchor</text>
+
+<path class="ln" d="M740,644 H765 M740,704 H765 M740,780 H765 M740,856 H765 M765,644 V856"/>
+<path class="ln" d="M765,751 H789" marker-end="url(#ah)"/>
+
+<rect class="b2" x="790" y="620" width="230" height="262" rx="10"/>
+<text class="b" x="905" y="644">Pair features</text>
+<tex x="905" y="748" size="15" v="mid">$\renewcommand{\arraystretch}{1.7}\left[\begin{array}{c} V_A + V_B \\ |V_A - V_B| \\ V_A \odot V_B \\ u_A \odot u_B \odot \sum_i w_i\,(t_i \odot t_i) \\ \text{screen type} \end{array}\right]$</tex>
+<text class="xs gray" x="905" y="850">an anchor without a gene</text>
+<tex x="905" y="867" size="13" fill="#666">vector has $u = 0$</tex>
+
+<path class="ln" d="M1020,751 H1044" marker-end="url(#ah)"/>
+<rect class="lr" x="1045" y="726" width="60" height="50" rx="4"/>
+<text x="1075" y="757">MLP</text>
+<path class="ln" d="M1105,751 H1129" marker-end="url(#ah)"/>
+<rect class="b2" x="1130" y="699" width="115" height="104" rx="12" style="fill:#e3f3dd"/>
+<text class="b" x="1187" y="727">SL score</text>
+<tex x="1187" y="754" size="18">$s(c, A, B)$</tex>
+<tex x="1187" y="776" size="13" fill="#666">same for $(A, B)$</tex>
+<tex x="1187" y="793" size="13" fill="#666">and $(B, A)$</tex>
+</g>
+
+<g id="evaluation">
+<rect class="ev" x="1290" y="560" width="180" height="375" rx="12"/>
+<text class="h" x="1380" y="594">Evaluation</text>
+<text class="sm gray" x="1380" y="630">Held out:</text>
+<text class="sm gray" x="1380" y="650">17 validation,</text>
+<text class="sm gray" x="1380" y="670">16 test lines</text>
+<path class="ln" d="M1245,751 H1301" marker-end="url(#ah)"/>
+<rect class="evb" x="1302" y="711" width="156" height="80" rx="10"/>
+<text class="sm" x="1380" y="736">Rank the pairs</text>
+<text class="sm" x="1380" y="756">of each screen</text>
+<text class="sm" x="1380" y="776">by score</text>
+<path class="ln" d="M1380,791 V815" marker-end="url(#ah)"/>
+<rect class="evb" x="1302" y="816" width="156" height="110" rx="10"/>
+<text class="xs" x="1380" y="837">Recall in the top 10%:</text>
+<tex x="1380" y="868" size="12" v="mid">$\dfrac{\text{SL pairs in the top 10\%}}{\min(\text{SL pairs},\ \text{top places})}$</tex>
+<text class="xs" x="1380" y="913">and AUROC, AUPRC</text>
+</g>
+
+<g id="legend">
+<rect class="lg" x="1490" y="580" width="345" height="220" rx="4"/>
+<text class="b l" x="1508" y="612">Legend:</text>
+<path class="ln" d="M1508,640 H1556" marker-end="url(#ah)"/>
+<text class="l sm" x="1570" y="645">data flow</text>
+<path class="ln dash" d="M1508,675 H1556" marker-end="url(#ah)"/>
+<text class="l sm" x="1570" y="680">used only for fitting</text>
+<rect class="wb" x="1510" y="698" width="44" height="24" rx="3"/>
+<text class="l sm" x="1570" y="715">fixed input or step, not trained</text>
+<rect class="p1" x="1510" y="733" width="44" height="24" rx="3"/>
+<text class="l sm" x="1570" y="750">trained in stage 1, fine-tuned in stage 2</text>
+<rect class="p2" x="1510" y="768" width="44" height="24" rx="3"/>
+<text class="l sm" x="1570" y="785">trained in stage 2</text>
+</g>
+</svg>
