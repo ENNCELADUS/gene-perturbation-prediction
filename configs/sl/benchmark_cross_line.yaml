@@ -6,7 +6,9 @@
 # cross_line_depmap_dna. The reference run gets its four other-line controls from
 # `hpc/run.sh sl-embedding configs/sl/embedding_direct_mean_token.yaml --run-id embedding_direct_mean_token_seed0_v2
 # --line-input-controls`.
-# `hpc/run.sh sl-baselines configs/sl/benchmark_cross_line.yaml --run-id benchmark_cross_line_seed0` (CPU).
+# `hpc/run.sh sl-baselines configs/sl/benchmark_cross_line.yaml --run-id benchmark_cross_line_seed0_v2` (CPU; `_v2`
+# since 2026-11-25: recall at 10% false positives, the chance-corrected AUPRC, and the cross-line ordering of every
+# scorer, with the model with cell tokens of SL protocol §19 and Kebabci on measured GeneEffect as two more rows).
 kind: sl_benchmark_baselines
 seed: 0
 output_root: outputs/sl
@@ -28,6 +30,8 @@ extra_scores:
   direct_mean_token_line_term_other_line_2: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term_other_line_2.parquet
   direct_mean_token_line_term_other_line_3: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term_other_line_3.parquet
   direct_mean_token_line_term_other_line_4: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term_other_line_4.parquet
+  # the model with Tx1-3B cell tokens and the line term on own expression and PIE change (SL protocol §19)
+  direct_pie_change_line_term: outputs/sl/embedding/embedding_direct_pie_change_seed0_v2/scores/embedding_line_term.parquet
   # each run of the study: the score with the line term, the pair head alone, the model on the mean input, and
   # the score with the line term read in each of four other lines
   cross_frozen: outputs/sl/embedding/cross_line_frozen_seed0/scores/embedding_line_term.parquet
@@ -71,6 +75,7 @@ extra_scores:
   paris: outputs/sl/paris_benchmark/seed0/scores.parquet
   slidr: outputs/sl/slidr/seed0/scores.parquet
   dekegel_paralog: outputs/sl/dekegel/scores.parquet
+  kebabci_paralog: outputs/sl/kebabci/seed0/scores.parquet
   kebabci_paralog_predicted: outputs/sl/kebabci/predicted_seed0/scores.parquet
   mit4sl: outputs/sl/mit4sl/seed0/scores.parquet
 top_k: 20
@@ -83,7 +88,8 @@ scorer_means:
   cross_genes_input_other_lines: [cross_genes_input_other_line_1, cross_genes_input_other_line_2, cross_genes_input_other_line_3, cross_genes_input_other_line_4]
   cross_wide_other_lines: [cross_wide_other_line_1, cross_wide_other_line_2, cross_wide_other_line_3, cross_wide_other_line_4]
   cross_depmap_dna_other_lines: [cross_depmap_dna_other_line_1, cross_depmap_dna_other_line_2, cross_depmap_dna_other_line_3, cross_depmap_dna_other_line_4]
-# scorers with the cross-line ordering: the labels (its example counts), each score and each score on another line's input
+# scorers with the cross-line ordering: the labels (its example counts), each score, each score on another line's
+# input, then every other row of the report (a score without the line gives 0.5)
 cross_line_ordering:
   - labels
   - direct_mean_token_line_term
@@ -98,6 +104,21 @@ cross_line_ordering:
   - cross_wide_other_line_1
   - cross_depmap_dna
   - cross_depmap_dna_other_line_1
+  - direct_mean_token
+  - direct_pie_change_line_term
+  - buffer_head
+  - stage_one
+  - pan_essentiality
+  - measured_geneeffect
+  - random
+  - kg4sl
+  - cilantro_sl
+  - paris
+  - slidr
+  - dekegel_paralog
+  - kebabci_paralog
+  - kebabci_paralog_predicted
+  - mit4sl
 # (scorer, control): the per-line difference in recall in the top 10% with the line bootstrap
 paired_differences:
   # the line's gain: the score minus itself on other lines' input, and minus the model on the mean input

@@ -109,12 +109,17 @@ def test_recall_in_the_top_tenth_and_percentiles_of_a_known_list():
     score = -np.arange(20, dtype=float)
     label = np.zeros(20, dtype=int)
     label[[0, 4]] = 1
-    credit, percentile = positive_ranks(label, score)
+    credit, percentile, at_fpr = positive_ranks(label, score)
     assert credit.tolist() == [1.0, 0.0]
     assert percentile.tolist() == pytest.approx([18 / 18, 15 / 18])
+    # 18 negatives: 1.8 false-positive places; 0 and 3 negatives rank above the two.
+    assert at_fpr.tolist() == [1.0, 0.0]
     # A constant score is a random ranking: each positive's credit is 0.10.
-    credit, percentile = positive_ranks(label, np.zeros(20))
+    credit, percentile, at_fpr = positive_ranks(label, np.zeros(20))
     assert credit == pytest.approx([0.1, 0.1]) and percentile.tolist() == [0.5, 0.5]
+    assert at_fpr == pytest.approx([0.1, 0.1])
+    # No negative: the percentile and the credit at 10% false positives are undefined.
+    assert all(np.isnan(v).all() for v in positive_ranks(np.ones(3), np.zeros(3))[1:])
 
 
 def test_a_line_averages_its_studies_of_screens_and_the_gap_is_per_line():
@@ -246,7 +251,10 @@ def test_run_scores_every_list(tmp_path):
     assert ("test", "pair_identity", "non_cancer") in by  # E0 is non-cancer
     by = {(s, c): row for (s, c, g), row in by.items() if g == "all"}
     # On E0 the measured GeneEffect ranks the one SL pair (G0, G2) first.
-    assert by[("test", "measured_geneeffect")]["auprc_lift"] == pytest.approx(4.0)
+    # AUPRC 1 at a positive rate of 0.25: (1 - 0.25) / (1 - 0.25)
+    assert by[("test", "measured_geneeffect")]["auprc_corrected"] == pytest.approx(1.0)
+    assert by[("test", "measured_geneeffect")]["recall_fpr10"] == pytest.approx(1.0)
+    assert "Table 7" in report and "Chance-corrected AUPRC" in report
     # A list of 4 pairs: its top 10% is 0.4 of a place, all of it the first pair, and
     # one SL pair is more than 0.4 places, so the recall is 0.4 / 0.4.
     assert by[("test", "measured_geneeffect")]["recall_top10"] == pytest.approx(1.0)
@@ -406,8 +414,8 @@ def test_a_scorer_mean_is_the_mean_of_its_scorers_per_line():
     lines = pd.DataFrame(
         {"split": "val", "scorer": ["a", "a", "b"], "model_id": ["L0", "L1", "L0"],
          "positives": [3, 4, 5], "studies": [2, 1, 1], "screens": [4, 1, 2],
-         "recall_top10": [0.2, 0.5, 0.4], "auroc": [0.6, 0.5, 0.8],
-         "auprc_lift": [1.0, 1.0, 2.0]}
+         "recall_top10": [0.2, 0.5, 0.4], "recall_fpr10": [0.1, 0.5, 0.3],
+         "auroc": [0.6, 0.5, 0.8], "auprc_corrected": [0.0, 0.0, 0.5]}
     )  # fmt: skip
     out = with_scorer_means(lines, {"m": ["a", "b"]})
     assert list(out.columns) == list(lines.columns)
@@ -416,9 +424,8 @@ def test_a_scorer_mean_is_the_mean_of_its_scorers_per_line():
     # L1 has no score of b: no derived row
     assert derived["model_id"].tolist() == ["L0"]
     row = derived.iloc[0]
-    assert row[["recall_top10", "auroc", "auprc_lift"]].tolist() == pytest.approx(
-        [0.3, 0.7, 1.5]
-    )
+    metrics = ["recall_top10", "recall_fpr10", "auroc", "auprc_corrected"]
+    assert row[metrics].tolist() == pytest.approx([0.3, 0.2, 0.7, 0.25])
     assert row[["positives", "studies", "screens"]].tolist() == [3, 2, 4]
 
 

@@ -5,9 +5,13 @@ genetic screen with both classes, over min(positives, top 10% of the list), so a
 perfect ranking gives 1 (a random ranking gives 0.10, or the positive rate where it
 is above 0.10), then the mean over a
 study's screens, over a line's studies and over a split's lines, and the per-line
-difference from pair identity. AUROC (the mean percentile of the known positives) and
-AUPRC over the positive rate are averaged the same way. Screens under a treatment, an
-activating anchor or a group-level call are scored but kept out of the headline.
+difference from pair identity. Three more metrics are averaged the same way: recall at
+10% false positives (the share of the known positives above the top 10% of the list's
+negatives; a random ranking gives 0.10 at every positive rate), AUROC (the mean
+percentile of the known positives) and the chance-corrected AUPRC, (AUPRC − positive
+rate) / (1 − positive rate) (a random ranking gives 0, a perfect one 1). Screens
+under a treatment, an activating anchor or a group-level call are scored but kept out
+of the headline.
 Scorers: the pair's hit rate in the same study's training lines (pair identity), each
 gene's mean GeneEffect over the training lines (pan-essentiality), stage one's
 prediction of GeneEffect in the line (the SL backbone's reader, fitted without the
@@ -47,7 +51,7 @@ SIDES = ("train", "val", "test")
 LIST_KEYS = ["split", "design", "condition", "study_id", "list_id", "model_id"]
 #: The only condition the headline reads (the rules' ``condition`` column).
 HEADLINE = "genetic"
-METRICS = ["recall_top10", "auroc", "auprc_lift"]
+METRICS = ["recall_top10", "recall_fpr10", "auroc", "auprc_corrected"]
 NAMES = {
     "stage_one": "Stage one's predicted GeneEffect (linear expression model)",
     "conditional": "Conditional score (backbone: B's predicted change when A is lost)",
@@ -401,8 +405,11 @@ def no_dependency_alone(effects: pd.DataFrame, rows: pd.DataFrame) -> np.ndarray
 def positive_ranks(label: np.ndarray, score: np.ndarray) -> tuple[np.ndarray, ...]:
     """Per known positive of one list (finite scores only): its top-10% credit, the
     expected share of its tie block that falls in the top ``TOP`` of the list (a
-    random ranking gives ``TOP``), and its percentile among the list's negatives
-    (ties count half; NaN when the list has no negative)."""
+    random ranking gives ``TOP``), its percentile among the list's negatives (ties
+    count half), and its credit at ``TOP`` false positives: 1 when at most ``TOP`` of
+    the negatives rank above it, else the share of its tie block of negatives that
+    the remaining places hold (a random ranking gives ``TOP``). The last two are NaN
+    when the list has no negative."""
     keep = np.isfinite(score)
     label, score = label[keep].astype(bool), score[keep]
     ranked = np.sort(score)
@@ -414,35 +421,42 @@ def positive_ranks(label: np.ndarray, score: np.ndarray) -> tuple[np.ndarray, ..
     credit = np.clip(TOP * len(score) - above, 0, ties) / ties
     negative = np.sort(score[~label])
     if not len(negative):
-        return credit, np.full(len(positive), np.nan)
+        nan = np.full(len(positive), np.nan)
+        return credit, nan, nan
     below = np.searchsorted(negative, positive, side="left")
     tied = np.searchsorted(negative, positive, side="right") - below
-    return credit, (below + 0.5 * tied) / len(negative)
+    # false-positive places left when the ranking reaches the positive
+    room = TOP * len(negative) - (len(negative) - below - tied)
+    at_fpr = np.where(tied > 0, np.clip(room / np.maximum(tied, 1), 0, 1), room >= 0)
+    return credit, (below + 0.5 * tied) / len(negative), at_fpr
 
 
 def list_records(scores: pd.DataFrame, k: int) -> pd.DataFrame:
-    """Per held-out list and scorer: the known positives' summed top-10% credit and
-    percentile, and the ranking metrics (AUPRC over the positive rate)."""
+    """Per held-out list and scorer: the known positives' summed top-10% credit,
+    percentile and credit at 10% false positives, and the ranking metrics (AUPRC and
+    the positive rate)."""
     records = []
     for keys, group in scores.groupby([*LIST_KEYS, "scorer"], sort=True):
         label, score = group["label"].to_numpy(), group["score"].to_numpy()
-        credit, percentile = positive_ranks(label, score)
+        credit, percentile, at_fpr = positive_ranks(label, score)
         defined = percentile[np.isfinite(percentile)]
         records.append(
             dict(zip([*LIST_KEYS, "scorer"], keys))
             | ranking_metrics(label, score, k)
             | {"top_credit": float(credit.sum()), "ranked_positives": len(credit),
                "top_places": TOP * int(np.isfinite(score).sum()),
-               "percentile_sum": float(defined.sum()), "percentiles": len(defined)}
+               "percentile_sum": float(defined.sum()), "percentiles": len(defined),
+               "fpr_credit": float(at_fpr[np.isfinite(at_fpr)].sum())}
         )  # fmt: skip
     return pd.DataFrame(records)
 
 
 def line_records(lists: pd.DataFrame) -> pd.DataFrame:
     """Per split, scorer and line: each headline screen's (genetic, both classes
-    ranked) recall in the top 10%, AUROC (mean percentile of its positives) and AUPRC
-    over the positive rate, averaged over a study's screens, then over the line's
-    studies, so neither a large screen nor a study with many screens dominates."""
+    ranked) recall in the top 10%, recall at 10% false positives, AUROC (mean
+    percentile of its positives) and chance-corrected AUPRC, averaged over a study's
+    screens, then over the line's studies, so neither a large screen nor a study with
+    many screens dominates."""
     keys = ["split", "scorer", "model_id"]
     columns = [*keys, "positives", "studies", "screens", *METRICS]
     two_class = (lists["ranked_positives"] > 0) & (lists["percentiles"] > 0)
@@ -454,7 +468,11 @@ def line_records(lists: pd.DataFrame) -> pd.DataFrame:
         recall_top10=lambda x: (
             x["top_credit"] / np.minimum(x["ranked_positives"], x["top_places"])
         ),
+        recall_fpr10=lambda x: x["fpr_credit"] / x["percentiles"],
         auroc=lambda x: x["percentile_sum"] / x["percentiles"],
+        auprc_corrected=lambda x: (
+            (x["auprc"] - x["positive_rate"]) / (1 - x["positive_rate"])
+        ),
     )
     studies = screens.groupby([*keys, "study_id"]).agg(
         **{m: (m, "mean") for m in METRICS},
@@ -580,8 +598,8 @@ def summary(
 ) -> list[dict[str, Any]]:
     """Per split, group of lines and scorer: the mean over lines of recall in the
     top 10%, the mean per-line difference from pair identity with a 95% interval
-    from resampling lines, AUROC and AUPRC over the positive rate; each with its
-    line count and positive count."""
+    from resampling lines, and the mean of each other metric of METRICS; each with
+    its line count and positive count."""
     rng = np.random.default_rng(seed)
     out = []
     for split in ("val", "test", "train"):  # train last: same draws for val and test
@@ -597,12 +615,10 @@ def summary(
                 out.append(
                     {"split": split, "group": name, "scorer": scorer,
                      "lines": len(rows), "positives": int(rows["positives"].sum()),
-                     "recall_top10": float(rows["recall_top10"].mean()),
+                     **{m: float(rows[m].mean()) for m in METRICS},
                      "minus_pair_identity": (
                          float(values.mean()) if len(values) else None),
-                     "interval": [float(low), float(high)],
-                     "auroc": float(rows["auroc"].mean()),
-                     "auprc_lift": float(rows["auprc_lift"].mean())}
+                     "interval": [float(low), float(high)]}
                 )  # fmt: skip
     return out
 
@@ -851,8 +867,8 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
     Table 2, the difference from pair identity; Table 3, each stratum and subset;
     Table 4, each partial scorer on the rows it covers; Table 5, the paired
     differences named in the config; Table 6, the cross-line ordering of the scorers
-    named in the config. The other line groups, AUROC, AUPRC and each screen are in
-    metrics.json, lines.csv and lists.csv."""
+    named in the config; Table 7, every metric on the test lines. The other line
+    groups and each screen are in metrics.json, lines.csv and lists.csv."""
     rows = {
         (r["split"], r["scorer"]): r
         for r in metrics["summary"]
@@ -932,8 +948,9 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
         *covered_table(metrics["covered"]),
         *paired_table(metrics["paired_differences"]),
         *ordering_table(metrics["cross_line_ordering"]),
+        *metrics_table(rows, metrics["cross_line_ordering"], scorers),
         *agreement_lines(metrics["label_agreement"]),
-        "AUROC and AUPRC of each row set and line group are in `summary.csv`; each "
+        "Every metric of each row set and line group are in `summary.csv`; each "
         "line in `lines.csv`; each screen, the non-genetic ones included, in "
         "`lists.csv`.",
     ]  # fmt: skip
@@ -1019,6 +1036,36 @@ def ordering_table(ordering: Mapping[str, Any]) -> list[str]:
         *(f"| {NAMES[name]} | "
           + " | ".join(cell(sides.get(s)) for s in ("train", "val", "test")) + " |"
           for name, sides in ordering.items()),
+        "",
+    ]  # fmt: skip
+
+
+def metrics_table(
+    rows: Mapping[tuple[str, str], Mapping[str, Any]],
+    ordering: Mapping[str, Any],
+    scorers: Sequence[str],
+) -> list[str]:
+    """Table 7: every metric of each scorer on the test lines."""
+
+    def order(scorer: str) -> str:
+        entry = ordering.get(scorer, {}).get("test")
+        return "—" if entry is None else f"{entry['value']:.3f}"
+
+    return [
+        "**Table 7.** The test lines, all pairs: the cross-line ordering (mean over "
+        "studies; 0.5 for a score that is the same in every line), recall in the top "
+        "10%, recall at 10% false positives (the share of a screen's SL pairs above "
+        "the top 10% of its other pairs; a random ranking gives 0.10), AUROC and the "
+        "chance-corrected AUPRC, (AUPRC − positive rate) / (1 − positive rate) (a "
+        "random ranking gives 0, a perfect one 1); mean over lines. Higher is better. "
+        "— : the config does not name the scorer for the ordering.",
+        "",
+        "| Model | Cross-line ordering | Recall in the top 10% | Recall at 10% false "
+        "positives | AUROC | Chance-corrected AUPRC |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        *(f"| {NAMES[s]} | {order(s)} | "
+          + " | ".join(f"{rows[('test', s)][m]:.3f}" for m in METRICS) + " |"
+          for s in scorers),
         "",
     ]  # fmt: skip
 

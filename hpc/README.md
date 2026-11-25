@@ -528,7 +528,7 @@ for NAME in cross_line_frozen cross_line_joint cross_line_genes_input cross_line
   i=$((i + 1))
 done
 # when the five runs have finished
-hpc/run.sh sl-baselines configs/sl/benchmark_cross_line.yaml --run-id benchmark_cross_line_seed0
+hpc/run.sh sl-baselines configs/sl/benchmark_cross_line.yaml --run-id benchmark_cross_line_seed0_v2
 ```
 
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw

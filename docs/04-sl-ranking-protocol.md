@@ -979,6 +979,13 @@ score `s = f + D − mean over R of D` are those of §19.
     an interval from resampling gene pairs inside each study. A score that is the same in every line gives exactly
     0.5. Both lines are held out because a training line's score is in sample. The table also gives the number of
     examples and studies on each side.
+  - *Two metrics with the same random value in every screen* (since 2026-11-25, harness run `_v2`). *Recall at 10%
+    false positives*: the share of a screen's SL pairs above the top 10% of its other pairs (a tie block counts in
+    part); a random ranking gives 0.10 at every positive rate, where recall in the top 10% gives the positive rate
+    when it is above 0.10. *Chance-corrected AUPRC*: (AUPRC − positive rate) / (1 − positive rate), 0 for a random
+    ranking and 1 for a perfect one; it replaces AUPRC over the positive rate in the harness, whose top value was
+    1 / positive rate. Both are averaged over screens, studies, then lines. The harness report gives every metric on
+    the test lines in one table, with the cross-line ordering of every scorer named in the config.
 - **Rows of the study.** One config each, seed 0, run id `<config>_seed0`, without cell tokens; each row is the row
   above with one change:
 
@@ -996,6 +1003,13 @@ score `s = f + D − mean over R of D` are those of §19.
   deferred part of the design (§7 there).
 - **Limits.** The line-specific part of the labels repeats at 0.35 to 0.39 inside one study (§16), which bounds the
   ordering; its top value is not measured. One seed.
+- **Result** (2026-11-24, [record](../results/sl_cross_line_seed0/summary.html)). Recall in the top 10% of the five
+  runs is 0.525 to 0.555 validation / 0.495 to 0.524 test, equal to the reference (0.549 / 0.505; the loss with the
+  line term trained last minus it +0.006 [−0.023, +0.035] / +0.008 [−0.027, +0.045]). Own input minus another line's
+  input (mean over four lines) is positive in every run (+0.027 to +0.052 / +0.026 to +0.062). The cross-line
+  ordering is 0.74 to 0.99 on the training lines and 0.50 to 0.55 on held-out lines; no run is above 0.5 on
+  validation and on test, and the reference on another line's input reaches 0.572 on test. The loss fits (line,
+  pair) on the 44 training lines and does not carry to unseen lines.
 - **Runs** (seed 0, 2026-11-24, code `b2de0c9`, H20 port 30838). The seven cache steps ran on CPU (about 6 s for
   each cell-file step); their counts are in the [card](data/gene-in-line-features.md): every one of the 86 labelled
   lines has a cell file, 79 have DepMap mutation calls and 65 have DepMap copy number. The reference run's four
