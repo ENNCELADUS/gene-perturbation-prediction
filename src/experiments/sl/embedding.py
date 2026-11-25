@@ -1339,8 +1339,9 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
     sl, one, counts = metrics["sl"], metrics["stage_one"], metrics["counts"]
     base = metrics["stage_one_base"]
     line_sl, line_term = metrics["sl_line_term"], metrics["line_term"]
-    names = {"recall_top10": "Recall in the top 10%", "auroc": "AUROC",
-             "auprc_lift": "AUPRC over the positive rate"}  # fmt: skip
+    names = {"recall_top10": "Recall in the top 10%",
+             "recall_fpr10": "Recall at 10% false positives", "auroc": "AUROC",
+             "auprc_corrected": "Chance-corrected AUPRC"}  # fmt: skip
     keys = [("line_spearman", "per-line residual Spearman"),
             ("selective_spearman", "per-gene residual Spearman"),
             ("within_gene_r2", "residual skill score"),

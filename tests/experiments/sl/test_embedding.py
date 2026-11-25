@@ -677,9 +677,9 @@ def test_the_harness_names_every_table_of_the_cross_line_study():
     )
     named = set(config["extra_scores"]) | set(config["scorer_means"])
     assert named <= set(benchmark_baselines.NAMES)
-    assert set(config["cross_line_ordering"]) <= set(config["extra_scores"]) | {
-        "labels"
-    }
+    # the harness's own scorers need no table
+    own = {"labels", "random", "stage_one", "pan_essentiality", "measured_geneeffect"}
+    assert set(config["cross_line_ordering"]) <= set(config["extra_scores"]) | own
     assert {n for pair in config["paired_differences"] for n in pair} <= named
 
 
