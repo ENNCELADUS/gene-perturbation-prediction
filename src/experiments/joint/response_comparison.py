@@ -21,7 +21,7 @@ from torch import nn
 
 from src.data.io import write_json
 from src.data.prepared import load_inputs, read_manifest
-from src.experiments.joint.config import load_config
+from src.experiments.joint_config import load_config
 from src.experiments.joint.response_arms import (
     ARMS,
     SEED,

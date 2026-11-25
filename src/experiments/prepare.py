@@ -226,7 +226,7 @@ def _prepare_lines(
 def prepare_inputs(config: Mapping[str, Any]) -> Path:
     """Write the prepared root, or grow it by its missing lines; return its
     manifest path (written last)."""
-    from src.experiments.joint.config import validate_config
+    from src.experiments.joint_config import validate_config
 
     validate_config(config)
     root = Path(config["prepared_root"])
@@ -761,7 +761,7 @@ def main(argv=None):
         help="write only the co-detection cache of the SL split's screened lines",
     )
     args = parser.parse_args(argv)
-    from src.experiments.joint.config import load_config
+    from src.experiments.joint_config import load_config
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"

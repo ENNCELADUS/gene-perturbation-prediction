@@ -35,7 +35,7 @@ from src.data.depmap import read_depmap_matrix, read_models
 from src.data.extra_lines import ExtraLines, load_bulk_lines
 from src.data.splits import FixedSplit, load_geneeffect_split
 from src.eval.accuracy import score
-from src.experiments.joint.config import load_config
+from src.experiments.joint_config import load_config
 
 SCORED = ("val", "test")
 

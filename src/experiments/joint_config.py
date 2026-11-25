@@ -1,5 +1,6 @@
-"""The joint GeneEffect model's config (``all``, ``revision``, ``test``; the linear
-model and the ladder read it too): every key explicit, unknown keys rejected."""
+"""The joint config (``all``, ``revision``, ``test``): every key explicit, unknown keys
+rejected. Every track reads its data paths, features and preparation through its
+``joint_config`` key, so it lives outside ``joint/``."""
 
 from collections.abc import Mapping
 from pathlib import Path

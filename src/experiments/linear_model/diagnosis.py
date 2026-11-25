@@ -26,7 +26,7 @@ from src.data.linear_model_offsets import (
     read_linear_model_offsets,
 )
 from src.eval.accuracy import gain, score
-from src.experiments.joint.config import load_config
+from src.experiments.joint_config import load_config
 from src.experiments.linear_model.base import (
     RunBase,
     build,

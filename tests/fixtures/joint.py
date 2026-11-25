@@ -25,7 +25,7 @@ from src.data.linear_model_offsets import (
 )
 from src.data.q_sc import QScFeatures  # noqa: E402
 from src.data.splits import FixedSplit  # noqa: E402
-from src.experiments.joint.config import load_config  # noqa: E402
+from src.experiments.joint_config import load_config  # noqa: E402
 from src.model.state import build_state  # noqa: E402
 
 CONFIG = Path("configs/geneeffect_joint.yaml")

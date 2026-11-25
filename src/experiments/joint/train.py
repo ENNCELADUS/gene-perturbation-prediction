@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.data.io import write_json
-from src.experiments.joint.config import load_config, mixed_precision, validate_config
+from src.experiments.joint_config import load_config, mixed_precision, validate_config
 from src.experiments.run_dir import git_revision
 
 if TYPE_CHECKING:

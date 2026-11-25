@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from src.data.io import read_json
-from src.experiments.joint.config import load_config
+from src.experiments.joint_config import load_config
 from src.experiments.joint.pipeline import (
     BASELINE_NAMES,
     LINEAR_MODEL_CONTROLS,

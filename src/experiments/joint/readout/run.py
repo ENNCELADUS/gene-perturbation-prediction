@@ -42,7 +42,7 @@ def extract_cache(checkpoint, destination, *, device="cpu", batch_size=32, input
     """Write train/val features of a joint checkpoint; ``inputs`` replaces
     ``load_inputs`` (synthetic tests)."""
     from src.data.datasets import DependencyDataset
-    from src.experiments.joint.config import mixed_precision
+    from src.experiments.joint_config import mixed_precision
     from src.experiments.joint.readout.cache import write_feature_cache
     from src.experiments.run_dir import git_revision
     from src.model.initialization import restore_joint_model

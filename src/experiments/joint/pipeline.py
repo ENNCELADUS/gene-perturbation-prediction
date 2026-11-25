@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.data.io import read_json
-from src.experiments.joint.config import PRECISION
+from src.experiments.joint_config import PRECISION
 
 BASELINE_NAMES = {
     "gene_mean": "Gene mean",

@@ -20,7 +20,7 @@ from src.data.datasets import DependencyDataset  # noqa: E402
 from src.data.prepared import PreparedLine  # noqa: E402
 from src.eval.accuracy import aggregate_geneeffect, evaluate_model  # noqa: E402
 from src.experiments.joint import train as geneeffect  # noqa: E402
-from src.experiments.joint.config import load_config, validate_config  # noqa: E402
+from src.experiments.joint_config import load_config, validate_config  # noqa: E402
 from src.model.initialization import (  # noqa: E402
     build_joint_model,
     warm_start_state_dict,

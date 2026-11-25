@@ -1,6 +1,6 @@
 """What every track's strict config loader shares: every key explicit, unknown keys
-rejected. Each track's loader lives in its package (``joint``, ``linear_model``,
-``stage_one``, ``states``)."""
+rejected. Each track's loader lives in its package (``linear_model``, ``stage_one``,
+``states``); the joint config is ``joint_config``."""
 
 from collections.abc import Mapping
 from pathlib import Path

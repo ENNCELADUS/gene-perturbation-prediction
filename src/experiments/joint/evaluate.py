@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.data.io import write_json
-from src.experiments.joint.config import mixed_precision
+from src.experiments.joint_config import mixed_precision
 
 if TYPE_CHECKING:
     from src.eval.accuracy import EvalResult

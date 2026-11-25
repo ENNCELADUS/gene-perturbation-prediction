@@ -111,6 +111,7 @@ track's commands live in `experiments/<track>/`. Retired scripts are removed fro
 ### `experiments/`
 
 - `config`: What every track's strict config loader shares.
+- `joint_config`: The joint config (``all``, ``revision``, ``test``): data paths, features and preparation that every track reads through its ``joint_config`` key.
 - `prepare`: Prepare fixed joint-training inputs once, in STATE's log expression space (``log1p(x * T / L_cell)``, Tx1 on raw UMI); the only reader of raw data; also the co-detection cache of the SL pairs (`--codetection`).
 - `run_dir`: What every experiment command does with its run directory.
 
@@ -119,7 +120,6 @@ track's commands live in `experiments/<track>/`. Retired scripts are removed fro
 - `all`: One automatic run.
 - `baselines`: Evaluate train-fitted residual baselines on the prepared common panel.
 - `compare_runs`: Paired line bootstrap of selective Spearman between two runs of one split.
-- `config`: The joint GeneEffect model's config (``all``, ``revision``, ``test``; the linear model and the ladder read it too).
 - `evaluate`: Score a saved joint checkpoint on one split with its saved preprocessing, never fitting (``hpc/run.sh test``).
 - `pipeline`: What the joint model's runs (``all`` and ``revision``) share.
 - `response_arms`: The six response-model arms the comparison scores in STATE's log expression space.

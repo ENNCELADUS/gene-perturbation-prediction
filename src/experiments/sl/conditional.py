@@ -49,7 +49,7 @@ import pandas as pd
 
 from src.data.extra_lines import load_bulk_lines
 from src.data.io import jsonable, write_json, write_text
-from src.experiments.joint.config import load_config as load_joint_config
+from src.experiments.joint_config import load_config as load_joint_config
 from src.data.splits import load_geneeffect_split
 from src.eval.accuracy import fold_accuracy, wide_accuracy
 from src.experiments.config import read_yaml, require_keys

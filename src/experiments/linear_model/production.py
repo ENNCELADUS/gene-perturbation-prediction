@@ -21,7 +21,7 @@ from src.data.depmap import read_models
 from src.data.extra_lines import ExtraLines, load_bulk_lines
 from src.data.io import jsonable, write_json
 from src.data.splits import FixedSplit, load_geneeffect_split
-from src.experiments.joint.config import load_config
+from src.experiments.joint_config import load_config
 from src.experiments.linear_model.base import base_on, linear_model_inputs, stages
 from src.experiments.linear_model.config import load_linear_model_config
 from src.experiments.run_dir import bind

@@ -31,7 +31,7 @@ from src.data.extra_lines import load_bulk_lines
 from src.data.io import jsonable, write_json, write_text
 from src.data.pseudobulk import read_pseudobulk
 from src.data.splits import load_geneeffect_split
-from src.experiments.joint.config import load_config as load_joint_config
+from src.experiments.joint_config import load_config as load_joint_config
 from src.experiments.linear_model.base import base_on
 from src.experiments.linear_model.config import load_linear_model_config
 from src.experiments.run_dir import absolute, bind

@@ -104,7 +104,7 @@ def write_tables(config: Mapping[str, Any]) -> dict[str, Any]:
     from src.data.ladder_cells import symbol_key
     from src.data.pseudobulk import read_pseudobulk
     from src.data.splits import load_geneeffect_split
-    from src.experiments.joint.config import load_config as load_joint_config
+    from src.experiments.joint_config import load_config as load_joint_config
     from src.experiments.stage_one.ladder_inputs import bulk_gene_columns
     from src.linear_model.space import measured_genes
 

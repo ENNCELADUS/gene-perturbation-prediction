@@ -101,7 +101,7 @@ class Setup:
 
 def load_setup(config: Mapping[str, Any] | str | Path) -> Setup:
     """A ladder config (a path, or one already loaded) with the configs it names."""
-    from src.experiments.joint.config import load_config
+    from src.experiments.joint_config import load_config
     from src.experiments.linear_model.config import (
         load_noise_config,
         load_linear_model_config,

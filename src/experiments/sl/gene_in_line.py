@@ -356,7 +356,7 @@ def tx1_gene(
 
     from src.data.basal import symbol_column
     from src.data.tx1_cache import EMBEDDING_WIDTH, read_basal_source, tx1_cell_indices
-    from src.experiments.joint.config import load_config as load_joint_config
+    from src.experiments.joint_config import load_config as load_joint_config
     from src.model.tx1 import build_tx1_gene_encoder
 
     out = Path(config["out"]) / "tx1_gene"
