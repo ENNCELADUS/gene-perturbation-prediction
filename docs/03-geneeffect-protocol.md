@@ -432,7 +432,7 @@ Joint Huber improves on gene-mean by only 0.0773%, while residual correlations t
 context baselines. Response validation loss fell 45.57% from epoch 1 to 8 without
 sustained GeneEffect validation improvement. This establishes a working training and
 evaluation path, not a context-modelling advantage
-([full result](../results/joint_geneeffect_seed0/README.md)).
+(full result: `results/joint_geneeffect_seed0/README.md`, removed; `git show f35133a:<path>`).
 
 The best model to date is the selected seed-0 joint backbone, frozen, read out by a
 residual head that adds an explicit gene-specific context slope to the §4 head:
@@ -718,7 +718,7 @@ data-selected genes' gain is spread over thousands of features. The **default li
 affine bridge with expression components at penalty 1 and data-selected genes at gene penalty 10:
 0.2290 validation / 0.2338 test (`configs/linear_model/default_linear_model.yaml`). On the 226 split rebuilt
 with A549 in test it scored 0.2302 / 0.2318 (run `default_linear_model_resplit_20261012`,
-[record](../results/default_linear_model_rerun_seed0/README.md)). On the **final split** (run
+record: `results/default_linear_model_rerun_seed0/README.md`, removed; `git show f35133a:<path>`). On the **final split** (run
 `default_linear_model_final_split_20261012`, [record](../results/final_split_seed0/README.md)), whose definitions fit on
 377 labelled training lines (4,323 selective genes), it scores **0.2045 validation / 0.2025 test**: the change is the
 metric's, since on the same genes it is −0.0014 [−0.0030, 0.0003] on validation against the 226 split's linear model. There

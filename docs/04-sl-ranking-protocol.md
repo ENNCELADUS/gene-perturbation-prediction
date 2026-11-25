@@ -160,7 +160,7 @@ improving one task is not evidence of improving the other.
 
 The completed seed-0 `best.pt` is diagnostic evidence only: it beats the context-blind
 gene mean by 0.0773% Huber and trails the Tx1 context-PCA ridge on residual
-correlation ([result](../results/joint_geneeffect_seed0/README.md)). It neither supplies
+correlation (result: `results/joint_geneeffect_seed0/README.md`, removed; `git show f35133a:<path>`). It neither supplies
 the required SL exclusions nor the inner-fold models of §5, and its 226-line test set was
 observed once on 2026-09-07 (§8). Inner fits that
 exclude a response anchor need an explicit eligible-anchor configuration; the fixed
