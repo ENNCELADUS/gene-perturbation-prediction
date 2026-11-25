@@ -85,7 +85,7 @@ The counts come from the label table and the SL split. The harness gives the fir
 
 - **Cross-line training examples.** For each study: the pairs that at least one training line called SL and at least one training line did not, and the number of line pairs they give. If a few paralog-library studies supply most of them (§15 found the same-line advantage there and in few other study pairs), the loss trains on those studies, and the report must say so.
 - **Cross-line held-out examples.** The same count with both lines among the validation lines, and with both among the test lines. These examples carry the measure of §5.5.
-- **The 36 bulk-RNA lines.** How many have a two-class genetic screen in the label table, and how many of them are among the 74 lines with an SL label that stage one's fit already leaves out (`stage_one_lines` leaves out every line with an SL label and every line of its patient; the fit has 928 lines). If all 36 are among them, the row with 80 training lines keeps the same stage one. Measured on the H20 on 2026-11-24: 36 bulk-only lines of the split have a two-class genetic screen in the label table (32 `bulk_labelled`, 4 `bulk_unlabelled`). The stage-one fit leaves out every line with an SL label, so it stays at 928 lines. `benchmark_rows` drops the rows of every line outside train, validation and test, so that row needs its own [plan](2026-11-24-cross-line-loss-plan.md).
+- **The 36 bulk-RNA lines.** How many have a two-class genetic screen in the label table, and how many of them are among the 74 lines with an SL label that stage one's fit already leaves out (`stage_one_lines` leaves out every line with an SL label and every line of its patient; the fit has 928 lines). If all 36 are among them, the row with 80 training lines keeps the same stage one. Measured on the H20 on 2026-11-24: 36 bulk-only lines of the split have a two-class genetic screen in the label table (32 `bulk_labelled`, 4 `bulk_unlabelled`). The stage-one fit leaves out every line with an SL label, so it stays at 928 lines. `benchmark_rows` drops the rows of every line outside train, validation and test, so that row needs its own [plan](2026-11-24-cross-line-loss-plan.md). Built on 2026-11-25 (`bulk_training_lines`, [SL protocol §21](../04-sl-ranking-protocol.md)).
 
 ### 5.2 The Cross-Line Loss
 
@@ -124,9 +124,9 @@ The new data are gene-in-line caches under `data/sl_gene_in_line/v1/<name>/`, wr
 | `depmap_copy_number` | log2 copy-number ratio; deep loss (< −0.8) | `PortalOmicsCNGeneLog2.csv` | the same |
 
 - With `wide_expression`, `line_term.own_expression` is off: the wide cache holds that value for all genes, not for the 6,523 bridged genes.
-- The mean token `t_0` keeps its bridged 6,523-gene input in every row. This design repairs the gene coverage for the two genes of the pair, not for the line summary; a wider `t_0` needs a wide input for stage one's bulk fit lines and is a later change.
+- The mean token `t_0` keeps its bridged 6,523-gene input in every row. This design repairs the gene coverage for the two genes of the pair, not for the line summary; a wider `t_0` needs a wide input for stage one's bulk fit lines and is a later change. Built as one row on 2026-11-25 (`space_measured_share: 0.5`, `cross_line_wide_token.yaml`, SL protocol §21): the linear model's wide space of SL protocol §13 gives that input.
 - **The 36 bulk-RNA training lines.** Their `wide_expression` is bulk RNA mapped gene by gene with an affine fit on the 343 paired training lines; `cell_spread` is absent. The model can tell these lines from the single-cell lines by that flag, and they come from other studies, so this row reads as "more lines of another kind", not as a clean sample-size effect. Validation and test lines do not change.
-- No pair-in-line tensor. The line head already reads `e_A ⊙ e_B` and `|e_A − e_B|`, which can express "A is lost and B is expressed"; shared-partner features of a pair are deferred.
+- No pair-in-line tensor. The line head already reads `e_A ⊙ e_B` and `|e_A − e_B|`, which can express "A is lost and B is expressed"; shared-partner features of a pair are deferred. Built as one row on 2026-11-25 (`line_term.pair_in_line`, `cross_line_pair_in_line.yaml`, SL protocol §21): computed from the wide expression and the model's own predicted dependency, without a stored tensor.
 
 ### 5.5 Measures (Read from the Harness Report, Never Gated in Code)
 
@@ -134,7 +134,7 @@ The new data are gene-in-line caches under `data/sl_gene_in_line/v1/<name>/`, wr
 - **The other-line control over several lines.** `eval.other_lines: 4`: the model is scored on the input of four seeded other benchmark lines, and the control's recall is the mean over them. One other line (as now) gives a wider interval for the same training cost.
 - **Cross-line ordering in held-out lines.** Examples as in §5.2 with both lines held out on the same side. The value is the share of examples with `s(c⁺) > s(c⁻)` (a tie counts one half), mean over studies, with a bootstrap over gene pairs (as §15). A score that is the same in every line gives exactly 0.5. It is given for the model, for the model on another line's input, and on the training lines.
   - Both lines are held out because a training line's score is in sample: a difference between a held-out line and a training line carries regression to the mean, not the line.
-  - The noise limits it: the line-specific part of the labels repeats at 0.35 to 0.39 inside one study (§16). The top value of the ordering is not measured; Harle's replicates in `target_options.py` can give it.
+  - The noise limits it: the line-specific part of the labels repeats at 0.35 to 0.39 inside one study (§16). The top value of the ordering was measured on 2026-11-25 from Harle's replicates (`sl-target-options`, run `target_options_seed0_v3`, Table 2): one replicate's score orders another replicate's calls at 0.695 over all the study's lines (0.678 to 0.712 over the six ordered pairs of replicates), and the mean of two replicates orders the third's calls at 0.724 [0.690, 0.755]. A second measurement of the same lines thus reaches about 0.70 to 0.72, not 1.
 - **Row sets for the claim.** Seen pairs on which the training lines differ, and rows where no gene of the pair is a dependency alone.
 
 ## 6. Rows of the Study
@@ -149,7 +149,10 @@ One config, one seed-0 run and one change for each row, all without cell tokens 
 | `cross_line_genes_input.yaml` | `line_term.input: genes` | Does a deviation with less capacity hold better in unseen lines? |
 | `cross_line_wide.yaml` (**scRNA-only query, headline**) | `wide_expression`, `cell_spread` and the buffer caches; `own_expression` off | Do the gene coverage and the buffers of the two genes add line signal? |
 | `cross_line_depmap_dna.yaml` (**multi-omic query**) | `depmap_mutation` and `depmap_copy_number`, masked | What do measured mutations and copy number add over scRNA? |
-| `cross_line_80_lines.yaml` | The wide row with the 36 bulk-RNA training lines | Does the line count limit the line signal? |
+| `cross_line_wide_v2.yaml` (added 2026-11-25) | The wide row on the v2 caches: the silenced flag on every measured gene (SL protocol §21) | Does the corrected flag change the wide row? |
+| `cross_line_80_lines.yaml` | The v2 wide row with the 36 bulk-RNA training lines | Does the line count limit the line signal? |
+| `cross_line_wide_token.yaml` (added 2026-11-25) | The v2 wide row with the mean token on about 18,300 genes (§5.4) | Does the gene coverage of the line summary limit it? |
+| `cross_line_pair_in_line.yaml` (added 2026-11-25) | The v2 wide row with the pair-in-line features (§5.4) | Do features of the pair in the line add line signal? |
 
 ### What the Report Must Show
 
