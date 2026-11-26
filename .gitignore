@@ -122,6 +122,7 @@ csc286_eval.py
 !/third_party/paris/
 !/third_party/slidr/
 !/third_party/musl/
+!/third_party/musl/*.ipynb
 /.venv-cilantro/
 /.venv-kg4sl/
 /.venv-pie/
