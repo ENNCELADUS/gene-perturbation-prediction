@@ -13,7 +13,7 @@ COEXP_SHA=bd3d86093a27e11669083a29dc8d3d0745e8fdf315ffe6156d38e95b12d23d48
 
 fetch() { # url, target, sha256
   if [[ -f $2 ]] && [[ $(sha256sum "$2" | cut -d' ' -f1) == "$3" ]]; then return; fi
-  wget -q -O "$2.part.$$" "$1"
+  wget -q -T 30 -t 6 -O "$2.part.$$" "$1"  # the H20's DNS sometimes answers an address that hangs
   [[ $(sha256sum "$2.part.$$" | cut -d' ' -f1) == "$3" ]] || { echo "SHA-256 mismatch for $1" >&2; rm -f "$2.part.$$"; exit 1; }
   mv "$2.part.$$" "$2"
 }
