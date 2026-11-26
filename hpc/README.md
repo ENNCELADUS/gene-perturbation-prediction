@@ -691,6 +691,76 @@ PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/train.py --
   --out outputs/sl/mit4sl/seed0 --device 0
 ```
 
+### The published baselines of 2026-11-26
+
+Five more published models run on the benchmark with their official code, vendored under `third_party/<model>/`
+(each with a `VENDORED.md`: source, commit, licence, local changes). Design and decisions:
+`docs/specs/2026-11-26-published-baselines-plan.md`; shared rows and score writers: `hpc/common/sl_common.py`. Each
+model fits on the training lines and the labelled bulk-only lines (MuSL: the training lines; it needs single cells)
+and writes `scores.parquet` under `outputs/sl/<model>/seed0/`. `setup.sh` builds the model's own environment and
+fetches the released files that the H20 reaches (SHA-256 checked). On port 30757 start a long run with
+`setsid nohup ... > outputs/launches/<id>.log 2>&1 < /dev/null &`.
+
+| Model | Environment | Runs on | Measured cost (2026-11-26) |
+| --- | --- | --- | --- |
+| SLMGAE | `.venv-slmgae` (TensorFlow 2.15, `compat.v1`) | CPU, peak about 75 GB | 13 to 20 s for each of 300 epochs |
+| ESM4SL | `.venv-esm4sl` (torch 2.6, Lightning) | 1 GPU, about 25 GB | embeddings 56 GB; about 20 h |
+| MVGCN-iSL | `.venv-mvgcn` (torch 2.6, PyG 2.6.1) | 1 GPU, about 4 GB | 12 to 24 s for each epoch, 500 at most |
+| MuSL | `.venv-musl` (torch 2.6, PyG, magic-impute) | 1 GPU, about 8 GB | inputs 267 s; 17 s for each epoch |
+| PromptCASL | `.venv-promptcasl` (torch 2.6, pykeen) | 1 GPU | inputs about 45 min; about 21 min for each epoch |
+
+Files that come from the laptop (the H20 does not reach their hosts), with SHA-256:
+- ESM-2 weights to `/2023533015/.cache/torch/hub/checkpoints/`: `esm2_t33_650M_UR50D.pt` `ea9d0522…168c`,
+  `esm2_t33_650M_UR50D-contact-regression.pt` `8ffe6edb…3575` (run with `TORCH_HOME=/2023533015/.cache/torch`).
+- MuSL's `protein_embeddings.pt` (Zenodo 17098066) to `data/musl/official/`: `84b57628…76f4`.
+- GenePT's `GenePT_gene_protein_embedding_model_3_text.pickle` (Zenodo 10833191) to `data/promptcasl/official/`:
+  `cd64611e…6618`.
+
+```bash
+# SLMGAE (CPU)
+hpc/slmgae/setup.sh
+.venv-slmgae/bin/python hpc/slmgae/prepare.py --out data/slmgae/benchmark                     # about 1 min
+PYTHONPATH=third_party/slmgae/code .venv-slmgae/bin/python hpc/slmgae/train.py \
+  --data data/slmgae/benchmark --out outputs/sl/slmgae/seed0 --check-official-go
+
+# ESM4SL: sequences and pair files, per-residue ESM-2 for each gene, the official command line, then the table.
+# TRAIN.NUM_WORKERS 0: the container has 4 GB of /dev/shm. One GPU: each process writes test_logits.csv.
+hpc/esm4sl/setup.sh
+.venv-esm4sl/bin/python hpc/esm4sl/prepare.py --out data/esm4sl
+cd third_party/esm4sl
+TORCH_HOME=/2023533015/.cache/torch ../../.venv-esm4sl/bin/python data_preprocess/esm2_gen.py \
+  --root ../../data/esm4sl --gpu_id 1 --batch_size 4                                          # about 85 min
+TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 CUDA_VISIBLE_DEVICES=1 OMP_NUM_THREADS=16 ../../.venv-esm4sl/bin/python train.py \
+  --config-file esm4sl/configuration/attn/new.yaml --num-gpus 1 SEED 0 OUTPUT_DIR ../../outputs/sl/esm4sl/seed0 \
+  DATALOADER.TRAIN.NUM_WORKERS 0 DATASET.ESM_ROOT ../../data/esm4sl/pretrained_emb/esm2 \
+  DATASET.TRAIN_FILE ../../data/esm4sl/benchmark/sl_train.csv DATASET.VAL_FILE ../../data/esm4sl/benchmark/sl_val.csv \
+  DATASET.TEST_FILE ../../data/esm4sl/benchmark/sl_test.csv
+cd ../.. && .venv-esm4sl/bin/python hpc/esm4sl/collect.py --run outputs/sl/esm4sl/seed0 --out outputs/sl/esm4sl/seed0
+
+# MVGCN-iSL (also writes scores_mean_input.parquet)
+hpc/mvgcn_isl/setup.sh
+PYTHONPATH=third_party/mvgcn_isl/code MPLBACKEND=Agg .venv-mvgcn/bin/python hpc/mvgcn_isl/prepare.py \
+  --out data/mvgcn_isl/benchmark --held-gene-effect outputs/sl/conditional/conditional_seed0/predictions.parquet
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=third_party/mvgcn_isl/code OMP_NUM_THREADS=16 .venv-mvgcn/bin/python \
+  hpc/mvgcn_isl/train.py --data data/mvgcn_isl/benchmark --out outputs/sl/mvgcn_isl/seed0 --device 0
+
+# MuSL (also writes scores_pooled_input.parquet)
+hpc/musl/setup.sh
+OMP_NUM_THREADS=1 .venv-musl/bin/python hpc/musl/prepare.py --out data/musl/benchmark --workers 64
+OMP_NUM_THREADS=16 .venv-musl/bin/python hpc/musl/train.py --data data/musl/benchmark \
+  --out outputs/sl/musl/seed0 --device 2 --workers 16
+
+# PromptCASL (also writes scores_mean_input.parquet)
+hpc/promptcasl/setup.sh
+.venv-promptcasl/bin/python hpc/promptcasl/prepare.py --out data/promptcasl/benchmark --device 3
+OMP_NUM_THREADS=16 .venv-promptcasl/bin/python hpc/promptcasl/train.py --data data/promptcasl/benchmark \
+  --out outputs/sl/promptcasl/seed0 --device 3
+
+# KG4SL on the fit lines, then the harness of the published baselines
+PYTHONPATH=third_party/kg4sl/src .venv-kg4sl/bin/python hpc/kg4sl/train.py --out outputs/sl/kg4sl/fit_lines_seed0
+hpc/run.sh sl-baselines configs/sl/benchmark_published.yaml --run-id benchmark_published_seed0
+```
+
 ### Line-specific signal in the labels
 
 `sl-line-specificity` (`src.experiments.sl.line_specificity`) reads only the labels and the SL split. It reports the
