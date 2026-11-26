@@ -1,7 +1,8 @@
 """SLMGAE (Ding et al., official code at third_party/slmgae) on the multi-study SL
 benchmark. SLMGAE scores a gene pair from a graph auto-encoder over three support views
 (GO-BP, GO-CC, BioGRID; hpc/slmgae/prepare.py) and a main view, the fit SL pairs; it
-does not read the line. The model, its loss, optimiser and settings are the official ones.
+does not read the line. The model, its loss, optimiser and settings are the official
+ones.
 
 Differences from the official train.py: one fit on all fit pairs in place of five folds;
 the loss index is the official one (every pair i < j, except the pairs the model is
