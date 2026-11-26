@@ -119,8 +119,8 @@ NAMES = {
     "musl_pooled_input": "MuSL, context-ablated (cells pooled over the training lines)",
     "promptcasl": "PromptCASL (BiomedBERT prompt of the line's omics and pathway "
     "evidence, official code, one model over the fit lines)",
-    "promptcasl_mean_input": "PromptCASL, context-ablated (the fit lines' mean omics, no "
-    "line description)",
+    "promptcasl_mean_input": "PromptCASL, context-ablated (the fit lines' mean omics, "
+    "no line description)",
     # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding):
     # the runs of 2026-11-19 on the residual target, whose stage two started from the
     # untrained model
