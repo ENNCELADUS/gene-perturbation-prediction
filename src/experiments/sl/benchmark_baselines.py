@@ -89,7 +89,7 @@ NAMES = {
     "measured_geneeffect": "Measured GeneEffect (reference, lines with GeneEffect)",
     "labels": "Labels as the score (check: the ceiling)",
     "random": "Random score (check: about 0.10)",
-    "kg4sl": "KG4SL (knowledge graph, official code, trained on the training lines)",
+    "kg4sl": "KG4SL (knowledge graph, official code, trained on the fit lines)",
     "cilantro_sl": "Cilantro-SL (Geneformer deletions, official code, refitted)",
     "paris": "PARIS (random-forest dependency pairs, Python port of the R code)",
     "slidr": "SLIdR (mutation-dependency test, Python port of the R code)",
@@ -102,6 +102,25 @@ NAMES = {
     "one's predicted GeneEffect), context-ablated (the training-side lines' mean of "
     "every line input)",
     "mit4sl": "MiT4SL (cell-line-specific graph model, official code, refitted)",
+    # the published baselines of 2026-11-26 (hpc/<model>/,
+    # docs/specs/2026-11-26-published-baselines-plan.md): each fits on the training
+    # lines and the labelled bulk-only lines
+    "slmgae": "SLMGAE (multi-view graph autoencoder, official code, trained on the fit "
+    "lines)",
+    "esm4sl": "ESM4SL (ESM-2 protein language model, official code, trained on the fit "
+    "lines)",
+    "mvgcn_isl": "MVGCN-iSL (multi-view graph network on line omics, stage one's "
+    "predicted GeneEffect in the held-out lines, official code, one model over the fit "
+    "lines)",
+    "mvgcn_isl_mean_input": "MVGCN-iSL, context-ablated (the fit lines' mean node "
+    "features)",
+    "musl": "MuSL (pair expression histograms from the line's single cells, official "
+    "code, one model over the training lines)",
+    "musl_pooled_input": "MuSL, context-ablated (cells pooled over the training lines)",
+    "promptcasl": "PromptCASL (BiomedBERT prompt of the line's omics and pathway "
+    "evidence, official code, one model over the fit lines)",
+    "promptcasl_mean_input": "PromptCASL, context-ablated (the fit lines' mean omics, no "
+    "line description)",
     # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding):
     # the runs of 2026-11-19 on the residual target, whose stage two started from the
     # untrained model

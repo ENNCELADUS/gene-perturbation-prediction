@@ -7,8 +7,9 @@ preprocessing.py), and also without every edge between the two genes of a benchm
 (the official step removes the edges between its SL pairs). A benchmark gene is a graph
 gene of the same symbol; a symbol with more than one gene entity takes the one with the
 most edges. The model, its neighbour sampling and its settings are the official ones. It
-trains on the training lines' genetic pairs: one sample per ordered pair, SL when at
-least half of its rows are SL, and as many tested non-SL pairs as SL pairs (the official
+trains on the genetic pairs of the fit lines (the training lines and the labelled
+bulk-only lines): one sample per ordered pair, SL when at least half of its rows are
+SL, and as many tested non-SL pairs as SL pairs (the official
 data are SynLethDB SL pairs and as many random pairs). The epoch is the one with the
 best AUROC on the validation lines' pairs (the official rule, read on our validation
 lines), with the official early stop on the training loss. Output: one score per
@@ -54,15 +55,17 @@ def benchmark_rows(labels: Path, split: Path) -> pd.DataFrame:
     side = {
         m: s
         for s, members in json.loads(split.read_text()).items()
-        if s in ("train", "val", "test")
+        if s in ("train", "bulk_labelled", "val", "test")
         for m in members
     }
     rows = pd.read_parquet(
         labels, columns=["model_id", "gene_a", "gene_b", "label", "condition"]
     )
     rows = rows[rows["label"].notna() & rows["model_id"].isin(side)]
+    # a bulk-only labelled line is a fit line
     return rows.assign(
-        split=rows["model_id"].map(side), label=rows["label"].astype(int)
+        split=rows["model_id"].map(side).replace("bulk_labelled", "train"),
+        label=rows["label"].astype(int),
     )
 
 
@@ -185,7 +188,7 @@ def main() -> None:
     drawn = np.random.choice(len(negative), len(positive), replace=False)
     train = np.concatenate([positive, negative[drawn]])
     np.random.shuffle(train)
-    # every scored pair: the held-out ones, and the training ones in sample
+    # every scored pair: the held-out ones, and the fit lines' ones in sample
     held = rows.drop_duplicates(["gene_a", "gene_b"])
     held_covered = held[held["covered"]]
     held_pairs = held_covered[["ia", "ib"]].to_numpy(np.int64)

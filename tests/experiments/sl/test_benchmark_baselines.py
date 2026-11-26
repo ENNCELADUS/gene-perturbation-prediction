@@ -472,3 +472,16 @@ def test_an_extra_training_line_gives_training_rows():
     assert dropped["rows_line_not_in_split"] == int(
         (~frame["model_id"].isin(["T0", "T1", "E0"]) & frame["label"].notna()).sum()
     )
+
+
+def test_published_baseline_config_names_known_scorers():
+    from src.experiments.run_dir import REPO_ROOT
+
+    config = benchmark_baselines.load_config(
+        REPO_ROOT / "configs" / "sl" / "benchmark_published.yaml"
+    )
+    scorers = set(config["extra_scores"])
+    assert scorers <= set(benchmark_baselines.NAMES)
+    assert {"slmgae", "esm4sl", "mvgcn_isl", "musl", "promptcasl"} <= scorers
+    assert not {"paris", "slidr", "dekegel_paralog"} & scorers
+    assert ["mvgcn_isl", "mvgcn_isl_mean_input"] in config["paired_differences"]
