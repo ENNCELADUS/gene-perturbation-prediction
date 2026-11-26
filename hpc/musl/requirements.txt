@@ -1,0 +1,15 @@
+# MuSL's released environment (torch 2.1.2 + CUDA 12.1) is replaced by torch 2.6.0 on CUDA 12.4 (as hpc/mit4sl);
+# only the packages that src/, hpc/musl and the notebook's imputation import are kept.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+torch-geometric==2.6.1
+numpy==1.26.4
+pandas==2.2.3
+pyarrow==17.0.0
+scipy==1.13.1
+scikit-learn==1.5.2
+scanpy==1.10.4
+anndata==0.10.9
+magic-impute==3.0.0
+scprep==1.2.3
+tqdm==4.66.5
