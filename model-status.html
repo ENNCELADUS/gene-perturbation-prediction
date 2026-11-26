@@ -28,17 +28,21 @@ h2 { font-size: 1.15rem; margin: 16px 0 0; }
 p { margin: 0; }
 .muted { color: var(--muted); font-size: 0.875rem; }
 .wrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 0.875rem; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 640px; table-layout: fixed; font-variant-numeric: tabular-nums; font-size: 0.875rem; }
 caption { text-align: left; padding-bottom: 8px; }
-th, td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
-th { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
-td.n, th.n { text-align: right; white-space: nowrap; }
-th.n { white-space: normal; }
-th.grp { text-align: center; color: var(--fg); border-bottom: 1px solid var(--rule); }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; overflow-wrap: break-word; }
+th { font-size: 0.78rem; font-weight: 600; color: var(--muted); vertical-align: bottom; text-wrap: balance; }
+thead tr:last-child th { border-bottom: 1.5px solid var(--fg); }
+/* fixed layout: <colgroup> gives each column its share of the width */
+td.n, th.n { text-align: right; }
+td.n { white-space: nowrap; }
+th.grp { text-align: center; color: var(--fg); }
 .sep { border-left: 1.5px solid var(--rule); }
-td:first-child { min-width: 18ch; }
-td.what { color: var(--muted); font-size: 0.875rem; }
+th:first-child, td:first-child { position: sticky; left: 0; z-index: 1; background: var(--bg); }
+td.what { color: var(--muted); }
 tr.ours td { background: var(--ours); }
+tbody tr:hover td { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+tr.ours:hover td { background: color-mix(in srgb, var(--accent) 14%, var(--ours)); }
 b { color: var(--accent); }
 ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
 a { color: var(--accent); }
@@ -61,6 +65,7 @@ a { color: var(--accent); }
 <div class="wrap">
 <table>
 <caption><strong>Table 1.</strong> SL benchmark, all pairs, test lines (16); higher is better, best in bold. — : not computed; *: one other line, run of 2026-11-20. Source: harness run of 2026-11-25 (<a href="results/sl_cross_line_seed0/host/benchmark_results_v2.md">report</a>).</caption>
+<colgroup><col style="width:21%"><col style="width:19%"><col span="6" style="width:10%"></colgroup>
 <thead><tr><th rowspan="2">Model</th><th rowspan="2">What it reads</th><th colspan="4" class="grp sep">Within-line ranking</th><th colspan="2" class="grp sep">Cell-line specificity</th></tr>
 <tr><th class="n sep">Recall in the top 10% ↑</th><th class="n">Recall at 10% false positives ↑</th><th class="n">AUROC ↑</th><th class="n">Chance-corrected AUPRC ↑</th><th class="n sep">Cross-line ordering ↑</th><th class="n">Recall: own − another line's input ↑</th></tr></thead>
 <tbody>
@@ -90,6 +95,7 @@ a { color: var(--accent); }
 <div class="wrap">
 <table>
 <caption><strong>Table 2.</strong> Recall in the top 10% by row set, mean over lines. Training lines: in sample. Unseen lines: validation / test. Higher is better; best in bold. — : no score for every training row. Sources: run records of <a href="results/sl_cross_line_seed0/summary.html">2026-11-24</a> and <a href="results/sl_line_term_seed0/summary.html">2026-11-20</a>.</caption>
+<colgroup><col style="width:28%"><col span="4" style="width:18%"></colgroup>
 <thead><tr><th>Model</th><th class="n">Seen lines, seen pairs (training) ↑</th><th class="n">Unseen lines, seen pairs ↑</th><th class="n">Unseen lines, new pairs ↑</th><th class="n">Unseen lines, seen pairs that no training line called SL ↑</th></tr></thead>
 <tbody>
 <tr class="ours"><td>Ours: gene-knowledge model, no cell tokens</td><td class="n"><b>0.923</b></td><td class="n">0.556 / <b>0.529</b></td><td class="n"><b>0.555</b> / 0.434</td><td class="n">0.352 / <b>0.332</b></td></tr>
