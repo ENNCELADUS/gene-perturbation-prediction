@@ -1,7 +1,7 @@
 """SLMGAE (Ding et al., official code at third_party/slmgae) on the multi-study SL
 benchmark. SLMGAE scores a gene pair from a graph auto-encoder over three support views
-(GO-BP, GO-CC, BioGRID; hpc/slmgae/prepare.py) and a main view, the fit SL pairs; it does
-not read the line. The model, its loss, optimiser and settings are the official ones.
+(GO-BP, GO-CC, BioGRID; hpc/slmgae/prepare.py) and a main view, the fit SL pairs; it
+does not read the line. The model, its loss, optimiser and settings are the official ones.
 
 Differences from the official train.py: one fit on all fit pairs in place of five folds;
 the loss index is the official one (every pair i < j, except the pairs the model is
@@ -9,6 +9,12 @@ tested on) held as an array: here the pairs that only held-out lines tested; the
 official 300 epochs, the last epoch (the official script has no validation: the AUROC on
 the validation lines' pairs every 25 epochs is telemetry). An untested pair counts as
 non-SL, as in the official code. A pair with a gene outside the nodes is not covered.
+
+GO views: our own Wang similarities computed for the benchmark genes, not the official
+loader's output. The released Human_GOsim*.txt are ragged upper triangles (line i holds
+the similarities of gene i to genes i + 1 onward), but the official load_dense_feature
+reads them as if each line started at column i, so it misaligns every line after the
+first; --check-official-go reports our agreement with both readings.
 
     PYTHONPATH=third_party/slmgae/code .venv-slmgae/bin/python hpc/slmgae/train.py \
         --data data/slmgae/benchmark --out outputs/sl/slmgae/seed0 --check-official-go
@@ -72,26 +78,43 @@ def neighbour_jaccard(ours: sp.spmatrix, official: sp.spmatrix) -> tuple[float, 
 
 
 def check_official_go(official: Path, gaf: Path, obo: Path, k: int) -> dict:
-    """Agreement of our GO graphs with the released matrices on the released genes:
-    our similarity on those genes, the same k nearest neighbours, the official
-    load_dense_feature, then the neighbour Jaccard index."""
+    """Agreement of our GO graphs with the released matrices on the released genes
+    (the genes of List_Proteins_in_SL.txt, in that order): our Wang similarity and the
+    same k nearest neighbours rule against (a) the graph of the official
+    load_dense_feature, which is what the released code trains on, and (b) the graph of
+    the released file read with the correct alignment (go.read_released). Neighbour
+    Jaccard index, and for (b) also the entry correlations and the share of zeros."""
+    from scipy.stats import spearmanr
     from utils import load_dense_feature
 
     genes = (official / "List_Proteins_in_SL.txt").read_text().split("\n")[:-1]
+    n = len(genes)
     parents = go.read_obo(obo)
-    out = {"released_genes": len(genes)}
+    rng = np.random.default_rng(0)
+    sample = (rng.integers(0, n, 2_000_000), rng.integers(0, n, 2_000_000))
+    keep = sample[0] < sample[1]
+    sample = (sample[0][keep], sample[1][keep])
+    out = {"released_genes": n}
     for aspect, name in (("BP", "Human_GOsim.txt"), ("CC", "Human_GOsim_CC.txt")):
         table = go.read_gaf(gaf, aspect)
         table = table[table["symbol"].isin(set(genes)) & table["term"].isin(parents)]
-        ours = go.knn_graph(go.go_similarity(table, parents, genes), k)
-        theirs = load_dense_feature(str(official / name), knn=True, nnSize=k)
-        jaccard, n = neighbour_jaccard(ours, theirs)
+        sim = go.go_similarity(table, parents, genes)
+        ours = go.knn_graph(sim, k)
+        loader = load_dense_feature(str(official / name), knn=True, nnSize=k)
+        released = go.read_released(official / name, n)
+        aligned = go.knn_graph(released, k)
+        x, y = sim[sample], released[sample]
         out[aspect] = {
-            "mean_neighbour_jaccard": jaccard,
-            "genes_compared": n,
             "released_genes_with_a_term": int(table["symbol"].nunique()),
             "edges_ours": ours.nnz // 2,
-            "edges_released": theirs.nnz // 2,
+            "edges_official_loader": loader.nnz // 2,
+            "edges_released_aligned": aligned.nnz // 2,
+            "jaccard_vs_official_loader": neighbour_jaccard(ours, loader)[0],
+            "jaccard_vs_released_aligned": neighbour_jaccard(ours, aligned)[0],
+            "entry_pearson_vs_released_aligned": float(np.corrcoef(x, y)[0, 1]),
+            "entry_spearman_vs_released_aligned": float(spearmanr(x, y)[0]),
+            "released_zero_share": float((released[np.triu_indices(n, 1)] == 0).mean()),
+            "entries_sampled": len(x),
         }
     return out
 

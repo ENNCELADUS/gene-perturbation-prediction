@@ -80,3 +80,17 @@ def test_loss_index_equals_the_official_set_construction():
         n, np.array([a for a, _ in held]), np.array([b for _, b in held])
     )
     assert index.dtype == np.int32 and set(map(tuple, index.tolist())) == official
+
+
+def test_released_matrix_is_a_ragged_upper_triangle(tmp_path):
+    path = (
+        tmp_path / "gosim.txt"
+    )  # 4 genes: line i holds the values of genes i+1 onward
+    path.write_text("0.1\t0.2\t0.3\t\n0.4\t0.5\t\n0.6\t\n")
+    out = go.read_released(path, 4)
+    assert out[0].tolist() == [0.0, 0.1, 0.2, 0.3]
+    assert out[1, 2] == 0.4 and out[1, 3] == 0.5 and out[2, 3] == 0.6
+    assert np.array_equal(out, out.T)
+    path.write_text("0.1\t0.2\t0.3\t\n0.4\t0.5\t\n")
+    with pytest.raises(ValueError):
+        go.read_released(path, 5)

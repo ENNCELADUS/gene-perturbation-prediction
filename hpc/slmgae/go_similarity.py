@@ -165,3 +165,19 @@ def go_similarity(
         shape=(len(genes), len(terms)),
     )
     return gene_similarity(term_similarity(parents, terms), gene_terms)
+
+
+def read_released(path: Path, n: int) -> np.ndarray:
+    """A released GO matrix (Human_GOsim*.txt) as a dense symmetric matrix. The file is
+    a ragged upper triangle: value k of line i is the similarity of genes i and
+    i + 1 + k (line i holds n - 1 - i values and a trailing tab). The diagonal is 0."""
+    out = np.zeros((n, n))
+    lines = Path(path).read_text().split("\n")
+    for i, line in enumerate(lines[: n - 1]):
+        values = np.array([v for v in line.split("\t") if v], dtype=float)
+        if len(values) != n - 1 - i:
+            raise ValueError(
+                f"line {i} holds {len(values)} values, expected {n - 1 - i}"
+            )
+        out[i, i + 1 :] = values
+    return out + out.T
