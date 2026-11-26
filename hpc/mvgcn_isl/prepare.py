@@ -24,7 +24,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "hpc"))
+sys.path.insert(0, str(ROOT / "hpc" / "common"))
 
 import sl_common  # noqa: E402
 

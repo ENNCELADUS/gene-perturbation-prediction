@@ -29,7 +29,7 @@ from sklearn.metrics import auc, precision_recall_curve
 from torch.utils.data import ConcatDataset, DataLoader
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "hpc"))
+sys.path.insert(0, str(ROOT / "hpc" / "common"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import prepare  # noqa: E402
 import sl_common as sl  # noqa: E402

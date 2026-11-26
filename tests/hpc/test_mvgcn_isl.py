@@ -13,7 +13,7 @@ import pytest
 
 from src.experiments.run_dir import REPO_ROOT
 
-sys.path.insert(0, str(REPO_ROOT / "hpc"))
+sys.path.insert(0, str(REPO_ROOT / "hpc" / "common"))
 spec = importlib.util.spec_from_file_location(
     "mvgcn_prepare", REPO_ROOT / "hpc" / "mvgcn_isl" / "prepare.py"
 )

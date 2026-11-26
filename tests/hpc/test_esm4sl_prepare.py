@@ -10,7 +10,7 @@ import pandas as pd
 
 from src.experiments.run_dir import REPO_ROOT
 
-sys.path.insert(0, str(REPO_ROOT / "hpc"))
+sys.path.insert(0, str(REPO_ROOT / "hpc" / "common"))
 
 
 def load(name):

@@ -24,7 +24,7 @@ def prepare():
 
     saved = {k: sys.modules.pop(k) for k in list(sys.modules) if foreign(k)}
     sys.path.insert(0, str(VENDORED))
-    sys.path.insert(0, str(REPO_ROOT / "hpc"))
+    sys.path.insert(0, str(REPO_ROOT / "hpc" / "common"))
     try:
         spec = importlib.util.spec_from_file_location(
             "promptcasl_prepare", REPO_ROOT / "hpc" / "promptcasl" / "prepare.py"
@@ -35,7 +35,7 @@ def prepare():
         yield module
     finally:
         sys.path.remove(str(VENDORED))
-        sys.path.remove(str(REPO_ROOT / "hpc"))
+        sys.path.remove(str(REPO_ROOT / "hpc" / "common"))
         for k in [k for k in sys.modules if foreign(k)]:
             del sys.modules[k]
         sys.modules.update(saved)

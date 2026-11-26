@@ -1,5 +1,5 @@
-"""The shared pieces of the published-baseline harnesses (hpc/sl_common.py): rows of
-the fit and held-out lines, pair labels, and score tables that hold each stored
+"""The shared pieces of the published-baseline harnesses (hpc/common/sl_common.py):
+rows of the fit and held-out lines, pair labels, and score tables that hold each stored
 orientation and tie the rows a model cannot score."""
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import pandas as pd
 from src.experiments.run_dir import REPO_ROOT
 
 spec = importlib.util.spec_from_file_location(
-    "sl_common", REPO_ROOT / "hpc" / "sl_common.py"
+    "sl_common", REPO_ROOT / "hpc" / "common" / "sl_common.py"
 )
 common = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(common)

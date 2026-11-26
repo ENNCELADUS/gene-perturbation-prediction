@@ -20,8 +20,7 @@ take
 when a batch asks for them (official tokenizer and embedding layer, official neighbour
 selection), and nothing is stored. The held-out lines are scored one line at a time;
 a finished line is kept in ``parts/`` and skipped on a rerun. Training lines are not
-scored: their rows get the median score of the covered held-out rows (``covered``
-false).
+scored: the tables hold the rows of the held-out lines only.
 A row is covered when both genes have a GenePT vector and a PrimeKG entity with at
 least 100 neighbours (the official step skips any other row), and its line has omics.
 
@@ -51,7 +50,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "hpc"))
+sys.path.insert(0, str(ROOT / "hpc" / "common"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 OFFICIAL = ROOT / "data/promptcasl/official"
 os.environ.setdefault("PROMPTCASL_BIOMEDBERT", str(OFFICIAL / "biomedbert"))

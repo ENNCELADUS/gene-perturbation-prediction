@@ -85,7 +85,7 @@ lines' mean omics values.
 
 | File | Responsibility |
 | --- | --- |
-| `hpc/sl_common.py` (new) | Benchmark rows, pair labels, balanced draw, graph-edge removal, score-table writers. No heavy import. |
+| `hpc/common/sl_common.py` (new) | Benchmark rows, pair labels, balanced draw, graph-edge removal, score-table writers. No heavy import. |
 | `third_party/{mvgcn_isl,slmgae,esm4sl,musl,promptcasl}/` (new, tracked) | Vendored official code with `VENDORED.md`. |
 | `hpc/mvgcn_isl/{setup.sh,requirements.txt,prepare.py,train.py}` (new) | MVGCN-iSL environment, inputs and run. |
 | `hpc/slmgae/{setup.sh,requirements.txt,go_similarity.py,prepare.py,train.py}` (new) | SLMGAE environment, GO views and run. |
@@ -103,7 +103,7 @@ lines' mean omics values.
 ### Task 1: Shared benchmark rows and score writers
 
 **Files:**
-- Create: `hpc/sl_common.py`
+- Create: `hpc/common/sl_common.py`
 - Test: `tests/hpc/test_sl_common.py`
 
 **Interfaces (produced, used by every later task):**
@@ -125,7 +125,7 @@ lines' mean omics values.
 - [ ] **Step 1: Baseline the suite.** `uv run python -m pytest tests -q > pytest_baseline.txt 2>&1`; keep the file
   until the last task, then delete it.
 - [ ] **Step 2: Create the branch.** `git switch -c published-baselines`
-- [ ] **Step 3: Write the failing tests** in `tests/hpc/test_sl_common.py` (load `hpc/sl_common.py` with `importlib`):
+- [ ] **Step 3: Write the failing tests** in `tests/hpc/test_sl_common.py` (load `hpc/common/sl_common.py` with `importlib`):
 
 ```python
 ROWS = pd.DataFrame({
@@ -171,11 +171,11 @@ def test_line_scores_keep_the_line(tmp_path):
 
   `balanced` test: 2 SL and 5 non-SL rows give 4 rows with 2 SL. The writers score the rows of `SCORED_SIDES` only.
 - [ ] **Step 4: Run** `uv run python -m pytest tests/hpc/test_sl_common.py -q > pytest.txt 2>&1`. Expected: FAIL
-  (`hpc/sl_common.py` is absent).
-- [ ] **Step 5: Implement `hpc/sl_common.py`** (pandas, numpy and pyarrow only; each harness imports it after
-  `sys.path.insert(0, str(ROOT / "hpc"))`).
+  (`hpc/common/sl_common.py` is absent).
+- [ ] **Step 5: Implement `hpc/common/sl_common.py`** (pandas, numpy and pyarrow only; each harness imports it after
+  `sys.path.insert(0, str(ROOT / "hpc" / "common"))`).
 - [ ] **Step 6: Run the test file again.** Expected: PASS.
-- [ ] **Step 7: Commit.** `git add hpc/sl_common.py tests/hpc/test_sl_common.py && git commit -m "feat(sl): shared benchmark rows and score writers for the published baselines"`
+- [ ] **Step 7: Commit.** `git add hpc/common/sl_common.py tests/hpc/test_sl_common.py && git commit -m "feat(sl): shared benchmark rows and score writers for the published baselines"`
 
 ---
 

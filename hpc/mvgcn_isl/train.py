@@ -27,7 +27,7 @@ import torch.nn.functional as F
 from sklearn.preprocessing import scale
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "hpc"))
+sys.path.insert(0, str(ROOT / "hpc" / "common"))
 sys.path.insert(0, str(ROOT / "hpc" / "mvgcn_isl"))
 sys.path.insert(0, str(ROOT / "third_party" / "mvgcn_isl" / "code"))
 
