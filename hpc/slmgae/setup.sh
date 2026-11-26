@@ -18,7 +18,7 @@ fetch() {
   local url=$1 dest=$2 sha=${3:-}
   if [[ ! -s $dest ]]; then
     local tmp="$dest.part.$$"
-    wget -q --tries=5 --waitretry=5 -O "$tmp" "$url" || { rm -f "$tmp"; echo "cannot fetch $url" >&2; exit 1; }
+    wget -q --timeout=30 --tries=10 --waitretry=5 -O "$tmp" "$url" || { rm -f "$tmp"; echo "cannot fetch $url" >&2; exit 1; }
     if [[ -n $sha ]]; then
       [[ $(sha256sum "$tmp" | cut -d' ' -f1) == "$sha" ]] || { rm -f "$tmp"; echo "SHA-256 mismatch for $url" >&2; exit 1; }
     fi
