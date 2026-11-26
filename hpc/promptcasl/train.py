@@ -182,9 +182,12 @@ def worker_init(_):
 
 
 def loader(ds, batch, workers, shuffle=False):
+    """A row is 2.1 MiB and the H20 container has 4 GB of /dev/shm (a loader that fills
+    it dies with a bus error): at most 600 rows are in flight, one batch per worker."""
+    workers = min(workers, max(1, 600 // batch))
     return DataLoader(
         ds, batch_size=batch, shuffle=shuffle, num_workers=workers,
-        worker_init_fn=worker_init, prefetch_factor=4 if workers else None,
+        worker_init_fn=worker_init, prefetch_factor=1,
     )  # fmt: skip
 
 

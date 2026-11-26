@@ -29,8 +29,8 @@ the
   triples rebuilt from the HeteroData, every edge between the two genes of a benchmark
   pair removed. The official ConvE script runs on it (its ``PrimeKG`` dataset call is
   replaced by this graph; its 16 x 16 reshape of the 768-dim vectors, which pykeen
-  1.10.2 refuses, becomes 16 x 48). Neighbour tables are not written: train.py selects the 100
-  neighbours of each pair as ``scripts/build_kg_neighbors.py`` and
+  1.10.2 refuses, becomes 16 x 48). Neighbour tables are not written: train.py selects
+  the 100 neighbours of each pair as ``scripts/build_kg_neighbors.py`` and
   ``src/preprocess_datasets.py`` do, when it builds a row.
 
     .venv-promptcasl/bin/python hpc/promptcasl/prepare.py \
