@@ -1,0 +1,24 @@
+# torch 2.6.0 on CUDA 12.4 (as hpc/mit4sl); the other versions are those uv resolved on 2026-11-26.
+# rich is pinned below 14: the vendored coach_pl imports rich.logging.FormatTimeCallable, which later versions drop.
+# torchvision: coach_pl.dataset.transform imports it (the official environment.sh installs it with torch).
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+torchvision==0.21.0
+pytorch-lightning==2.6.6
+fair-esm==2.0.0
+omegaconf==2.4.0
+fvcore==0.1.5.post20221221
+easydict==1.14
+transformers==5.20.2
+peft==0.21.3
+biopython==1.88
+scikit-learn==1.7.2
+pandas==2.3.3
+pyarrow==25.0.1
+scipy==1.15.3
+tensorboard==2.21.0
+wandb==0.31.2
+matplotlib==3.10.9
+seaborn==0.13.2
+numpy==1.26.4
+rich==13.9.4

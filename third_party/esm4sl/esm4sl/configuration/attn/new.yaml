@@ -1,0 +1,89 @@
+SEED: 42
+OUTPUT_DIR: null  # change
+
+DATALOADER:
+  PIN_MEMORY: True
+  DROP_LAST: True  # False
+  PERSISTENT_WORKERS: False
+  
+  TRAIN:
+    BATCH_SIZE: 16
+    NUM_WORKERS: 8
+
+  VAL:
+    BATCH_SIZE: 0
+    NUM_WORKERS: 0
+
+  TEST:
+    BATCH_SIZE: 0
+    NUM_WORKERS: 0
+  
+  SAMPLE: True
+
+DATASET:
+  NAME: SLwholeembDataset
+  TRAIN_FILE: null  # change
+  VAL_FILE: null  # change
+  TEST_FILE: null  # change
+  CELL_LINE: null  # or cell-line name
+
+  ESM_ROOT: /data/qingyuyang/SL/ESM4SL_modified/data/pretrained_emb/esm2  # change
+  GENE_SEQ_PATH: null  # only if dataset is raw
+  IF_RAW_SEQ: False
+
+  TRANSFORM:
+    NAME: null
+
+MODEL:
+  NAME: AttnWrap
+  DEVICE: cuda
+
+  IN_CHANNELS: 1280
+  HIDDEN_CHANNELS: null
+  OUT_CHANNELS: 1
+  ACT_LAYER: gelu  # relu
+  NORM_LAYER: batchnorm  # layernorm?
+
+  KERNEL_SIZE: 3
+  EMBED_DIM: 128
+  NUM_HEADS: 4
+  NUM_LAYERS: 2
+  LINEAR_DEPTH: 2
+  DROPOUT: 0.05
+  POOLING: attention
+
+  CRITERION:
+    NAME: null
+    TYPE: null
+
+MODULE:
+  NAME: AttnModule
+  COMPILE: False
+
+  OPTIMIZER:
+    BASE_LR: 0.00005
+
+TRAINER:
+  STRATEGY: auto        # Set to `auto`, `ddp`, `deepspeed_stage_2`, `deepspeed_stage_3` ...
+  PRECISION: 32-true
+
+  CHECKPOINT:
+    EVERY_N_EPOCHS: 1  # validate every n epochs
+    SAVE_BEST: True    # If True, monitor will be required
+    MONITOR: avgmtr    # avgmtr means (auprc + auroc) / 2
+    MONITOR_MODE: max
+
+  MAX_EPOCHS: 100        # If profiler is enabled, this will be *automatically* set to 1
+  LOG_EVERY_N_STEPS: 1
+  ACCUMULATE_GRAD_BATCHES: 1
+  NUM_SANITY_VAL_STEPS: 0
+
+  CLIP_GRAD:
+    ALGORITHM: norm
+    VALUE: 1.0
+
+  DETERMINISTIC: False  # Set to True to enable cudnn.deterministic
+  BENCHMARK: False      # Set to True to enable cudnn.benchmark
+  PROFILER: null        # Set to `advanced` or `pytorch` to enable profiling
+  DETECT_ANOMALY: False # Set to True to enable anomaly detection
+  SYNC_BATCHNORM: False # Set to True to enable sync batchnorm

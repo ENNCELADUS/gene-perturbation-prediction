@@ -119,12 +119,14 @@ csc286_eval.py
 # PIE is vendored and tracked (third_party/pie/VENDORED.md), its environment built by hpc/pie/setup.sh
 /third_party/*
 !/third_party/pie/
+!/third_party/esm4sl/
 !/third_party/paris/
 !/third_party/slidr/
 !/third_party/slmgae/
 !/third_party/musl/
 !/third_party/musl/*.ipynb
 /.venv-cilantro/
+/.venv-esm4sl/
 /.venv-kg4sl/
 /.venv-slmgae/
 /.venv-pie/

@@ -1,0 +1,71 @@
+CRITERION:
+  NAME: null
+  TYPE: null
+
+DATALOADER:
+  PIN_MEMORY: False
+  DROP_LAST: False
+  PERSISTENT_WORKERS: False
+
+  TRAIN:
+    BATCH_SIZE: 0
+    NUM_WORKERS: 0
+
+  VAL:
+    BATCH_SIZE: 0  # If 0, it will be the same as TRAIN.BATCH_SIZE
+    NUM_WORKERS: 0 # If 0, it will be the same as TRAIN.NUM_WORKERS
+
+  TEST:
+    BATCH_SIZE: 0  # If 0, it will be the same as TRAIN.BATCH_SIZE
+    NUM_WORKERS: 0 # If 0, it will be the same as TRAIN.NUM_WORKERS
+
+DATASET:
+  NAME: null
+
+  TRANSFORM:
+    NAME: null
+
+METRIC:
+  NAME: null
+  TYPE: null
+
+MODEL:
+  NAME: null
+
+MODULE:
+  NAME: null
+  COMPILE: False
+
+  OPTIMIZER:
+    NAME: null
+
+  SCHEDULER:
+    NAME: null
+
+TRAINER:
+  STRATEGY: auto        # Options: `auto`, `ddp`, `deepspeed_stage_2`, `deepspeed_stage_3` ...
+  PRECISION: 32-true    # Options: `16-true`, `16-mixed`, `bf16-true`, `bf16-mixed`, `32-true`, `64-true`
+  CHECKPOINT:
+    EVERY_N_EPOCHS: 10
+
+    SAVE_BEST: False    # If True, monitor will be required
+    MONITOR: null
+    MONITOR_MODE: min   # Options: `min` or `max`
+
+  MAX_EPOCHS: -1        # If profiler is enabled, this will be *automatically* set to 1
+  NUM_SANITY_VAL_STEPS: 0
+  LOG_EVERY_N_STEPS: 1
+  ACCUMULATE_GRAD_BATCHES: 1
+
+  CLIP_GRAD:
+    ALGORITHM: null
+    VALUE: null
+
+  DETERMINISTIC: False  # Set to True to enable cudnn.deterministic
+  BENCHMARK: False      # Set to True to enable cudnn.benchmark
+  PROFILER: null        # Set to `advanced` or `pytorch` to enable profiling
+  DETECT_ANOMALY: False # Set to True to enable anomaly detection
+  SYNC_BATCHNORM: False # Set to True to enable sync batchnorm
+
+SEED: null
+OUTPUT_DIR: null
