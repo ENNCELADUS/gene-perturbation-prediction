@@ -121,6 +121,21 @@ def impute(
     return out
 
 
+SYMBOL_COLUMNS = ("gene_symbol", "gene_symbols", "gene_name")
+
+
+def counts_frame(x: np.ndarray, var: pd.DataFrame) -> pd.DataFrame:
+    """Cells x gene symbols. The symbol column is the first of SYMBOL_COLUMNS the h5ad
+    has (the lines differ); counts of genes with one symbol are summed."""
+    column = next(c for c in SYMBOL_COLUMNS if c in var.columns)
+    counts = pd.DataFrame(
+        x.astype(np.float32), columns=var[column].astype(str).to_numpy()
+    )
+    if counts.columns.duplicated().any():
+        counts = counts.T.groupby(level=0, sort=False).sum().T
+    return counts
+
+
 def line_matrix(imputed: pd.DataFrame, genes: pd.Index) -> np.ndarray:
     """Genes x cells float32; a gene the line lacks is a zero row."""
     values = imputed.reindex(columns=genes, fill_value=0.0).to_numpy(np.float32)
@@ -198,9 +213,7 @@ def _impute_line(model_id: str, raw: Path, out: Path, nodes: list[str]) -> dict:
     rows = _draw(adata.n_obs, MAX_CELLS, np.random.default_rng(0))
     x = adata.X[rows]
     x = x.toarray() if hasattr(x, "toarray") else np.asarray(x)
-    counts = pd.DataFrame(
-        x.astype(np.float32), columns=adata.var["gene_symbol"].astype(str).to_numpy()
-    )
+    counts = counts_frame(x, adata.var)
     imputed = impute(counts, np.random.default_rng(0))
     matrix = line_matrix(imputed, pd.Index(nodes))
     np.save(out / "lines" / f"{model_id}.npy", matrix)

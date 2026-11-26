@@ -92,3 +92,12 @@ def test_a_gene_without_expression_gives_finite_features_and_histograms():
         state=torch.from_numpy(features),
     )
     assert torch.isfinite(dataset[0]["image"]).all()
+
+
+def test_gene_symbols_come_from_the_first_known_column_and_duplicates_are_summed():
+    var = pd.DataFrame({"gene_name": ["A", "B", "A"]}, index=["e1", "e2", "e3"])
+    out = prepare.counts_frame(np.array([[1, 2, 3], [4, 5, 6]]), var)
+    assert out.columns.tolist() == ["A", "B"] and out.to_numpy().tolist() == [
+        [4, 2],
+        [10, 5],
+    ]
