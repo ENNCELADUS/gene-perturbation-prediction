@@ -28,7 +28,8 @@ the
 - PrimeKG: the MiT4SL copy (data/mit4sl/official, no Harvard Dataverse on the H20), its
   triples rebuilt from the HeteroData, every edge between the two genes of a benchmark
   pair removed. The official ConvE script runs on it (its ``PrimeKG`` dataset call is
-  replaced by this graph). Neighbour tables are not written: train.py selects the 100
+  replaced by this graph; its 16 x 16 reshape of the 768-dim vectors, which pykeen 1.10.2
+  refuses, becomes 16 x 48). Neighbour tables are not written: train.py selects the 100
   neighbours of each pair as ``scripts/build_kg_neighbors.py`` and
   ``src/preprocess_datasets.py`` do, when it builds a row.
 
@@ -484,6 +485,11 @@ def build_kg(out: Path, rows: pd.DataFrame, device: int, epochs: int) -> dict:
         validation=SimpleNamespace(mapped_triples=valid.mapped_triples[:5000]),
     )
     conve.PrimeKG = lambda create_inverse_triples: small
+    # pykeen 1.10.2 refuses the official 16 x 16 reshape of a 768-dim entity vector
+    # (ConvE "could not resolve (1, 16, 16) to a valid factorization of 768"); the model
+    # needs 768 dims, so the width is 48 (16 x 48 = 768) and nothing else changes
+    official_conve = conve.ConvE
+    conve.ConvE = lambda **kwargs: official_conve(**{**kwargs, "embedding_width": 48})
     sys.argv = [
         "train_conve_primekg", "--dim", "768", "--epochs", str(epochs),
         "--device", str(device), "--out_dir", str(out / "kg"),
