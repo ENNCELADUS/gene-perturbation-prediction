@@ -21,7 +21,7 @@ mkdir -p data/sl_baselines/biogrid data/mvgcn_isl/official/CCLE
 fetch "$RAW/BIOGRID-9606.csv" data/sl_baselines/biogrid/BIOGRID-9606.csv "$BIOGRID_SHA"
 fetch "$RAW/coexpression_exp_0.5.csv" data/mvgcn_isl/official/coexpression_exp_0.5.csv "$COEXP_SHA"
 # the official loaders read ../data/BIOGRID-9606.csv and ../data/coexpression_exp_0.5.csv from code/
-ln -sfn "$PWD/data/sl_baselines/biogrid/BIOGRID-9606.csv" data/mvgcn_isl/official/BIOGRID-9606.csv
+ln -sfn ../../sl_baselines/biogrid/BIOGRID-9606.csv data/mvgcn_isl/official/BIOGRID-9606.csv
 ln -sfn "$PWD/data/mvgcn_isl/official" third_party/mvgcn_isl/data
 
 [[ -x .venv-mvgcn/bin/python ]] || "$UV" venv --python 3.10 .venv-mvgcn
