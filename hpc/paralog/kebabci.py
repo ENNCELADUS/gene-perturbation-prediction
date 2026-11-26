@@ -41,6 +41,11 @@ has DepMap expression and GeneEffect (measured or predicted); the other rows get
 median score of the covered held-out rows, so they tie. The training lines' rows are
 scored too, in sample (they read measured GeneEffect, as in the fit).
 
+With ``--mean-input``, each held-out line that a table has reads the mean of the
+training-side lines in that table (GeneEffect, expression, copy number, mutations), so
+the same forest gives one score for each pair in every held-out line: the
+context-ablated control of the run with the same other options.
+
     .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/seed0
     .venv-tx1/bin/python hpc/paralog/kebabci.py \
         --out outputs/sl/kebabci/predicted_seed0 \
@@ -280,6 +285,18 @@ def gene_effect(
     return pd.concat([fit, predicted.loc[held, genes]])
 
 
+def mean_input(table: pd.DataFrame, fit_lines, held_lines) -> pd.DataFrame:
+    """``table`` (lines x genes) with each held-out line's row replaced by the mean of
+    the training-side lines' rows; a held-out line that the table lacks stays absent,
+    so the covered rows do not change."""
+    out = table.astype("float64")
+    held = out.index.intersection(pd.Index(held_lines))
+    out.loc[held] = (
+        out.loc[out.index.intersection(pd.Index(fit_lines))].mean().to_numpy()
+    )
+    return out
+
+
 def benchmark_rows(labels: Path, split: Path) -> pd.DataFrame:
     sides = json.loads(split.read_text())
     side = {m: s for s in FIT_SIDES + HELD_SIDES for m in sides[s]}
@@ -317,6 +334,12 @@ def main() -> None:
         type=Path,
         help="predicted GeneEffect (lines x genes) that the held-out lines read",
     )
+    parser.add_argument(
+        "--mean-input",
+        action="store_true",
+        help="the held-out lines read the training-side lines' mean of every line "
+        "input (the context-ablated control)",
+    )
     cli = parser.parse_args()
     symbols = entrez_symbols(DEPMAP / "CRISPRGeneEffect.csv")
     pair_table = table_s8(BASELINES / "dekegel/Table_S8.csv", symbols).rename(
@@ -335,12 +358,20 @@ def main() -> None:
         DEPMAP / "OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv"
     )
     mut, damaging = mutation_counts(BASELINES / "depmap24q4/OmicsSomaticMutations.csv")
+    copy_number = read_copy_number(DEPMAP / "PortalOmicsCNGeneLog2.csv")
+    if cli.mean_input:
+        fit_lines = rows.loc[rows["side"].isin(FIT_SIDES), "model_id"].unique()
+        held_lines = rows.loc[rows["side"].isin(HELD_SIDES), "model_id"].unique()
+        effect, expression, copy_number, mut, damaging = (
+            mean_input(table, fit_lines, held_lines)
+            for table in (effect, expression, copy_number, mut, damaging)
+        )
     # the notebooks' paralog gene list: Table S8 genes with expression
     paralog = set(pair_table["gene_1"]) | set(pair_table["gene_2"])
     inputs = {
         "expression": expression,
         "ranks": effect.rank(axis=1),
-        "copy_number": read_copy_number(DEPMAP / "PortalOmicsCNGeneLog2.csv"),
+        "copy_number": copy_number,
         "mut": mut,
         "damaging": damaging,
         "string": string_scores(

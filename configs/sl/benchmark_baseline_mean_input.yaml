@@ -1,0 +1,26 @@
+# The context-ablated controls of the two baselines that read the line (SL protocol §8):
+# the logistic regression on predicted GeneEffect and the Kebabci classifier on predicted
+# GeneEffect, each beside its score on the training-side mean input. The paired
+# differences are the "recall: own - mean input" cells of model-status.html.
+#   hpc/run.sh sl-baselines configs/sl/benchmark_baseline_mean_input.yaml --run-id benchmark_baseline_mean_input_seed0
+kind: sl_benchmark_baselines
+seed: 0
+output_root: outputs/sl
+task: benchmark_baselines
+labels: data/sl_studies/benchmark_v2/labels.parquet
+split: configs/benchmarks/cell_line_sl_split.json
+gene_effect: data/sl_dependency_v0/raw/depmap/CRISPRGeneEffect.csv
+model: data/sl_dependency_v0/raw/depmap/Model.csv
+stage_one: outputs/sl/conditional/conditional_buffer_seed0/predictions.parquet
+extra_scores:
+  buffer_head: outputs/sl/conditional/conditional_buffer_seed0/scores/head.parquet
+  buffer_head_ablated: outputs/sl/conditional/conditional_buffer_seed0/scores/head_ablated.parquet
+  kebabci_paralog_predicted: outputs/sl/kebabci/predicted_seed0/scores.parquet
+  kebabci_paralog_predicted_mean_input: outputs/sl/kebabci/predicted_mean_input_seed0/scores.parquet
+top_k: 20
+bootstrap: 1000
+paired_differences:
+  - [buffer_head, buffer_head_ablated]
+  - [kebabci_paralog_predicted, kebabci_paralog_predicted_mean_input]
+scorer_means: {}
+cross_line_ordering: [buffer_head, buffer_head_ablated, kebabci_paralog_predicted, kebabci_paralog_predicted_mean_input]

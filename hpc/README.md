@@ -658,13 +658,19 @@ laptop: the H20 reaches neither figshare nor DepMap's bucket, and 26Q1's links n
 (`data/sl_baselines/string/`); GOA human release 218 (`data/sl_baselines/go/`). By default its features read the
 held-out line's measured GeneEffect, so that run is a reference row. With `--held-gene-effect`, the held-out lines read
 stage one's predicted GeneEffect (the SL backbone's `predictions.parquet`), and the fit keeps the training-side lines'
-measured GeneEffect, both on the predicted genes: that run is a baseline row.
+measured GeneEffect, both on the predicted genes: that run is a baseline row. With `--mean-input`, each held-out line
+reads the training-side lines' mean of every line input (GeneEffect, expression, copy number, mutations): the
+context-ablated control of the same run. `configs/sl/benchmark_baseline_mean_input.yaml` scores it and the logistic
+regression's `head_ablated.parquet` beside their own-input scores (recall: own − mean input).
 
 ```bash
 .venv-tx1/bin/python hpc/paralog/dekegel_scores.py --out outputs/sl/dekegel   # seconds
 OMP_NUM_THREADS=32 .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/seed0
 OMP_NUM_THREADS=32 .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/predicted_seed0 \
   --held-gene-effect outputs/sl/conditional/conditional_seed0/predictions.parquet
+OMP_NUM_THREADS=32 .venv-tx1/bin/python hpc/paralog/kebabci.py --out outputs/sl/kebabci/predicted_mean_input_seed0 \
+  --held-gene-effect outputs/sl/conditional/conditional_seed0/predictions.parquet --mean-input
+hpc/run.sh sl-baselines configs/sl/benchmark_baseline_mean_input.yaml --run-id benchmark_baseline_mean_input_seed0
 ```
 
 MiT4SL (`hpc/mit4sl/`, `.venv-mit4sl`: torch 2.6 on CUDA 12.4, PyG 2.6.1, torch-sparse built from source; the released

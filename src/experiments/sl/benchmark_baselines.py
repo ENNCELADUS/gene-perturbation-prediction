@@ -98,6 +98,9 @@ NAMES = {
     "reference, official code, refitted)",
     "kebabci_paralog_predicted": "Kebabci 2026 paralog classifier (stage one's "
     "predicted GeneEffect in the held-out lines, official code, refitted)",
+    "kebabci_paralog_predicted_mean_input": "Kebabci 2026 paralog classifier (stage "
+    "one's predicted GeneEffect), context-ablated (the training-side lines' mean of "
+    "every line input)",
     "mit4sl": "MiT4SL (cell-line-specific graph model, official code, refitted)",
     # the gene-knowledge, cell-set model (SL protocol §18, hpc/run.sh sl-embedding):
     # the runs of 2026-11-19 on the residual target, whose stage two started from the

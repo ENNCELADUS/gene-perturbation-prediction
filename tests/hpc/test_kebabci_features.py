@@ -67,3 +67,21 @@ def test_gene_effect_gives_held_lines_the_prediction_on_its_genes():
     assert out.loc["HELD"].tolist() == [-1.0, -3.0]
     # a held line without a prediction is absent: its rows are not covered
     assert set(out.index) == {"FIT", "HELD"}
+
+
+def test_mean_input_gives_held_lines_the_training_mean_and_adds_no_line():
+    table = pd.DataFrame(
+        {"A": [1, 3, 9, 7], "B": [2.0, np.nan, 5.0, 6.0]},
+        index=["FIT_1", "FIT_2", "HELD", "OTHER"],
+    )
+    out = kebabci.mean_input(
+        table, ["FIT_1", "FIT_2", "FIT_ABSENT"], ["HELD", "HELD_ABSENT"]
+    )
+    # the held line reads the mean of the training-side lines the table has
+    assert out.loc["HELD"].tolist() == [2.0, 2.0]
+    # every other line is unchanged, and an absent held line stays absent
+    assert out.loc["FIT_1"].tolist() == [1.0, 2.0] and out.loc["OTHER"].tolist() == [
+        7.0,
+        6.0,
+    ]
+    assert list(out.index) == list(table.index)
