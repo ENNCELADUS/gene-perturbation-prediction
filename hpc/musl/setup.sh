@@ -13,7 +13,7 @@ PPI_SHA256=10aed182ae9a9bcb114b03194f309c46e536cedaa008364d7d39577de776efb7
 
 mkdir -p data/musl/official
 ppi=data/musl/official/merged_ppi_gene_names.csv
-if [[ ! -f $ppi ]]; then
+if [[ ! -s $ppi ]]; then
   wget -q -O "$ppi" "https://raw.githubusercontent.com/JieZheng-ShanghaiTech/MuSL/$MUSL_COMMIT/processed_data/merged_ppi_gene_names.csv"
 fi
 echo "$PPI_SHA256  $ppi" | sha256sum -c -

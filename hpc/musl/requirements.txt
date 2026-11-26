@@ -4,7 +4,7 @@
 torch==2.6.0
 torch-geometric==2.6.1
 numpy==1.26.4
-pandas==2.2.3
+pandas==2.0.3  # scprep 1.2.3 needs pandas < 2.1 (as the released environment)
 pyarrow==17.0.0
 scipy==1.13.1
 scikit-learn==1.5.2
