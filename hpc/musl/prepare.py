@@ -327,8 +327,8 @@ def main() -> None:
     pooled = np.stack([lines[m][:, c] for m, c in picks], axis=1)
     np.save(out / "pooled.npy", pooled)
 
-    # 2. the rows each line contributes. A gene without expression in a line is a zero
-    # row (the official get_cell_expression); its pairs stay: the PPI branch scores them.
+    # 2. the rows each line contributes. A gene without expression in a line is a
+    # zero row (the official get_cell_expression); its pairs stay in.
     held_all = scored[scored["side"].isin(sl.HELD_SIDES)].drop_duplicates(
         ["model_id", "gene_1", "gene_2"]
     )
