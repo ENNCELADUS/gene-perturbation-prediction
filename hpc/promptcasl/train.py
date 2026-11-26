@@ -408,9 +408,7 @@ def main() -> None:
         },
         "scores": report,
         "scores_mean_input": report_mean,
-        "best_validation": {
-            k: (v if isinstance(v, str) else float(v)) for k, v in best.items()
-        },
+        "best_validation": {k: float(v) for k, v in best.items() if k != "Fold"},
         "epochs_run": epochs_run,
         "seconds": {
             "train_including_validation": t_train,
