@@ -170,7 +170,11 @@ def pair_features(
     out = []
     for start in range(0, len(pairs), chunk):
         block = torch.from_numpy(np.ascontiguousarray(pairs[start : start + chunk].T))
-        with open(os.devnull, "w") as quiet, contextlib.redirect_stdout(quiet):
+        with (
+            open(os.devnull, "w") as quiet,
+            contextlib.redirect_stdout(quiet),
+            contextlib.redirect_stderr(quiet),
+        ):
             features = utils.calculate_features(exp, log, norm, block.long())
         out.append(torch.nan_to_num(features, nan=0.0).float())
     return torch.cat(out).numpy() if out else np.zeros((0, 35), np.float32)
@@ -356,7 +360,9 @@ def main() -> None:
     )
     table["i"] = table["gene_1"].map(node_id)
     table["j"] = table["gene_2"].map(node_id)
-    per_line = {m: g.reset_index(drop=True) for m, g in table.groupby("model_id")}
+    per_line = {  # a line without a usable row gets an empty table
+        m: table[table["model_id"] == m].reset_index(drop=True) for m in side.index
+    }
     pooled_pairs = (
         table[table["score"]][["gene_1", "gene_2", "i", "j"]]
         .drop_duplicates(["i", "j"])

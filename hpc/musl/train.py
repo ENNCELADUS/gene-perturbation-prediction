@@ -149,8 +149,8 @@ def main() -> None:
             missing += 1
 
     rows = {m: pd.read_parquet(data / "rows" / f"{m}.parquet") for m in side}
-    train = [m for m in side if side[m] == "train"]
-    validation = [m for m in side if side[m] == "val"]
+    train = [m for m in side if side[m] == "train" and rows[m]["fit"].any()]
+    validation = [m for m in side if side[m] == "val" and rows[m]["val"].any()]
     held = [m for m in side if side[m] in sl.HELD_SIDES]
 
     # normalization parameters from the fit rows of the training lines
