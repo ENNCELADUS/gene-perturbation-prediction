@@ -25,15 +25,17 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--
 main { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
 h1 { font-size: 1.5rem; margin: 0; text-wrap: balance; }
 h2 { font-size: 1.15rem; margin: 16px 0 0; }
-p { margin: 0; max-width: 68ch; }
+p { margin: 0; }
 .muted { color: var(--muted); font-size: 0.875rem; }
 .wrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 0.875rem; }
 caption { text-align: left; padding-bottom: 8px; }
 th, td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
 th { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 td.n, th.n { text-align: right; white-space: nowrap; }
 th.n { white-space: normal; }
+th.grp { text-align: center; color: var(--fg); border-bottom: 1px solid var(--rule); }
+.sep { border-left: 1.5px solid var(--rule); }
 td:first-child { min-width: 18ch; }
 td.what { color: var(--muted); font-size: 0.875rem; }
 tr.ours td { background: var(--ours); }
@@ -54,7 +56,7 @@ a { color: var(--accent); }
 <figcaption class="muted"><strong>Figure 2.</strong> The gene-knowledge model. A pair head reads the gene-in-line embeddings of the two genes; stage one trains on GeneEffect. Added modules: Tx1-3B cell tokens and a line term on gene-in-line features (<a href="results/sl_line_term_seed0/summary.html">run record</a>); a ranking loss between two training lines for the same pair (<a href="results/sl_cross_line_seed0/summary.html">run record</a>).</figcaption>
 </figure>
 <h2>Stage two: SL ranking</h2>
-<p>Metrics, each for one screen, then averaged over screens, studies and held-out lines. <strong>Recall in the top 10%:</strong> the share of a screen's SL pairs in the model's top 10% (perfect 1; random about 0.10, more in screens with over 10% SL pairs). <strong>Recall at 10% false positives:</strong> the share of the SL pairs above the top 10% of the screen's other pairs (random 0.10 in every screen). <strong>Chance-corrected AUPRC:</strong> (AUPRC − positive rate) / (1 − positive rate) (random 0, perfect 1). <strong>Cross-line ordering:</strong> see the last section. Seed 0; validation selects, test is scored once.</p>
+<p>Metrics, each for one screen, then averaged over screens, studies and held-out lines. <strong>Recall in the top 10%:</strong> the share of a screen's SL pairs in the model's top 10% (perfect 1; random about 0.10, more in screens with over 10% SL pairs). <strong>Recall at 10% false positives:</strong> the share of the SL pairs above the top 10% of the screen's other pairs (random 0.10 in every screen). <strong>Chance-corrected AUPRC:</strong> (AUPRC − positive rate) / (1 − positive rate) (random 0, perfect 1). <strong>Cross-line ordering:</strong> see the last section. <strong>Recall: own − another line's input:</strong> the same trained weights score each held-out line with its own input and with another line's input; the difference in recall in the top 10% is above 0 when the model uses information of the correct line. Seed 0; validation selects, test is scored once.</p>
 
 <figure style="margin:0;display:grid;gap:6px">
 <img src="results/sl_cross_line_seed0/figures/all_pairs_status.svg" alt="Dot chart of recall in the top 10% on all pairs: the three gene-knowledge rows are near 0.55 on validation and 0.50 to 0.51 on test, every published baseline at or below 0.40." style="width:100%;height:auto;border:1px solid var(--rule);border-radius:4px;background:#fff">
@@ -63,19 +65,20 @@ a { color: var(--accent); }
 
 <div class="wrap">
 <table>
-<caption><strong>Table 1.</strong> Multi-study SL benchmark, all pairs, test lines (16). Cross-line ordering (0.5 for a score that is the same in every line), recall in the top 10%, recall at 10% false positives (random 0.10), AUROC (random 0.5) and chance-corrected AUPRC (random 0); higher is better, and a perfect ranking gives 1 in every column. Rows ranked by recall in the top 10%; best in bold (the random score is not ranked). In the first column, no ranked model is above 0.5 beyond its interval (Figure 4). Ours: the best version of each design by validation recall. Source: harness run of 2026-11-25 (<a href="results/sl_cross_line_seed0/host/benchmark_results_v2.md">report</a>).</caption>
-<thead><tr><th>Model</th><th>What it reads</th><th class="n">Cross-line ordering ↑</th><th class="n">Recall in the top 10% ↑</th><th class="n">Recall at 10% false positives ↑</th><th class="n">AUROC ↑</th><th class="n">Chance-corrected AUPRC ↑</th></tr></thead>
+<caption><strong>Table 1.</strong> Multi-study SL benchmark, all pairs, test lines (16). <em>Within-line ranking:</em> how well the model ranks the pairs of one line; recall in the top 10%, recall at 10% false positives (random 0.10), AUROC (random 0.5) and chance-corrected AUPRC (random 0). <em>Cell-line specificity:</em> whether the score depends on the correct line; cross-line ordering (0.5 for a score that is the same in every line) and recall in the top 10% with the line's own input minus the same weights on another line's input (mean over four lines; 0 for a model with one score per pair, by construction). Higher is better; best in bold (the random score is not ranked). Rows ranked by recall in the top 10%. No ranked model is above 0.5 in the cross-line ordering beyond its interval (Figure 4). The input-swap value is for the score with the line term, and its 95% intervals are in the text below. — : not computed. *: from the harness run of 2026-11-20, one other line (<a href="results/sl_line_term_seed0/summary.html">run record</a>). Ours: the best version of each design by validation recall. Source: harness run of 2026-11-25 (<a href="results/sl_cross_line_seed0/host/benchmark_results_v2.md">report</a>, Tables 5, 6 and 7).</caption>
+<thead><tr><th rowspan="2">Model</th><th rowspan="2">What it reads</th><th colspan="4" class="grp sep">Within-line ranking</th><th colspan="2" class="grp sep">Cell-line specificity</th></tr>
+<tr><th class="n sep">Recall in the top 10% ↑</th><th class="n">Recall at 10% false positives ↑</th><th class="n">AUROC ↑</th><th class="n">Chance-corrected AUPRC ↑</th><th class="n sep">Cross-line ordering ↑</th><th class="n">Recall: own − another line's input ↑</th></tr></thead>
 <tbody>
-<tr class="ours"><td>Ours: gene-knowledge model, no cell tokens + cross-line loss</td><td class="what">Gene text; protein; network; line mean expression; own expression; ranking loss between two lines</td><td class="n">0.521</td><td class="n"><b>0.514</b></td><td class="n">0.540</td><td class="n">0.781</td><td class="n">0.304</td></tr>
-<tr class="ours"><td>Ours: gene-knowledge model, no cell tokens</td><td class="what">Gene text; protein; network; line mean expression</td><td class="n">0.529</td><td class="n">0.505</td><td class="n">0.540</td><td class="n"><b>0.789</b></td><td class="n">0.305</td></tr>
-<tr class="ours"><td>Ours: gene-knowledge model, Tx1-3B cell tokens + line term</td><td class="what">Gene text; protein; network; Tx1-3B cell tokens; own expression; PIE change</td><td class="n"><b>0.533</b></td><td class="n">0.501</td><td class="n"><b>0.541</b></td><td class="n">0.786</td><td class="n"><b>0.314</b></td></tr>
-<tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralog features; predicted GeneEffect</td><td class="n">0.491</td><td class="n">0.395</td><td class="n">0.383</td><td class="n">0.664</td><td class="n">0.240</td></tr>
-<tr class="ours"><td>Ours: logistic regression on predicted GeneEffect</td><td class="what">Predicted GeneEffect; its change after partner loss; expression</td><td class="n">0.498</td><td class="n">0.361</td><td class="n">0.365</td><td class="n">0.716</td><td class="n">0.156</td></tr>
-<tr><td>KG4SL</td><td class="what">Knowledge graph</td><td class="n">0.500</td><td class="n">0.338</td><td class="n">0.323</td><td class="n">0.653</td><td class="n">0.104</td></tr>
-<tr><td>De Kegel 2021 paralog classifier</td><td class="what">Paralog features; released scores</td><td class="n">0.500</td><td class="n">0.293</td><td class="n">0.304</td><td class="n">0.665</td><td class="n">0.122</td></tr>
-<tr><td>PARIS</td><td class="what">Dependency pairs; random forest</td><td class="n">0.500</td><td class="n">0.213</td><td class="n">0.212</td><td class="n">0.572</td><td class="n">0.060</td></tr>
-<tr><td>Cilantro-SL</td><td class="what">Geneformer deletion embeddings</td><td class="n">0.501</td><td class="n">0.134</td><td class="n">0.116</td><td class="n">0.510</td><td class="n">0.012</td></tr>
-<tr><td>Random score</td><td class="what">Random number</td><td class="n">0.517</td><td class="n">0.124</td><td class="n">0.105</td><td class="n">0.519</td><td class="n">0.008</td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model, no cell tokens + cross-line loss</td><td class="what">Gene text; protein; network; line mean expression; own expression; ranking loss between two lines</td><td class="n sep"><b>0.514</b></td><td class="n">0.540</td><td class="n">0.781</td><td class="n">0.304</td><td class="n sep">0.521</td><td class="n">+0.026</td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model, no cell tokens</td><td class="what">Gene text; protein; network; line mean expression</td><td class="n sep">0.505</td><td class="n">0.540</td><td class="n"><b>0.789</b></td><td class="n">0.305</td><td class="n sep">0.529</td><td class="n"><b>+0.042</b></td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model, Tx1-3B cell tokens + line term</td><td class="what">Gene text; protein; network; Tx1-3B cell tokens; own expression; PIE change</td><td class="n sep">0.501</td><td class="n"><b>0.541</b></td><td class="n">0.786</td><td class="n"><b>0.314</b></td><td class="n sep"><b>0.533</b></td><td class="n">+0.011*</td></tr>
+<tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralog features; predicted GeneEffect</td><td class="n sep">0.395</td><td class="n">0.383</td><td class="n">0.664</td><td class="n">0.240</td><td class="n sep">0.491</td><td class="n">—</td></tr>
+<tr class="ours"><td>Ours: logistic regression on predicted GeneEffect</td><td class="what">Predicted GeneEffect; its change after partner loss; expression</td><td class="n sep">0.361</td><td class="n">0.365</td><td class="n">0.716</td><td class="n">0.156</td><td class="n sep">0.498</td><td class="n">—</td></tr>
+<tr><td>KG4SL</td><td class="what">Knowledge graph</td><td class="n sep">0.338</td><td class="n">0.323</td><td class="n">0.653</td><td class="n">0.104</td><td class="n sep">0.500</td><td class="n">0</td></tr>
+<tr><td>De Kegel 2021 paralog classifier</td><td class="what">Paralog features; released scores</td><td class="n sep">0.293</td><td class="n">0.304</td><td class="n">0.665</td><td class="n">0.122</td><td class="n sep">0.500</td><td class="n">0</td></tr>
+<tr><td>PARIS</td><td class="what">Dependency pairs; random forest</td><td class="n sep">0.213</td><td class="n">0.212</td><td class="n">0.572</td><td class="n">0.060</td><td class="n sep">0.500</td><td class="n">0</td></tr>
+<tr><td>Cilantro-SL</td><td class="what">Geneformer deletion embeddings</td><td class="n sep">0.134</td><td class="n">0.116</td><td class="n">0.510</td><td class="n">0.012</td><td class="n sep">0.501</td><td class="n">—</td></tr>
+<tr><td>Random score</td><td class="what">Random number</td><td class="n sep">0.124</td><td class="n">0.105</td><td class="n">0.519</td><td class="n">0.008</td><td class="n sep">0.517</td><td class="n">—</td></tr>
 </tbody>
 </table>
 </div>
@@ -83,7 +86,8 @@ a { color: var(--accent); }
 <ul>
 <li><strong>Our gene-knowledge models are above every published baseline on the four ranking metrics:</strong> against the Kebabci classifier, recall in the top 10% 0.514 against 0.395 (paired difference +0.119 [+0.073, +0.159]), recall at 10% false positives 0.540 against 0.383, chance-corrected AUPRC 0.304 against 0.240.</li>
 <li><strong>No added module raises recall:</strong> for cell tokens, the line term and the cross-line loss, each difference is +0.008 or less and each test interval includes zero (cross-line loss: +0.008 [−0.027, +0.045]).</li>
-<li><strong>No model orders a pair between two unseen lines</strong> (first column; Figure 4).</li>
+<li><strong>Our models use the correct line's input:</strong> own minus another line's input is +0.042 [+0.015, +0.069] without cell tokens and +0.026 [+0.009, +0.041] with the cross-line loss; with Tx1-3B cell tokens +0.011 [−0.008, +0.030] (one other line).</li>
+<li><strong>No model orders a pair between two unseen lines</strong> (cross-line ordering column; Figure 4).</li>
 </ul>
 
 <h2>Where the result holds: seen and unseen lines and pairs</h2>
