@@ -17,3 +17,12 @@ Local changes:
   `code/metrics.py` and `code/inits.py` (the released environment, TensorFlow 1.15 on Python 3.7, cannot be built on
   the H20). `code/models.py` and `code/objective.py` take `tf` from `layers.py` by `import *`. `hpc/slmgae/train.py`
   calls `tf.disable_v2_behavior()` and defines the official flags. No other line changed.
+
+Known fault of the released code (found 2026-11-26, not changed here): `Human_GOsim.txt` and `Human_GOsim_CC.txt` are
+ragged upper triangles (line i holds the similarities of gene i to genes i + 1 onward), but `utils.load_dense_feature`
+reads value `j >= i` of line i into column `j + 1`. That is right for line 0 only: every later line loses its first i
+values and shifts the rest i columns left, so the graphs the released code trains on are misaligned (59% zeros, near-chance
+agreement with our Wang similarity: neighbour Jaccard 0.005 / 0.005 for BP / CC). With the correct alignment
+(`hpc/slmgae/go_similarity.py: read_released`) the released matrices agree with our Wang similarity for the same 6,375
+genes with entry Pearson 0.67 / 0.70 and neighbour Jaccard 0.22 / 0.20. Our GO views are Wang similarities computed for
+the benchmark genes, not the output of `load_dense_feature`.
