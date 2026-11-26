@@ -8,8 +8,7 @@ its own line's imputed cells. The validation AUPR of the final head over the val
 lines' samples picks the epoch (the official monitor, there the test split). Scores:
 the SL probability of every row of the validation and test lines;
 scores_pooled_input.parquet reads one pooled matrix of training-line cells for every
-row instead (the same weights). Training lines are not scored (their rows get the
-median score, covered false).
+row instead (the same weights). Training lines are not in the tables.
 
     OMP_NUM_THREADS=16 .venv-musl/bin/python hpc/musl/train.py \
         --data data/musl/benchmark --out outputs/sl/musl/seed0 --device 2
@@ -269,7 +268,9 @@ def main() -> None:
             )
     score_seconds = time.perf_counter() - start
 
+    # the training lines are not scored: only the held-out lines' rows go to the tables
     benchmark = sl.benchmark_rows(cli.labels, cli.split)
+    benchmark = benchmark[benchmark["side"].isin(sl.HELD_SIDES)]
     own_scores = pd.concat(own.values())
     pooled_scores = pd.concat(pooled.values())
     report = sl.write_line_scores(cli.out, benchmark, own_scores)

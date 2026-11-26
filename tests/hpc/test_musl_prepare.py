@@ -72,3 +72,23 @@ def test_features_do_not_depend_on_the_chunk_size_and_have_35_columns():
     chunked = prepare.pair_features(matrix, pairs, chunk_rows=2)
     assert whole.shape == (5, 35) and np.isfinite(whole).all()
     assert np.allclose(whole, chunked)
+
+
+def test_a_gene_without_expression_gives_finite_features_and_histograms():
+    rng = np.random.default_rng(0)
+    matrix = rng.gamma(2.0, 1.0, (3, 30)).astype(np.float32)
+    matrix[1] = 0.0  # a zero row: the gene is a node but has no expression in the line
+    pairs = np.array([[0, 1], [1, 2]])
+    features = prepare.pair_features(matrix, pairs)
+    assert np.isfinite(
+        features
+    ).all()  # std ratio (column 13) is inf: torch's nan_to_num caps it
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch_geometric")  # the official module imports it
+    dataset = prepare.official("module").EdgeDataset(
+        torch.from_numpy(pairs.T.copy()),
+        torch.zeros(2).long(),
+        torch.from_numpy(matrix),
+        state=torch.from_numpy(features),
+    )
+    assert torch.isfinite(dataset[0]["image"]).all()

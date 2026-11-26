@@ -213,7 +213,6 @@ def _impute_line(model_id: str, raw: Path, out: Path, nodes: list[str]) -> dict:
         "magic_without_pca": bool(matrix.shape[1] <= 100),
         "genes_with_expression": int(matrix.any(axis=1).sum()),
         "seconds": time.perf_counter() - start,
-        "present": matrix.any(axis=1),
     }
 
 
@@ -315,7 +314,6 @@ def main() -> None:
             )
         )
     impute_seconds = time.perf_counter() - t0
-    present = {s["model_id"]: s.pop("present") for s in stats}
     line_info = {s["model_id"]: {**s, "side": side[s["model_id"]]} for s in stats}
 
     # the pooled matrix: 2,000 cells drawn evenly from the training lines
@@ -329,23 +327,17 @@ def main() -> None:
     pooled = np.stack([lines[m][:, c] for m, c in picks], axis=1)
     np.save(out / "pooled.npy", pooled)
 
-    # 2. the rows each line contributes; a row with a gene that has no expression in the
-    # line is dropped (the model cannot score it)
-    scored["covered"] = False
-    for m, mask in present.items():
-        at = scored["model_id"] == m
-        scored.loc[at, "covered"] = (
-            mask[scored.loc[at, "i"]] & mask[scored.loc[at, "j"]]
-        )
+    # 2. the rows each line contributes. A gene without expression in a line is a zero
+    # row (the official get_cell_expression); its pairs stay: the PPI branch scores them.
     held_all = scored[scored["side"].isin(sl.HELD_SIDES)].drop_duplicates(
         ["model_id", "gene_1", "gene_2"]
     )
-    usable = scored[scored["covered"] & (scored["condition"] == "genetic")]
+    usable = scored[scored["condition"] == "genetic"]
     rng = np.random.default_rng(0)
     fit = line_samples(usable[usable["side"] == "train"], rng).assign(fit=True)
     val = line_samples(usable[usable["side"] == "val"], rng).assign(val=True)
     held = (
-        scored[scored["side"].isin(sl.HELD_SIDES) & scored["covered"]]
+        scored[scored["side"].isin(sl.HELD_SIDES)]
         .groupby(["model_id", "gene_1", "gene_2"], as_index=False)["label"]
         .mean()
         .assign(score=True, label=lambda d: (d["label"] >= 0.5).astype(int))
