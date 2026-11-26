@@ -124,6 +124,8 @@ a { color: var(--accent); }
 <li><strong>Our models fit the order on the training lines, not on unseen lines:</strong> 0.743 to 0.854 on the training lines, 0.521 to 0.533 on the test lines, and each test interval includes 0.5. A random score gives 0.517 [0.470, 0.563] on test.</li>
 <li><strong>The cross-line loss helps on validation only:</strong> 0.553 [0.519, 0.589] on validation, 0.521 [0.474, 0.568] on test.</li>
 <li><strong>A score can follow the line when it reads the line's measured GeneEffect</strong> (a reference that is not in Table 1; <a href="results/sl_cross_line_seed0/host/benchmark_results_v2.md">report</a>, Table 6): the Kebabci classifier on measured GeneEffect gives 0.645 [0.612, 0.673] on test (0.534 [0.512, 0.556] on validation). The same classifier on stage one's predicted GeneEffect gives 0.491 [0.453, 0.528].</li>
+<li><strong>More training lines, a wide mean token and pair-in-line features do not change this</strong> (2026-11-26, <a href="results/sl_context_rows_seed0/summary.html">run record</a>): recall 0.493 to 0.498 on test. The cross-line loss model on corrected caches is above 0.5 on both splits (0.554 [0.521, 0.585] / 0.595 [0.551, 0.635]), but the same weights on a wrong input reach 0.423 to 0.615, so this is not line signal yet.</li>
+<li><strong>The ceiling is about 0.6 to 0.7:</strong> inside Harle 2025, a second replicate orders unseen lines at 0.602 (validation) and 0.709 (test).</li>
 <li><strong>The line-specific SL prediction in unseen lines is not reached.</strong></li>
 </ul>
 </main>

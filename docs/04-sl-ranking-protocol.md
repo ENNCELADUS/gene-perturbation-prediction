@@ -1093,3 +1093,19 @@ between two unseen lines?
   | `cross_line_80_lines.yaml` | `bulk_training_lines: true` |
   | `cross_line_wide_token.yaml` | `space_measured_share: 0.5` |
   | `cross_line_pair_in_line.yaml` | `line_term.pair_in_line: true` |
+- **Result** (2026-11-26, [record](../results/sl_context_rows_seed0/summary.html); runs on H20 port 30757, code
+  `b54b426`, harness run `benchmark_context_rows_seed0`). Recall in the top 10%, validation / test: v2 base 0.511 /
+  0.488, bulk-RNA training lines 0.525 / 0.498, wide mean token 0.528 / 0.497, pair-in-line features 0.504 / 0.493.
+  Each change minus the v2 base is within ±0.017 and every interval includes zero; the v2 caches minus the v1 caches
+  −0.014 [−0.049, +0.017] / −0.008 [−0.061, +0.061]. Every row is above the Kebabci classifier on predicted
+  GeneEffect (+0.093 to +0.103 on test) and none is above the cross-line loss row of §20 (0.555 / 0.514). Own input
+  minus another line's input (mean over four lines) is positive in every row (+0.026 to +0.049 / +0.015 to +0.044;
+  test interval clear of zero for the wide mean token only). The wide mean token makes the score depend most on its
+  input (minus the mean input +0.189 / +0.156). The line term adds at most +0.013. Cross-line ordering on held-out
+  lines: v2 base 0.554 [0.521, 0.585] / 0.595 [0.551, 0.635], the first row above 0.5 on both splits beyond the
+  interval over gene pairs; bulk-RNA lines 0.580 / 0.530, wide mean token 0.549 / 0.530, pair-in-line 0.523 / 0.616.
+  The same weights on another line's input reach 0.423 to 0.615, and the change of the cache flag alone moves the
+  base row by +0.03 / +0.05, so that interval does not cover the variation between lines and runs, and the ordering
+  in unseen lines is not shown. The replicate ceiling inside Harle 2025 (run `target_options_seed0_v3`) is 0.695 on
+  all lines, 0.602 on validation lines and 0.709 on test lines (mean of two replicates against the third 0.724);
+  inside that study the four rows reach 0.37 to 0.48 / 0.47 to 0.57.

@@ -154,6 +154,8 @@ One config, one seed-0 run and one change for each row, all without cell tokens 
 | `cross_line_wide_token.yaml` (added 2026-11-25) | The v2 wide row with the mean token on about 18,300 genes (§5.4) | Does the gene coverage of the line summary limit it? |
 | `cross_line_pair_in_line.yaml` (added 2026-11-25) | The v2 wide row with the pair-in-line features (§5.4) | Do features of the pair in the line add line signal? |
 
+Result of the four rows added 2026-11-25 (SL protocol §21, [record](../../results/sl_context_rows_seed0/summary.html)): no row is positive in the sense of §6. Recall does not change (each change within ±0.017 of the v2 base), and the cross-line ordering in held-out lines is above 0.5 on both splits only for the v2 base (0.554 / 0.595), inside the spread of the wrong-input controls (0.423 to 0.615). §7 stays deferred.
+
 ### What the Report Must Show
 
 1. The cross-line ordering in held-out lines against 0.5, on validation and test, beside its value on the training lines.
