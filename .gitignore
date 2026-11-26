@@ -119,9 +119,11 @@ csc286_eval.py
 # PIE is vendored and tracked (third_party/pie/VENDORED.md), its environment built by hpc/pie/setup.sh
 /third_party/*
 !/third_party/pie/
+!/third_party/esm4sl/
 !/third_party/paris/
 !/third_party/slidr/
 /.venv-cilantro/
+/.venv-esm4sl/
 /.venv-kg4sl/
 /.venv-pie/
 # cNMF, starCAT and scvi-tools for the cell-state fits (hpc/states/setup.sh)

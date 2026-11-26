@@ -1,0 +1,68 @@
+SEED: 42
+OUTPUT_DIR: null  # change
+
+DATALOADER:
+  PIN_MEMORY: True
+  DROP_LAST: True
+  PERSISTENT_WORKERS: False
+  
+  TRAIN:
+    BATCH_SIZE: 16
+    NUM_WORKERS: 8
+  
+  VAL:
+    BATCH_SIZE: 0
+    NUM_WORKERS: 0
+  
+  TEST:
+    BATCH_SIZE: 0
+    NUM_WORKERS: 0
+  
+  SAMPLE: True
+
+DATASET:
+  NAME: SLonehotmeanDataset
+  TRAIN_FILE: null
+  VAL_FILE: null
+  TEST_FILE: null
+  ESM_ROOT: /sharedata/home/daihzh/protein/ESM4SL/data/SLKB/ESM2_emb  # change
+  CELL_LINE: null
+
+MODEL:
+  NAME: MLP
+  
+  IN_CHANNELS: 42
+  HIDDEN_CHANNELS: null
+  OUT_CHANNELS: 1
+
+MODULE:
+  NAME: ClsModule
+  COMPILE: False
+
+  OPTIMIZER:
+    BASE_LR: 0.00005
+
+TRAINER:
+  STRATEGY: auto        # Set to `auto`, `ddp`, `deepspeed_stage_2`, `deepspeed_stage_3` ...
+  PRECISION: 32-true
+
+  CHECKPOINT:
+    EVERY_N_EPOCHS: 1  # validate every n epochs
+    SAVE_BEST: True    # If True, monitor will be required
+    MONITOR: avgmtr
+    MONITOR_MODE: max
+
+  MAX_EPOCHS: 100        # If profiler is enabled, this will be *automatically* set to 1
+  LOG_EVERY_N_STEPS: 1
+  ACCUMULATE_GRAD_BATCHES: 1
+  NUM_SANITY_VAL_STEPS: 0
+
+  CLIP_GRAD:
+    ALGORITHM: norm
+    VALUE: 1.0
+
+  DETERMINISTIC: False  # Set to True to enable cudnn.deterministic
+  BENCHMARK: False      # Set to True to enable cudnn.benchmark
+  PROFILER: null        # Set to `advanced` or `pytorch` to enable profiling
+  DETECT_ANOMALY: False # Set to True to enable anomaly detection
+  SYNC_BATCHNORM: False # Set to True to enable sync batchnorm

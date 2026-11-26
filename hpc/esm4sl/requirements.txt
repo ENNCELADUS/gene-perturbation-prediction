@@ -1,0 +1,19 @@
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+pytorch-lightning
+fair-esm
+omegaconf
+fvcore
+easydict
+transformers
+peft
+biopython
+scikit-learn
+pandas
+pyarrow
+scipy
+tensorboard
+wandb
+matplotlib
+seaborn
+numpy<2
