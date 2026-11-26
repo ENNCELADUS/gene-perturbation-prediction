@@ -45,7 +45,7 @@ stage_two:
   # the GeneEffect loss's weight when the whole model trains; one phase for each
   geneeffect_weights: [1.0]
 # other_lines: the number of other benchmark lines whose input each line's score is read on (a control)
-eval: {rows_per_chunk: 1024, genes_per_chunk: 2048, other_lines: 1}
+eval: {rows_per_chunk: 1024, genes_per_chunk: 2048, other_lines: 4}
 # the line head on the gene-in-line features: R is a draw of reference_lines SL training lines at each
 # step; own_expression reads the line's own scaled pseudo-bulk value of each gene
 line_term:

@@ -144,7 +144,9 @@ def test_the_model_learns_geneeffect_and_ranks_held_out_pairs():
     assert result["phases"][0]["val_recall_top10"] > 0.2
     phases = result["phases"]
     assert [p["phase"] for p in phases] == ["frozen", "trained further"]
-    assert result["chosen"] == int(np.argmax([p["val_recall_top10"] for p in phases]))
+    assert result["chosen"] == embedding.choose_phase(phases)
+    assert all(p["val_recall_se"] >= 0 and np.isfinite(p["val_own_minus_other_line"])
+               for p in phases)  # fmt: skip
     assert np.isfinite(result["scores"]).all()
     assert result["line_term"] is None
     # the controls: with the fit lines' mean input a pair has one score in every line
@@ -300,6 +302,25 @@ def test_the_line_term_trains_alone_and_train_reports_it():
     assert moved and all(k.startswith(("line_head.", "in_line.")) for k in moved)
     assert all(p.requires_grad for p in model.parameters())
     assert history and all("val_recall_top10" in r for r in history)
+
+
+def test_the_phase_is_the_most_line_specific_one_within_one_standard_error():
+    def phase(recall, se, specific):
+        return {"val_recall_top10": recall, "val_recall_se": se,
+                "val_own_minus_other_line": specific}  # fmt: skip
+
+    # the second phase is within one standard error of the best and more line-specific
+    assert (
+        embedding.choose_phase([phase(0.50, 0.02, 0.01), phase(0.49, 0.03, 0.05)]) == 1
+    )
+    # a phase below the floor is not a candidate, however line-specific
+    assert (
+        embedding.choose_phase([phase(0.50, 0.02, 0.01), phase(0.45, 0.03, 0.09)]) == 0
+    )
+    # a tie goes to the earlier phase
+    assert (
+        embedding.choose_phase([phase(0.50, 0.02, 0.03), phase(0.50, 0.02, 0.03)]) == 0
+    )
 
 
 def test_training_reads_only_training_rows_of_two_class_genetic_screens():

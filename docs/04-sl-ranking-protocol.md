@@ -273,6 +273,12 @@ validation, report both, experiment code reports and people decide). The SL-spec
   $\mu_{\text{train}}$, SL-head training, hyperparameter and checkpoint selection,
   standardiser fitting, calibration and thresholding.
 - Validation contexts select only; they are never promoted into training.
+- (2026-11-26) Selection reads two validation metrics: recall in the top 10%, and the line specificity (that recall
+  with the line's own input minus with another line's input, mean over the four other lines of `eval.other_lines`).
+  Of the candidates whose recall is within one standard error over validation lines of the best, the one with the
+  largest line specificity wins; a tie goes to the earlier (simpler) candidate. The SL runner applies it to the
+  phase of stage two (`src.experiments.sl.embedding.choose_phase`; the epoch of each phase stays on recall), and the
+  choice of a design's version for `model-status.html` applies it to the runs.
 - Join contexts by DepMap ModelID through the checked-in map and fail loudly on an
   unmapped context. Never join on informal name: DepMap's `CellLineName` for K562 is `K-562`.
 - (2026-11-04) A line needs basal scRNA and study labels to be in the multi-study SL benchmark; measured GeneEffect
@@ -679,7 +685,7 @@ gene-in-line embeddings, not its predicted GeneEffect. A better GeneEffect is no
   each line, rows at the benchmark's weights (§11: each line equal, then its studies, a study's screens, a screen's
   two classes); the loss is binary cross-entropy on the SL call. First the head trains on the frozen stage-one model.
   Then, from that state, the whole model trains with the GeneEffect loss kept at each weight of
-  `stage_two.geneeffect_weights`. Validation recall in the top 10% selects the epoch and the phase; test is scored
+  `stage_two.geneeffect_weights`. Validation recall in the top 10% selects the epoch, the rule of §8 the phase; test is scored
   once.
 - **Outputs.** `scores/embedding.parquet` (one score per line, design and ordered pair) and the two tables of the
   line-input controls (below) for the harness (`configs/sl/benchmark_embedding.yaml`), `predictions.parquet` (the model's GeneEffect of the SL lines with
@@ -954,7 +960,7 @@ score `s = f + D − mean over R of D` are those of §19.
 - **Two training modes** (`line_term.joint`). `false`: the line term trains last on the frozen model, as in §19.
   `true`: in the phase that trains the whole model, the score is `s` and the model, the pair head and the line term
   train together on the binary cross-entropy, the cross-line loss and the GeneEffect loss; no separate line-term
-  phase follows. Validation recall in the top 10% of `s` selects the epoch and the phase.
+  phase follows. Validation recall in the top 10% of `s` selects the epoch, the rule of §8 the phase.
 - **What the line head reads** (`line_term.input`). `model`: the pair head's input (the line's tokens and the free
   gene deviation `r_g`) and the gene-in-line features, as in §19. `genes`: the gene vectors of the frozen sources
   alone (the gene encoder's output without `r_g`) and the gene-in-line features,

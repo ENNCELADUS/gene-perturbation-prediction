@@ -13,8 +13,11 @@
    the GeneEffect loss kept at each weight of ``stage_two.geneeffect_weights``. Rows
    are the SL training lines' genetic screens with both classes, drawn as the benchmark
    weighs them (each line equal, then its studies, a study's screens, a screen's two
-   classes). Validation recall in the top 10% selects the epoch and the phase; test is
-   scored once.
+   classes). Validation recall in the top 10% selects the epoch of each phase. The
+   phase: of the phases whose validation recall is within one standard error (over
+   validation lines) of the best, the one with the largest validation recall of the
+   line's own input minus another line's input (mean over ``eval.other_lines``;
+   ``choose_phase``). Test is scored once.
 
 A line with cells reads its mean token (bridged pseudo-bulk, as the SL backbone) and
 one token for each cell (its cached Tx1-3B embedding): a random subset at each training
@@ -900,15 +903,55 @@ def fit_line_term(
     )  # fmt: skip
 
 
+@torch.no_grad()
+def line_specificity(
+    model: GeneLineModel,
+    data: Data,
+    pairs: PairRows,
+    config: Mapping[str, Any],
+    with_line_term: bool,
+) -> dict[str, float]:
+    """On the validation rows, with the model's present weights: the standard error
+    over lines of recall in the top 10%, and that recall with the line's own input
+    minus with another line's input (mean over the maps of ``other_lines``)."""
+    val = np.flatnonzero((data.rows["split"] == "val").to_numpy())
+    rows, top_k = data.rows.iloc[val], int(config["top_k"])
+
+    def score(other: Mapping[int, int] | None) -> np.ndarray:
+        if with_line_term:
+            read = None if other is None else other.__getitem__
+            return line_term_scores(model, data, pairs, val, config, read)
+        tokens_of = None if other is None else (
+            lambda line: one_line(model, data, other[line], None, None))  # fmt: skip
+        return pair_scores(model, data, pairs, val, config, tokens_of)
+
+    frame = rows[[*LIST_KEYS, "label"]].assign(scorer="model", score=score(None))
+    own = line_records(list_records(frame, top_k))["recall_top10"].to_numpy()
+    others = [recall_top10(rows, score(m), top_k) for m in other_lines(data, config)]
+    return {
+        "val_recall_se": float(own.std(ddof=1) / np.sqrt(len(own))),
+        "val_own_minus_other_line": float(own.mean() - np.mean(others)),
+    }
+
+
+def choose_phase(phases: Sequence[Mapping[str, Any]]) -> int:
+    """Of the phases whose validation recall is within one standard error of the best
+    phase's, the one with the largest own-minus-other-line recall; the earlier phase
+    wins a tie."""
+    best = max(phases, key=lambda p: p["val_recall_top10"])
+    floor = best["val_recall_top10"] - best["val_recall_se"]
+    near = [i for i, p in enumerate(phases) if p["val_recall_top10"] >= floor]
+    return max(near, key=lambda i: phases[i]["val_own_minus_other_line"])
+
+
 def train(
     model: GeneLineModel, data: Data, config: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Stage one, then stage two's phases; picks the phase with the best validation
-    recall in the top 10% (the frozen phase wins a tie). With a ``line_term``
-    config, the line term then trains on that phase, and ``model`` is left at its
-    best epoch. With ``line_term.joint``, the line term trains in each whole-model
-    phase instead (the frozen phase is as without it: the untrained line term is
-    0), and no line-term phase follows."""
+    """Stage one, then stage two's phases; picks the phase by ``choose_phase``. With
+    a ``line_term`` config, the line term then trains on that phase, and ``model`` is
+    left at its best epoch. With ``line_term.joint``, the line term trains in each
+    whole-model phase instead (the frozen phase is as without it: the untrained line
+    term is 0), and no line-term phase follows."""
     generator = torch.Generator().manual_seed(int(config["seed"]))
     term = config["line_term"]
     joint = term is not None and term["joint"]
@@ -916,18 +959,23 @@ def train(
     stage_one = fit_dependency(model, data, config, generator)
     phases = []
     frozen, score, history = fit_pairs(model, data, pairs, config, generator, None)
+    model.load_state_dict(frozen)
     phases.append({"phase": "frozen", "geneeffect_weight": None,
-                   "val_recall_top10": score, "history": history})  # fmt: skip
+                   "val_recall_top10": score, "history": history}
+                  | line_specificity(model, data, pairs, config, False))  # fmt: skip
     states = [frozen]
     for weight in config["stage_two"]["geneeffect_weights"]:
         model.load_state_dict(frozen)
         state, score, history = fit_pairs(
             model, data, pairs, config, generator, float(weight), joint
         )
+        model.load_state_dict(state)
+        specific = line_specificity(model, data, pairs, config, joint)
         phases.append({"phase": "trained further", "geneeffect_weight": float(weight),
-                       "val_recall_top10": score, "history": history})  # fmt: skip
+                       "val_recall_top10": score, "history": history}
+                      | specific)  # fmt: skip
         states.append(state)
-    chosen = int(np.argmax([phase["val_recall_top10"] for phase in phases]))
+    chosen = choose_phase(phases)
     model.load_state_dict(states[chosen])
     every = np.arange(len(data.rows))
     result = {
@@ -1544,21 +1592,27 @@ def results_markdown(metrics: Mapping[str, Any]) -> str:
                               ("Gene mean of the fit lines", base))),
         "",
         "**Table 4.** Stage two: validation recall in the top 10% of each phase at its "
-        "best epoch. The chosen phase is in bold. The line term, when the config has "
-        "one, trains last on the chosen phase.",
+        "best epoch, its standard error over lines, and that recall with the line's "
+        "own input minus another line's input. The chosen phase (bold): of the phases "
+        "within one standard error of the best recall, the largest own minus other "
+        "line. The line term, when the config has one, trains last on the chosen "
+        "phase.",
         "",
-        "| Phase | GeneEffect loss weight | Best epoch / epochs run | Validation |",
-        "| --- | ---: | ---: | ---: |",
+        "| Phase | GeneEffect loss weight | Best epoch / epochs run | Validation "
+        "| Standard error | Own − other line |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
         *(f"| {phase['phase']} | "
           + ("—" if phase["geneeffect_weight"] is None
              else f"{phase['geneeffect_weight']:g}")
           + f" | {epochs(phase['history'], 'val_recall_top10', max)} | "
           + (f"**{phase['val_recall_top10']:.4f}**" if phase is chosen
-             else f"{phase['val_recall_top10']:.4f}") + " |"
+             else f"{phase['val_recall_top10']:.4f}")
+          + f" | {phase['val_recall_se']:.4f}"
+          + f" | {phase['val_own_minus_other_line']:+.4f} |"
           for phase in metrics["phases"]),
         *([] if line_term is None else
           [f"| line term | — | {epochs(line_term['history'], 'val_recall_top10', max)}"
-           f" | {line_term['val_recall_top10']:.4f} |"]),
+           f" | {line_term['val_recall_top10']:.4f} | — | — |"]),
         "",
         "**Table 5.** Stage one: the GeneEffect loss on the SL training lines (out of "
         "sample; lower is better). Epoch 0 is the untrained model, which predicts one "

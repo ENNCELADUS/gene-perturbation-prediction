@@ -4,7 +4,8 @@
 # token (cross_line_wide_token) and with the pair-in-line features (cross_line_pair_in_line). Each run: `hpc/run.sh sl-embedding configs/sl/<config>.yaml --run-id <config>_seed0`.
 # The harness reads the split's 44 training lines alone: for the run with the bulk-RNA training lines, a held-out pair
 # that only those lines hold is a new pair here (the run's results.md gives the count).
-# `hpc/run.sh sl-baselines configs/sl/benchmark_context_rows.yaml --run-id benchmark_context_rows_seed0` (CPU).
+# Every run is the `<config>_seed0_select` rerun, whose phase follows the selection rule of SL protocol §8 (2026-11-26).
+# `hpc/run.sh sl-baselines configs/sl/benchmark_context_rows.yaml --run-id benchmark_context_rows_seed0_select` (CPU).
 kind: sl_benchmark_baselines
 seed: 0
 output_root: outputs/sl
@@ -19,82 +20,82 @@ stage_one: outputs/sl/conditional/conditional_buffer_seed0/predictions.parquet
 extra_scores:
   # the reference: the finished run without cell tokens (SL protocol §19), its model, its line-input controls,
   # its score with the line term and that score read in four other lines
-  direct_mean_token: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding.parquet
-  direct_mean_token_mean_input: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_mean_input.parquet
-  direct_mean_token_line_term: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term.parquet
-  direct_mean_token_line_term_other_line: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term_other_line.parquet
-  direct_mean_token_line_term_other_line_2: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term_other_line_2.parquet
-  direct_mean_token_line_term_other_line_3: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term_other_line_3.parquet
-  direct_mean_token_line_term_other_line_4: outputs/sl/embedding/embedding_direct_mean_token_seed0_v2/scores/embedding_line_term_other_line_4.parquet
+  direct_mean_token: outputs/sl/embedding/embedding_direct_mean_token_seed0_select/scores/embedding.parquet
+  direct_mean_token_mean_input: outputs/sl/embedding/embedding_direct_mean_token_seed0_select/scores/embedding_mean_input.parquet
+  direct_mean_token_line_term: outputs/sl/embedding/embedding_direct_mean_token_seed0_select/scores/embedding_line_term.parquet
+  direct_mean_token_line_term_other_line: outputs/sl/embedding/embedding_direct_mean_token_seed0_select/scores/embedding_line_term_other_line.parquet
+  direct_mean_token_line_term_other_line_2: outputs/sl/embedding/embedding_direct_mean_token_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  direct_mean_token_line_term_other_line_3: outputs/sl/embedding/embedding_direct_mean_token_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  direct_mean_token_line_term_other_line_4: outputs/sl/embedding/embedding_direct_mean_token_seed0_select/scores/embedding_line_term_other_line_4.parquet
   # the model with Tx1-3B cell tokens and the line term on own expression and PIE change (SL protocol §19)
-  direct_pie_change_line_term: outputs/sl/embedding/embedding_direct_pie_change_seed0_v2/scores/embedding_line_term.parquet
+  direct_pie_change_line_term: outputs/sl/embedding/embedding_direct_pie_change_seed0_select/scores/embedding_line_term.parquet
   # each run of the study: the score with the line term, the pair head alone, the model on the mean input, and
   # the score with the line term read in each of four other lines
-  cross_frozen: outputs/sl/embedding/cross_line_frozen_seed0/scores/embedding_line_term.parquet
-  cross_frozen_model: outputs/sl/embedding/cross_line_frozen_seed0/scores/embedding.parquet
-  cross_frozen_mean_input: outputs/sl/embedding/cross_line_frozen_seed0/scores/embedding_mean_input.parquet
-  cross_frozen_other_line_1: outputs/sl/embedding/cross_line_frozen_seed0/scores/embedding_line_term_other_line.parquet
-  cross_frozen_other_line_2: outputs/sl/embedding/cross_line_frozen_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_frozen_other_line_3: outputs/sl/embedding/cross_line_frozen_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_frozen_other_line_4: outputs/sl/embedding/cross_line_frozen_seed0/scores/embedding_line_term_other_line_4.parquet
-  cross_joint: outputs/sl/embedding/cross_line_joint_seed0/scores/embedding_line_term.parquet
-  cross_joint_model: outputs/sl/embedding/cross_line_joint_seed0/scores/embedding.parquet
-  cross_joint_mean_input: outputs/sl/embedding/cross_line_joint_seed0/scores/embedding_mean_input.parquet
-  cross_joint_other_line_1: outputs/sl/embedding/cross_line_joint_seed0/scores/embedding_line_term_other_line.parquet
-  cross_joint_other_line_2: outputs/sl/embedding/cross_line_joint_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_joint_other_line_3: outputs/sl/embedding/cross_line_joint_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_joint_other_line_4: outputs/sl/embedding/cross_line_joint_seed0/scores/embedding_line_term_other_line_4.parquet
-  cross_genes_input: outputs/sl/embedding/cross_line_genes_input_seed0/scores/embedding_line_term.parquet
-  cross_genes_input_model: outputs/sl/embedding/cross_line_genes_input_seed0/scores/embedding.parquet
-  cross_genes_input_mean_input: outputs/sl/embedding/cross_line_genes_input_seed0/scores/embedding_mean_input.parquet
-  cross_genes_input_other_line_1: outputs/sl/embedding/cross_line_genes_input_seed0/scores/embedding_line_term_other_line.parquet
-  cross_genes_input_other_line_2: outputs/sl/embedding/cross_line_genes_input_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_genes_input_other_line_3: outputs/sl/embedding/cross_line_genes_input_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_genes_input_other_line_4: outputs/sl/embedding/cross_line_genes_input_seed0/scores/embedding_line_term_other_line_4.parquet
-  cross_wide: outputs/sl/embedding/cross_line_wide_seed0/scores/embedding_line_term.parquet
-  cross_wide_model: outputs/sl/embedding/cross_line_wide_seed0/scores/embedding.parquet
-  cross_wide_mean_input: outputs/sl/embedding/cross_line_wide_seed0/scores/embedding_mean_input.parquet
-  cross_wide_other_line_1: outputs/sl/embedding/cross_line_wide_seed0/scores/embedding_line_term_other_line.parquet
-  cross_wide_other_line_2: outputs/sl/embedding/cross_line_wide_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_wide_other_line_3: outputs/sl/embedding/cross_line_wide_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_wide_other_line_4: outputs/sl/embedding/cross_line_wide_seed0/scores/embedding_line_term_other_line_4.parquet
-  cross_depmap_dna: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_line_term.parquet
-  cross_depmap_dna_model: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding.parquet
-  cross_depmap_dna_mean_input: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_mean_input.parquet
-  cross_depmap_dna_other_line_1: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_line_term_other_line.parquet
-  cross_depmap_dna_other_line_2: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_depmap_dna_other_line_3: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_depmap_dna_other_line_4: outputs/sl/embedding/cross_line_depmap_dna_seed0/scores/embedding_line_term_other_line_4.parquet
+  cross_frozen: outputs/sl/embedding/cross_line_frozen_seed0_select/scores/embedding_line_term.parquet
+  cross_frozen_model: outputs/sl/embedding/cross_line_frozen_seed0_select/scores/embedding.parquet
+  cross_frozen_mean_input: outputs/sl/embedding/cross_line_frozen_seed0_select/scores/embedding_mean_input.parquet
+  cross_frozen_other_line_1: outputs/sl/embedding/cross_line_frozen_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_frozen_other_line_2: outputs/sl/embedding/cross_line_frozen_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_frozen_other_line_3: outputs/sl/embedding/cross_line_frozen_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_frozen_other_line_4: outputs/sl/embedding/cross_line_frozen_seed0_select/scores/embedding_line_term_other_line_4.parquet
+  cross_joint: outputs/sl/embedding/cross_line_joint_seed0_select/scores/embedding_line_term.parquet
+  cross_joint_model: outputs/sl/embedding/cross_line_joint_seed0_select/scores/embedding.parquet
+  cross_joint_mean_input: outputs/sl/embedding/cross_line_joint_seed0_select/scores/embedding_mean_input.parquet
+  cross_joint_other_line_1: outputs/sl/embedding/cross_line_joint_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_joint_other_line_2: outputs/sl/embedding/cross_line_joint_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_joint_other_line_3: outputs/sl/embedding/cross_line_joint_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_joint_other_line_4: outputs/sl/embedding/cross_line_joint_seed0_select/scores/embedding_line_term_other_line_4.parquet
+  cross_genes_input: outputs/sl/embedding/cross_line_genes_input_seed0_select/scores/embedding_line_term.parquet
+  cross_genes_input_model: outputs/sl/embedding/cross_line_genes_input_seed0_select/scores/embedding.parquet
+  cross_genes_input_mean_input: outputs/sl/embedding/cross_line_genes_input_seed0_select/scores/embedding_mean_input.parquet
+  cross_genes_input_other_line_1: outputs/sl/embedding/cross_line_genes_input_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_genes_input_other_line_2: outputs/sl/embedding/cross_line_genes_input_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_genes_input_other_line_3: outputs/sl/embedding/cross_line_genes_input_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_genes_input_other_line_4: outputs/sl/embedding/cross_line_genes_input_seed0_select/scores/embedding_line_term_other_line_4.parquet
+  cross_wide: outputs/sl/embedding/cross_line_wide_seed0_select/scores/embedding_line_term.parquet
+  cross_wide_model: outputs/sl/embedding/cross_line_wide_seed0_select/scores/embedding.parquet
+  cross_wide_mean_input: outputs/sl/embedding/cross_line_wide_seed0_select/scores/embedding_mean_input.parquet
+  cross_wide_other_line_1: outputs/sl/embedding/cross_line_wide_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_wide_other_line_2: outputs/sl/embedding/cross_line_wide_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_wide_other_line_3: outputs/sl/embedding/cross_line_wide_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_wide_other_line_4: outputs/sl/embedding/cross_line_wide_seed0_select/scores/embedding_line_term_other_line_4.parquet
+  cross_depmap_dna: outputs/sl/embedding/cross_line_depmap_dna_seed0_select/scores/embedding_line_term.parquet
+  cross_depmap_dna_model: outputs/sl/embedding/cross_line_depmap_dna_seed0_select/scores/embedding.parquet
+  cross_depmap_dna_mean_input: outputs/sl/embedding/cross_line_depmap_dna_seed0_select/scores/embedding_mean_input.parquet
+  cross_depmap_dna_other_line_1: outputs/sl/embedding/cross_line_depmap_dna_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_depmap_dna_other_line_2: outputs/sl/embedding/cross_line_depmap_dna_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_depmap_dna_other_line_3: outputs/sl/embedding/cross_line_depmap_dna_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_depmap_dna_other_line_4: outputs/sl/embedding/cross_line_depmap_dna_seed0_select/scores/embedding_line_term_other_line_4.parquet
   # the rows of SL protocol §21: the wide row on the v2 caches, then that row with one change each (the bulk-RNA
   # training lines, the wide mean token, the pair-in-line features)
-  cross_wide_v2: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term.parquet
-  cross_wide_v2_model: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding.parquet
-  cross_wide_v2_mean_input: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_mean_input.parquet
-  cross_wide_v2_other_line_1: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term_other_line.parquet
-  cross_wide_v2_other_line_2: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_wide_v2_other_line_3: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_wide_v2_other_line_4: outputs/sl/embedding/cross_line_wide_v2_seed0/scores/embedding_line_term_other_line_4.parquet
-  cross_80_lines: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding_line_term.parquet
-  cross_80_lines_model: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding.parquet
-  cross_80_lines_mean_input: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding_mean_input.parquet
-  cross_80_lines_other_line_1: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding_line_term_other_line.parquet
-  cross_80_lines_other_line_2: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_80_lines_other_line_3: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_80_lines_other_line_4: outputs/sl/embedding/cross_line_80_lines_seed0/scores/embedding_line_term_other_line_4.parquet
-  cross_wide_token: outputs/sl/embedding/cross_line_wide_token_seed0/scores/embedding_line_term.parquet
-  cross_wide_token_model: outputs/sl/embedding/cross_line_wide_token_seed0/scores/embedding.parquet
-  cross_wide_token_mean_input: outputs/sl/embedding/cross_line_wide_token_seed0/scores/embedding_mean_input.parquet
-  cross_wide_token_other_line_1: outputs/sl/embedding/cross_line_wide_token_seed0/scores/embedding_line_term_other_line.parquet
-  cross_wide_token_other_line_2: outputs/sl/embedding/cross_line_wide_token_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_wide_token_other_line_3: outputs/sl/embedding/cross_line_wide_token_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_wide_token_other_line_4: outputs/sl/embedding/cross_line_wide_token_seed0/scores/embedding_line_term_other_line_4.parquet
-  cross_pair_in_line: outputs/sl/embedding/cross_line_pair_in_line_seed0/scores/embedding_line_term.parquet
-  cross_pair_in_line_model: outputs/sl/embedding/cross_line_pair_in_line_seed0/scores/embedding.parquet
-  cross_pair_in_line_mean_input: outputs/sl/embedding/cross_line_pair_in_line_seed0/scores/embedding_mean_input.parquet
-  cross_pair_in_line_other_line_1: outputs/sl/embedding/cross_line_pair_in_line_seed0/scores/embedding_line_term_other_line.parquet
-  cross_pair_in_line_other_line_2: outputs/sl/embedding/cross_line_pair_in_line_seed0/scores/embedding_line_term_other_line_2.parquet
-  cross_pair_in_line_other_line_3: outputs/sl/embedding/cross_line_pair_in_line_seed0/scores/embedding_line_term_other_line_3.parquet
-  cross_pair_in_line_other_line_4: outputs/sl/embedding/cross_line_pair_in_line_seed0/scores/embedding_line_term_other_line_4.parquet
+  cross_wide_v2: outputs/sl/embedding/cross_line_wide_v2_seed0_select/scores/embedding_line_term.parquet
+  cross_wide_v2_model: outputs/sl/embedding/cross_line_wide_v2_seed0_select/scores/embedding.parquet
+  cross_wide_v2_mean_input: outputs/sl/embedding/cross_line_wide_v2_seed0_select/scores/embedding_mean_input.parquet
+  cross_wide_v2_other_line_1: outputs/sl/embedding/cross_line_wide_v2_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_wide_v2_other_line_2: outputs/sl/embedding/cross_line_wide_v2_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_wide_v2_other_line_3: outputs/sl/embedding/cross_line_wide_v2_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_wide_v2_other_line_4: outputs/sl/embedding/cross_line_wide_v2_seed0_select/scores/embedding_line_term_other_line_4.parquet
+  cross_80_lines: outputs/sl/embedding/cross_line_80_lines_seed0_select/scores/embedding_line_term.parquet
+  cross_80_lines_model: outputs/sl/embedding/cross_line_80_lines_seed0_select/scores/embedding.parquet
+  cross_80_lines_mean_input: outputs/sl/embedding/cross_line_80_lines_seed0_select/scores/embedding_mean_input.parquet
+  cross_80_lines_other_line_1: outputs/sl/embedding/cross_line_80_lines_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_80_lines_other_line_2: outputs/sl/embedding/cross_line_80_lines_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_80_lines_other_line_3: outputs/sl/embedding/cross_line_80_lines_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_80_lines_other_line_4: outputs/sl/embedding/cross_line_80_lines_seed0_select/scores/embedding_line_term_other_line_4.parquet
+  cross_wide_token: outputs/sl/embedding/cross_line_wide_token_seed0_select/scores/embedding_line_term.parquet
+  cross_wide_token_model: outputs/sl/embedding/cross_line_wide_token_seed0_select/scores/embedding.parquet
+  cross_wide_token_mean_input: outputs/sl/embedding/cross_line_wide_token_seed0_select/scores/embedding_mean_input.parquet
+  cross_wide_token_other_line_1: outputs/sl/embedding/cross_line_wide_token_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_wide_token_other_line_2: outputs/sl/embedding/cross_line_wide_token_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_wide_token_other_line_3: outputs/sl/embedding/cross_line_wide_token_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_wide_token_other_line_4: outputs/sl/embedding/cross_line_wide_token_seed0_select/scores/embedding_line_term_other_line_4.parquet
+  cross_pair_in_line: outputs/sl/embedding/cross_line_pair_in_line_seed0_select/scores/embedding_line_term.parquet
+  cross_pair_in_line_model: outputs/sl/embedding/cross_line_pair_in_line_seed0_select/scores/embedding.parquet
+  cross_pair_in_line_mean_input: outputs/sl/embedding/cross_line_pair_in_line_seed0_select/scores/embedding_mean_input.parquet
+  cross_pair_in_line_other_line_1: outputs/sl/embedding/cross_line_pair_in_line_seed0_select/scores/embedding_line_term_other_line.parquet
+  cross_pair_in_line_other_line_2: outputs/sl/embedding/cross_line_pair_in_line_seed0_select/scores/embedding_line_term_other_line_2.parquet
+  cross_pair_in_line_other_line_3: outputs/sl/embedding/cross_line_pair_in_line_seed0_select/scores/embedding_line_term_other_line_3.parquet
+  cross_pair_in_line_other_line_4: outputs/sl/embedding/cross_line_pair_in_line_seed0_select/scores/embedding_line_term_other_line_4.parquet
   buffer_head: outputs/sl/conditional/conditional_buffer_seed0/scores/head.parquet
   kg4sl: outputs/sl/kg4sl/seed0/scores.parquet
   cilantro_sl: outputs/cilantro_reproduction/benchmark_gc95M/benchmark/scores.parquet

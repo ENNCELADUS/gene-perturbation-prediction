@@ -555,6 +555,23 @@ done
 hpc/run.sh sl-baselines configs/sl/benchmark_context_rows.yaml --run-id benchmark_context_rows_seed0
 ```
 
+Since 2026-11-26 the phase of stage two follows the selection rule of SL protocol §8 (line specificity within one
+standard error of the best validation recall). The eleven runs that `benchmark_context_rows.yaml` reads were
+trained again under it, as `<config>_seed0_select`, three or two runs on each GPU:
+
+```bash
+i=0
+for NAME in embedding_direct_mean_token embedding_direct_pie_change cross_line_frozen cross_line_joint \
+    cross_line_genes_input cross_line_wide cross_line_depmap_dna cross_line_wide_v2 cross_line_80_lines \
+    cross_line_wide_token cross_line_pair_in_line; do
+  OMP_NUM_THREADS=8 CUDA_VISIBLE_DEVICES=$((i % 4)) setsid nohup hpc/run.sh sl-embedding configs/sl/$NAME.yaml \
+    --run-id ${NAME}_seed0_select > outputs/launches/${NAME}_seed0_select.log 2>&1 < /dev/null &
+  i=$((i + 1))
+done
+# when the eleven runs have finished
+hpc/run.sh sl-baselines configs/sl/benchmark_context_rows.yaml --run-id benchmark_context_rows_seed0_select
+```
+
 Two single-cell parts of the backbone (SL protocol §13). `sl-codetection JOINT_CONFIG LABELS SL_SPLIT` reads the raw
 cells of each SL split line with labelled rows and writes, per line, the co-detection of each of its pairs (real and
 after each gene's counts are permuted across the cells) to `<prepared_root>/codetection/<ModelID>.parquet` (CPU,
