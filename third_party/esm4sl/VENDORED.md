@@ -17,3 +17,13 @@ Local changes:
 - `esm4sl/module/cls_module.py` (2026-11-26): `step_common` no longer appends each batch's attention map
   (`[batch, 2000, 2000]` float, 256 MB at batch 16) to `self.attns`. Nothing reads that list; it kept every map of an
   epoch in memory, which is about 540 GB per training epoch and about 18 TB in the test pass over 1.1 million pairs.
+
+Run notes (H20, measured 2026-11-26; none changes a vendored file):
+- `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` is set for `train.py`: with torch 2.6 the final `trainer.test(ckpt_path="best")`
+  fails with "Unsupported global: omegaconf.dictconfig.DictConfig", because the checkpoint holds the config as
+  hyperparameters. The checkpoint is the run's own file.
+- `DATALOADER.TRAIN.NUM_WORKERS 0` is passed: `/dev/shm` of the container is 4 GB and shared with other jobs, and one
+  batch is 330 MB (16 pairs, both genes padded to 2,000 x 1,280 floats); 8 workers die with "Bus error". Validation and
+  test use the training worker count, so they load in the main process too.
+- The test pass writes `csv_log/version_<n>/test_logits.csv` from every process: use one GPU for it (with `--num-gpus 4`
+  each process would overwrite the file with its own shard).
