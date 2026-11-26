@@ -2,8 +2,9 @@
 features of every line, and the labelled rows (data/mvgcn_isl/benchmark/).
 
 A held-out line (val, test) reads stage one's predicted GeneEffect, never its measured
-GeneEffect, in its node features; the co-essentiality graph is computed on the fit lines
-only. Run from the repo root with the vendored code on the path:
+GeneEffect, in its node features; the co-essentiality graph is computed on the split's
+train and bulk_labelled lines (labelled or not), never a val or test line.
+Run from the repo root with the vendored code on the path:
 
     PYTHONPATH=third_party/mvgcn_isl/code MPLBACKEND=Agg \
         .venv-mvgcn/bin/python hpc/mvgcn_isl/prepare.py \
@@ -112,10 +113,23 @@ def pseudo_bulk_cpm(path: Path) -> pd.Series:
     return counts / counts.sum() * 1e6
 
 
-def official_graphs(fit_effect: pd.DataFrame) -> dict[str, pd.DataFrame]:
+def coessentiality_input(measured: pd.DataFrame, split: dict) -> pd.DataFrame:
+    """Measured GeneEffect of every line the split lists in ``train`` or
+    ``bulk_labelled`` (labelled or not), all genes. Fails when such a line is also a
+    val or test line, or when a val or test profile would be in the result."""
+    held = set(split["val"]) | set(split["test"])
+    listed = set(split["train"]) | set(split["bulk_labelled"])
+    if listed & held:
+        raise ValueError(f"split lists {sorted(listed & held)[:5]} as fit and held-out")
+    table = measured.loc[measured.index.isin(listed)]
+    assert_no_held_gene_effect(table, held)
+    return table
+
+
+def official_graphs(coess_effect: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """The four official graphs. The co-essentiality graph is built again by the
-    official ``calculate_coexpression`` from the fit lines' measured GeneEffect (the
-    released file reads the held-out lines'); the loaders read ../data from code/."""
+    official ``calculate_coexpression`` from ``coess_effect`` (the released file reads
+    the held-out lines' GeneEffect); the loaders read ../data from code/."""
     sys.path.insert(0, str(CODE))
     # pandas 2 dropped DataFrame.append, which the official load_graph_data calls
     pd.DataFrame.append = lambda self, other: pd.concat([self, other])
@@ -123,7 +137,7 @@ def official_graphs(fit_effect: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
     data = CODE.parent / "data"
     (data / "CCLE").mkdir(parents=True, exist_ok=True)
-    fit_effect.to_csv(data / "CCLE" / "CCLE_ess.csv")
+    coess_effect.to_csv(data / "CCLE" / "CCLE_ess.csv")
     here = os.getcwd()
     os.chdir(CODE)
     try:
@@ -182,10 +196,10 @@ def main() -> None:
     )  # fit lines without measured GeneEffect
     no_prediction = sorted(set(held_lines) - set(ess.index))
 
-    # co-essentiality reads the fit lines only; fails when a held-out profile is in it
-    fit_effect = ess.loc[ess.index.isin(fit_lines)]
-    assert_no_held_gene_effect(fit_effect, held_lines)
-    graphs = official_graphs(fit_effect)
+    # co-essentiality reads every train and bulk_labelled line of the split, never a
+    # val or test line (the official graph reads all CCLE lines)
+    coess_effect = coessentiality_input(measured, json.loads(cli.split.read_text()))
+    graphs = official_graphs(coess_effect)
 
     exp = (
         2.0
@@ -259,6 +273,7 @@ def main() -> None:
         "genes": len(genes),
         "edges_per_graph": {name: int(e.shape[1]) for name, e in edges.items()},
         "fit_lines": len(fit_lines),
+        "coessentiality_lines": len(coess_effect),
         "held_lines": len(held_lines),
         "fit_lines_without_gene_effect": no_effect,
         "held_lines_without_prediction": no_prediction,

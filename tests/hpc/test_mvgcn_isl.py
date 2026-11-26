@@ -77,3 +77,25 @@ def test_graph_edges_drop_benchmark_pairs_and_index_genes():
     index = {"A": 0, "B": 1, "C": 2, "D": 3}
     out = prepare.graph_edges(edges, rows, index)
     assert out.tolist() == [[2, 3], [3, 2]]  # symmetric, upper-case, pair edge gone
+
+
+SPLIT = {
+    "train": ["A"],
+    "bulk_labelled": ["B"],
+    "val": ["V"],
+    "test": ["T"],
+    "unlabeled_train": ["X"],
+}
+
+
+def test_coessentiality_reads_listed_fit_lines_with_gene_effect_only():
+    measured = pd.DataFrame({"G1": range(7)}, index=["A", "B", "V", "T", "X", "Z", "C"])
+    table = prepare.coessentiality_input(measured, SPLIT)
+    # not the held-out lines, nor a line the split does not list as train or bulk
+    assert sorted(table.index) == ["A", "B"]
+
+
+def test_coessentiality_refuses_a_line_that_is_fit_and_held_out():
+    measured = pd.DataFrame({"G1": [0.0]}, index=["A"])
+    with pytest.raises(ValueError, match="A"):
+        prepare.coessentiality_input(measured, {**SPLIT, "val": ["A"]})
