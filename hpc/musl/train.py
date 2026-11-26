@@ -78,7 +78,7 @@ class Lines:
 def edge_dataset(pairs: pd.DataFrame, labels, matrix, state, bins: int):
     edges = torch.from_numpy(pairs[["i", "j"]].to_numpy().T.copy()).long()
     return module.EdgeDataset(
-        edges, torch.as_tensor(labels).long(), matrix, state=state, bins=bins
+        edges, torch.as_tensor(np.asarray(labels)).long(), matrix, state=state, bins=bins
     )
 
 
