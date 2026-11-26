@@ -95,7 +95,10 @@ def main() -> None:
         """Scaled node features; the graphs cut to the genes expressed in the line."""
         expressed = torch.tensor(x_raw[:, EXP] > 0, device=device)
         return SimpleNamespace(
-            x=torch.tensor(scale(x_raw), dtype=torch.float, device=device),
+            # float64 as in the official code (float32 gives numerical warnings)
+            x=torch.tensor(
+                scale(x_raw.astype(np.float64)), dtype=torch.float, device=device
+            ),
             edge_index_list=[
                 prepare.line_edges(e, expressed) for e in full_edges.values()
             ],
