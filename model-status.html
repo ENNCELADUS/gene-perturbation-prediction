@@ -64,14 +64,14 @@ a { color: var(--accent); }
 
 <div class="wrap">
 <table>
-<caption><strong>Table 1.</strong> SL benchmark, all pairs, test lines (16); higher is better, best in bold. — : not computed; *: one other line, run of 2026-11-20. Source: harness run of 2026-11-25 (<a href="results/sl_cross_line_seed0/host/benchmark_results_v2.md">report</a>).</caption>
+<caption><strong>Table 1.</strong> SL benchmark, all pairs, test lines (16); higher is better, best in bold. — : not computed; *: run of 2026-11-20. Source: harness run of 2026-11-25 (<a href="results/sl_cross_line_seed0/host/benchmark_results_v2.md">report</a>).</caption>
 <colgroup><col style="width:21%"><col style="width:19%"><col span="6" style="width:10%"></colgroup>
 <thead><tr><th rowspan="2">Model</th><th rowspan="2">What it reads</th><th colspan="4" class="grp sep">Within-line ranking</th><th colspan="2" class="grp sep">Cell-line specificity</th></tr>
-<tr><th class="n sep">Recall in the top 10% ↑</th><th class="n">Recall at 10% false positives ↑</th><th class="n">AUROC ↑</th><th class="n">Chance-corrected AUPRC ↑</th><th class="n sep">Cross-line ordering ↑</th><th class="n">Recall: own − another line's input ↑</th></tr></thead>
+<tr><th class="n sep">Recall in the top 10% ↑</th><th class="n">Recall at 10% false positives ↑</th><th class="n">AUROC ↑</th><th class="n">Chance-corrected AUPRC ↑</th><th class="n sep">Cross-line ordering ↑</th><th class="n">Recall: own − mean input ↑</th></tr></thead>
 <tbody>
-<tr class="ours"><td>Ours: gene-knowledge model, no cell tokens + cross-line loss</td><td class="what">Gene knowledge; line expression; cross-line loss</td><td class="n sep"><b>0.514</b></td><td class="n">0.540</td><td class="n">0.781</td><td class="n">0.304</td><td class="n sep">0.521</td><td class="n">+0.026</td></tr>
-<tr class="ours"><td>Ours: gene-knowledge model, no cell tokens</td><td class="what">Gene knowledge; line expression</td><td class="n sep">0.505</td><td class="n">0.540</td><td class="n"><b>0.789</b></td><td class="n">0.305</td><td class="n sep">0.529</td><td class="n"><b>+0.042</b></td></tr>
-<tr class="ours"><td>Ours: gene-knowledge model, Tx1-3B cell tokens + line term</td><td class="what">Gene knowledge; Tx1-3B cell tokens; PIE change</td><td class="n sep">0.501</td><td class="n"><b>0.541</b></td><td class="n">0.786</td><td class="n"><b>0.314</b></td><td class="n sep"><b>0.533</b></td><td class="n">+0.011*</td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model, no cell tokens + cross-line loss</td><td class="what">Gene knowledge; line expression; cross-line loss</td><td class="n sep"><b>0.514</b></td><td class="n">0.540</td><td class="n">0.781</td><td class="n">0.304</td><td class="n sep">0.521</td><td class="n"><b>+0.112</b></td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model, no cell tokens</td><td class="what">Gene knowledge; line expression</td><td class="n sep">0.505</td><td class="n">0.540</td><td class="n"><b>0.789</b></td><td class="n">0.305</td><td class="n sep">0.529</td><td class="n">+0.107</td></tr>
+<tr class="ours"><td>Ours: gene-knowledge model, Tx1-3B cell tokens + line term</td><td class="what">Gene knowledge; Tx1-3B cell tokens; PIE change</td><td class="n sep">0.501</td><td class="n"><b>0.541</b></td><td class="n">0.786</td><td class="n"><b>0.314</b></td><td class="n sep"><b>0.533</b></td><td class="n">+0.071*</td></tr>
 <tr><td>Kebabci 2026 paralog classifier</td><td class="what">Paralogs; predicted GeneEffect</td><td class="n sep">0.395</td><td class="n">0.383</td><td class="n">0.664</td><td class="n">0.240</td><td class="n sep">0.491</td><td class="n">—</td></tr>
 <tr class="ours"><td>Ours: logistic regression on predicted GeneEffect</td><td class="what">Predicted GeneEffect; expression</td><td class="n sep">0.361</td><td class="n">0.365</td><td class="n">0.716</td><td class="n">0.156</td><td class="n sep">0.498</td><td class="n">—</td></tr>
 <tr><td>KG4SL</td><td class="what">Knowledge graph</td><td class="n sep">0.338</td><td class="n">0.323</td><td class="n">0.653</td><td class="n">0.104</td><td class="n sep">0.500</td><td class="n">0</td></tr>
@@ -86,7 +86,7 @@ a { color: var(--accent); }
 <ul>
 <li><strong>Above every published baseline</strong> on within-line ranking: recall 0.514 against 0.395 for Kebabci (+0.119 [+0.073, +0.159]).</li>
 <li><strong>No added module raises recall</strong> (each difference ≤ +0.008, intervals include zero).</li>
-<li><strong>The score uses the correct line's input</strong> (+0.042 [+0.015, +0.069] without cell tokens), <strong>but does not order a pair between two unseen lines</strong> (ordering near 0.5; Figure 3).</li>
+<li><strong>The score reads the line's input</strong> (own minus mean input +0.107 [+0.036, +0.175] without cell tokens), <strong>but does not order a pair between two unseen lines</strong> (ordering near 0.5; Figure 3).</li>
 </ul>
 
 <h2>Where the result holds: seen and unseen lines and pairs</h2>
