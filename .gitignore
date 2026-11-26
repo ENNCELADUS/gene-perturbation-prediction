@@ -139,3 +139,8 @@ docs/superpowers
 docs/literature/
 docs/notes/
 graphify-out/
+# MVGCN-iSL (hpc/mvgcn_isl): vendored and tracked, its data link, official outputs and environment ignored
+!/third_party/mvgcn_isl/
+/third_party/mvgcn_isl/data
+/third_party/mvgcn_isl/code/*.png
+/.venv-mvgcn/
