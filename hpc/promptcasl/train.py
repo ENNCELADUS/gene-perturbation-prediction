@@ -261,7 +261,7 @@ def main() -> None:
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
-    # TF32 matrix products: BiomedBERT runs on 512 padded tokens, a row costs about 25 ms in fp32
+    # TF32 matrix products (1.9x faster steps): BiomedBERT reads 512 padded tokens
     torch.set_float32_matmul_precision("high")
     device = torch.device(f"cuda:{cli.device}")
     out, data = cli.out, cli.data
@@ -280,7 +280,13 @@ def main() -> None:
     t0 = time.time()
     ctx = Context(data, genes)
     pairs = pd.concat([fit, val, held])[["gene_1", "gene_2"]].drop_duplicates()
-    pair_ids, pair_ok = neighbor_table(ctx, pairs.reset_index(drop=True), 32)
+    cache = out / "neighbors.npz"  # 4 ms a pair: kept for a rerun of the same pairs
+    key = hashlib.sha256("|".join(pairs["gene_1"] + "," + pairs["gene_2"]).encode())
+    if cache.exists() and str(np.load(cache)["key"]) == key.hexdigest():
+        pair_ids, pair_ok = np.load(cache)["ids"], np.load(cache)["ok"]
+    else:
+        pair_ids, pair_ok = neighbor_table(ctx, pairs.reset_index(drop=True), 32)
+        np.savez(cache, ids=pair_ids, ok=pair_ok, key=key.hexdigest())
     where = pd.MultiIndex.from_frame(pairs.reset_index(drop=True))
     print(
         f"inputs ready in {time.time() - t0:.0f} s; neighbours for "

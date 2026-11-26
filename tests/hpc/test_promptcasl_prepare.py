@@ -189,3 +189,14 @@ def test_kg_triples_drop_rev_copies_and_keep_gene_symbols(prepare):
         ("TP53", "protein_protein", "MDM2"),
         ("drug:tp53", "drug_protein", "MDM2"),
     ]
+
+
+def test_pairs_are_matched_in_upper_case_and_sorted_again(prepare):
+    rows = pd.DataFrame({"gene_a": ["C1orf112", "C1QA"], "gene_b": ["C1QA", "A1BG"]})
+    out = prepare.upper_pairs(rows)
+    # C1ORF112 sorts before C1QA once both are upper case
+    assert out[["gene_1", "gene_2"]].values.tolist() == [
+        ["C1ORF112", "C1QA"],
+        ["A1BG", "C1QA"],
+    ]
+    assert out["gene_a"].tolist() == ["C1orf112", "C1QA"]

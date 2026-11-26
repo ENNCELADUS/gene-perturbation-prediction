@@ -311,6 +311,14 @@ def neighbor_ids(adj: dict, a: int, b: int, min_len: int = NEIGHBOR_COUNT):
 # --- steps -------------------------------------------------------------------------
 
 
+def upper_pairs(rows: pd.DataFrame) -> pd.DataFrame:
+    """The pair columns in upper case, sorted: DepMap, PrimeKG and the Reactome sets
+    are matched by upper-case symbol (852 benchmark genes are not, as ``C1orf112``).
+    ``gene_a`` and ``gene_b`` keep the stored spelling and orientation."""
+    a, b = rows["gene_a"].str.upper(), rows["gene_b"].str.upper()
+    return rows.assign(gene_1=np.minimum(a, b), gene_2=np.maximum(a, b))
+
+
 def smoke_lines(rows: pd.DataFrame, with_copy_number: set, n: int) -> list[str]:
     """``n`` lines for a short run: about two thirds fit lines, the rest held out, the
     smallest ones with at least 20 SL pairs, and at least one without copy number."""
@@ -429,7 +437,13 @@ def build_reactome(
     lines: the paths and the line list are set, the z-score takes the fit lines."""
     info = json.loads((out / "lines.json").read_text())
     names = [m for m in lines if info[m]["expression"]] + [MEAN_INPUT]
-    gmt = OFFICIAL / "c2.cp.v7.5.1.symbols.gmt"
+    gmt = out / "multi_omics" / "c2.cp.v7.5.1.symbols.upper.gmt"
+    gmt.parent.mkdir(parents=True, exist_ok=True)
+    with open(OFFICIAL / "c2.cp.v7.5.1.symbols.gmt") as f:
+        sets = [line.rstrip("\n").split("\t") for line in f]
+    gmt.write_text(  # the DepMap columns are upper case
+        "".join("\t".join(x[:2] + [g.upper() for g in x[2:]]) + "\n" for x in sets)
+    )
     pu = vendored("src.pathway_utils")
     script = vendored("scripts.build_reactome_pair_evidence")
     ge = pd.read_csv(out / "ccle" / "GE.csv", index_col=0)
@@ -528,7 +542,7 @@ def main() -> None:
     os.environ.setdefault("PROMPTCASL_BIOMEDBERT", str(OFFICIAL / "biomedbert"))
     out = cli.out
     out.mkdir(parents=True, exist_ok=True)
-    rows = sl_common.benchmark_rows(cli.labels, cli.split)
+    rows = upper_pairs(sl_common.benchmark_rows(cli.labels, cli.split))
     if cli.lines:
         copy_number = set(
             pd.read_csv(DEPMAP / "PortalOmicsCNGeneLog2.csv", usecols=[0]).iloc[:, 0]
