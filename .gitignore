@@ -122,10 +122,13 @@ csc286_eval.py
 !/third_party/paris/
 !/third_party/slidr/
 !/third_party/slmgae/
+!/third_party/musl/
+!/third_party/musl/*.ipynb
 /.venv-cilantro/
 /.venv-kg4sl/
 /.venv-slmgae/
 /.venv-pie/
+/.venv-musl/
 # cNMF, starCAT and scvi-tools for the cell-state fits (hpc/states/setup.sh)
 /.venv-states/
 
