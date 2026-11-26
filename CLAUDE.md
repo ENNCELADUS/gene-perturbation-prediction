@@ -23,7 +23,7 @@ bare internal label (`A0`, `V1`, `Tier 3`). Where code uses a label, give it onc
 - **Open problem**: no model orders one pair between two unseen lines beyond chance (0.5 = a score without the line). The cross-line ranking loss and the wide-row changes fit the 44 training lines and do not carry to held-out lines (SL protocol §20–§21, [record](results/sl_cross_line_seed0/summary.html), [record](results/sl_context_rows_seed0/summary.html)); only the Kebabci classifier on the line's measured GeneEffect does (0.645 [0.612, 0.673]). Ceiling: a second Harle 2025 replicate, 0.602 / 0.709.
 - **Benchmark** ([card](docs/data/sl-benchmark.html)): labels in `data/sl_studies/benchmark_v2` (H20); 77 lines, 44/17/16. Headline = recall in the top 10% of genetic two-class screens (ceiling 1), averaged over screens, studies, then lines. The harness also reports cross-line ordering, recall at 10% false positives, AUROC and the chance-corrected AUPRC.
 - **Stage one**: no reader beats the linear model refitted on the frame (per-line residual Spearman 0.226 / 0.227; protocol §16, §18).
-- One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test. Since 2026-11-26 the phase of stage two, and a design's version on `model-status.html`, is the most line-specific candidate (validation own minus another line's input) within one standard error of the best validation recall (SL protocol §8); the eleven harness runs are trained again under it (`_seed0_select`, `hpc/README.md`).
+- One config is one experiment at seed 0: train, select `best.pt` on **validation**, score it once on test. Since 2026-11-26 the phase of stage two, and a design's version on `model-status.html`, is the most line-specific candidate (validation own minus another line's input) within one standard error of the best validation recall (SL protocol §8); the eleven harness runs were trained again under it (`_seed0_select`, harness `benchmark_context_rows_seed0_select`, `results/sl_selection_seed0/`): every run keeps the same phase; the cross-line version is now the line term trained with the model (test recall 0.524, ordering 0.553 [0.510, 0.596], 0.468 on validation); the ordering of one config moves by up to 0.08 between trainings.
 
 ## Commands
 
@@ -52,7 +52,7 @@ uv run python -m pytest tests/experiments/joint/test_all.py -q  # one file; -k f
 
 - When a change alters behaviour a doc describes, update that doc in the same change. Update this file and
   `README.md` in every conversation: replace old text (the current state holds the latest status only; history lives in
-  `results/` and the protocols), and keep both short (this file under 100 lines). When a model design finishes its run, update `model-status.html` (its design, figure and SL-benchmark scores).
+  `results/` and the protocols), and keep both short (this file under 100 lines). When a model design finishes its run, update `model-status.html` (its design, figure and SL-benchmark scores; test metrics only, validation stays in the run record).
 - Experiment code reports results (format: `.claude/skills/results-report`); decisions are made by reading them, not in code.
 - No formalism gates: do not add digest pinning, contract verifiers, eligibility ceremony or any check that blocks a run on
   model quality. Record provenance and proceed; model-quality signals are telemetry. The existing guards against silent wrong

@@ -278,7 +278,14 @@ validation, report both, experiment code reports and people decide). The SL-spec
   Of the candidates whose recall is within one standard error over validation lines of the best, the one with the
   largest line specificity wins; a tie goes to the earlier (simpler) candidate. The SL runner applies it to the
   phase of stage two (`src.experiments.sl.embedding.choose_phase`; the epoch of each phase stays on recall), and the
-  choice of a design's version for `model-status.html` applies it to the runs.
+  choice of a design's version for `model-status.html` applies it to the runs. First use (2026-11-26, the eleven
+  runs of `benchmark_context_rows.yaml` trained again as `<config>_seed0_select` on GPUs, harness run
+  `benchmark_context_rows_seed0_select`): every run keeps the whole model trained further, as before (validation
+  standard error of recall about 0.06; the frozen phase is a candidate in one run and is less line-specific). Of the
+  cross-line versions, all nine are within one standard error, and the line term trained with the model is the most
+  line-specific (+0.063 [+0.034, +0.090] validation; test recall 0.524, own minus another line +0.050
+  [+0.031, +0.071], ordering 0.553 [0.510, 0.596], 0.468 on validation). Trained again, the ordering of one config
+  moves by up to 0.08 (the corrected wide row 0.595 → 0.519 on test).
 - Join contexts by DepMap ModelID through the checked-in map and fail loudly on an
   unmapped context. Never join on informal name: DepMap's `CellLineName` for K562 is `K-562`.
 - (2026-11-04) A line needs basal scRNA and study labels to be in the multi-study SL benchmark; measured GeneEffect
