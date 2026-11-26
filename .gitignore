@@ -121,9 +121,11 @@ csc286_eval.py
 !/third_party/pie/
 !/third_party/paris/
 !/third_party/slidr/
+!/third_party/promptcasl/
 /.venv-cilantro/
 /.venv-kg4sl/
 /.venv-pie/
+/.venv-promptcasl/
 # cNMF, starCAT and scvi-tools for the cell-state fits (hpc/states/setup.sh)
 /.venv-states/
 
