@@ -261,6 +261,8 @@ def main() -> None:
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
+    # TF32 matrix products: BiomedBERT runs on 512 padded tokens, a row costs about 25 ms in fp32
+    torch.set_float32_matmul_precision("high")
     device = torch.device(f"cuda:{cli.device}")
     out, data = cli.out, cli.data
     (out / "parts").mkdir(parents=True, exist_ok=True)
