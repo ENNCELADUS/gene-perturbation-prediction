@@ -91,6 +91,8 @@ NAMES = {
     "random": "Random score (check: about 0.10)",
     "kg4sl": "KG4SL (knowledge graph, official code, trained on the fit lines)",
     "cilantro_sl": "Cilantro-SL (Geneformer deletions, official code, refitted)",
+    "cilantro_sl_mean_input": "Cilantro-SL, context-ablated (each gene's deletion "
+    "embedding averaged over the fit lines)",
     "paris": "PARIS (random-forest dependency pairs, Python port of the R code)",
     "slidr": "SLIdR (mutation-dependency test, Python port of the R code)",
     "dekegel_paralog": "De Kegel 2021 paralog classifier (released scores)",
@@ -102,6 +104,8 @@ NAMES = {
     "one's predicted GeneEffect), context-ablated (the training-side lines' mean of "
     "every line input)",
     "mit4sl": "MiT4SL (cell-line-specific graph model, official code, refitted)",
+    "mit4sl_mean_input": "MiT4SL, context-ablated (the graph of the fit lines' mean "
+    "expression)",
     # the published baselines of 2026-11-26 (hpc/<model>/,
     # docs/specs/2026-11-26-published-baselines-plan.md): each fits on the training
     # lines and the labelled bulk-only lines

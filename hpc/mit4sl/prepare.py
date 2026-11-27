@@ -15,6 +15,11 @@ and its line has DepMap expression. One row per (line, pair): SL when half or mo
 its labels are SL. Every PrimeKG and reference-PPI edge between the two genes of a
 benchmark pair is removed, so no label leaks through the graphs (as hpc/kg4sl).
 
+For the mean-input control (the "recall: own - mean input" column), one more graph,
+with the last cell id (``mean_input_cell_id`` in prepare.json), is built the same way
+from the mean of the fitted-side lines' log2(TPM + 1); train.py scores the held-out rows
+on it too. No row names it, so training does not read it.
+
     PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/prepare.py \
         --out data/mit4sl/benchmark
 """
@@ -204,6 +209,17 @@ def main() -> None:
             flush=True,
         )
     rows = rows[rows["model_id"].isin(cell_ids)]
+    fit_lines = [m for m in cell_ids if side[m] in FIT_SIDES]
+    mean_tpm = 2.0 ** expression.loc[fit_lines].mean() - 1
+    built = cell_graph(
+        sorted(mean_tpm.index[mean_tpm.to_numpy() >= TPM_THRESHOLD]),
+        ppi, name_to_index, sequence_index,
+    )  # fmt: skip
+    if built is None:
+        raise ValueError("the fitted-side mean expression gives no graph")
+    mean_input_cell_id = len(graphs)
+    tables.append(built[0].assign(cell_name="MEAN_INPUT", cell_id=mean_input_cell_id))
+    graphs.append(built[1])
 
     out = cli.out
     (out / "task").mkdir(parents=True, exist_ok=True)
@@ -241,6 +257,9 @@ def main() -> None:
     summary = {
         "lines": len(cell_ids),
         "lines_without_a_graph": skipped,
+        "mean_input_cell_id": mean_input_cell_id,
+        "mean_input_lines": len(fit_lines),
+        "mean_input_proteins": len(built[0]),
         "rows": counts,
         "benchmark_pairs_blocked": len(blocked_index),
         "ppi_edges_removed": int(ppi_blocked.sum()),

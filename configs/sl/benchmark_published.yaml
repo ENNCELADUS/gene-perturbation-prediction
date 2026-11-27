@@ -1,8 +1,9 @@
 # The published baselines on the multi-study SL benchmark (docs/specs/2026-11-26-published-baselines-plan.md):
-# four with one score for each pair in every line (SLMGAE, KG4SL, ESM4SL; Cilantro-SL scores few rows) and five that
-# read the line (MiT4SL, MVGCN-iSL, MuSL, PromptCASL, the Kebabci 2026 paralog classifier), beside our model with the
-# cross-line loss. Every baseline fits on the training lines and the labelled bulk-only lines (MuSL: the training
-# lines, it needs single cells). The controls give "recall: own - mean input" for the new models that read the line.
+# three with one score for each pair in every line (SLMGAE, KG4SL, ESM4SL) and six that read the line (Cilantro-SL,
+# which scores few rows, MiT4SL, MVGCN-iSL, MuSL, PromptCASL, the Kebabci 2026 paralog classifier), beside our model
+# with the cross-line loss. Every baseline fits on the training lines and the labelled bulk-only lines (MuSL: the
+# training lines, it needs single cells). The controls give "recall: own - mean input" for the models that read the
+# line (the Kebabci control is in benchmark_baseline_mean_input.yaml).
 #   hpc/run.sh sl-baselines configs/sl/benchmark_published.yaml --run-id benchmark_published_seed0
 kind: sl_benchmark_baselines
 seed: 0
@@ -19,8 +20,10 @@ extra_scores:
   kg4sl: outputs/sl/kg4sl/fit_lines_seed0/scores.parquet
   esm4sl: outputs/sl/esm4sl/seed0/scores.parquet
   cilantro_sl: outputs/cilantro_reproduction/benchmark_gc95M/benchmark/scores.parquet
+  cilantro_sl_mean_input: outputs/cilantro_reproduction/benchmark_gc95M/benchmark/scores_mean_input.parquet # hpc/cilantro/mean_input.py
   # hpc/mit4sl/train.py; hpc/mvgcn_isl/train.py; hpc/musl/train.py; hpc/promptcasl/train.py; hpc/paralog/kebabci.py
-  mit4sl: outputs/sl/mit4sl/seed0/scores.parquet
+  mit4sl: outputs/sl/mit4sl/seed0_mean_input/scores.parquet
+  mit4sl_mean_input: outputs/sl/mit4sl/seed0_mean_input/scores_mean_input.parquet
   mvgcn_isl: outputs/sl/mvgcn_isl/seed0/scores.parquet
   mvgcn_isl_mean_input: outputs/sl/mvgcn_isl/seed0/scores_mean_input.parquet
   musl: outputs/sl/musl/seed0/scores.parquet
@@ -36,6 +39,8 @@ paired_differences:
   - [mvgcn_isl, mvgcn_isl_mean_input]
   - [musl, musl_pooled_input]
   - [promptcasl, promptcasl_mean_input]
+  - [mit4sl, mit4sl_mean_input]
+  - [cilantro_sl, cilantro_sl_mean_input]
   - [cross_joint, slmgae]
   - [cross_joint, kg4sl]
   - [cross_joint, esm4sl]
@@ -45,4 +50,4 @@ paired_differences:
   - [cross_joint, promptcasl]
   - [cross_joint, kebabci_paralog_predicted]
 scorer_means: {}
-cross_line_ordering: [mit4sl, mvgcn_isl, mvgcn_isl_mean_input, musl, musl_pooled_input, promptcasl, promptcasl_mean_input, kebabci_paralog_predicted, cross_joint]
+cross_line_ordering: [mit4sl, mit4sl_mean_input, cilantro_sl, cilantro_sl_mean_input, mvgcn_isl, mvgcn_isl_mean_input, musl, musl_pooled_input, promptcasl, promptcasl_mean_input, kebabci_paralog_predicted, cross_joint]

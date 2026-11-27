@@ -216,6 +216,14 @@ rows of the split's single-cell training and bulk labelled lines that have GeneE
 the training lines' genetic pairs, with each line's own label (SL when half or more of its rows are SL). It writes the SL
 probability of each held-out (line, pair) to `benchmark/scores.parquet`. A pair whose genes are not both in the line's
 top 2,048 tokens gets 0.5, so these pairs tie. `--gene-subset 200 --epochs 2` makes a smoke run (`benchmark_smoke`, 5 min).
+`mean_input.py` gives the control of the "recall: own − mean input" column: the saved stage one and classifier score
+each held-out row again with each gene's deletion embedding replaced by its mean over the fit lines
+(`benchmark/scores_mean_input.parquet`). It also scores the own input again and stops if the covered rows differ from
+`benchmark/scores.parquet`; `benchmark/mean_input.json` records the largest score difference.
+
+```bash
+.venv-cilantro/bin/python hpc/cilantro/mean_input.py --run-dir outputs/cilantro_reproduction/benchmark_gc95M
+```
 
 The port's coverage report (step 0) was `src/experiments/historical/cilantro_coverage.py` (removed; `git show a313239:<path>`).
 
@@ -683,12 +691,15 @@ the official model and training step (cross-cell-line protocol, 20 epochs of one
 one run and keeps the epoch with the best validation AUROC (about 35 min on one GPU). Two changes let the released code
 run: the official `HGTConv(..., group='sum')` drops the argument (PyG 2.3+ always sums), and each line's 64-layer graph
 encoder is checkpointed (the same outputs and gradients; 106 graphs do not fit on one GPU otherwise).
+For the mean-input control, `prepare.py` also builds one graph from the fit lines' mean log2(TPM + 1), with the last
+cell id, and `train.py` scores the validation and test rows on it with the chosen weights
+(`scores_mean_input.parquet`).
 
 ```bash
 hpc/mit4sl/setup.sh
 PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/prepare.py --out data/mit4sl/benchmark
 PYTHONPATH=third_party/mit4sl/src .venv-mit4sl/bin/python hpc/mit4sl/train.py --data data/mit4sl/benchmark \
-  --out outputs/sl/mit4sl/seed0 --device 0
+  --out outputs/sl/mit4sl/seed0_mean_input --device 0
 ```
 
 ### The published baselines of 2026-11-26
